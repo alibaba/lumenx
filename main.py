@@ -8,6 +8,13 @@ import webview
 if getattr(sys, 'frozen', False):
     # 打包后的环境
     application_path = sys._MEIPASS
+    # 将打包后的 Resources 目录添加到 Python 路径，PyInstaller 通常将数据文件放在这里
+    resources_path = os.path.join(os.path.dirname(os.path.dirname(application_path)), 'Resources')
+    if os.path.exists(resources_path) and resources_path not in sys.path:
+        sys.path.insert(0, resources_path)
+    # 也添加 _MEIPASS 本身
+    if application_path not in sys.path:
+        sys.path.insert(0, application_path)
 else:
     # 开发环境
     application_path = os.path.dirname(os.path.abspath(__file__))
@@ -28,7 +35,9 @@ def run_server():
     app.mount("/static", StaticFiles(directory=
                                     os.path.join(cwd, "static"), html=True), name="static")
     
-    uvicorn.run("src.apps.comic_gen.api:app",
+    # 直接传入 app 对象，而非字符串路径
+    # 这样可以避免 PyArmor 混淆后字符串导入失败的问题
+    uvicorn.run(app,
                 host="127.0.0.1",
                 port=8000,
                 reload=False,
@@ -48,7 +57,7 @@ def open_webview():
         width=1280,
         height=800,
         resizable=True,
-        fullscreen=False,
+        fullscreen=True,
         min_size=(800, 600)
     )
     

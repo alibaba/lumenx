@@ -5,6 +5,39 @@ echo ======================================
 echo 开始 Windows 打包流程
 echo ======================================
 
+REM 先构建前端项目
+echo 0. 开始构建前端项目...
+if not exist frontend (
+    echo 错误: frontend 目录不存在
+    exit /b 1
+)
+
+cd frontend
+
+REM 检查 npm 或 yarn
+where yarn >nul 2>&1
+if %errorlevel% equ 0 (
+    echo    使用 yarn 安装依赖...
+    call yarn install
+    echo    使用 yarn 构建前端...
+    call yarn build
+) else (
+    where npm >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo 错误: 未找到 npm 或 yarn
+        cd ..
+        exit /b 1
+    )
+    echo    使用 npm 安装依赖...
+    call npm install
+    echo    使用 npm 构建前端...
+    call npm run build
+)
+
+cd ..
+echo    前端构建完成，输出目录: static/
+echo.
+
 REM 检查 Python 环境
 where python >nul 2>&1
 if %errorlevel% neq 0 (

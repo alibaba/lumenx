@@ -9,6 +9,35 @@ echo "======================================"
 echo "开始 Mac 打包流程"
 echo "======================================"
 
+# 先构建前端项目
+echo "0. 开始构建前端项目..."
+if [ ! -d "frontend" ]; then
+    echo "错误: frontend 目录不存在"
+    exit 1
+fi
+
+cd frontend
+
+# 检查 npm 或 yarn
+if command -v yarn &> /dev/null; then
+    echo "   使用 yarn 安装依赖..."
+    yarn install
+    echo "   使用 yarn 构建前端..."
+    yarn build
+elif command -v npm &> /dev/null; then
+    echo "   使用 npm 安装依赖..."
+    npm install
+    echo "   使用 npm 构建前端..."
+    npm run build
+else
+    echo "错误: 未找到 npm 或 yarn"
+    exit 1
+fi
+
+cd ..
+echo "   前端构建完成，输出目录: static/"
+echo ""
+
 # 检查是否跳过混淆
 NO_OBFUSCATION=false
 if [[ "$1" == "--no-obfuscation" ]]; then
@@ -105,7 +134,7 @@ pyinstaller --clean --noconfirm \
     --windowed \
     $ICON_PARAM \
     --add-data "$ADD_DATA_STATIC" \
-    --add-data "$ADD_DATA_PRESET" \
+    --add-data "src:src" \
     --additional-hooks-dir=$HOOKS_DIR \
     $HIDDEN_IMPORT_SRC \
     --hidden-import=uvicorn.logging \
@@ -152,9 +181,58 @@ else
     cp -r obfuscated/dist/* dist_mac/
 fi
 
+# 创建 DMG 安装包
+if [ "$NO_OBFUSCATION" = true ]; then
+    echo "6. 创建 DMG 安装包..."
+else
+    echo "7. 创建 DMG 安装包..."
+fi
+
+# 定义 DMG 文件名和路径
+APP_NAME="云创AI漫剧"
+DMG_NAME="${APP_NAME}.dmg"
+DMG_PATH="dist_mac/${DMG_NAME}"
+APP_PATH="dist_mac/${APP_NAME}.app"
+
+# 检查 .app 是否存在
+if [ ! -d "$APP_PATH" ]; then
+    echo "错误: 未找到 ${APP_NAME}.app"
+    exit 1
+fi
+
+# 删除旧的 DMG 文件
+if [ -f "$DMG_PATH" ]; then
+    rm "$DMG_PATH"
+fi
+
+# 创建临时 DMG 目录
+TMP_DMG_DIR="dist_mac/dmg_tmp"
+rm -rf "$TMP_DMG_DIR"
+mkdir -p "$TMP_DMG_DIR"
+
+# 复制 .app 到临时目录
+cp -R "$APP_PATH" "$TMP_DMG_DIR/"
+
+# 创建 Applications 软链接（方便用户拖拽安装）
+ln -s /Applications "$TMP_DMG_DIR/Applications"
+
+# 使用 hdiutil 创建 DMG
+echo "   正在生成 DMG 文件..."
+hdiutil create -volname "${APP_NAME}" \
+    -srcfolder "$TMP_DMG_DIR" \
+    -ov -format UDZO \
+    "$DMG_PATH"
+
+# 清理临时目录
+rm -rf "$TMP_DMG_DIR"
+
+echo "   DMG 创建完成: $DMG_PATH"
+
 echo "======================================"
 echo "打包完成！"
 echo "输出目录: dist_mac/"
+echo "App 文件: ${APP_NAME}.app"
+echo "DMG 文件: ${DMG_NAME}"
 if [ "$NO_OBFUSCATION" = true ]; then
     echo "模式: 无混淆"
 else

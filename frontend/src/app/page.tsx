@@ -30,9 +30,14 @@ export default function Home() {
   const checkEnvConfig = async () => {
     try {
       const config = await api.getEnvConfig();
-      const hasRequired = config.DASHSCOPE_API_KEY && 
-                         config.ALIBABA_CLOUD_ACCESS_KEY_ID && 
-                         config.ALIBABA_CLOUD_ACCESS_KEY_SECRET;
+      // 空值和空字符串都视为未配置
+      const dashscopeKey = config.DASHSCOPE_API_KEY?.trim();
+      const accessKeyId = config.ALIBABA_CLOUD_ACCESS_KEY_ID?.trim();
+      const accessKeySecret = config.ALIBABA_CLOUD_ACCESS_KEY_SECRET?.trim();
+      
+      const hasRequired = dashscopeKey && dashscopeKey.length > 0 &&
+                         accessKeyId && accessKeyId.length > 0 &&
+                         accessKeySecret && accessKeySecret.length > 0;
       
       if (!hasRequired) {
         setEnvRequired(true);

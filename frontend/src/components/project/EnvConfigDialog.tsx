@@ -49,26 +49,30 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
     }
   };
 
+  const validateRequiredFields = () => {
+    const dashscopeKey = config.DASHSCOPE_API_KEY?.trim();
+    const accessKeyId = config.ALIBABA_CLOUD_ACCESS_KEY_ID?.trim();
+    const accessKeySecret = config.ALIBABA_CLOUD_ACCESS_KEY_SECRET?.trim();
+      
+    return dashscopeKey && dashscopeKey.length > 0 &&
+           accessKeyId && accessKeyId.length > 0 &&
+           accessKeySecret && accessKeySecret.length > 0;
+  };
+  
   const handleSave = async () => {
+    // 必填项校验：空值和空字符串都视为未填写
+    if (!validateRequiredFields()) {
+      alert("请填写所有必填项：\n- DashScope API Key\n- 阿里云 Access Key ID\n- 阿里云 Access Key Secret");
+      return;
+    }
+  
     setSaving(true);
     try {
       await api.saveEnvConfig(config);
-      if (!isRequired) {
-        onClose();
-      } else {
-        // Check if all required fields are filled
-        const hasRequired = config.DASHSCOPE_API_KEY && 
-                          config.ALIBABA_CLOUD_ACCESS_KEY_ID && 
-                          config.ALIBABA_CLOUD_ACCESS_KEY_SECRET;
-        if (hasRequired) {
-          onClose();
-        } else {
-          alert("请填写必填项：DashScope API Key 和阿里云 Access Key");
-        }
-      }
+      onClose();
     } catch (error) {
       console.error("Failed to save env config:", error);
-      alert("保存配置失败，请重试");
+      alert("保存配置失败,请重试");
     } finally {
       setSaving(false);
     }
@@ -78,7 +82,7 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
-  const canClose = !isRequired || (config.DASHSCOPE_API_KEY && config.ALIBABA_CLOUD_ACCESS_KEY_ID && config.ALIBABA_CLOUD_ACCESS_KEY_SECRET);
+  const canClose = !isRequired || validateRequiredFields();
 
   if (!isOpen) return null;
 
