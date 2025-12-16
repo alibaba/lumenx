@@ -328,11 +328,27 @@ export const useProjectStore = create<ProjectStore>()(
         }),
         {
             name: 'project-storage',
+            // 明确使用 localStorage
+            storage: {
+                getItem: (name) => {
+                    const str = localStorage.getItem(name);
+                    return str ? JSON.parse(str) : null;
+                },
+                setItem: (name, value) => {
+                    localStorage.setItem(name, JSON.stringify(value));
+                },
+                removeItem: (name) => {
+                    localStorage.removeItem(name);
+                },
+            },
+            // 持久化更多状态，包括 currentProject
             partialize: (state) => ({
                 projects: state.projects,
+                currentProject: state.currentProject,
                 styles: state.styles,
                 selectedStyleId: state.selectedStyleId,
-                // generatingAssetIds: state.generatingAssetIds // Do NOT persist this, or it gets stuck on refresh
+                selectedFrameId: state.selectedFrameId,
+                // generatingTasks 不持久化，避免刷新后卡住
             }),
         }
     )

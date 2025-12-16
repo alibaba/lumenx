@@ -28,8 +28,44 @@ path = os.path.expanduser("~/.tron/comic")
 os.makedirs(path, exist_ok=True)
 os.chdir(path)
 
+# 配置日志文件路径
+log_file = os.path.join(path, "app.log")
+
+# 创建一个同时写入文件和控制台的类
+class TeeOutput:
+    def __init__(self, file_path, original_stream):
+        self.file = open(file_path, 'a', encoding='utf-8')
+        self.original = original_stream
+    
+    def write(self, message):
+        self.file.write(message)
+        self.file.flush()
+        self.original.write(message)
+        self.original.flush()
+    
+    def flush(self):
+        self.file.flush()
+        self.original.flush()
+    
+    def isatty(self):
+        # 返回原始流的 isatty 状态
+        return self.original.isatty() if hasattr(self.original, 'isatty') else False
+
+# 保存原始的stdout和stderr
+original_stdout = sys.stdout
+original_stderr = sys.stderr
+
+# 重定向标准输出和标准错误到文件和控制台
+sys.stdout = TeeOutput(log_file, original_stdout)
+sys.stderr = TeeOutput(log_file, original_stderr)
+
+# 在重定向后导入其他模块
 import uvicorn
 from src.apps.comic_gen.api import app
+from src.utils import setup_logging
+
+# 设置日志系统
+setup_logging(log_file=log_file)
 
 def run_server():
     app.mount("/static", StaticFiles(directory=
@@ -61,8 +97,13 @@ def open_webview():
         min_size=(800, 600)
     )
     
-    # 启动 webview（阻塞式调用）
-    webview.start()
+    # 启动 webview(阻塞式调用)
+    # private_mode=False: 禁用隐私模式,允许保存 cookies 和 localStorage
+    # storage_path: 指定持久化存储路径,确保 localStorage 数据不会丢失
+    webview.start(
+        private_mode=False,
+        storage_path=os.path.expanduser("~/.tron/comic/webview_storage")
+    )
     
     # WebView 关闭后，退出整个进程
     os._exit(0)

@@ -12,8 +12,10 @@ from .llm import ScriptProcessor
 from ...utils.oss_utils import OSSImageUploader
 from dotenv import load_dotenv, set_key
 
-# Load environment variables
-load_dotenv()
+
+env_path = ".env"
+if os.path.exists(env_path):
+    load_dotenv(env_path, override=True)
 
 app = FastAPI(title="AI Comic Gen API")
 

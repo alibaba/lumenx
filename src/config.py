@@ -7,9 +7,6 @@ from dotenv import load_dotenv
 
 from .utils import get_logger
 
-env_path = ".env"
-if os.path.exists(env_path):
-    load_dotenv(env_path, override=True)
 
 logger = get_logger(__name__)
 
