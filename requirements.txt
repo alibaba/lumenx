@@ -23,8 +23,7 @@ alibabacloud-tea-util>=0.3.0
 oss2>=2.18.0
 
 # GUI Framework
-PyQt5>=5.15.0
-PyQtWebEngine>=5.15.0
+pywebview>=5.0.0
 
 # Build & Package
 pyinstaller>=6.0.0

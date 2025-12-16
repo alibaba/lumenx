@@ -80,10 +80,7 @@ pyinstaller --clean --noconfirm ^
     --hidden-import=uvicorn.protocols.websockets.auto ^
     --hidden-import=uvicorn.lifespan ^
     --hidden-import=uvicorn.lifespan.on ^
-    --hidden-import=PyQt5 ^
-    --hidden-import=PyQt5.QtCore ^
-    --hidden-import=PyQt5.QtWidgets ^
-    --hidden-import=PyQt5.QtWebEngineWidgets ^
+    --hidden-import=webview ^
     --hidden-import=starlette ^
     --hidden-import=starlette.staticfiles ^
     --hidden-import=fastapi ^
@@ -103,7 +100,6 @@ pyinstaller --clean --noconfirm ^
     --collect-all fastapi ^
     --collect-all starlette ^
     --collect-all pydantic ^
-    --collect-all PyQt5 ^
     main.py
 
 REM 复制打包结果到项目根目录

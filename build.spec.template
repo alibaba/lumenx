@@ -34,13 +34,8 @@ hiddenimports = [
     'uvicorn.protocols.websockets.auto',
     'uvicorn.lifespan',
     'uvicorn.lifespan.on',
-    # PyQt5
-    'PyQt5',
-    'PyQt5.QtCore',
-    'PyQt5.QtGui',
-    'PyQt5.QtWidgets',
-    'PyQt5.QtWebEngineWidgets',
-    'PyQt5.QtWebEngineCore',
+    # WebView
+    'webview',
     # Web Framework
     'starlette',
     'starlette.staticfiles',
@@ -62,7 +57,7 @@ hiddenimports = [
 ]
 
 # 自动收集包的所有内容
-for package in ['uvicorn', 'fastapi', 'starlette', 'pydantic', 'PyQt5']:
+for package in ['uvicorn', 'fastapi', 'starlette', 'pydantic']:
     tmp_datas, tmp_binaries, tmp_hiddenimports = collect_all(package)
     datas += tmp_datas
     hiddenimports += tmp_hiddenimports
