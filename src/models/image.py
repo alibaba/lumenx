@@ -7,6 +7,7 @@ from http import HTTPStatus
 import dashscope
 from dashscope import ImageSynthesis
 from ..utils import get_logger
+from ..utils.oss_utils import OSSImageUploader
 
 logger = get_logger(__name__)
 
@@ -45,10 +46,6 @@ class WanxImageModel(ImageGenModel):
         
         dashscope.api_key = self.api_key
         self.params = config.get('params', {})
-        
-        # Initialize OSS Uploader
-        from ..utils.oss_utils import OSSImageUploader
-        self.oss_uploader = OSSImageUploader()
 
     def generate(self, prompt: str, output_path: str, ref_image_path: str = None, ref_image_paths: list = None, **kwargs) -> Tuple[str, float]:
         # Determine model based on whether reference image is provided
@@ -94,7 +91,7 @@ class WanxImageModel(ImageGenModel):
                         raise ValueError(f"Reference image not found: {path}")
                     
                     # Upload to OSS
-                    url = self.oss_uploader.upload_image(path)
+                    url = OSSImageUploader().upload_image(path)
                     if not url:
                         raise RuntimeError(f"Failed to upload reference image to OSS: {path}")
                     ref_image_urls.append(url)

@@ -36,7 +36,7 @@ app.mount("/files", StaticFiles(directory="output"), name="files")
 
 # Initialize pipeline
 pipeline = ComicGenPipeline()
-oss_uploader = OSSImageUploader()
+
 
 
 @app.post("/upload")
@@ -51,7 +51,7 @@ async def upload_file(file: UploadFile = File(...)):
             shutil.copyfileobj(file.file, buffer)
 
         # Try uploading to OSS
-        oss_url = oss_uploader.upload_image(file_path)
+        oss_url = OSSImageUploader().upload_image(file_path)
         if oss_url:
             return {"url": oss_url}
 
