@@ -51,22 +51,46 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# 检查并安装必要的打包工具
-echo "1. 检查并安装打包工具..."
-if [ "$NO_OBFUSCATION" = true ]; then
-    pip3 install --upgrade pyinstaller
+# 检查并创建虚拟环境
+echo "1. 检查 Python 虚拟环境..."
+if [ ! -d ".venv" ]; then
+    echo "   .venv 不存在，正在创建虚拟环境..."
+    python3 -m venv .venv
+    echo "   虚拟环境创建成功"
 else
-    pip3 install --upgrade pyinstaller pyarmor
+    echo "   .venv 已存在"
+fi
+
+# 激活虚拟环境
+echo "2. 激活虚拟环境..."
+source .venv/bin/activate
+
+# 安装项目依赖
+echo "3. 安装项目依赖..."
+if [ -f "requirements.txt" ]; then
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    echo "   依赖安装完成"
+else
+    echo "   警告: 未找到 requirements.txt"
+fi
+
+# 检查并安装必要的打包工具
+echo "4. 检查并安装打包工具..."
+if [ "$NO_OBFUSCATION" = true ]; then
+    pip install --upgrade pyinstaller
+else
+    pip install --upgrade pyinstaller pyarmor
 fi
 
 # 清理之前的打包文件
-echo "2. 清理旧的打包文件..."
+echo "5. 清理旧的打包文件..."
 rm -rf build dist obfuscated dist_mac *.spec __pycache__
 find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
 if [ "$NO_OBFUSCATION" = true ]; then
     # 不混淆模式：直接在当前目录打包
-    echo "3. 跳过代码混淆步骤"
+    echo "6. 跳过代码混淆步骤"
     WORK_DIR="."
     ADD_DATA_STATIC="static:static"
     ADD_DATA_PRESET="src:src"
@@ -75,7 +99,7 @@ if [ "$NO_OBFUSCATION" = true ]; then
     HIDDEN_IMPORT_SRC="--hidden-import=src --hidden-import=src.apps --hidden-import=src.apps.comic_gen --hidden-import=src.apps.comic_gen.api"
 else
     # 混淆模式：创建混淆目录
-    echo "3. 使用 PyArmor 混淆代码..."
+    echo "6. 使用 PyArmor 混淆代码..."
     mkdir -p obfuscated
     
     # 混淆所有 Python 文件到同一目录结构
@@ -86,7 +110,7 @@ else
     pyarmor gen -O obfuscated main.py
     
     # 复制静态资源
-    echo "4. 复制静态资源..."
+    echo "7. 复制静态资源..."
     cp -r static obfuscated/
     
     # 复制其他必要文件
@@ -116,9 +140,9 @@ fi
 
 # 使用 PyInstaller 打包
 if [ "$NO_OBFUSCATION" = true ]; then
-    echo "4. 使用 PyInstaller 打包..."
+    echo "7. 使用 PyInstaller 打包..."
 else
-    echo "5. 使用 PyInstaller 打包..."
+    echo "8. 使用 PyInstaller 打包..."
 fi
 
 # 检查图标文件是否存在
@@ -171,11 +195,11 @@ pyinstaller --clean --noconfirm \
 
 # 复制打包结果到项目根目录
 if [ "$NO_OBFUSCATION" = true ]; then
-    echo "5. 复制打包结果..."
+    echo "8. 复制打包结果..."
     mkdir -p dist_mac
     cp -r dist/* dist_mac/
 else
-    echo "6. 复制打包结果..."
+    echo "9. 复制打包结果..."
     cd ..
     mkdir -p dist_mac
     cp -r obfuscated/dist/* dist_mac/
@@ -183,9 +207,9 @@ fi
 
 # 创建 DMG 安装包
 if [ "$NO_OBFUSCATION" = true ]; then
-    echo "6. 创建 DMG 安装包..."
+    echo "9. 创建 DMG 安装包..."
 else
-    echo "7. 创建 DMG 安装包..."
+    echo "10. 创建 DMG 安装包..."
 fi
 
 # 定义 DMG 文件名和路径

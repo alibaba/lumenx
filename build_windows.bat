@@ -45,12 +45,36 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+REM 检查并创建虚拟环境
+echo 1. 检查 Python 虚拟环境...
+if not exist .venv (
+    echo    .venv 不存在，正在创建虚拟环境...
+    python -m venv .venv
+    echo    虚拟环境创建成功
+) else (
+    echo    .venv 已存在
+)
+
+REM 激活虚拟环境
+echo 2. 激活虚拟环境...
+call .venv\Scripts\activate.bat
+
+REM 安装项目依赖
+echo 3. 安装项目依赖...
+if exist requirements.txt (
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+    echo    依赖安装完成
+) else (
+    echo    警告: 未找到 requirements.txt
+)
+
 REM 检查并安装必要的打包工具
-echo 1. 检查并安装打包工具...
+echo 4. 检查并安装打包工具...
 pip install --upgrade pyinstaller pyarmor
 
 REM 清理之前的打包文件
-echo 2. 清理旧的打包文件...
+echo 5. 清理旧的打包文件...
 if exist build rmdir /s /q build
 if exist dist rmdir /s /q dist
 if exist obfuscated rmdir /s /q obfuscated
@@ -58,7 +82,7 @@ if exist *.spec del /q *.spec
 for /d /r . %%d in (__pycache__) do @if exist "%%d" rmdir /s /q "%%d"
 
 REM 创建混淆目录
-echo 3. 使用 PyArmor 混淆代码...
+echo 6. 使用 PyArmor 混淆代码...
 mkdir obfuscated
 
 REM 混淆 src 目录下的所有 Python 文件
@@ -69,7 +93,7 @@ copy main.py obfuscated\
 pyarmor gen -O obfuscated obfuscated\main.py
 
 REM 复制静态资源
-echo 4. 复制静态资源...
+echo 7. 复制静态资源...
 xcopy /E /I /Y static obfuscated\static
 
 REM 复制其他必要文件
@@ -86,7 +110,7 @@ REM 进入混淆目录
 cd obfuscated
 
 REM 使用 PyInstaller 打包
-echo 5. 使用 PyInstaller 打包...
+echo 8. 使用 PyInstaller 打包...
 
 REM 检查图标文件是否存在
 if exist ..\icon.ico (
@@ -136,7 +160,7 @@ pyinstaller --clean --noconfirm ^
     main.py
 
 REM 复制打包结果到项目根目录
-echo 6. 复制打包结果...
+echo 9. 复制打包结果...
 cd ..
 if not exist dist_windows mkdir dist_windows
 xcopy /E /I /Y obfuscated\dist\* dist_windows\
