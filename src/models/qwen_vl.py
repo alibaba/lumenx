@@ -3,6 +3,8 @@ import logging
 import base64
 from typing import Tuple
 
+import dashscope
+
 logger = logging.getLogger(__name__)
 
 # System prompt template for I2V prompt optimization
@@ -36,17 +38,20 @@ I2V_OPTIMIZATION_PROMPT = """你是一个AI视频提示词专家，我需要你�
 
 class QwenVLModel:
     def __init__(self, config: dict):
-        self.api_key = os.getenv('DASHSCOPE_API_KEY')
         self.model_name = config.get('params', {}).get('model_name', 'qwen-vl-plus')
-        
-        if not self.api_key:
-            logger.warning("DASHSCOPE_API_KEY not found in environment variables.")
-    
+
+    @property
+    def api_key(self):
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        if not api_key:
+            logger.warning("Dashscope API Key not found in config or environment variables.")
+        return api_key
+
     def _encode_image_to_base64(self, image_path: str) -> str:
         """Convert local image to base64 string"""
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
-    
+
     def optimize_prompt(self, image_path: str, original_prompt: str) -> Tuple[str, float]:
         """
         Optimize prompt using Qwen-VL model
@@ -58,15 +63,17 @@ class QwenVLModel:
         Returns:
             Tuple[str, float]: (optimized_prompt, duration)
         """
+        dashscope.api_key = self.api_key
+
         try:
             from dashscope import MultiModalConversation
         except ImportError:
             logger.error("dashscope package not found. Please install it.")
             raise
-        
+
         import time
         start_time = time.time()
-        
+
         # Prepare image URL
         if image_path.startswith('http'):
             image_url = image_path
@@ -76,10 +83,10 @@ class QwenVLModel:
             ext = os.path.splitext(image_path)[1].lower()
             mime_type = "image/png" if ext == ".png" else "image/jpeg"
             image_url = f"data:{mime_type};base64,{base64_image}"
-        
+
         # Construct system prompt
         system_prompt = I2V_OPTIMIZATION_PROMPT.format(original_prompt=original_prompt)
-        
+
         # Call Qwen-VL API
         messages = [
             {
@@ -90,13 +97,13 @@ class QwenVLModel:
                 ]
             }
         ]
-        
+
         logger.info(f"Calling Qwen-VL {self.model_name} for prompt optimization...")
         response = MultiModalConversation.call(
             model=self.model_name,
             messages=messages
         )
-        
+
         if response.status_code == 200:
             optimized_prompt = response.output.choices[0].message.content[0]['text']
             logger.info(f"Optimized prompt: {optimized_prompt[:100]}...")

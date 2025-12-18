@@ -263,4 +263,14 @@ export const api = {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/generate_video`);
         return res.data;
     },
+
+    getEnvConfig: async () => {
+        const res = await axios.get(`${API_URL}/config/env`);
+        return res.data;
+    },
+
+    saveEnvConfig: async (config: Record<string, string | undefined>) => {
+        const res = await axios.post(`${API_URL}/config/env`, config);
+        return res.data;
+    },
 };

@@ -37,19 +37,20 @@ class ImageGenModel(ABC):
 class WanxImageModel(ImageGenModel):
     def __init__(self, config):
         super().__init__(config)
-        self.api_key = config.get('api_key')
-        if not self.api_key:
-            self.api_key = os.getenv("DASHSCOPE_API_KEY")
-            
-        if not self.api_key:
-             logger.warning("Dashscope API Key not found in config or environment variables.")
-        
-        dashscope.api_key = self.api_key
         self.params = config.get('params', {})
+
+    @property
+    def api_key(self):
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        if not api_key:
+            logger.warning("Dashscope API Key not found in config or environment variables.")
+        return api_key
 
     def generate(self, prompt: str, output_path: str, ref_image_path: str = None, ref_image_paths: list = None, **kwargs) -> Tuple[str, float]:
         # Determine model based on whether reference image is provided
         # Support both single path (legacy) and list of paths
+        dashscope.api_key = self.api_key
+
         all_ref_paths = []
         if ref_image_path:
             all_ref_paths.append(ref_image_path)

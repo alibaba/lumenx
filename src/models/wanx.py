@@ -17,20 +17,18 @@ logger = get_logger(__name__)
 class WanxModel(VideoGenModel):
     def __init__(self, config):
         super().__init__(config)
-        self.api_key = config.get('api_key')
-        if not self.api_key:
-            # Try getting from env if not in config
-            self.api_key = os.getenv("DASHSCOPE_API_KEY")
-
-        if not self.api_key:
-            logger.warning("Dashscope API Key not found in config or environment variables.")
-
-        # Set dashscope API key
-        dashscope.api_key = self.api_key
 
         self.params = config.get('params', {})
 
+    @property
+    def api_key(self):
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        if not api_key:
+            logger.warning("Dashscope API Key not found in config or environment variables.")
+        return api_key
+
     def generate(self, prompt: str, output_path: str, img_path: str = None, **kwargs) -> Tuple[str, float]:
+        dashscope.api_key = self.api_key
         # Determine model
         if img_path or kwargs.get('img_url'):
             model_name = self.params.get('i2v_model_name', 'wan2.5-i2v-preview')  # Default to I2V model

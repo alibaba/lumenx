@@ -9,44 +9,16 @@ import CreateProjectDialog from "@/components/project/CreateProjectDialog";
 import EnvConfigDialog from "@/components/project/EnvConfigDialog";
 import CreativeCanvas from "@/components/canvas/CreativeCanvas";
 import dynamic from "next/dynamic";
-import { api } from "@/lib/api";
 
 const ProjectClient = dynamic(() => import("@/app/project/[id]/ProjectClient"), { ssr: false });
 
 export default function Home() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEnvDialogOpen, setIsEnvDialogOpen] = useState(false);
-  const [envRequired, setEnvRequired] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'project'>('home');
   const [projectId, setProjectId] = useState<string | null>(null);
   const projects = useProjectStore((state) => state.projects);
   const deleteProject = useProjectStore((state) => state.deleteProject);
-
-  // Check environment variables on startup
-  useEffect(() => {
-    checkEnvConfig();
-  }, []);
-
-  const checkEnvConfig = async () => {
-    try {
-      const config = await api.getEnvConfig();
-      // 空值和空字符串都视为未配置
-      const dashscopeKey = config.DASHSCOPE_API_KEY?.trim();
-      const accessKeyId = config.ALIBABA_CLOUD_ACCESS_KEY_ID?.trim();
-      const accessKeySecret = config.ALIBABA_CLOUD_ACCESS_KEY_SECRET?.trim();
-      
-      const hasRequired = dashscopeKey && dashscopeKey.length > 0 &&
-                         accessKeyId && accessKeyId.length > 0 &&
-                         accessKeySecret && accessKeySecret.length > 0;
-      
-      if (!hasRequired) {
-        setEnvRequired(true);
-        setIsEnvDialogOpen(true);
-      }
-    } catch (error) {
-      console.error("Failed to check env config:", error);
-    }
-  };
 
   // 监听 hash 变化
   useEffect(() => {
@@ -99,10 +71,7 @@ export default function Home() {
               </p>
             </div>
             <button
-              onClick={() => {
-                setEnvRequired(false);
-                setIsEnvDialogOpen(true);
-              }}
+              onClick={() => setIsEnvDialogOpen(true)}
               className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors"
               title="配置环境变量"
             >
@@ -170,11 +139,8 @@ export default function Home() {
       {/* Environment Configuration Dialog */}
       <EnvConfigDialog
         isOpen={isEnvDialogOpen}
-        onClose={() => {
-          setIsEnvDialogOpen(false);
-          setEnvRequired(false);
-        }}
-        isRequired={envRequired}
+        onClose={() => setIsEnvDialogOpen(false)}
+        isRequired={false}
       />
     </main>
   );

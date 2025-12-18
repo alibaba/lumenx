@@ -17,6 +17,7 @@ interface EnvConfig {
   OSS_BUCKET_NAME: string;
   OSS_ENDPOINT: string;
   OSS_BASE_PATH: string;
+  [key: string]: string; // 添加索引签名以兼容Record类型
 }
 
 export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }: EnvConfigDialogProps) {
@@ -69,7 +70,12 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
     setSaving(true);
     try {
       await api.saveEnvConfig(config);
+      alert("配置保存成功！");
       onClose();
+      // 如果是必填配置保存成功后，可以考虑刷新页面以重新检查配置
+      if (isRequired) {
+        window.location.reload();
+      }
     } catch (error) {
       console.error("Failed to save env config:", error);
       alert("保存配置失败,请重试");

@@ -27,8 +27,15 @@ logger = logging.getLogger(__name__)
 
 class ScriptProcessor:
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or os.getenv("DASHSCOPE_API_KEY")
+        pass
         # self.model = "qwen-plus"
+
+    @property
+    def api_key(self):
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        if not api_key:
+            logger.warning("Warning: DASHSCOPE_API_KEY not set.")
+        return api_key
 
     def parse_novel(self, title: str, text: str) -> Script:
         """
