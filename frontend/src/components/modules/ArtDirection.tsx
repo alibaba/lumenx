@@ -25,9 +25,13 @@ export default function ArtDirection() {
     const [editingNegative, setEditingNegative] = useState("");
     const [isSaving, setIsSaving] = useState(false);
 
+    // Load presets only once on mount (separate from project-dependent state)
     useEffect(() => {
         loadPresets();
+    }, []);  // Empty dependency - only run on mount
 
+    // Load art direction from project when it changes
+    useEffect(() => {
         // Load existing art direction if available
         if (currentProject?.art_direction) {
             console.log("Loading Art Direction:", currentProject.art_direction);
@@ -47,7 +51,7 @@ export default function ArtDirection() {
         } else {
             console.log("No Art Direction found in currentProject");
         }
-    }, [currentProject]);
+    }, [currentProject?.id, currentProject?.art_direction]);  // More specific dependencies
 
     // Sync local aiRecommendations with store when it updates (e.g. after analysis finishes)
     useEffect(() => {

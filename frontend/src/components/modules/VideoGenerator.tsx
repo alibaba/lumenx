@@ -14,20 +14,31 @@ export default function VideoGenerator() {
     // Shared state for Remix functionality
     const [remixData, setRemixData] = useState<Partial<VideoTask> | null>(null);
 
+    // Get default model from project settings
+    const defaultI2vModel = currentProject?.model_settings?.i2v_model || "wan2.5-i2v-preview";
+
     // Generation Params (Lifted State)
     const [params, setParams] = useState({
         resolution: "720p",
         duration: 5,
         seed: undefined as number | undefined,
-        generateAudio: false,
+        generateAudio: true,  // Default to AI Sound enabled
         audioUrl: "",
         promptExtend: true,
         negativePrompt: "",
         batchSize: 1,
         cameraMovement: "none" as string,
         subjectMotion: "still" as string,
-        model: "wan2.5-i2v-preview" as string
+        model: defaultI2vModel,
+        shotType: "single" as string  // 'single' or 'multi' (only for wan2.6-i2v)
     });
+
+    // Sync model from project settings when project changes
+    useEffect(() => {
+        if (currentProject?.model_settings?.i2v_model) {
+            setParams(p => ({ ...p, model: currentProject.model_settings!.i2v_model }));
+        }
+    }, [currentProject?.model_settings?.i2v_model]);
 
     // Sync tasks from project
     useEffect(() => {

@@ -94,24 +94,37 @@ function ScriptInspector({ project }: { project: any }) {
 }
 
 function AssetsInspector({ project }: { project: any }) {
-    const styles = useProjectStore((state) => state.styles);
-    const selectedStyleId = useProjectStore((state) => state.selectedStyleId);
-    const updateStylePrompt = useProjectStore((state) => state.updateStylePrompt);
+    const currentProject = useProjectStore((state) => state.currentProject);
+    const updateProject = useProjectStore((state) => state.updateProject);
 
-    const selectedStyle = styles.find(s => s.id === selectedStyleId);
-    const [isEditing, setIsEditing] = useState(false);
-    const [prompt, setPrompt] = useState("");
+    // Get art direction style from Step 2
+    const artDirectionStyle = currentProject?.art_direction?.style_config;
 
-    useEffect(() => {
-        if (selectedStyle) {
-            setPrompt(selectedStyle.prompt);
-        }
-    }, [selectedStyle]);
+    // Get aspect ratios from model settings
+    const characterAspectRatio = currentProject?.model_settings?.character_aspect_ratio || '9:16';
+    const sceneAspectRatio = currentProject?.model_settings?.scene_aspect_ratio || '16:9';
+    const propAspectRatio = currentProject?.model_settings?.prop_aspect_ratio || '1:1';
 
-    const handleSave = () => {
-        if (selectedStyle) {
-            updateStylePrompt(selectedStyle.id, prompt);
-            setIsEditing(false);
+    const handleUpdateAspectRatio = async (type: 'character' | 'scene' | 'prop', ratio: string) => {
+        if (!currentProject) return;
+
+        try {
+            const updatePayload: any = {};
+            if (type === 'character') updatePayload.character_aspect_ratio = ratio;
+            else if (type === 'scene') updatePayload.scene_aspect_ratio = ratio;
+            else if (type === 'prop') updatePayload.prop_aspect_ratio = ratio;
+
+            const updated = await api.updateModelSettings(
+                currentProject.id,
+                undefined, undefined, undefined,
+                type === 'character' ? ratio : undefined,
+                type === 'scene' ? ratio : undefined,
+                type === 'prop' ? ratio : undefined,
+                undefined
+            );
+            updateProject(currentProject.id, updated);
+        } catch (error) {
+            console.error('Failed to update aspect ratio:', error);
         }
     };
 
@@ -122,75 +135,121 @@ function AssetsInspector({ project }: { project: any }) {
                     <Users size={14} /> Asset Overview
                 </h3>
                 <div className="text-xs text-gray-400">
-                    Manage your project assets and global style settings.
+                    Manage aspect ratios and view global style settings.
                 </div>
             </div>
 
-            {/* Style Editor Section */}
+            {/* Aspect Ratio Controls */}
             <div className="space-y-4 pt-4 border-t border-white/10">
                 <div className="flex items-center gap-2 mb-2">
-                    <Paintbrush className="text-primary" size={16} />
-                    <h3 className="font-bold text-white text-sm">Global Style</h3>
+                    <Layout className="text-primary" size={14} />
+                    <h3 className="font-bold text-white text-xs">Aspect Ratios</h3>
                 </div>
 
-                <div>
-                    <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Selected Style</label>
-                    <div className={`text-sm font-bold text-white bg-gradient-to-r ${selectedStyle?.color || 'from-gray-700 to-gray-900'} p-3 rounded-lg border border-white/10 shadow-lg`}>
-                        {selectedStyle?.name || "None"}
-                    </div>
-                </div>
-
-                <div>
-                    <div className="flex justify-between items-center mb-2">
-                        <label className="text-xs font-bold text-gray-500 uppercase">Style Prompt</label>
-                        {!isEditing && (
+                {/* Character Aspect Ratio */}
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">Character</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                        {['9:16', '16:9', '1:1'].map((ratio) => (
                             <button
-                                onClick={() => setIsEditing(true)}
-                                className="text-xs text-primary hover:text-primary/80 font-bold"
+                                key={ratio}
+                                onClick={() => handleUpdateAspectRatio('character', ratio)}
+                                className={`px-2 py-1.5 rounded text-[10px] border transition-all font-medium ${characterAspectRatio === ratio
+                                    ? 'bg-primary/20 text-primary border-primary/30'
+                                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                                    }`}
                             >
-                                Edit
+                                {ratio}
                             </button>
-                        )}
+                        ))}
                     </div>
+                </div>
 
-                    {isEditing ? (
-                        <div className="space-y-2">
-                            <textarea
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                className="w-full h-32 bg-black/40 border border-primary/50 rounded-lg p-3 text-xs text-gray-300 resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-                                placeholder="Enter style description..."
-                            />
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => {
-                                        setIsEditing(false);
-                                        if (selectedStyle) setPrompt(selectedStyle.prompt);
-                                    }}
-                                    className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-gray-400 text-xs rounded-md font-bold transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleSave}
-                                    className="flex-1 py-1.5 bg-primary hover:bg-primary/90 text-white text-xs rounded-md font-bold transition-colors"
-                                >
-                                    Save
-                                </button>
+                {/* Scene Aspect Ratio */}
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">Scene</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                        {['9:16', '16:9', '1:1'].map((ratio) => (
+                            <button
+                                key={ratio}
+                                onClick={() => handleUpdateAspectRatio('scene', ratio)}
+                                className={`px-2 py-1.5 rounded text-[10px] border transition-all font-medium ${sceneAspectRatio === ratio
+                                    ? 'bg-primary/20 text-primary border-primary/30'
+                                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                                    }`}
+                            >
+                                {ratio}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Prop Aspect Ratio */}
+                <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase">Prop</label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                        {['9:16', '16:9', '1:1'].map((ratio) => (
+                            <button
+                                key={ratio}
+                                onClick={() => handleUpdateAspectRatio('prop', ratio)}
+                                className={`px-2 py-1.5 rounded text-[10px] border transition-all font-medium ${propAspectRatio === ratio
+                                    ? 'bg-primary/20 text-primary border-primary/30'
+                                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                                    }`}
+                            >
+                                {ratio}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Art Direction Style Display (Read-only) */}
+            <div className="space-y-4 pt-4 border-t border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                    <Paintbrush className="text-primary" size={14} />
+                    <h3 className="font-bold text-white text-xs">Art Direction Style</h3>
+                </div>
+
+                {artDirectionStyle ? (
+                    <div className="space-y-3">
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">Style Name</label>
+                            <div className="text-xs font-bold text-white bg-gradient-to-r from-blue-500/20 to-purple-500/20 p-2.5 rounded-lg border border-white/10">
+                                {artDirectionStyle.name}
                             </div>
                         </div>
-                    ) : (
-                        <div className="bg-black/40 border border-white/5 rounded-lg p-3 text-xs text-gray-400 leading-relaxed min-h-[80px]">
-                            {selectedStyle?.prompt}
-                        </div>
-                    )}
-                </div>
 
-                <div className="pt-2">
-                    <p className="text-[10px] text-gray-500 leading-relaxed">
-                        Tip: This prompt will be appended to all asset generation prompts. Use it to define lighting, art style, and atmosphere.
-                    </p>
-                </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">Positive Prompt</label>
+                            <div className="bg-black/40 border border-white/5 rounded-lg p-2.5 text-[10px] text-gray-400 leading-relaxed max-h-20 overflow-y-auto">
+                                {artDirectionStyle.positive_prompt || 'No positive prompt defined'}
+                            </div>
+                        </div>
+
+                        {artDirectionStyle.negative_prompt && (
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase mb-1.5 block">Negative Prompt</label>
+                                <div className="bg-black/40 border border-white/5 rounded-lg p-2.5 text-[10px] text-gray-400 leading-relaxed max-h-16 overflow-y-auto">
+                                    {artDirectionStyle.negative_prompt}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="pt-2">
+                            <p className="text-[9px] text-gray-500 leading-relaxed">
+                                💡 Tip: Edit style in Step 2 (Art Direction)
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-white/5 border border-white/10 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500 mb-2">No style configured</p>
+                        <p className="text-[9px] text-gray-600">
+                            Go to Step 2 (Art Direction) to set up your project's visual style
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -205,12 +264,22 @@ function StoryboardInspector() {
 
     const selectedFrame = currentProject?.frames?.find((f: any) => f.id === selectedFrameId);
 
-    const updateFrame = (data: any) => {
+    const updateFrame = async (data: any) => {
         if (!currentProject || !selectedFrame) return;
+
+        // Optimistically update local state first
         const updatedFrames = currentProject.frames.map((f: any) =>
             f.id === selectedFrameId ? { ...f, ...data } : f
         );
         updateProject(currentProject.id, { frames: updatedFrames });
+
+        // Sync to backend (fire and forget for speed, but log errors)
+        try {
+            await api.updateFrame(currentProject.id, selectedFrame.id, data);
+        } catch (error) {
+            console.error("Failed to sync frame to backend:", error);
+            // Note: We don't revert optimistic update to keep UI responsive
+        }
     };
 
     const handleComposePrompt = () => {
@@ -328,29 +397,9 @@ function StoryboardInspector() {
                 <div className="p-4 bg-white/5 rounded-lg border border-white/10 text-center text-gray-500 text-xs">
                     Select a frame to edit its details.
                 </div>
-
-                <div className="space-y-3">
-                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                        <Layout size={14} /> Global Settings
-                    </h3>
-                    <div className="space-y-2">
-                        <label className="text-xs text-gray-400">Aspect Ratio</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {["16:9", "9:16", "1:1"].map((ratio) => (
-                                <button
-                                    key={ratio}
-                                    onClick={() => updateProject(currentProject.id, { aspectRatio: ratio })}
-                                    className={`px-2 py-1.5 rounded text-xs border transition-all ${currentProject.aspectRatio === ratio
-                                        ? "bg-primary/20 text-primary border-primary/30"
-                                        : "bg-white/5 text-gray-400 border-white/10 hover:bg-white/10"
-                                        }`}
-                                >
-                                    {ratio}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
+                <p className="text-xs text-gray-500 text-center">
+                    Tip: Use the ⚙️ icon in the sidebar to configure aspect ratios.
+                </p>
             </div>
         );
     }

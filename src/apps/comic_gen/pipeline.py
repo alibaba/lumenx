@@ -4,6 +4,7 @@ import os
 import time
 import uuid
 import subprocess
+import threading
 from urllib.parse import quote
 from .models import Script, GenerationStatus, VideoTask
 from .llm import ScriptProcessor
@@ -27,6 +28,7 @@ class ComicGenPipeline:
         self.export_manager = ExportManager(self.config.get('export'))
         
         self.data_file = "output/projects.json"
+        self._save_lock = threading.Lock()  # Lock to prevent concurrent file writes
         self.scripts: Dict[str, Script] = self._load_data()
 
     # ... (existing methods)
@@ -55,12 +57,14 @@ class ComicGenPipeline:
             return {}
 
     def _save_data(self):
-        try:
-            os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
-            with open(self.data_file, 'w') as f:
-                json.dump({k: v.dict() for k, v in self.scripts.items()}, f, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to save data: {e}")
+        """Save data with thread lock to prevent concurrent write issues."""
+        with self._save_lock:
+            try:
+                os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
+                with open(self.data_file, 'w') as f:
+                    json.dump({k: v.dict() for k, v in self.scripts.items()}, f, indent=2)
+            except Exception as e:
+                logger.error(f"Failed to save data: {e}")
 
     def create_project(self, title: str, text: str, skip_analysis: bool = False) -> Script:
         """Step 1: Parse novel and create project."""
@@ -116,12 +120,32 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None) -> Script:
+    def generate_asset(self, script_id: str, asset_id: str, asset_type: str, style_preset: str = None, reference_image_url: str = None, style_prompt: str = None, generation_type: str = "all", prompt: str = None, apply_style: bool = True, negative_prompt: str = None, batch_size: int = 1, model_name: str = None) -> Script:
         """Step 2: Generate a specific asset (character/scene/prop).
         If style_preset is None, uses the project's global style."""
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
+        
+        # Get effective model name from project settings if not overridden
+        effective_model_name = model_name or script.model_settings.t2i_model
+        
+        # Get effective size based on asset type
+        from .assets import ASPECT_RATIO_TO_SIZE
+        if asset_type == "character":
+            aspect_ratio = script.model_settings.character_aspect_ratio
+            default_size = "576*1024"  # Portrait
+        elif asset_type == "scene":
+            aspect_ratio = script.model_settings.scene_aspect_ratio
+            default_size = "1024*576"  # Landscape
+        elif asset_type == "prop":
+            aspect_ratio = script.model_settings.prop_aspect_ratio
+            default_size = "1024*1024"  # Square
+        else:
+            aspect_ratio = "9:16"
+            default_size = "576*1024"
+        
+        effective_size = ASPECT_RATIO_TO_SIZE.get(aspect_ratio, default_size)
         
         # Determine effective style: Art Direction > passed style > legacy style
         effective_positive_prompt = ""
@@ -184,12 +208,15 @@ class ComicGenPipeline:
                     generation_type=generation_type, 
                     prompt=prompt, 
                     positive_prompt=effective_positive_prompt, # Used as style suffix if prompt is auto-generated
-                    negative_prompt=effective_negative_prompt
+                    negative_prompt=effective_negative_prompt,
+                    batch_size=batch_size,
+                    model_name=effective_model_name,
+                    size=effective_size
                 )
             elif asset_type == "scene":
-                self.asset_generator.generate_scene(target_asset, effective_positive_prompt, effective_negative_prompt)
+                self.asset_generator.generate_scene(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=effective_model_name, size=effective_size)
             elif asset_type == "prop":
-                self.asset_generator.generate_prop(target_asset, effective_positive_prompt, effective_negative_prompt)
+                self.asset_generator.generate_prop(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=effective_model_name, size=effective_size)
                 
             target_asset.status = GenerationStatus.COMPLETED
         except Exception as e:
@@ -339,7 +366,34 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def generate_storyboard_render(self, script_id: str, frame_id: str, composition_data: Optional[Dict[str, Any]], prompt: str) -> Script:
+    def update_frame(self, script_id: str, frame_id: str, **kwargs) -> Script:
+        """Update frame data (prompt, scene_id, character_ids, etc.)."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        
+        frame = next((f for f in script.frames if f.id == frame_id), None)
+        if not frame:
+            raise ValueError(f"Frame {frame_id} not found")
+        
+        # Update only provided fields
+        if kwargs.get('image_prompt') is not None:
+            frame.image_prompt = kwargs['image_prompt']
+        if kwargs.get('action_description') is not None:
+            frame.action_description = kwargs['action_description']
+        if kwargs.get('dialogue') is not None:
+            frame.dialogue = kwargs['dialogue']
+        if kwargs.get('camera_angle') is not None:
+            frame.camera_angle = kwargs['camera_angle']
+        if kwargs.get('scene_id') is not None:
+            frame.scene_id = kwargs['scene_id']
+        if kwargs.get('character_ids') is not None:
+            frame.character_ids = kwargs['character_ids']
+        
+        self._save_data()
+        return script
+
+    def generate_storyboard_render(self, script_id: str, frame_id: str, composition_data: Optional[Dict[str, Any]], prompt: str, batch_size: int = 1) -> Script:
         """Step 3b: Render a specific frame from composition data."""
         script = self.scripts.get(script_id)
         if not script:
@@ -388,6 +442,11 @@ class ComicGenPipeline:
             # Find scene for this frame
             scene = next((s for s in script.scenes if s.id == frame.scene_id), None)
 
+            # Get effective size from storyboard_aspect_ratio
+            from .assets import ASPECT_RATIO_TO_SIZE
+            storyboard_aspect_ratio = script.model_settings.storyboard_aspect_ratio
+            effective_size = ASPECT_RATIO_TO_SIZE.get(storyboard_aspect_ratio, "1024*576")  # Default to landscape
+
             # Call generator
             self.storyboard_generator.generate_frame(
                 frame, 
@@ -395,7 +454,9 @@ class ComicGenPipeline:
                 scene, 
                 ref_image_path=ref_image_path,
                 ref_image_paths=ref_image_paths,
-                prompt=final_prompt
+                prompt=final_prompt,
+                batch_size=batch_size,
+                size=effective_size
             )
             
             self._save_data()
@@ -434,7 +495,7 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.5-i2v-preview", frame_id: str = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.6-i2v", frame_id: str = None, shot_type: str = "single") -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -484,6 +545,7 @@ class ComicGenPipeline:
             prompt_extend=prompt_extend,
             negative_prompt=negative_prompt,
             model=model,
+            shot_type=shot_type,  # Store shot_type for wan2.6-i2v
             created_at=time.time()
         )
         
@@ -682,6 +744,7 @@ class ComicGenPipeline:
                 prompt_extend=task.prompt_extend,
                 negative_prompt=task.negative_prompt,
                 model=task.model,
+                shot_type=task.shot_type,  # Pass shot_type for wan2.6-i2v (single/multi)
                 # Legacy params mapped or ignored
                 camera_motion=None, 
                 subject_motion=None
@@ -767,3 +830,252 @@ class ComicGenPipeline:
 
     def get_script(self, script_id: str) -> Optional[Script]:
         return self.scripts.get(script_id)
+
+    def _select_variant_in_asset(self, image_asset: Any, variant_id: str) -> Any:
+        """Helper to select a variant in an ImageAsset. Returns the selected variant if found."""
+        if not image_asset or not image_asset.variants:
+            return None
+            
+        for variant in image_asset.variants:
+            if variant.id == variant_id:
+                image_asset.selected_id = variant_id
+                return variant
+        return None
+
+    def _delete_variant_in_asset(self, image_asset: Any, variant_id: str) -> bool:
+        """Helper to delete a variant in an ImageAsset. Returns True if found and deleted."""
+        if not image_asset or not image_asset.variants:
+            return False
+            
+        initial_len = len(image_asset.variants)
+        image_asset.variants = [v for v in image_asset.variants if v.id != variant_id]
+        
+        if len(image_asset.variants) < initial_len:
+            # If we deleted the selected one, select the last one or None
+            if image_asset.selected_id == variant_id:
+                if image_asset.variants:
+                    image_asset.selected_id = image_asset.variants[-1].id
+                else:
+                    image_asset.selected_id = None
+            return True
+        return False
+
+    def select_asset_variant(self, script_id: str, asset_id: str, asset_type: str, variant_id: str, generation_type: str = None) -> Script:
+        """Selects a specific variant for an asset."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+            
+        target_asset = None
+        if asset_type == "character":
+            target_asset = next((c for c in script.characters if c.id == asset_id), None)
+            if target_asset:
+                # If generation_type is specified, only select from that specific asset
+                if generation_type == "full_body":
+                    variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
+                    if variant:
+                        target_asset.full_body_image_url = variant.url
+                        target_asset.image_url = variant.url  # Legacy sync
+                elif generation_type == "three_view":
+                    variant = self._select_variant_in_asset(target_asset.three_view_asset, variant_id)
+                    if variant:
+                        target_asset.three_view_image_url = variant.url
+                elif generation_type == "headshot":
+                    variant = self._select_variant_in_asset(target_asset.headshot_asset, variant_id)
+                    if variant:
+                        target_asset.headshot_image_url = variant.url
+                        target_asset.avatar_url = variant.url  # Sync avatar
+                else:
+                    # Legacy fallback: search all assets (for backward compatibility)
+                    variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
+                    if variant:
+                        target_asset.full_body_image_url = variant.url
+                        target_asset.image_url = variant.url
+                    
+                    if not variant:
+                        variant = self._select_variant_in_asset(target_asset.three_view_asset, variant_id)
+                        if variant:
+                            target_asset.three_view_image_url = variant.url
+                    
+                    if not variant:
+                        variant = self._select_variant_in_asset(target_asset.headshot_asset, variant_id)
+                        if variant:
+                            target_asset.headshot_image_url = variant.url
+                            target_asset.avatar_url = variant.url
+                        
+        elif asset_type == "scene":
+            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
+            if target_asset:
+                variant = self._select_variant_in_asset(target_asset.image_asset, variant_id)
+                if variant:
+                    target_asset.image_url = variant.url
+
+        elif asset_type == "prop":
+            target_asset = next((p for p in script.props if p.id == asset_id), None)
+            if target_asset:
+                variant = self._select_variant_in_asset(target_asset.image_asset, variant_id)
+                if variant:
+                    target_asset.image_url = variant.url
+
+        elif asset_type == "storyboard_frame":
+            target_asset = next((f for f in script.frames if f.id == asset_id), None)
+            if target_asset:
+                # Check rendered_image_asset
+                variant = self._select_variant_in_asset(target_asset.rendered_image_asset, variant_id)
+                if variant:
+                    target_asset.rendered_image_url = variant.url
+                    target_asset.image_url = variant.url # Main image is rendered one
+                
+                # Also check image_asset (sketch)?
+                if not variant:
+                    variant = self._select_variant_in_asset(target_asset.image_asset, variant_id)
+                    # If sketch, maybe don't update main image_url if rendered exists?
+                    # For now, let's assume we only select rendered variants for frames usually.
+        
+        self._save_data()
+        return script
+
+    def delete_asset_variant(self, script_id: str, asset_id: str, asset_type: str, variant_id: str) -> Script:
+        """Deletes a specific variant from an asset."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+            
+        target_asset = None
+        if asset_type == "character":
+            target_asset = next((c for c in script.characters if c.id == asset_id), None)
+            if target_asset:
+                if self._delete_variant_in_asset(target_asset.full_body_asset, variant_id):
+                    # Sync legacy if needed
+                    if target_asset.full_body_asset.selected_id:
+                        selected = next((v for v in target_asset.full_body_asset.variants if v.id == target_asset.full_body_asset.selected_id), None)
+                        target_asset.image_url = selected.url if selected else None
+                    else:
+                        target_asset.image_url = None
+                
+                elif self._delete_variant_in_asset(target_asset.three_view_asset, variant_id):
+                    if target_asset.three_view_asset.selected_id:
+                        selected = next((v for v in target_asset.three_view_asset.variants if v.id == target_asset.three_view_asset.selected_id), None)
+                        target_asset.three_view_image_url = selected.url if selected else None
+                    else:
+                        target_asset.three_view_image_url = None
+
+                elif self._delete_variant_in_asset(target_asset.headshot_asset, variant_id):
+                    if target_asset.headshot_asset.selected_id:
+                        selected = next((v for v in target_asset.headshot_asset.variants if v.id == target_asset.headshot_asset.selected_id), None)
+                        target_asset.headshot_image_url = selected.url if selected else None
+                    else:
+                        target_asset.headshot_image_url = None
+
+        elif asset_type == "scene":
+            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
+            if target_asset and self._delete_variant_in_asset(target_asset.image_asset, variant_id):
+                if target_asset.image_asset.selected_id:
+                    selected = next((v for v in target_asset.image_asset.variants if v.id == target_asset.image_asset.selected_id), None)
+                    target_asset.image_url = selected.url if selected else None
+                else:
+                    target_asset.image_url = None
+
+        elif asset_type == "prop":
+            target_asset = next((p for p in script.props if p.id == asset_id), None)
+            if target_asset and self._delete_variant_in_asset(target_asset.image_asset, variant_id):
+                if target_asset.image_asset.selected_id:
+                    selected = next((v for v in target_asset.image_asset.variants if v.id == target_asset.image_asset.selected_id), None)
+                    target_asset.image_url = selected.url if selected else None
+                else:
+                    target_asset.image_url = None
+
+        elif asset_type == "storyboard_frame":
+            target_asset = next((f for f in script.frames if f.id == asset_id), None)
+            if target_asset:
+                if self._delete_variant_in_asset(target_asset.rendered_image_asset, variant_id):
+                    if target_asset.rendered_image_asset.selected_id:
+                        selected = next((v for v in target_asset.rendered_image_asset.variants if v.id == target_asset.rendered_image_asset.selected_id), None)
+                        target_asset.rendered_image_url = selected.url if selected else None
+                        target_asset.image_url = selected.url if selected else None
+                    else:
+                        target_asset.rendered_image_url = None
+                        # Don't clear image_url if it might fall back to sketch? 
+                        # For now, clear it if rendered is cleared.
+                        target_asset.image_url = None
+
+        self._save_data()
+        return script
+
+    def update_model_settings(self, script_id: str, t2i_model: str = None, i2i_model: str = None, i2v_model: str = None, character_aspect_ratio: str = None, scene_aspect_ratio: str = None, prop_aspect_ratio: str = None, storyboard_aspect_ratio: str = None) -> Script:
+        """Updates the model settings for a script."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        
+        if t2i_model:
+            script.model_settings.t2i_model = t2i_model
+        if i2i_model:
+            script.model_settings.i2i_model = i2i_model
+        if i2v_model:
+            script.model_settings.i2v_model = i2v_model
+        if character_aspect_ratio:
+            script.model_settings.character_aspect_ratio = character_aspect_ratio
+        if scene_aspect_ratio:
+            script.model_settings.scene_aspect_ratio = scene_aspect_ratio
+        if prop_aspect_ratio:
+            script.model_settings.prop_aspect_ratio = prop_aspect_ratio
+        if storyboard_aspect_ratio:
+            script.model_settings.storyboard_aspect_ratio = storyboard_aspect_ratio
+        
+        self._save_data()
+        return script
+
+    def _set_variant_favorite(self, image_asset: Any, variant_id: str, is_favorited: bool) -> bool:
+        """Helper to set favorite status of a variant. Returns True if found."""
+        if not image_asset or not image_asset.variants:
+            return False
+        for v in image_asset.variants:
+            if v.id == variant_id:
+                v.is_favorited = is_favorited
+                return True
+        return False
+
+    def toggle_variant_favorite(self, script_id: str, asset_id: str, asset_type: str, variant_id: str, is_favorited: bool, generation_type: str = None) -> Script:
+        """Toggles the favorite status of a variant."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+        
+        found = False
+        if asset_type == "character":
+            target_asset = next((c for c in script.characters if c.id == asset_id), None)
+            if target_asset:
+                if generation_type == "full_body":
+                    found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited)
+                elif generation_type == "three_view":
+                    found = self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited)
+                elif generation_type == "headshot":
+                    found = self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited)
+                else:
+                    # Try all character assets
+                    found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited) or \
+                            self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited) or \
+                            self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited)
+        
+        elif asset_type == "scene":
+            target_asset = next((s for s in script.scenes if s.id == asset_id), None)
+            if target_asset:
+                found = self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
+        
+        elif asset_type == "prop":
+            target_asset = next((p for p in script.props if p.id == asset_id), None)
+            if target_asset:
+                found = self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
+        
+        elif asset_type == "storyboard_frame":
+            target_asset = next((f for f in script.frames if f.id == asset_id), None)
+            if target_asset:
+                found = self._set_variant_favorite(target_asset.rendered_image_asset, variant_id, is_favorited) or \
+                        self._set_variant_favorite(target_asset.image_asset, variant_id, is_favorited)
+        
+        if not found:
+            raise ValueError(f"Variant {variant_id} not found")
+        
+        self._save_data()
+        return script

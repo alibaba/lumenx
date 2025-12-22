@@ -56,7 +56,11 @@ export default function VideoAssembly() {
         }
     };
 
-    const selectedFrame = currentProject?.frames?.find((f: any) => f.id === selectedFrameId);
+
+    const selectedFrame = useMemo(() => {
+        return currentProject?.frames?.find((f: any) => f.id === selectedFrameId);
+    }, [currentProject?.frames, selectedFrameId]);
+
     const variants = selectedFrameId ? videosByFrame[selectedFrameId] || [] : [];
 
     return (

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, FileText, Palette, Layout, Film, Settings, Share2, Mic, Music, BookOpen, Users, Video, ArrowLeft } from "lucide-react";
+import { ChevronLeft, FileText, Palette, Layout, Film, Share2, Mic, Music, BookOpen, Users, Video, ArrowLeft, Settings } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import PipelineSidebar from "@/components/layout/PipelineSidebar";
 import PropertiesPanel from "@/components/modules/PropertiesPanel";
@@ -17,14 +17,14 @@ import StoryboardComposer from "@/components/modules/StoryboardComposer";
 import VoiceActingStudio from "@/components/modules/VoiceActingStudio";
 import FinalMixStudio from "@/components/modules/FinalMixStudio";
 import ExportStudio from "@/components/modules/ExportStudio";
-import ProjectSettings from "@/components/project/ProjectSettings";
+import ModelSettingsModal from "@/components/common/ModelSettingsModal";
 import dynamic from "next/dynamic";
 
 const CreativeCanvas = dynamic(() => import("@/components/canvas/CreativeCanvas"), { ssr: false });
 
 export default function ProjectClient({ params }: { params: { id: string } }) {
     const [activeStep, setActiveStep] = useState("script");
-    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
 
     const selectProject = useProjectStore((state) => state.selectProject);
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -76,8 +76,8 @@ export default function ProjectClient({ params }: { params: { id: string } }) {
 
             {/* Left Sidebar */}
             <div className="relative z-20 h-full flex flex-col">
-                {/* Back Button + Settings */}
-                <div className="p-4 border-b border-glass-border bg-black/40 backdrop-blur-xl flex items-center justify-between gap-3">
+                {/* Back Button & Settings */}
+                <div className="p-4 border-b border-glass-border bg-black/40 backdrop-blur-xl flex justify-between items-center">
                     <button
                         onClick={handleBackToHome}
                         className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors text-sm"
@@ -87,30 +87,26 @@ export default function ProjectClient({ params }: { params: { id: string } }) {
                     </button>
 
                     <button
-                        onClick={() => setSettingsOpen(true)}
-                        className="p-2 hover:bg-white/10 rounded-lg transition-colors group relative"
-                        title="项目设置"
+                        onClick={() => setModelSettingsOpen(true)}
+                        className="p-2 hover:bg-white/10 rounded-lg transition-colors group"
+                        title="Model Settings"
                     >
-                        <Settings size={18} className="text-gray-400 group-hover:text-primary transition-colors" />
-                        {currentProject.style_preset && (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full"></span>
-                        )}
+                        <Settings size={18} className="text-gray-400 group-hover:text-white transition-colors" />
                     </button>
                 </div>
 
-                <PipelineSidebar activeStep={activeStep} onStepChange={setActiveStep} steps={steps} />
+                <PipelineSidebar
+                    activeStep={activeStep}
+                    onStepChange={setActiveStep}
+                    steps={steps}
+                />
             </div>
 
-            {/* Project Settings Modal */}
-            <ProjectSettings
-                project={currentProject}
-                isOpen={settingsOpen}
-                onClose={() => setSettingsOpen(false)}
-                onUpdate={(updated) => {
-                    updateProject(currentProject.id, updated);
-                    setSettingsOpen(false);
-                }}
-            />
+            {/* Model Settings Modal */}
+            <ModelSettingsModal
+                isOpen={modelSettingsOpen}
+                onClose={() => setModelSettingsOpen(false)}
+             />
 
             {/* Main Content Area */}
             <div className="flex-1 flex overflow-hidden relative z-10">

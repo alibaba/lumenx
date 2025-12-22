@@ -1,7 +1,7 @@
 import os
 import time
 from typing import Dict, Any, List
-from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus
+from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant
 from ...models.image import WanxImageModel
 from ...utils import get_logger
 
@@ -32,46 +32,98 @@ class StoryboardGenerator:
             
         return script
 
-    def generate_frame(self, frame: StoryboardFrame, characters: List[Character], scene: Scene, ref_image_path: str = None, ref_image_paths: List[str] = None, prompt: str = None) -> StoryboardFrame:
+    def generate_frame(self, frame: StoryboardFrame, characters: List[Character], scene: Scene, ref_image_path: str = None, ref_image_paths: List[str] = None, prompt: str = None, batch_size: int = 1, size: str = None) -> StoryboardFrame:
         """Generates a storyboard frame image."""
         frame.status = GenerationStatus.PROCESSING
+        
+        # Default size for storyboard (landscape)
+        effective_size = size or "1024*576"
         
         # Construct a rich prompt using character and scene details
         char_descriptions = []
         
         # Collect reference image paths from assets
         asset_ref_paths = []
-        if ref_image_paths:
-            asset_ref_paths.extend(ref_image_paths)
-        if ref_image_path:
-            asset_ref_paths.append(ref_image_path)
+        
+        # If frontend provides explicit reference paths, use them directly
+        # Otherwise, auto-collect from characters and scene
+        use_frontend_refs = (ref_image_paths and len(ref_image_paths) > 0) or ref_image_path
+        
+        if use_frontend_refs:
+            # Use only what frontend provided (already selected by user)
+            if ref_image_paths:
+                asset_ref_paths.extend(ref_image_paths)
+            if ref_image_path:
+                asset_ref_paths.append(ref_image_path)
+            logger.info(f"[Storyboard] Using {len(asset_ref_paths)} frontend-provided reference images")
+        else:
+            # Auto-collect from characters and scene (fallback for batch generation)
+            for char_id in frame.character_ids:
+                char = next((c for c in characters if c.id == char_id), None)
+                if char:
+                    # Add character reference image - prioritize selected variant from ImageAsset
+                    target_url = None
+                    source = "none"
+                    
+                    # Priority 1: Use selected variant from three_view_asset
+                    if char.three_view_asset and char.three_view_asset.selected_id:
+                        selected_variant = next((v for v in char.three_view_asset.variants if v.id == char.three_view_asset.selected_id), None)
+                        if selected_variant:
+                            target_url = selected_variant.url
+                            source = f"three_view_asset"
+                    
+                    # Priority 2: Use selected variant from full_body_asset
+                    if not target_url and char.full_body_asset and char.full_body_asset.selected_id:
+                        selected_variant = next((v for v in char.full_body_asset.variants if v.id == char.full_body_asset.selected_id), None)
+                        if selected_variant:
+                            target_url = selected_variant.url
+                            source = f"full_body_asset"
+                    
+                    # Priority 3: Use selected variant from headshot_asset
+                    if not target_url and char.headshot_asset and char.headshot_asset.selected_id:
+                        selected_variant = next((v for v in char.headshot_asset.variants if v.id == char.headshot_asset.selected_id), None)
+                        if selected_variant:
+                            target_url = selected_variant.url
+                            source = f"headshot_asset"
+                    
+                    # Priority 4: Fallback to legacy fields
+                    if not target_url:
+                        target_url = char.three_view_image_url or char.full_body_image_url or char.headshot_image_url or char.avatar_url or char.image_url
+                        source = "legacy_fields"
+                    
+                    logger.info(f"[Storyboard] Character '{char.name}' reference: source={source}, url={target_url}")
+                    
+                    if target_url:
+                        potential_path = os.path.join("output", target_url)
+                        if os.path.exists(potential_path):
+                            asset_ref_paths.append(os.path.abspath(potential_path))
+                        elif os.path.exists(target_url):
+                            asset_ref_paths.append(os.path.abspath(target_url))
             
+            # Add scene reference image
+            scene_url = None
+            if scene:
+                if scene.image_asset and scene.image_asset.selected_id:
+                    selected_variant = next((v for v in scene.image_asset.variants if v.id == scene.image_asset.selected_id), None)
+                    if selected_variant:
+                        scene_url = selected_variant.url
+                if not scene_url:
+                    scene_url = scene.image_url
+                
+                if scene_url:
+                    potential_path = os.path.join("output", scene_url)
+                    if os.path.exists(potential_path):
+                        asset_ref_paths.append(os.path.abspath(potential_path))
+                    elif os.path.exists(scene_url):
+                        asset_ref_paths.append(os.path.abspath(scene_url))
+        
+        # Collect character descriptions for prompt building
         for char_id in frame.character_ids:
             char = next((c for c in characters if c.id == char_id), None)
             if char:
                 char_descriptions.append(f"{char.name} ({char.description})")
-                # Add character reference image if available
-                # Prefer avatar_url if available to match frontend logic and avoid duplicates
-                target_url = char.avatar_url or char.image_url
-                
-                if target_url:
-                    # image_url might be relative to output dir or absolute
-                    # We need to resolve it to absolute path for upload
-                    potential_path = os.path.join("output", target_url)
-                    if os.path.exists(potential_path):
-                        asset_ref_paths.append(os.path.abspath(potential_path))
-                    elif os.path.exists(target_url):
-                         asset_ref_paths.append(os.path.abspath(target_url))
         
         char_text = ", ".join(char_descriptions)
-        
-        # Add scene reference image if available
-        if scene and scene.image_url:
-             potential_path = os.path.join("output", scene.image_url)
-             if os.path.exists(potential_path):
-                 asset_ref_paths.append(os.path.abspath(potential_path))
-             elif os.path.exists(scene.image_url):
-                 asset_ref_paths.append(os.path.abspath(scene.image_url))
 
         # Remove duplicates
         asset_ref_paths = list(set(asset_ref_paths))
@@ -91,16 +143,43 @@ class StoryboardGenerator:
         # Store the optimized prompt
         frame.image_prompt = prompt
         
+        # Initialize rendered_image_asset if not present
+        if not frame.rendered_image_asset:
+            frame.rendered_image_asset = ImageAsset(asset_id=frame.id, asset_type="storyboard_frame")
+
         try:
-            output_path = os.path.join(self.output_dir, f"{frame.id}.png")
+            import uuid
             
-            # Use I2I if reference images are available
-            # Pass collected asset paths to model
-            self.model.generate(prompt, output_path, ref_image_paths=asset_ref_paths)
+            for _ in range(batch_size):
+                variant_id = str(uuid.uuid4())
+                output_filename = f"{frame.id}_{variant_id}.png"
+                output_path = os.path.join(self.output_dir, output_filename)
+                
+                # Use I2I if reference images are available
+                # Pass collected asset paths to model
+                self.model.generate(prompt, output_path, ref_image_paths=asset_ref_paths, size=effective_size)
+                
+                # Store relative path for frontend serving
+                rel_path = os.path.relpath(output_path, "output")
+                
+                # Create Variant
+                variant = ImageVariant(
+                    id=variant_id,
+                    url=rel_path,
+                    prompt=prompt,
+                    created_at=time.time()
+                )
+                frame.rendered_image_asset.variants.append(variant)
+                
+                # Auto-select the latest one
+                frame.rendered_image_asset.selected_id = variant_id
             
-            # Store relative path for frontend serving
-            rel_path = os.path.relpath(output_path, "output")
-            frame.image_url = rel_path
+            # Sync legacy fields
+            selected_variant = next((v for v in frame.rendered_image_asset.variants if v.id == frame.rendered_image_asset.selected_id), None)
+            if selected_variant:
+                frame.rendered_image_url = selected_variant.url
+                frame.image_url = selected_variant.url
+                
             frame.updated_at = time.time()
             frame.status = GenerationStatus.COMPLETED
         except Exception as e:

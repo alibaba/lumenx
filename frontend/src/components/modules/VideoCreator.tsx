@@ -29,6 +29,7 @@ interface VideoCreatorProps {
         cameraMovement: string;
         subjectMotion: string;
         model: string;
+        shotType: string;  // 'single' or 'multi' (only for wan2.6-i2v)
     };
 }
 
@@ -252,7 +253,8 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     params.negativePrompt,
                     params.batchSize,
                     params.model,
-                    frameId
+                    frameId,
+                    params.shotType  // Pass shotType for wan2.6-i2v
                 );
             }
 

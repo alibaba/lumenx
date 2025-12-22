@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Paintbrush, User, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings } from "lucide-react";
+import { Paintbrush, User, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL } from "@/lib/api";
 import CharacterWorkbench from "./CharacterWorkbench";
+import { VariantSelector } from "../common/VariantSelector";
 
 export default function ConsistencyVault() {
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -40,12 +41,33 @@ export default function ConsistencyVault() {
         return list?.find((a: any) => a.id === selectedAssetId) || null;
     })() : null;
 
-    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "") => {
+    const isAssetGenerating = (assetId: string) => {
+        return generatingTasks?.some((t: any) => t.assetId === assetId);
+    };
+
+    const getAssetGeneratingTypes = (assetId: string) => {
+        return generatingTasks?.filter((t: any) => t.assetId === assetId).map((t: any) => ({
+            type: t.generationType,
+            batchSize: t.batchSize
+        })) || [];
+    };
+
+    const handleUpdateDescription = async (assetId: string, type: string, description: string) => {
+        if (!currentProject) return;
+        try {
+            const updatedProject = await api.updateAssetDescription(currentProject.id, assetId, type, description);
+            updateProject(currentProject.id, updatedProject);
+        } catch (error) {
+            console.error("Failed to update description:", error);
+        }
+    };
+
+    const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1) => {
         if (!currentProject) return;
 
-        // Add task with specific generation type
+        // Add task with specific generation type and batch size
         if (addGeneratingTask) {
-            addGeneratingTask(assetId, generationType);
+            addGeneratingTask(assetId, generationType, batchSize);
         }
 
         try {
@@ -62,7 +84,8 @@ export default function ConsistencyVault() {
                 generationType,
                 prompt,
                 applyStyle,
-                negativePrompt
+                negativePrompt,
+                batchSize
             );
 
             updateProject(currentProject.id, updatedProject);
@@ -77,135 +100,78 @@ export default function ConsistencyVault() {
         }
     };
 
-    const handleToggleLock = async (assetId: string, type: string) => {
-        if (!currentProject) return;
-        try {
-            const updatedProject = await api.toggleAssetLock(currentProject.id, assetId, type);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error: any) {
-            console.error("Failed to toggle lock:", error);
-        }
-    };
-
-    const handleUpdateDescription = async (assetId: string, type: string, description: string) => {
-        if (!currentProject) return;
-        try {
-            const updatedProject = await api.updateAssetDescription(currentProject.id, assetId, type, description);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error: any) {
-            console.error("Failed to update description:", error);
-            alert("Failed to update description");
-        }
-    };
-
-    const getAssets = () => {
-        if (!currentProject) return [];
-        switch (activeTab) {
-            case "character": return currentProject.characters || [];
-            case "scene": return currentProject.scenes || [];
-            case "prop": return currentProject.props || [];
-            default: return [];
-        }
-    };
-
-    // Helper to check if an asset is generating (any type)
-    const isAssetGenerating = (assetId: string) => {
-        return generatingTasks.some((t: any) => t.assetId === assetId);
-    };
-
-    // Helper to get generating types for an asset
-    const getAssetGeneratingTypes = (assetId: string) => {
-        return generatingTasks.filter((t: any) => t.assetId === assetId).map((t: any) => t.generationType);
-    };
+    const assets = activeTab === "character" ? currentProject?.characters :
+        activeTab === "scene" ? currentProject?.scenes :
+            activeTab === "prop" ? currentProject?.props : [];
 
     return (
-        <div className="flex flex-col h-full bg-background relative">
-            {/* Top Bar: Style Tuner */}
-            <div className="h-20 border-b border-white/10 bg-black/20 flex items-center px-8 justify-between">
-                <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
-                        <Paintbrush className="text-white" size={20} />
-                    </div>
-                    <div>
-                        <h2 className="text-xl font-display font-bold text-white">Consistency Vault</h2>
-                        <p className="text-xs text-gray-400">核心资产库 & 风格统一管控</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-400 font-mono uppercase tracking-wider">Global Style:</span>
-                    <div className="flex bg-black/40 p-1 rounded-lg border border-white/10">
-                        {styles.map((style) => (
-                            <button
-                                key={style.id}
-                                onClick={() => setSelectedStyleId(style.id)}
-                                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${selectedStyleId === style.id
-                                    ? `bg-gradient-to-r ${style.color} text-white shadow-lg`
-                                    : "text-gray-500 hover:text-gray-300 hover:bg-white/5"
-                                    }`}
-                            >
-                                {style.name}
-                            </button>
-                        ))}
-                    </div>
-                    <button
-                        onClick={() => setIsEditingStyle(true)}
-                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors"
-                        title="Edit Style Prompt"
-                    >
-                        <Settings size={18} />
-                    </button>
-                </div>
-            </div>
-
-            {/* Main Content */}
-            <div className="flex-1 flex overflow-hidden">
-                {/* Sidebar Tabs */}
-                <div className="w-64 border-r border-white/10 bg-black/10 flex flex-col p-4 gap-2">
+        <div className="flex flex-col h-full bg-[#111] text-white">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/10 bg-black/20">
+                <div className="flex gap-2 bg-black/40 p-1 rounded-xl border border-white/5">
                     <TabButton
                         active={activeTab === "character"}
                         onClick={() => setActiveTab("character")}
-                        icon={<User size={16} />}
+                        icon={<User size={18} />}
                         label="Characters"
                         count={currentProject?.characters?.length || 0}
                     />
                     <TabButton
                         active={activeTab === "scene"}
                         onClick={() => setActiveTab("scene")}
-                        icon={<MapPin size={16} />}
+                        icon={<MapPin size={18} />}
                         label="Scenes"
                         count={currentProject?.scenes?.length || 0}
                     />
                     <TabButton
                         active={activeTab === "prop"}
                         onClick={() => setActiveTab("prop")}
-                        icon={<Box size={16} />}
+                        icon={<Box size={18} />}
                         label="Props"
                         count={currentProject?.props?.length || 0}
                     />
                 </div>
 
-                {/* Grid Area */}
-                <div className="flex-1 overflow-y-auto p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        <AnimatePresence mode="popLayout">
-                            {getAssets().map((asset: any, i: number) => (
-                                <AssetCard
-                                    key={asset.id}
-                                    asset={asset}
-                                    type={activeTab}
-                                    isGenerating={isAssetGenerating(asset.id)}
-                                    onGenerate={() => handleGenerate(asset.id, activeTab)}
-                                    onToggleLock={() => handleToggleLock(asset.id, activeTab)}
-                                    onClick={() => {
-                                        setSelectedAssetId(asset.id);
-                                        setSelectedAssetType(activeTab);
-                                    }}
-                                />
-                            ))}
-                        </AnimatePresence>
+                <button
+                    onClick={() => setIsEditingStyle(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
+                >
+                    <Paintbrush size={16} className="text-primary" />
+                    <span className="text-sm font-bold">Global Style</span>
+                </button>
+            </div>
+
+            {/* Content Grid */}
+            <div className="flex-1 overflow-y-auto p-6">
+                {!currentProject ? (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                        Loading project...
                     </div>
-                </div>
+                ) : assets?.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4">
+                        <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
+                            {activeTab === "character" ? <User size={32} /> : activeTab === "scene" ? <MapPin size={32} /> : <Box size={32} />}
+                        </div>
+                        <p>No {activeTab}s found</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                        {assets?.map((asset: any) => (
+                            <AssetCard
+                                key={asset.id}
+                                asset={asset}
+                                type={activeTab}
+                                isGenerating={isAssetGenerating(asset.id)}
+                                onGenerate={() => handleGenerate(asset.id, activeTab)}
+                                onToggleLock={() => api.toggleAssetLock(currentProject.id, asset.id, activeTab).then(updated => updateProject(currentProject.id, updated))}
+                                onClick={() => {
+                                    setSelectedAssetId(asset.id);
+                                    setSelectedAssetType(activeTab);
+                                }}
+                            />
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Detail Modal / Workbench */}
@@ -219,7 +185,7 @@ export default function ConsistencyVault() {
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
-                            onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string) => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt)}
+                            onGenerate={(type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number) => handleGenerate(selectedAssetId, selectedAssetType, type, prompt, applyStyle, negativePrompt, batchSize)}
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || styles.find(s => s.id === selectedStyleId)?.prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || styles.find(s => s.id === selectedStyleId)?.negative_prompt || ""}
@@ -227,12 +193,13 @@ export default function ConsistencyVault() {
                     ) : (
                         <CharacterDetailModal
                             asset={selectedAsset}
+                            type={selectedAssetType}
                             onClose={() => {
                                 setSelectedAssetId(null);
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
-                            onGenerate={(applyStyle: boolean, negativePrompt: string) => handleGenerate(selectedAssetId, selectedAssetType, "all", "", applyStyle, negativePrompt)}
+                            onGenerate={(applyStyle: boolean, negativePrompt: string, batchSize: number) => handleGenerate(selectedAssetId, selectedAssetType, "all", "", applyStyle, negativePrompt, batchSize)}
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || styles.find(s => s.id === selectedStyleId)?.prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || styles.find(s => s.id === selectedStyleId)?.negative_prompt || ""}
@@ -243,31 +210,34 @@ export default function ConsistencyVault() {
 
             {/* Style Editor Modal */}
             <AnimatePresence>
-                {isEditingStyle && (
-                    <StyleEditorModal
-                        styles={styles}
-                        selectedStyleId={selectedStyleId}
-                        onClose={() => setIsEditingStyle(false)}
-                        onUpdate={(styleId: string, prompt: string) => {
-                            updateStylePrompt(styleId, prompt);
-                            setIsEditingStyle(false);
-                        }}
-                    />
-                )}
+                {
+                    isEditingStyle && (
+                        <StyleEditorModal
+                            styles={styles}
+                            selectedStyleId={selectedStyleId}
+                            onClose={() => setIsEditingStyle(false)}
+                            onUpdate={(styleId: string, prompt: string) => {
+                                updateStylePrompt(styleId, prompt);
+                                setIsEditingStyle(false);
+                            }}
+                        />
+                    )
+                }
             </AnimatePresence>
-        </div>
+        </div >
     );
 }
 
-function CharacterDetailModal({ asset, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "" }: any) {
+function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "" }: any) {
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
+    const currentProject = useProjectStore((state) => state.currentProject);
+    const updateProject = useProjectStore((state) => state.updateProject);
 
     // Style Controls
     const [applyStyle, setApplyStyle] = useState(true);
     const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || "low quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry");
     const [showAdvanced, setShowAdvanced] = useState(false);
-    const [showStylePrompt, setShowStylePrompt] = useState(false);
 
     // Sync local state if asset changes
     useEffect(() => {
@@ -286,33 +256,50 @@ function CharacterDetailModal({ asset, onClose, onUpdateDescription, onGenerate,
         setIsEditing(false);
     };
 
+    const handleSelectVariant = async (variantId: string) => {
+        if (!currentProject) return;
+        try {
+            const updatedProject = await api.selectAssetVariant(currentProject.id, asset.id, type, variantId);
+            updateProject(currentProject.id, updatedProject);
+        } catch (error) {
+            console.error("Failed to select variant:", error);
+        }
+    };
+
+    const handleDeleteVariant = async (variantId: string) => {
+        if (!currentProject) return;
+        try {
+            const updatedProject = await api.deleteAssetVariant(currentProject.id, asset.id, type, variantId);
+            updateProject(currentProject.id, updatedProject);
+        } catch (error) {
+            console.error("Failed to delete variant:", error);
+        }
+    };
+
+    const handleGenerateClick = (batchSize: number) => {
+        onGenerate(applyStyle, negativePrompt, batchSize);
+    };
+
     return (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-8">
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-4xl h-[85vh] flex overflow-hidden shadow-2xl"
+                className="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-5xl h-[85vh] flex overflow-hidden shadow-2xl"
             >
-                {/* Left: Image (Character Sheet) */}
-                <div className="w-1/2 bg-black/40 relative border-r border-white/10 p-4 flex items-center justify-center">
-                    {asset.image_url ? (
-                        <ImageWithRetry
-                            src={asset.image_url.startsWith("http") ? asset.image_url : `${API_URL}/files/${asset.image_url}`}
-                            alt={asset.name}
-                            className="max-w-full max-h-full object-contain"
-                        />
-                    ) : (
-                        <div className="text-gray-500 flex flex-col items-center gap-2">
-                            <ImageIcon size={48} />
-                            <span>No Reference Sheet</span>
-                        </div>
-                    )}
-
-                    {/* Close Button (Mobile/Small screens) */}
-                    <button onClick={onClose} className="absolute top-4 left-4 p-2 bg-black/50 rounded-full text-white hover:bg-white/20 md:hidden">
-                        <X size={20} />
-                    </button>
+                {/* Left: Variant Selector */}
+                <div className="w-1/2 bg-black/40 relative border-r border-white/10 p-4 flex flex-col overflow-hidden">
+                    <VariantSelector
+                        asset={asset.image_asset}
+                        currentImageUrl={asset.image_url}
+                        onSelect={handleSelectVariant}
+                        onDelete={handleDeleteVariant}
+                        onGenerate={handleGenerateClick}
+                        isGenerating={isGenerating}
+                        aspectRatio="16:9"
+                        className="h-full"
+                    />
                 </div>
 
                 {/* Right: Details */}
@@ -414,22 +401,11 @@ function CharacterDetailModal({ asset, onClose, onUpdateDescription, onGenerate,
                     {/* Footer Actions */}
                     <div className="p-6 border-t border-white/10 bg-black/20 flex gap-4">
                         <button
-                            onClick={() => onGenerate(applyStyle, negativePrompt)}
-                            disabled={asset.locked || isGenerating}
-                            className={`flex-1 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${asset.locked
-                                ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                                : "bg-white/10 hover:bg-white/20 text-white"
-                                }`}
-                        >
-                            <RefreshCw size={18} className={isGenerating ? "animate-spin" : ""} />
-                            {isGenerating ? "Regenerating..." : "Regenerate"}
-                        </button>
-                        <button
                             onClick={onClose}
                             className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-900/20"
                         >
                             <Check size={18} />
-                            Save Asset
+                            Done
                         </button>
                     </div>
                 </div>

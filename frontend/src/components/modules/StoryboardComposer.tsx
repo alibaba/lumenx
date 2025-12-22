@@ -11,15 +11,21 @@ import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 
+import StoryboardFrameEditor from "./StoryboardFrameEditor";
+
 export default function StoryboardComposer() {
     const currentProject = useProjectStore((state) => state.currentProject);
     const selectedFrameId = useProjectStore((state) => state.selectedFrameId);
     const setSelectedFrameId = useProjectStore((state) => state.setSelectedFrameId);
     const updateProject = useProjectStore((state) => state.updateProject);
 
-    const [isRendering, setIsRendering] = useState<Set<string>>(new Set()); // Store multiple frame IDs being rendered
+    // Use global rendering state (persists across module switches)
+    const renderingFrames = useProjectStore((state) => state.renderingFrames);
+    const addRenderingFrame = useProjectStore((state) => state.addRenderingFrame);
+    const removeRenderingFrame = useProjectStore((state) => state.removeRenderingFrame);
+
     const [isReparsing, setIsReparsing] = useState(false);
-    const [zoomedImage, setZoomedImage] = useState<{ url: string; prompt: string } | null>(null); // Track zoomed image URL and prompt
+    const [editingFrameId, setEditingFrameId] = useState<string | null>(null);
 
     const handleReparse = async () => {
         if (!currentProject) return;
@@ -38,16 +44,16 @@ export default function StoryboardComposer() {
         }
     };
 
-    const handleImageClick = (imageUrl: string, prompt: string, e: React.MouseEvent) => {
+    const handleImageClick = (frameId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        setZoomedImage({ url: imageUrl, prompt });
+        setEditingFrameId(frameId);
     };
 
-    const handleRenderFrame = async (frame: any, e: React.MouseEvent) => {
-        e.stopPropagation();
+    const handleRenderFrame = async (frame: any, batchSize: number = 1, e?: React.MouseEvent) => {
+        e?.stopPropagation();
         if (!currentProject) return;
 
-        setIsRendering(prev => new Set(prev).add(frame.id));
+        addRenderingFrame(frame.id);
         try {
             // Construct composition data with references
             const compositionData: any = {
@@ -57,32 +63,48 @@ export default function StoryboardComposer() {
                 reference_image_urls: []
             };
 
-            // 1. Add Scene Image
+            // Helper to get selected variant URL from an asset
+            const getSelectedVariantUrl = (asset: any): string | null => {
+                if (!asset || !asset.selected_id || !asset.variants) return null;
+                const variant = asset.variants.find((v: any) => v.id === asset.selected_id);
+                return variant?.url || null;
+            };
+
+            // 1. Add Scene Image - prioritize selected variant
             if (frame.scene_id) {
                 const scene = currentProject.scenes?.find((s: any) => s.id === frame.scene_id);
-                if (scene && scene.image_url) {
-                    compositionData.reference_image_urls.push(scene.image_url);
+                if (scene) {
+                    const sceneUrl = getSelectedVariantUrl(scene.image_asset) || scene.image_url;
+                    if (sceneUrl) compositionData.reference_image_urls.push(sceneUrl);
                 }
             }
 
-            // 2. Add Character Images
+            // 2. Add Character Images - use selected variant from three_view > full_body > headshot
             if (frame.character_ids && frame.character_ids.length > 0) {
                 frame.character_ids.forEach((charId: string) => {
                     const char = currentProject.characters?.find((c: any) => c.id === charId);
                     if (char) {
-                        // Prefer avatar for close-ups if available, or main image
-                        if (char.avatar_url) compositionData.reference_image_urls.push(char.avatar_url);
-                        else if (char.image_url) compositionData.reference_image_urls.push(char.image_url);
+                        // Priority: three_view_asset > full_body_asset > headshot_asset > legacy fields
+                        let charUrl = getSelectedVariantUrl(char.three_view_asset)
+                            || getSelectedVariantUrl(char.full_body_asset)
+                            || getSelectedVariantUrl(char.headshot_asset)
+                            || char.three_view_image_url
+                            || char.full_body_image_url
+                            || char.headshot_image_url
+                            || char.avatar_url
+                            || char.image_url;
+                        if (charUrl) compositionData.reference_image_urls.push(charUrl);
                     }
                 });
             }
 
-            // 3. Add Prop Images
+            // 3. Add Prop Images - prioritize selected variant
             if (frame.prop_ids && frame.prop_ids.length > 0) {
                 frame.prop_ids.forEach((propId: string) => {
                     const prop = currentProject.props?.find((p: any) => p.id === propId);
-                    if (prop && prop.image_url) {
-                        compositionData.reference_image_urls.push(prop.image_url);
+                    if (prop) {
+                        const propUrl = getSelectedVariantUrl(prop.image_asset) || prop.image_url;
+                        if (propUrl) compositionData.reference_image_urls.push(propUrl);
                     }
                 });
             }
@@ -102,17 +124,27 @@ export default function StoryboardComposer() {
                 globalStylePrompt = currentStyle?.prompt || "";
             }
 
-            // Combine: [Global Style] + [Action] + [Dialogue] + [Visual Details]
-            const parts = [
-                globalStylePrompt,
-                frame.action_description,
-                frame.dialogue ? `Dialogue context: "${frame.dialogue}"` : "",
-                frame.image_prompt // Manual overrides or extra details
-            ].filter(Boolean);
+            // Construct final prompt:
+            // If image_prompt exists (polished or manually edited), it already contains action/dialogue,
+            // so only prepend the style. Otherwise, build from action_description and dialogue.
+            let finalPrompt = "";
 
-            const finalPrompt = parts.join(" . ");
+            if (frame.image_prompt && frame.image_prompt.trim()) {
+                // User has a custom/polished prompt - only add style prefix
+                finalPrompt = globalStylePrompt
+                    ? `${globalStylePrompt} . ${frame.image_prompt}`
+                    : frame.image_prompt;
+            } else {
+                // No custom prompt - build from action_description and dialogue
+                const parts = [
+                    globalStylePrompt,
+                    frame.action_description,
+                    frame.dialogue ? `Dialogue context: "${frame.dialogue}"` : ""
+                ].filter(Boolean);
+                finalPrompt = parts.join(" . ");
+            }
 
-            await api.renderFrame(currentProject.id, frame.id, compositionData, finalPrompt);
+            await api.renderFrame(currentProject.id, frame.id, compositionData, finalPrompt, batchSize);
 
             // Fetch updated project to get new image URL and timestamp
             const updatedProject = await api.getProject(currentProject.id);
@@ -122,11 +154,7 @@ export default function StoryboardComposer() {
             console.error("Render failed:", error);
             alert("Render failed. See console for details.");
         } finally {
-            setIsRendering(prev => {
-                const next = new Set(prev);
-                next.delete(frame.id);
-                return next;
-            });
+            removeRenderingFrame(frame.id);
         }
     };
 
@@ -194,11 +222,7 @@ export default function StoryboardComposer() {
                                             src={getAssetUrl(frame.rendered_image_url || frame.image_url) + `?t=${frame.updated_at || 0}`}
                                             alt={`Frame ${index + 1}`}
                                             className="w-full h-full object-cover cursor-zoom-in"
-                                            onClick={(e: React.MouseEvent) => handleImageClick(
-                                                getAssetUrl(frame.rendered_image_url || frame.image_url) + `?t=${frame.updated_at || 0}`,
-                                                frame.image_prompt || frame.action_description, // Pass prompt
-                                                e
-                                            )}
+                                            onClick={(e: React.MouseEvent) => handleImageClick(frame.id, e)}
                                         />
                                     ) : (
                                         <div className="w-full h-full flex flex-col items-center justify-center text-gray-600 gap-2">
@@ -230,25 +254,32 @@ export default function StoryboardComposer() {
                                             {frame.locked ? <Unlock size={14} /> : <Lock size={14} />}
                                         </button>
 
-
-
-                                        {/* Render Button - only show if not locked */}
+                                        {/* Render Buttons with Batch Size - only show if not locked */}
                                         {!frame.locked && (
-                                            <button
-                                                onClick={(e) => handleRenderFrame(frame, e)}
-                                                disabled={isRendering.has(frame.id)}
-                                                className="p-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-bold flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed pointer-events-auto"
-                                            >
-                                                {isRendering.has(frame.id) ? (
-                                                    <>
-                                                        <Loader2 size={14} className="animate-spin" />
-                                                    </>
+                                            <div className="flex items-center gap-1 pointer-events-auto">
+                                                {renderingFrames.has(frame.id) ? (
+                                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 rounded-lg">
+                                                        <Loader2 size={14} className="animate-spin text-white" />
+                                                        <span className="text-xs text-white">Generating...</span>
+                                                    </div>
                                                 ) : (
                                                     <>
-                                                        <Wand2 size={14} />
+                                                        {[1, 2, 3, 4].map(size => (
+                                                            <button
+                                                                key={size}
+                                                                onClick={(e) => { e.stopPropagation(); handleRenderFrame(frame, size); }}
+                                                                className="px-2 py-1.5 bg-primary/80 hover:bg-primary text-white rounded text-xs font-bold transition-colors"
+                                                                title={`Generate ${size} variant${size > 1 ? 's' : ''}`}
+                                                            >
+                                                                <div className="flex items-center gap-1">
+                                                                    <Wand2 size={12} />
+                                                                    <span>×{size}</span>
+                                                                </div>
+                                                            </button>
+                                                        ))}
                                                     </>
                                                 )}
-                                            </button>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -283,53 +314,13 @@ export default function StoryboardComposer() {
                     </div>
                 </div>
             </div>
-            {/* Image Zoom Modal */}
+            {/* Storyboard Frame Editor Modal */}
             <AnimatePresence>
-                {zoomedImage && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4"
-                        onClick={() => setZoomedImage(null)}
-                    >
-                        <div className="relative max-w-5xl w-full flex gap-8 pointer-events-auto" onClick={e => e.stopPropagation()}>
-                            {/* Image */}
-                            <div className="flex-1 flex items-center justify-center">
-                                <motion.img
-                                    initial={{ scale: 0.9 }}
-                                    animate={{ scale: 1 }}
-                                    exit={{ scale: 0.9 }}
-                                    src={zoomedImage.url}
-                                    alt="Zoomed"
-                                    className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
-                                />
-                            </div>
-
-                            {/* Prompt Info */}
-                            <div className="w-80 bg-[#1a1a1a] border border-white/10 rounded-xl p-6 flex flex-col gap-4 h-fit">
-                                <div className="flex items-center gap-2 text-primary mb-2">
-                                    <Wand2 size={18} />
-                                    <h3 className="font-bold text-white">Generation Prompt</h3>
-                                </div>
-                                <div className="flex-1 overflow-y-auto max-h-[60vh]">
-                                    <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-mono bg-black/30 p-3 rounded-lg border border-white/5">
-                                        {zoomedImage.prompt || "No prompt available"}
-                                    </p>
-                                </div>
-                                <div className="text-xs text-gray-500 mt-2">
-                                    This prompt was constructed from the Global Style, Action Description, and Dialogue.
-                                </div>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={() => setZoomedImage(null)}
-                            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white"
-                        >
-                            <X size={24} />
-                        </button>
-                    </motion.div>
+                {editingFrameId && currentProject?.frames?.find((f: any) => f.id === editingFrameId) && (
+                    <StoryboardFrameEditor
+                        frame={currentProject.frames.find((f: any) => f.id === editingFrameId)}
+                        onClose={() => setEditingFrameId(null)}
+                    />
                 )}
             </AnimatePresence>
         </div>

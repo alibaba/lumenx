@@ -2,6 +2,18 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '@/lib/api';
 
+export interface ImageVariant {
+    id: string;
+    url: string;
+    created_at: number;
+    prompt_used?: string;
+}
+
+export interface ImageAsset {
+    selected_id: string | null;
+    variants: ImageVariant[];
+}
+
 export interface Character {
     id: string;
     name: string;
@@ -10,8 +22,19 @@ export interface Character {
     gender?: string;
     clothing?: string;
     visual_weight?: number;
+
+    // Legacy fields
     image_url?: string;
-    avatar_url?: string; // Close-up portrait for UI display
+    avatar_url?: string;
+    full_body_image_url?: string;
+    three_view_image_url?: string;
+    headshot_image_url?: string;
+
+    // New Asset Containers
+    full_body_asset?: ImageAsset;
+    three_view_asset?: ImageAsset;
+    headshot_asset?: ImageAsset;
+
     voice_id?: string;
     voice_name?: string;
     locked?: boolean;
@@ -20,6 +43,38 @@ export interface Character {
     full_body_updated_at?: number;
     three_view_updated_at?: number;
     headshot_updated_at?: number;
+}
+
+export interface Scene {
+    id: string;
+    name: string;
+    description: string;
+    image_url?: string;
+    image_asset?: ImageAsset;
+    status?: string;
+    locked?: boolean;
+}
+
+export interface Prop {
+    id: string;
+    name: string;
+    description: string;
+    image_url?: string;
+    image_asset?: ImageAsset;
+    status?: string;
+    locked?: boolean;
+}
+
+export interface StoryboardFrame {
+    id: string;
+    scene_id: string;
+    image_url?: string;
+    image_asset?: ImageAsset;
+    rendered_image_url?: string;
+    rendered_image_asset?: ImageAsset;
+    status?: string;
+    locked?: boolean;
+    // ... other fields
 }
 
 export interface StylePreset {
@@ -47,6 +102,42 @@ export interface ArtDirection {
     custom_styles: StyleConfig[];
     ai_recommendations: StyleConfig[];
 }
+
+export interface ModelSettings {
+    t2i_model: string;  // Text-to-Image model for Assets
+    i2i_model: string;  // Image-to-Image model for Storyboard
+    i2v_model: string;  // Image-to-Video model for Motion
+    character_aspect_ratio: string;  // Aspect ratio for Character generation
+    scene_aspect_ratio: string;  // Aspect ratio for Scene generation
+    prop_aspect_ratio: string;  // Aspect ratio for Prop generation
+    storyboard_aspect_ratio: string;  // Aspect ratio for Storyboard generation
+}
+
+// Model options for dropdowns
+export const T2I_MODELS = [
+    { id: 'wan2.6-t2i', name: 'Wan 2.6 T2I', description: 'Latest T2I model' },
+    { id: 'wan2.5-t2i-preview', name: 'Wan 2.5 T2I Preview', description: 'Default T2I' },
+    { id: 'wan2.2-t2i-plus', name: 'Wan 2.2 T2I Plus', description: 'Higher quality' },
+    { id: 'wan2.2-t2i-flash', name: 'Wan 2.2 T2I Flash', description: 'Faster generation' },
+];
+
+export const I2I_MODELS = [
+    { id: 'wan2.6-image', name: 'Wan 2.6 Image', description: 'Latest I2I model (HTTP)' },
+    { id: 'wan2.5-i2i-preview', name: 'Wan 2.5 I2I Preview', description: 'Default I2I' },
+];
+
+export const I2V_MODELS = [
+    { id: 'wan2.6-i2v', name: 'Wan 2.6 I2V', description: 'Latest I2V model (HTTP)' },
+    { id: 'wan2.5-i2v-preview', name: 'Wan 2.5 I2V Preview', description: 'Default I2V' },
+    { id: 'wan2.2-i2v-plus', name: 'Wan 2.2 I2V Plus', description: 'Higher quality' },
+    { id: 'wan2.2-i2v-flash', name: 'Wan 2.2 I2V Flash', description: 'Faster generation' },
+];
+
+export const ASPECT_RATIOS = [
+    { id: '9:16', name: '9:16', description: 'Portrait (576*1024)' },
+    { id: '16:9', name: '16:9', description: 'Landscape (1024*576)' },
+    { id: '1:1', name: '1:1', description: 'Square (1024*1024)' },
+];
 
 export const DEFAULT_STYLES: StylePreset[] = [
     {
@@ -91,9 +182,9 @@ export interface Project {
     title: string;
     originalText: string;
     characters: Character[];
-    scenes: any[];
-    props: any[];
-    frames: any[];
+    scenes: Scene[];
+    props: Prop[];
+    frames: any[]; // Keeping as any for now to avoid breaking too much, but ideally StoryboardFrame[]
     video_tasks?: any[];
     status: string;
     createdAt: string;
@@ -101,6 +192,7 @@ export interface Project {
     aspectRatio?: string;
     style_preset?: string;
     art_direction?: ArtDirection;
+    model_settings?: ModelSettings;
 }
 
 interface ProjectStore {
@@ -118,13 +210,14 @@ interface ProjectStore {
     selectedFrameId: string | null;
 
     // Actions
+    setProjects: (projects: Project[]) => void;  // For syncing from backend
     createProject: (title: string, text: string, skipAnalysis?: boolean) => Promise<void>;
     analyzeProject: (script: string) => Promise<void>;
     analyzeArtStyle: (scriptId: string, text: string) => Promise<void>;
     loadProjects: () => void;
     selectProject: (id: string) => Promise<void>;
     updateProject: (id: string, data: Partial<Project>) => void;
-    deleteProject: (id: string) => void;
+    deleteProject: (id: string) => Promise<void>;
     clearCurrentProject: () => void;
 
     // Style Actions
@@ -138,9 +231,14 @@ interface ProjectStore {
 
     // Asset Generation State
     // Asset Generation State
-    generatingTasks: { assetId: string; generationType: string }[];
-    addGeneratingTask: (assetId: string, generationType: string) => void;
+    generatingTasks: { assetId: string; generationType: string; batchSize: number }[];
+    addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => void;
     removeGeneratingTask: (assetId: string, generationType: string) => void;
+
+    // Storyboard Frame Rendering State
+    renderingFrames: Set<string>;  // Set of frame IDs currently being rendered
+    addRenderingFrame: (frameId: string) => void;
+    removeRenderingFrame: (frameId: string) => void;
 }
 
 export const useProjectStore = create<ProjectStore>()(
@@ -153,6 +251,9 @@ export const useProjectStore = create<ProjectStore>()(
             styles: DEFAULT_STYLES,
             selectedStyleId: "Cinematic",
             selectedFrameId: null,
+
+            // Sync projects from backend
+            setProjects: (projects: Project[]) => set({ projects }),
 
             createProject: async (title: string, text: string, skipAnalysis: boolean = false) => {
                 set({ isLoading: true });
@@ -250,11 +351,23 @@ export const useProjectStore = create<ProjectStore>()(
                 }));
             },
 
-            deleteProject: (id: string) => {
-                set((state) => ({
-                    projects: state.projects.filter((p) => p.id !== id),
-                    currentProject: state.currentProject?.id === id ? null : state.currentProject
-                }));
+            deleteProject: async (id: string) => {
+                try {
+                    // Delete from backend first
+                    await api.deleteProject(id);
+                    // Then remove from local state
+                    set((state) => ({
+                        projects: state.projects.filter((p) => p.id !== id),
+                        currentProject: state.currentProject?.id === id ? null : state.currentProject
+                    }));
+                } catch (error) {
+                    console.error('Failed to delete project from backend:', error);
+                    // Still remove from local state for UX, but warn user
+                    set((state) => ({
+                        projects: state.projects.filter((p) => p.id !== id),
+                        currentProject: state.currentProject?.id === id ? null : state.currentProject
+                    }));
+                }
             },
 
             isAnalyzingArtStyle: false,
@@ -319,12 +432,25 @@ export const useProjectStore = create<ProjectStore>()(
 
             // Asset Generation State
             generatingTasks: [],
-            addGeneratingTask: (assetId: string, generationType: string) => set((state) => ({
-                generatingTasks: [...state.generatingTasks, { assetId, generationType }]
+            addGeneratingTask: (assetId: string, generationType: string, batchSize: number) => set((state) => ({
+                generatingTasks: [...state.generatingTasks, { assetId, generationType, batchSize }]
             })),
             removeGeneratingTask: (assetId: string, generationType: string) => set((state) => ({
                 generatingTasks: state.generatingTasks.filter((t) => !(t.assetId === assetId && t.generationType === generationType))
             })),
+
+            // Storyboard Frame Rendering State
+            renderingFrames: new Set<string>(),
+            addRenderingFrame: (frameId: string) => set((state) => {
+                const newSet = new Set(state.renderingFrames);
+                newSet.add(frameId);
+                return { renderingFrames: newSet };
+            }),
+            removeRenderingFrame: (frameId: string) => set((state) => {
+                const newSet = new Set(state.renderingFrames);
+                newSet.delete(frameId);
+                return { renderingFrames: newSet };
+            }),
         }),
         {
             name: 'project-storage',

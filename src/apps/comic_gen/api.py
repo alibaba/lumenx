@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File
+from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -26,6 +26,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware to add cache headers to static files
+@app.middleware("http")
+async def add_cache_control_header(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/files/"):
+        response.headers["Cache-Control"] = "public, max-age=86400"
+    return response
 
 # Create output directory if it doesn't exist
 os.makedirs("output", exist_ok=True)
@@ -87,6 +95,11 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/projects/", response_model=List[Script])
+async def list_projects():
+    """Lists all projects from backend storage."""
+    return list(pipeline.scripts.values())
+
 @app.get("/projects/{script_id}", response_model=Script)
 async def get_project(script_id: str):
     """Retrieves a project by ID."""
@@ -95,6 +108,21 @@ async def get_project(script_id: str):
         raise HTTPException(status_code=404, detail="Project not found")
     return script
 
+
+@app.delete("/projects/{script_id}")
+async def delete_project(script_id: str):
+    """Deletes a project by ID. WARNING: This permanently removes the project from backend storage."""
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    try:
+        # Remove from pipeline scripts
+        del pipeline.scripts[script_id]
+        pipeline._save_data()
+        return {"status": "deleted", "id": script_id, "title": script.title}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 class UpdateStyleRequest(BaseModel):
     style_preset: str
@@ -179,7 +207,8 @@ class CreateVideoTaskRequest(BaseModel):
     prompt_extend: bool = True
     negative_prompt: Optional[str] = None
     batch_size: int = 1
-    model: str = "wan2.5-i2v-preview"
+    model: str = "wan2.6-i2v"
+    shot_type: str = "single"  # 'single' or 'multi' (only for wan2.6-i2v)
 
 
 async def process_video_task(script_id: str, task_id: str):
@@ -208,7 +237,8 @@ async def create_video_task(script_id: str, request: CreateVideoTaskRequest, bac
                 audio_url=request.audio_url,
                 prompt_extend=request.prompt_extend,
                 negative_prompt=request.negative_prompt,
-                model=request.model
+                model=request.model,
+                shot_type=request.shot_type  # Pass shot_type for wan2.6-i2v
             )
 
             # Find the created task object
@@ -236,6 +266,8 @@ class GenerateAssetRequest(BaseModel):
     prompt: Optional[str] = None  # Specific prompt for this generation step
     apply_style: bool = True
     negative_prompt: Optional[str] = None
+    batch_size: int = 1
+    model_name: Optional[str] = None  # Override model, or use project's t2i_model setting
 
 
 @app.post("/projects/{script_id}/assets/generate", response_model=Script)
@@ -252,7 +284,9 @@ async def generate_single_asset(script_id: str, request: GenerateAssetRequest):
             request.generation_type,
             request.prompt,
             request.apply_style,
-            request.negative_prompt
+            request.negative_prompt,
+            request.batch_size,
+            request.model_name
         )
         return updated_script
     except ValueError as e:
@@ -351,6 +385,104 @@ async def update_asset_description(script_id: str, request: UpdateAssetDescripti
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class SelectVariantRequest(BaseModel):
+    asset_id: str
+    asset_type: str
+    variant_id: str
+    generation_type: str = None  # For character: "full_body", "three_view", "headshot"
+
+@app.post("/projects/{script_id}/assets/variant/select", response_model=Script)
+async def select_asset_variant(script_id: str, request: SelectVariantRequest):
+    """Selects a specific variant for an asset."""
+    try:
+        updated_script = pipeline.select_asset_variant(
+            script_id,
+            request.asset_id,
+            request.asset_type,
+            request.variant_id,
+            request.generation_type
+        )
+        return updated_script
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class DeleteVariantRequest(BaseModel):
+    asset_id: str
+    asset_type: str
+    variant_id: str
+
+@app.post("/projects/{script_id}/assets/variant/delete", response_model=Script)
+async def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
+    """Deletes a specific variant from an asset."""
+    try:
+        updated_script = pipeline.delete_asset_variant(
+            script_id,
+            request.asset_id,
+            request.asset_type,
+            request.variant_id
+        )
+        return updated_script
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class FavoriteVariantRequest(BaseModel):
+    asset_id: str
+    asset_type: str
+    variant_id: str
+    generation_type: Optional[str] = None  # For character: 'full_body', 'three_view', 'headshot'
+    is_favorited: bool
+
+@app.post("/projects/{script_id}/assets/variant/favorite", response_model=Script)
+async def toggle_variant_favorite(script_id: str, request: FavoriteVariantRequest):
+    """Toggles the favorite status of a variant. Favorited variants won't be auto-deleted when limit is reached."""
+    try:
+        updated_script = pipeline.toggle_variant_favorite(
+            script_id,
+            request.asset_id,
+            request.asset_type,
+            request.variant_id,
+            request.is_favorited,
+            request.generation_type
+        )
+        return updated_script
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class UpdateModelSettingsRequest(BaseModel):
+    t2i_model: Optional[str] = None
+    i2i_model: Optional[str] = None
+    i2v_model: Optional[str] = None
+    character_aspect_ratio: Optional[str] = None
+    scene_aspect_ratio: Optional[str] = None
+    prop_aspect_ratio: Optional[str] = None
+    storyboard_aspect_ratio: Optional[str] = None
+
+@app.post("/projects/{script_id}/model_settings", response_model=Script)
+async def update_model_settings(script_id: str, request: UpdateModelSettingsRequest):
+    """Updates project's model settings for T2I/I2I/I2V and aspect ratios."""
+    try:
+        updated_script = pipeline.update_model_settings(
+            script_id,
+            request.t2i_model,
+            request.i2i_model,
+            request.i2v_model,
+            request.character_aspect_ratio,
+            request.scene_aspect_ratio,
+            request.prop_aspect_ratio,
+            request.storyboard_aspect_ratio
+        )
+        return updated_script
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class BindVoiceRequest(BaseModel):
     voice_id: str
     voice_name: str
@@ -429,10 +561,40 @@ async def toggle_frame_lock(script_id: str, request: ToggleFrameLockRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class UpdateFrameRequest(BaseModel):
+    frame_id: str
+    image_prompt: Optional[str] = None
+    action_description: Optional[str] = None
+    dialogue: Optional[str] = None
+    camera_angle: Optional[str] = None
+    scene_id: Optional[str] = None
+    character_ids: Optional[List[str]] = None
+
+@app.post("/projects/{script_id}/frames/update", response_model=Script)
+async def update_frame(script_id: str, request: UpdateFrameRequest):
+    """Updates frame data (prompt, scene, characters, etc.)."""
+    try:
+        updated_script = pipeline.update_frame(
+            script_id,
+            request.frame_id,
+            image_prompt=request.image_prompt,
+            action_description=request.action_description,
+            dialogue=request.dialogue,
+            camera_angle=request.camera_angle,
+            scene_id=request.scene_id,
+            character_ids=request.character_ids
+        )
+        return updated_script
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 class RenderFrameRequest(BaseModel):
     frame_id: str
     composition_data: Optional[Dict[str, Any]] = None
     prompt: str
+    batch_size: int = 1
 
 
 @app.post("/projects/{script_id}/storyboard/render", response_model=Script)
@@ -443,7 +605,8 @@ async def render_frame(script_id: str, request: RenderFrameRequest):
             script_id,
             request.frame_id,
             request.composition_data,
-            request.prompt
+            request.prompt,
+            request.batch_size
         )
         return updated_script
     except ValueError as e:

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Settings2, List, Info, RefreshCw, ChevronDown, ChevronUp, Mic, Music, VolumeX, Wand2 } from "lucide-react";
 import VideoQueue from "./VideoQueue";
 import { VideoTask, api } from "@/lib/api";
+import { I2V_MODELS } from "@/store/projectStore";
 
 interface VideoSidebarProps {
     tasks: VideoTask[];
@@ -22,6 +23,7 @@ interface VideoSidebarProps {
         cameraMovement: string;
         subjectMotion: string;
         model: string;
+        shotType: string;  // 'single' or 'multi' (only for wan2.6-i2v)
     };
     setParams: (params: any) => void;
 }
@@ -71,7 +73,7 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
         }
     };
 
-    const isAudioSupported = params.model === "wan2.5-i2v-preview";
+    const isAudioSupported = params.model === "wan2.5-i2v-preview" || params.model === "wan2.6-i2v";
 
     return (
         <div className="h-full flex flex-col bg-black/40 backdrop-blur-sm border-l border-white/5">
@@ -132,15 +134,26 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
                                 {/* Model Selection */}
                                 <div>
                                     <label className="block text-xs text-gray-400 mb-2">Model (模型)</label>
-                                    <select
-                                        value={params.model || "wan2.5-i2v-preview"}
-                                        onChange={(e) => updateParam("model", e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-lg py-2 px-3 text-xs text-white focus:border-primary focus:outline-none"
-                                    >
-                                        <option value="wan2.5-i2v-preview">Wan 2.5 Preview</option>
-                                        <option value="wan2.2-i2v-flash">Wan 2.2 Flash</option>
-                                        <option value="wan2.2-i2v-plus">Wan 2.2 Plus</option>
-                                    </select>
+                                    <div className="space-y-2">
+                                        {I2V_MODELS.map((model) => (
+                                            <button
+                                                key={model.id}
+                                                onClick={() => updateParam("model", model.id)}
+                                                className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition-all text-left ${params.model === model.id
+                                                    ? 'border-primary/50 bg-primary/10'
+                                                    : 'border-white/10 hover:border-white/20 bg-white/5'
+                                                    }`}
+                                            >
+                                                <div>
+                                                    <span className="text-xs font-medium text-white">{model.name}</span>
+                                                    <p className="text-[10px] text-gray-500">{model.description}</p>
+                                                </div>
+                                                {params.model === model.id && (
+                                                    <div className="w-2 h-2 bg-primary rounded-full" />
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
 
                                 {/* Duration */}
@@ -161,6 +174,45 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
                                         ))}
                                     </div>
                                 </div>
+
+                                {/* Shot Type - Only for wan2.6-i2v when promptExtend is enabled */}
+                                {params.model === 'wan2.6-i2v' && (
+                                    <div>
+                                        <label className="block text-xs text-gray-400 mb-2">
+                                            Shot Type (镜头类型)
+                                            {!params.promptExtend && (
+                                                <span className="text-yellow-500 ml-2">(需开启智能扩写)</span>
+                                            )}
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                onClick={() => updateParam("shotType", "single")}
+                                                disabled={!params.promptExtend}
+                                                className={`py-2 text-xs rounded-lg border transition-all flex flex-col items-center gap-1 ${params.shotType === "single"
+                                                    ? "bg-primary/20 border-primary text-primary"
+                                                    : "bg-white/5 border-transparent text-gray-400 hover:bg-white/10"
+                                                    } ${!params.promptExtend ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            >
+                                                <span className="font-medium">Single</span>
+                                                <span className="text-[10px] text-gray-500">单镜头</span>
+                                            </button>
+                                            <button
+                                                onClick={() => updateParam("shotType", "multi")}
+                                                disabled={!params.promptExtend}
+                                                className={`py-2 text-xs rounded-lg border transition-all flex flex-col items-center gap-1 ${params.shotType === "multi"
+                                                    ? "bg-primary/20 border-primary text-primary"
+                                                    : "bg-white/5 border-transparent text-gray-400 hover:bg-white/10"
+                                                    } ${!params.promptExtend ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            >
+                                                <span className="font-medium">Multi</span>
+                                                <span className="text-[10px] text-gray-500">多镜头叙事</span>
+                                            </button>
+                                        </div>
+                                        <p className="text-[10px] text-gray-600 mt-1.5">
+                                            多镜头模式会生成包含多个切换镜头的叙事视频
+                                        </p>
+                                    </div>
+                                )}
                             </section>
 
                             <div className="w-full h-px bg-white/5" />

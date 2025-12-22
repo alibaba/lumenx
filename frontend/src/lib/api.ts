@@ -29,9 +29,19 @@ export const api = {
         return { ...res.data, originalText: res.data.original_text };
     },
 
+    getProjects: async () => {
+        const res = await axios.get(`${API_URL}/projects/`);
+        return res.data.map((p: any) => ({ ...p, originalText: p.original_text }));
+    },
+
     getProject: async (scriptId: string) => {
         const res = await axios.get(`${API_URL}/projects/${scriptId}`);
         return { ...res.data, originalText: res.data.original_text };
+    },
+
+    deleteProject: async (scriptId: string) => {
+        const res = await axios.delete(`${API_URL}/projects/${scriptId}`);
+        return res.data;
     },
 
     reparseProject: async (scriptId: string, text: string) => {
@@ -56,8 +66,9 @@ export const api = {
         promptExtend: boolean = true,
         negativePrompt?: string,
         batchSize: number = 1,
-        model: string = "wan2.5-i2v-preview",
-        frameId?: string
+        model: string = "wan2.6-i2v",
+        frameId?: string,
+        shotType: string = "single"  // 'single' or 'multi' (only for wan2.6-i2v)
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -71,7 +82,8 @@ export const api = {
             negative_prompt: negativePrompt,
             batch_size: batchSize,
             model,
-            frame_id: frameId
+            frame_id: frameId,
+            shot_type: shotType  // Pass shot_type to backend
         });
         return res.data;
     },
@@ -88,7 +100,7 @@ export const api = {
         return response.json();
     },
 
-    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "") => {
+    generateAsset: async (scriptId: string, assetId: string, assetType: string, stylePreset: string, stylePrompt?: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -97,7 +109,8 @@ export const api = {
             generation_type: generationType,
             prompt: prompt,
             apply_style: applyStyle,
-            negative_prompt: negativePrompt
+            negative_prompt: negativePrompt,
+            batch_size: batchSize
         });
         return res.data;
     },
@@ -115,6 +128,58 @@ export const api = {
             asset_id: assetId,
             asset_type: assetType,
             image_url: imageUrl
+        });
+        return res.data;
+    },
+
+    selectAssetVariant: async (scriptId: string, assetId: string, assetType: string, variantId: string, generationType?: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/select`, {
+            asset_id: assetId,
+            asset_type: assetType,
+            variant_id: variantId,
+            generation_type: generationType
+        });
+        return res.data;
+    },
+
+    deleteAssetVariant: async (scriptId: string, assetId: string, assetType: string, variantId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/delete`, {
+            asset_id: assetId,
+            asset_type: assetType,
+            variant_id: variantId
+        });
+        return res.data;
+    },
+
+    favoriteAssetVariant: async (scriptId: string, assetId: string, assetType: string, variantId: string, isFavorited: boolean, generationType?: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/variant/favorite`, {
+            asset_id: assetId,
+            asset_type: assetType,
+            variant_id: variantId,
+            is_favorited: isFavorited,
+            generation_type: generationType
+        });
+        return res.data;
+    },
+
+    updateModelSettings: async (
+        scriptId: string,
+        t2iModel?: string,
+        i2iModel?: string,
+        i2vModel?: string,
+        characterAspectRatio?: string,
+        sceneAspectRatio?: string,
+        propAspectRatio?: string,
+        storyboardAspectRatio?: string
+    ) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/model_settings`, {
+            t2i_model: t2iModel,
+            i2i_model: i2iModel,
+            i2v_model: i2vModel,
+            character_aspect_ratio: characterAspectRatio,
+            scene_aspect_ratio: sceneAspectRatio,
+            prop_aspect_ratio: propAspectRatio,
+            storyboard_aspect_ratio: storyboardAspectRatio
         });
         return res.data;
     },
@@ -192,6 +257,21 @@ export const api = {
         return res.data;
     },
 
+    updateFrame: async (scriptId: string, frameId: string, data: {
+        image_prompt?: string;
+        action_description?: string;
+        dialogue?: string;
+        camera_angle?: string;
+        scene_id?: string;
+        character_ids?: string[];
+    }) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/frames/update`, {
+            frame_id: frameId,
+            ...data
+        });
+        return res.data;
+    },
+
     updateProjectStyle: async (scriptId: string, stylePreset: string, stylePrompt?: string) => {
         const res = await axios.patch(`${API_URL}/projects/${scriptId}/style`, {
             style_preset: stylePreset,
@@ -200,14 +280,14 @@ export const api = {
         return res.data;
     },
 
-    renderFrame: async (scriptId: string, frameId: string, compositionData: any, prompt: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/storyboard/render`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ frame_id: frameId, composition_data: compositionData, prompt: prompt }),
+    renderFrame: async (scriptId: string, frameId: string, compositionData: any, prompt: string, batchSize: number = 1) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render`, {
+            frame_id: frameId,
+            composition_data: compositionData,
+            prompt: prompt,
+            batch_size: batchSize
         });
-        if (!response.ok) throw new Error("Failed to render frame");
-        return response.json();
+        return res.data;
     },
 
     generateStoryboard: async (scriptId: string) => {

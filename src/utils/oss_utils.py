@@ -39,15 +39,34 @@ class OSSImageUploader:
                 md5_hash.update(chunk)
         return md5_hash.hexdigest()
 
-    def get_oss_url(self, object_name: str) -> str:
-        """Get signed OSS URL (valid for 1 hour)."""
+    def get_oss_url(self, object_name: str, use_public_url: bool = True) -> str:
+        """
+        Get OSS URL.
+        
+        Args:
+            object_name: The object key in OSS
+            use_public_url: If True, return public URL (for Dashscope API access).
+                           If False, return signed URL (for private buckets).
+        
+        Note: For Dashscope API to access reference images, the URL must be publicly 
+        accessible. Set use_public_url=True and ensure OSS bucket has public read access.
+        """
         if not self.bucket:
              return ""
-        # Generate signed URL for private buckets
-        url = self.bucket.sign_url('GET', object_name, 3600)
-        print(f"DEBUG: OSS Endpoint: {self.endpoint}")
-        print(f"DEBUG: Generated OSS URL: {url}")
-        return url
+        
+        if use_public_url:
+            # Generate public URL (requires bucket to have public read access)
+            # Format: https://{bucket}.{endpoint}/{object_name}
+            # Remove 'https://' or 'http://' from endpoint if present
+            endpoint_clean = self.endpoint.replace('https://', '').replace('http://', '')
+            public_url = f"https://{self.bucket_name}.{endpoint_clean}/{object_name}"
+            print(f"DEBUG: Generated PUBLIC OSS URL: {public_url}")
+            return public_url
+        else:
+            # Generate signed URL for private buckets (valid for 1 hour)
+            url = self.bucket.sign_url('GET', object_name, 3600)
+            print(f"DEBUG: Generated SIGNED OSS URL: {url}")
+            return url
 
     def upload_image(self, local_image_path: str) -> Optional[str]:
         """

@@ -15,6 +15,20 @@ class GenerationStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+class ImageVariant(BaseModel):
+    id: str = Field(..., description="Unique identifier for the variant")
+    url: str = Field(..., description="URL of the image")
+    created_at: float = Field(default_factory=time.time, description="Timestamp of creation")
+    prompt_used: Optional[str] = Field(None, description="Prompt used for this specific variant")
+    is_favorited: bool = Field(False, description="Whether this variant is favorited/pinned (won't be auto-deleted)")
+
+# Maximum variants to keep per asset (excluding favorited ones)
+MAX_VARIANTS_PER_ASSET = 10
+
+class ImageAsset(BaseModel):
+    selected_id: Optional[str] = Field(None, description="ID of the currently selected variant")
+    variants: List[ImageVariant] = Field(default_factory=list, description="History of generated variants")
+
 class Character(BaseModel):
     id: str = Field(..., description="Unique identifier for the character")
     name: str = Field(..., description="Name of the character")
@@ -27,16 +41,19 @@ class Character(BaseModel):
     visual_weight: int = Field(3, description="Visual importance weight (1-5)")
     
     # Level 1: Full Body (Master)
-    full_body_image_url: Optional[str] = Field(None, description="URL of the full body master image")
+    full_body_image_url: Optional[str] = Field(None, description="URL of the full body master image (Legacy)")
     full_body_prompt: Optional[str] = Field(None, description="Prompt used for full body generation")
+    full_body_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Full body asset container")
 
     # Level 2: Three Views (Derived)
-    three_view_image_url: Optional[str] = Field(None, description="URL of the 3-view character sheet")
+    three_view_image_url: Optional[str] = Field(None, description="URL of the 3-view character sheet (Legacy)")
     three_view_prompt: Optional[str] = Field(None, description="Prompt used for 3-view generation")
+    three_view_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Three view asset container")
 
     # Level 2: Headshot (Derived)
-    headshot_image_url: Optional[str] = Field(None, description="URL of the headshot/avatar")
+    headshot_image_url: Optional[str] = Field(None, description="URL of the headshot/avatar (Legacy)")
     headshot_prompt: Optional[str] = Field(None, description="Prompt used for headshot generation")
+    headshot_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Headshot asset container")
 
     # Legacy fields (kept for compatibility, mapped to new fields)
     image_url: Optional[str] = Field(None, description="Legacy: mapped to three_view_image_url")
@@ -62,7 +79,8 @@ class Scene(BaseModel):
     visual_weight: int = Field(3, description="Visual importance weight (1-5)")
     time_of_day: Optional[str] = Field(None, description="Time of day (e.g. Night, Day)")
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
-    image_url: Optional[str] = Field(None, description="URL of the generated scene reference image")
+    image_url: Optional[str] = Field(None, description="URL of the generated scene reference image (Legacy)")
+    image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Scene image asset container")
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     status: GenerationStatus = GenerationStatus.PENDING
 
@@ -74,7 +92,8 @@ class Prop(BaseModel):
     audio_url: Optional[str] = None
     sfx_url: Optional[str] = None
     bgm_url: Optional[str] = None
-    image_url: Optional[str] = Field(None, description="URL of the generated prop image")
+    image_url: Optional[str] = Field(None, description="URL of the generated prop image (Legacy)")
+    image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Prop image asset container")
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     status: GenerationStatus = GenerationStatus.PENDING
 
@@ -98,8 +117,10 @@ class StoryboardFrame(BaseModel):
     composition_data: Optional[Dict[str, Any]] = Field(None, description="JSON data representing the canvas composition")
     
     image_prompt: Optional[str] = Field(None, description="Optimized prompt for T2I/I2I")
-    image_url: Optional[str] = Field(None, description="URL of the generated storyboard image")
-    rendered_image_url: Optional[str] = Field(None, description="URL of the high-fidelity rendered image")
+    image_url: Optional[str] = Field(None, description="URL of the generated storyboard image (Legacy)")
+    image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Storyboard image asset container")
+    rendered_image_url: Optional[str] = Field(None, description="URL of the high-fidelity rendered image (Legacy)")
+    rendered_image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Rendered image asset container")
     
     video_prompt: Optional[str] = Field(None, description="Optimized prompt for I2V")
     video_url: Optional[str] = Field(None, description="URL of the generated video clip")
@@ -127,9 +148,20 @@ class VideoTask(BaseModel):
     audio_url: Optional[str] = Field(None, description="URL of generated/uploaded audio")
     prompt_extend: bool = Field(True, description="Whether to use prompt extension")
     negative_prompt: Optional[str] = Field(None, description="Negative prompt")
-    model: str = Field("wan2.5-i2v-preview", description="Model used for generation")
+    model: str = Field("wan2.6-i2v", description="Model used for generation")
+    shot_type: str = Field("single", description="Shot type: 'single' or 'multi' (only for wan2.6-i2v)")
     created_at: float = Field(default_factory=time.time)
 
+
+class ModelSettings(BaseModel):
+    """Model selection settings for different generation stages"""
+    t2i_model: str = Field("wan2.6-t2i", description="Text-to-Image model for Assets")
+    i2i_model: str = Field("wan2.6-image", description="Image-to-Image model for Storyboard")
+    i2v_model: str = Field("wan2.6-i2v", description="Image-to-Video model for Motion")
+    character_aspect_ratio: str = Field("9:16", description="Aspect ratio for Characters (9:16, 16:9, 1:1)")
+    scene_aspect_ratio: str = Field("16:9", description="Aspect ratio for Scenes (9:16, 16:9, 1:1)")
+    prop_aspect_ratio: str = Field("1:1", description="Aspect ratio for Props (9:16, 16:9, 1:1)")
+    storyboard_aspect_ratio: str = Field("16:9", description="Aspect ratio for Storyboard (9:16, 16:9, 1:1)")
 
 
 class ArtDirection(BaseModel):
@@ -156,6 +188,9 @@ class Script(BaseModel):
     
     # Art Direction configuration (new approach)
     art_direction: Optional[ArtDirection] = Field(None, description="Global visual style configuration")
+    
+    # Model Settings for each generation stage
+    model_settings: ModelSettings = Field(default_factory=ModelSettings, description="Model selection for T2I/I2I/I2V")
     
     # Merged video URL
     merged_video_url: Optional[str] = Field(None, description="URL of the merged final video")

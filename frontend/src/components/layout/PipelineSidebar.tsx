@@ -33,10 +33,50 @@ export default function PipelineSidebar({ activeStep, onStepChange, steps }: Pip
             animate={{ x: 0, opacity: 1 }}
             className="w-64 h-screen border-r border-glass-border bg-black/40 backdrop-blur-xl flex flex-col z-50"
         >
-            <div className="p-6 border-b border-glass-border">
-                <h1 className="font-display text-xl font-bold tracking-tight text-white">
-                    AI-Manga <span className="text-primary">Studio</span>
-                </h1>
+            <div className="p-5 border-b border-glass-border">
+                <div className="flex gap-4 items-center">
+                    {/* Left Column: Large Logo */}
+                    <div className="flex-shrink-0">
+                        <img
+                            src="/static/LumenX.png"
+                            alt="LumenX"
+                            className="w-16 h-16 object-contain"
+                        />
+                    </div>
+
+                    {/* Right Column: LumenX / Studio */}
+                    <div className="flex flex-col flex-1 justify-center h-full gap-1">
+                        {/* LumenX (Top Left) */}
+                        <div className="flex items-center justify-start -mb-1">
+                            <span className="font-display text-3xl font-bold tracking-tight text-primary">
+                                Lumen
+                            </span>
+                            <span
+                                className="font-display text-4xl font-black tracking-tighter ml-1"
+                                style={{
+                                    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 50%, #ec4899 100%)',
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                    backgroundClip: 'text',
+                                }}
+                            >
+                                X
+                            </span>
+                        </div>
+
+                        {/* Studio (Bottom Right) */}
+                        <div className="flex justify-end -mt-1 pr-2">
+                            <span className="font-display text-3xl font-bold tracking-tight text-white">
+                                Studio
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Slogan */}
+                <p className="text-[9px] text-gray-500 tracking-wide text-center mt-3">
+                    Render Noise into Narrative
+                </p>
             </div>
 
             <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
