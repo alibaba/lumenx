@@ -1,4 +1,4 @@
-# Windows build script - PyArmor obfuscation + PyInstaller packaging
+# Windows build script - PyInstaller packaging
 # PowerShell version
 
 Write-Host "======================================"
@@ -67,55 +67,23 @@ if (Test-Path "requirements.txt") {
 
 # Check and install necessary packaging tools
 Write-Host "4. Checking and installing packaging tools..."
-pip install --upgrade pyinstaller pyarmor
+pip install --upgrade pyinstaller
 
 # Clean previous packaging files
 Write-Host "5. Cleaning old packaging files..."
 if (Test-Path "build") { Remove-Item -Recurse -Force build }
 if (Test-Path "dist") { Remove-Item -Recurse -Force dist }
-if (Test-Path "obfuscated") { Remove-Item -Recurse -Force obfuscated }
 if (Test-Path "dist_windows") { Remove-Item -Recurse -Force dist_windows }
 Get-ChildItem -Filter "*.spec" | Remove-Item -Force
 Get-ChildItem -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force
 
-# Create obfuscation directory
-Write-Host "6. Obfuscating code with PyArmor..."
-New-Item -ItemType Directory -Path obfuscated -Force | Out-Null
-
-# Obfuscate all Python files in src directory
-pyarmor gen -O obfuscated -r src/
-
-# Obfuscate main.py
-pyarmor gen -O obfuscated main.py
-
-# Copy static resources
-Write-Host "7. Copying static resources..."
-Copy-Item -Path static -Destination obfuscated\static -Recurse -Force
-
-# Copy other necessary files
-if (Test-Path "requirements.txt") {
-    Copy-Item requirements.txt obfuscated\
-}
-if (Test-Path ".env") {
-    Copy-Item .env obfuscated\
-}
-
-# Copy style_presets.json
-if (Test-Path "src\apps\comic_gen\style_presets.json") {
-    New-Item -ItemType Directory -Path obfuscated\src\apps\comic_gen -Force | Out-Null
-    Copy-Item src\apps\comic_gen\style_presets.json obfuscated\src\apps\comic_gen\
-}
-
-# Enter obfuscation directory
-Push-Location obfuscated
-
 # Package with PyInstaller
-Write-Host "8. Packaging with PyInstaller..."
+Write-Host "6. Packaging with PyInstaller..."
 
 # Check if icon file exists
 $iconParam = ""
-if (Test-Path "..\icon.ico") {
-    $iconParam = "--icon=..\icon.ico"
+if (Test-Path "icon.ico") {
+    $iconParam = "--icon=icon.ico"
 } else {
     Write-Host "Note: icon.ico not found, using default icon" -ForegroundColor Yellow
 }
@@ -223,13 +191,11 @@ if ($iconParam) {
 pyinstaller @pyinstallerArgs
 
 # Copy packaging results to project root
-Write-Host "9. Copying packaging results..."
-Pop-Location
-
+Write-Host "7. Copying packaging results..."
 if (-not (Test-Path "dist_windows")) {
     New-Item -ItemType Directory -Path dist_windows -Force | Out-Null
 }
-Copy-Item -Path obfuscated\dist\* -Destination dist_windows\ -Recurse -Force
+Copy-Item -Path dist\* -Destination dist_windows\ -Recurse -Force
 
 Write-Host "======================================"
 Write-Host "Packaging complete!" -ForegroundColor Green

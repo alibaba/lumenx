@@ -27,7 +27,6 @@ pywebview>=5.0.0
 
 # Build & Package
 pyinstaller>=6.0.0
-pyarmor>=8.0.0
 
 # Optional Dependencies
 # Uncomment if needed:
