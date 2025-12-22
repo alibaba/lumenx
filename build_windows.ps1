@@ -5,36 +5,6 @@ Write-Host "======================================"
 Write-Host "Starting Windows packaging process"
 Write-Host "======================================"
 
-# Build frontend project first
-Write-Host "0. Building frontend project..."
-if (-not (Test-Path "frontend")) {
-    Write-Host "Error: frontend directory not found" -ForegroundColor Red
-    exit 1
-}
-
-Push-Location frontend
-
-# Check npm or yarn
-if (Get-Command yarn -ErrorAction SilentlyContinue) {
-    Write-Host "   Using yarn to install dependencies..."
-    yarn install
-    Write-Host "   Using yarn to build frontend..."
-    yarn build
-} elseif (Get-Command npm -ErrorAction SilentlyContinue) {
-    Write-Host "   Using npm to install dependencies..."
-    npm install
-    Write-Host "   Using npm to build frontend..."
-    npm run build
-} else {
-    Write-Host "Error: npm or yarn not found" -ForegroundColor Red
-    Pop-Location
-    exit 1
-}
-
-Pop-Location
-Write-Host "   Frontend build complete, output directory: static/"
-Write-Host ""
-
 # Check Python environment
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     Write-Host "Error: Python not found, please install Python first" -ForegroundColor Red
