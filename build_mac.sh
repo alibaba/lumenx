@@ -162,6 +162,15 @@ mkdir -p "$TMP_DMG_DIR"
 # 复制 .app 到临时目录
 cp -R "$APP_PATH" "$TMP_DMG_DIR/"
 
+# 复制安装脚本到临时目录
+if [ -f "install.sh" ]; then
+    cp "install.sh" "$TMP_DMG_DIR/"
+    chmod +x "$TMP_DMG_DIR/运行APP前_先点我安装.sh"
+    echo "   已添加安装脚本到 DMG"
+else
+    echo "   警告: 未找到 运行APP前_先点我安装.sh 安装脚本"
+fi
+
 # 创建 Applications 软链接（方便用户拖拽安装）
 ln -s /Applications "$TMP_DMG_DIR/Applications"
 
