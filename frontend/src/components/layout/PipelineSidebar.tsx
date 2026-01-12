@@ -18,6 +18,7 @@ interface Step {
     id: string;
     label: string;
     icon: any; // Using any for LucideIcon to avoid type strictness issues with different versions
+    comingSoon?: boolean; // Mark step as under development
 }
 
 interface PipelineSidebarProps {
@@ -104,10 +105,21 @@ export default function PipelineSidebar({ activeStep, onStepChange, steps }: Pip
                                 />
                             )}
 
-                            <Icon size={20} className={clsx("transition-colors", isActive ? "text-primary" : "group-hover:text-white")} />
+                            <Icon size={20} className={clsx(
+                                "transition-colors",
+                                step.comingSoon ? "opacity-50" : "",
+                                isActive ? "text-primary" : "group-hover:text-white"
+                            )} />
 
-                            <div className="flex flex-col items-start text-sm">
-                                <span className="font-medium">{step.label}</span>
+                            <div className="flex flex-col items-start text-sm flex-1">
+                                <div className="flex items-center gap-2">
+                                    <span className={clsx("font-medium", step.comingSoon && "opacity-70")}>{step.label}</span>
+                                    {step.comingSoon && (
+                                        <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-medium">
+                                            Beta
+                                        </span>
+                                    )}
+                                </div>
                                 <span className="text-[10px] opacity-50 font-mono">STEP 0{index + 1}</span>
                             </div>
 

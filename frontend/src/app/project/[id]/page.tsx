@@ -47,9 +47,9 @@ export default function ProjectClient({ params }: { params: { id: string } }) {
         { id: "storyboard", label: "4. Storyboard", icon: Layout },
         { id: "motion", label: "5. Motion", icon: Video },
         { id: "assembly", label: "6. Assembly", icon: Film },
-        { id: "audio", label: "7. Voice Acting", icon: Mic },
-        { id: "mix", label: "8. Final Mix", icon: Music },
-        { id: "export", label: "9. Export", icon: Share2 },
+        { id: "audio", label: "7. Voice", icon: Mic, comingSoon: true },
+        { id: "mix", label: "8. Final Mix", icon: Music, comingSoon: true },
+        { id: "export", label: "9. Export", icon: Share2, comingSoon: true },
     ];
 
     useEffect(() => {
