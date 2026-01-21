@@ -68,6 +68,10 @@ import uvicorn
 from src.apps.comic_gen.api import app
 from src.utils import setup_logging
 
+import mimetypes
+mimetypes.add_type('text/css', '.css')
+mimetypes.add_type('application/javascript', '.js')
+
 # 设置日志系统
 setup_logging(log_file=log_file)
 
@@ -106,7 +110,7 @@ def open_webview():
 
     # 创建 pywebview 窗口
     window = webview.create_window(
-        title="云创 AI 漫剧",
+        title="LumenX Studio",
         url=f"http://127.0.0.1:17177/static/index.html?timestamp={datetime.now().timestamp()}",
         width=1280,
         height=800,

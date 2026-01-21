@@ -359,9 +359,16 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     finalImageUrl = img.replace(`${API_URL}/files/`, "");
                 }
 
-                // Find frame ID
-                const frame = currentProject?.frames?.find((f: any) => f.image_url === img || `${API_URL}/files/${f.image_url}` === img);
-                const frameId = frame ? frame.id : undefined;
+                // Find frame ID - use selectedFrameId directly for R2V mode
+                let frameId: string | undefined;
+                if (generationMode === 'r2v') {
+                    // R2V mode: use the explicitly selected frame
+                    frameId = selectedFrameId || undefined;
+                } else {
+                    // I2V mode: find frame by matching image URL
+                    const frame = currentProject?.frames?.find((f: any) => f.image_url === img || `${API_URL}/files/${f.image_url}` === img);
+                    frameId = frame ? frame.id : undefined;
+                }
 
                 // Determine model based on generation mode
                 // R2V mode uses wan2.6-r2v, I2V uses selected model
@@ -576,7 +583,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 {activeTab === "storyboard" ? (
                                     <div className="space-y-4">
                                         {currentProject?.frames && currentProject.frames.length > 0 ? (
-                                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[500px] overflow-y-auto custom-scrollbar pr-2 p-2">
                                                 {currentProject.frames.map((frame: any) => (
                                                     <div
                                                         key={frame.id}

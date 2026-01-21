@@ -28,9 +28,13 @@ class WanxModel(VideoGenModel):
         return api_key
 
     def generate(self, prompt: str, output_path: str, img_path: str = None, model_name: str = None, **kwargs) ->Tuple[str, float]:
-        # Determine model - allow explicit override via model_name param
+        # Determine model - allow explicit override via model_name param or 'model' kwarg
+        # Fix: pipeline.py passes 'model=task.model', we need to accept both
         if model_name:
             final_model_name = model_name
+        elif kwargs.get('model'):
+            final_model_name = kwargs.get('model')
+            logger.info(f"Using model from kwargs: {final_model_name}")
         elif img_path or kwargs.get('img_url'):
             final_model_name = self.params.get('i2v_model_name', 'wan2.6-i2v')  # Default to I2V model
             logger.info(f"Using I2V model: {final_model_name}")

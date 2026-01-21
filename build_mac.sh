@@ -35,6 +35,10 @@ fi
 
 cd ..
 echo "   前端构建完成，输出目录: static/"
+
+# 清理 .next 缓存以避免与开发模式冲突
+echo "   清理 .next 缓存（避免与开发模式冲突）..."
+rm -rf frontend/.next
 echo ""
 
 # 检查 Python 环境
@@ -107,7 +111,7 @@ else
 fi
 
 pyinstaller --clean --noconfirm \
-    --name "云创AI漫剧" \
+    --name "LumenX Studio" \
     --windowed \
     $ICON_PARAM \
     --add-data "static:static" \
@@ -158,7 +162,7 @@ cp -r dist/* dist_mac/
 echo "8. 创建 DMG 安装包..."
 
 # 定义 DMG 文件名和路径
-APP_NAME="云创AI漫剧"
+APP_NAME="LumenX Studio"
 DMG_NAME="${APP_NAME}.dmg"
 DMG_PATH="dist_mac/${DMG_NAME}"
 APP_PATH="dist_mac/${APP_NAME}.app"
