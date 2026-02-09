@@ -44,8 +44,42 @@ The platform natively integrates Alibaba's Qwen & Wanx series model capabilities
 ## 📸 Demo
 
 <div align="center">
-  <!-- Demo GIF Placeholder -->
-  <img src="docs/images/demo.gif" alt="LumenX Studio Demo" width="100%" />
+  Step 1: Script - Script Editing and Entity Extraction
+  
+  The script editor is located on the left side of the screen. After editing the script, click the "Extract Entities" button above to automatically extract characters, scenes, and props mentioned in the script using Qwen-Plus. You can edit and adjust these entities on the right side.
+  <img src="docs/images/Script_example.jpg" alt="LumenX Studio Script" width="100%" />
+
+  Step 2: Art Direction - Style Definition
+
+  You can use Qwen-Plus to analyze the appropriate style for the current script, or use preset styles. Each style consists of a set of positive/negative prompts used to visually constrain all subsequent generation stages, establishing a unified global visual standard.
+  <img src="docs/images/ArtDirection_example.jpg" alt="LumenX Studio ArtDirection" width="100%" />
+
+  Step 3: Assets - Asset Generation
+
+  In this stage, you can edit the text descriptions for characters, scenes, props, and other assets extracted in Step 1, then generate corresponding images based on these descriptions. For characters, to maintain consistency across different scenes, the system first generates a full-body image without background, then uses it as a reference to generate turnarounds and portrait close-ups as core character assets. Subsequent costume or form changes can be derived through secondary image editing based on these full-body photos or turnarounds.
+  Additionally, Wanx 2.6 series supports reference-to-video, so you can also generate reference videos for each character, scene, and prop here.
+
+  <img src="docs/images/Assets_example.jpg" alt="LumenX Studio Assets" width="100%" />
+
+  Step 4: StoryBoard - Storyboard Creation
+
+  In this stage, you can extract storyboard scripts based on the screenplay, forming a structured storyboard that supports secondary editing, adding, and deleting shots. For each scene, you can select participating characters, scenes, and props as reference images for generating storyboard images.
+  This stage incorporates AI prompt polishing capabilities, allowing you to directly use Qwen-Plus to polish existing prompts, with embedded image editing prompt guidelines as best practices.
+
+  <img src="docs/images/StoryBoard_example.jpg" alt="LumenX Studio StoryBoard" width="100%" />
+
+  Step 5: Motion - Storyboard Video Generation
+
+  This stage can be divided into two generation models: one is the i2v mode driven by the first frame, and the other is the r2v mode driven by character actions. In i2v mode, you can select the storyboard images generated in Step 4 and generate storyboard videos for them one by one. This generation process also incorporates AI prompt polishing capabilities, allowing you to directly use Qwen-Plus to polish existing prompts, with embedded image-to-video prompt guidelines as best practices. In r2v mode, you can select reference videos of characters, scenes, and props for reference-to-video generation.
+  This stage also supports a multi-batch size generation lottery mechanism, allowing you to select the final storyboard video for each shot in Step 6.
+
+  <img src="docs/images/Motion_example.jpg" alt="LumenX Studio Motion" width="100%" />
+
+  Step 6: Assembly - Storyboard Video Stitching
+
+  In this stage, you can review the storyboard videos for each shot, select the one you think is best as the final shot, and after all shots are selected, click the "Merge&Proceed" button to stitch them into a complete video with one click.
+
+  <img src="docs/images/Assembly_example.jpg" alt="LumenX Studio Assembly" width="100%" />
 </div>
 
 ---

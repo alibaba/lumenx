@@ -44,8 +44,42 @@ LumenX Studio将 **资产提取—>风格定调—>资产生成—>分镜脚本�
 ## 📸 产品演示
 
 <div align="center">
-  <!-- 待补充演示 GIF -->
-  <img src="docs/images/demo.gif" alt="LumenX Studio Demo" width="100%" />
+  Step 1: Script 剧本编辑与实体提取
+  
+  画面左侧置有剧本编辑器，剧本编辑后，可点击上方的“提取实体”按钮，由Qwen-Plus自动提取脚本中所涉及到的角色、场景、道具；右侧可针对这些实体进行编辑调整。
+  <img src="docs/images/Script_example.jpg" alt="LumenX Studio Script" width="100%" />
+
+  Step 2: Art Direction 风格定调
+
+  可利用Qwen-Plus分析当前剧本适合的风格，也可使用预设风格，每个风格是由一组 正向/负向提示词 组成，用于在视觉风格上限定后续的所有生成环节，建立全局统一的视觉标准。
+  <img src="docs/images/ArtDirection_example.jpg" alt="LumenX Studio ArtDirection" width="100%" />
+
+  Step 3: Assets 资产生成
+
+  该阶段可以为Step 1所抽取的角色、场景、道具等资产进行文本描述编辑，再基于该文本描述生成对应的图片。对于角色而言，为了保持角色在不同场景的一致性，采用先生成人物的无背景全身图，再基于该全身图作为参考图生成对应的 三视图、头像特写 作为该角色的核心资产，后续若涉及到更换服装、形态，皆可以沿用该全身照或三视图进行二次图像编辑得来。
+  另外，万相2.6系列支持参考生视频，所以此处也可以为每个橘色、场景、道具生成参考视频。
+
+  <img src="docs/images/Assets_example.jpg" alt="LumenX Studio Assets" width="100%" />
+
+  Step 4 StoryBoard 分镜图故事版
+
+  该阶段可以基于脚本提取分镜脚本，形成结构化的故事版，支持用户的对分镜的二次编辑与增加、删除；对于每个分镜场景可以选择该场景所参与的角色、场景、道具作为参考图，进行分镜图的生成。
+  该阶段融入AI提示词润色能力，可以直接利用Qwen-Plus对现有提示词进行润色，已嵌入图像编辑的提示词指南作为最佳实践。
+
+  <img src="docs/images/StoryBoard_example.jpg" alt="LumenX Studio StoryBoard" width="100%" />
+
+  Step 5 Motion 分镜视频生成
+
+  该阶段可分为两种生成模型，一种是基于首帧驱动的i2v模式，另一种是基于角色动作驱动的r2v模式。在i2v模式下，可选取Step 4所生成的分镜图，逐一为其生成分镜视频，该生成过程也已融入AI提示词润色能力，可以直接利用Qwen-Plus对现有提示词进行润色，已嵌入图生视频的提示词指南作为最佳实践。在r2v模式下，可选取角色、场景、道具的参考视频进行参考生视频。
+  同时该阶段支持 多Batch Size生成的抽卡机制，可在Step 6针对每个分镜进行最终分镜视频的选取。
+
+  <img src="docs/images/Motion_example.jpg" alt="LumenX Studio Motion" width="100%" />
+
+  Step 6 Assembly 分镜视频拼接
+
+  该阶段可以审查每个分镜的分镜视频，选择你认为最好的，作为最终分镜，全部分镜选择结束后，点击“Merge&Proceed”按钮即可一键拼接成片。
+
+  <img src="docs/images/Assembly_example.jpg" alt="LumenX Studio Assembly" width="100%" />
 </div>
 
 ---
