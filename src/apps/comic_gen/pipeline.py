@@ -14,6 +14,7 @@ from .storyboard import StoryboardGenerator
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
+from ...model_request_settings import MODEL_REQUEST_SETTINGS
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
@@ -1123,7 +1124,7 @@ class ComicGenPipeline:
                             duration=duration,
                             created_at=time.time(),
                             generate_audio=bool(audio_url),
-                            model="wan2.6-i2v",
+                            model=MODEL_REQUEST_SETTINGS.wanx_i2v_model_name_default,
                             generation_mode="i2v"  # Image to video (motion reference)
                         )
 
@@ -1273,7 +1274,7 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.6-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = MODEL_REQUEST_SETTINGS.wanx_i2v_model_name_default, frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -1283,7 +1284,7 @@ class ComicGenPipeline:
         
         # If R2V mode is selected, use the R2V model
         if generation_mode == "r2v":
-            model = "wan2.6-r2v"
+            model = MODEL_REQUEST_SETTINGS.wanx_r2v_model_name_default
         
         # Snapshot the input image to ensure consistency
         snapshot_url = image_url
@@ -1687,7 +1688,7 @@ class ComicGenPipeline:
             prompt=prompt or f"Cinematic shot of {target_asset.name}",
             status="pending",
             duration=duration,
-            model="wan2.6-r2v", # Force R2V model
+            model=MODEL_REQUEST_SETTINGS.wanx_r2v_model_name_default, # Force configured R2V model
             created_at=time.time()
         )
         
@@ -1888,7 +1889,7 @@ class ComicGenPipeline:
             status="pending",
             duration=duration,
             resolution=resolution,
-            model="wan2.6-i2v", # Asset video uses I2V
+            model=MODEL_REQUEST_SETTINGS.wanx_i2v_model_name_default, # Asset video uses configured I2V model
             created_at=time.time()
         )
         

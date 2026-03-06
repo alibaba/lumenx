@@ -9,12 +9,19 @@ from typing import List, Dict, Any
 
 from .models import Script, Character, Scene, Prop, StoryboardFrame, GenerationStatus
 from ...utils import get_logger
+from ...model_request_settings import MODEL_REQUEST_SETTINGS
 
 logger = get_logger(__name__)
 
 class ScriptProcessor:
     def __init__(self, api_key: str = None):
         self._api_key = api_key
+        self.parse_novel_model_name = MODEL_REQUEST_SETTINGS.llm_parse_novel_model_name
+        self.storyboard_analysis_model_name = MODEL_REQUEST_SETTINGS.llm_storyboard_analysis_model_name
+        self.style_recommend_model_name = MODEL_REQUEST_SETTINGS.llm_style_recommend_model_name
+        self.storyboard_polish_model_name = MODEL_REQUEST_SETTINGS.llm_storyboard_polish_model_name
+        self.video_polish_model_name = MODEL_REQUEST_SETTINGS.llm_video_polish_model_name
+        self.r2v_polish_model_name = MODEL_REQUEST_SETTINGS.llm_r2v_polish_model_name
 
     @property
     def api_key(self):
@@ -40,8 +47,7 @@ class ScriptProcessor:
             dashscope.api_key = self.api_key
             
             response = dashscope.Generation.call(
-                # model='deepseek-v3.2',
-                model='qwen-max',
+                model=self.parse_novel_model_name,
                 prompt=prompt,
                 result_format='message',
             )
@@ -416,7 +422,7 @@ CRITICAL STYLE GUIDELINES:
             dashscope.api_key = self.api_key
             
             response = dashscope.Generation.call(
-                model='qwen-plus',
+                model=self.style_recommend_model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -671,7 +677,7 @@ Props:
             dashscope.api_key = self.api_key
             
             response = dashscope.Generation.call(
-                model='qwen-max',
+                model=self.storyboard_analysis_model_name,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。"}
@@ -792,7 +798,7 @@ Return STRICTLY a JSON object:
             dashscope.api_key = self.api_key
             
             response = dashscope.Generation.call(
-                model='qwen-plus',
+                model=self.storyboard_polish_model_name,
                 prompt=system_prompt,
                 result_format='message',
                 response_format={'type': 'json_object'}
@@ -866,7 +872,7 @@ Return STRICTLY a JSON object:
             dashscope.api_key = self.api_key
 
             response = dashscope.Generation.call(
-                model='qwen-plus',
+                model=self.video_polish_model_name,
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': draft_prompt}
@@ -964,7 +970,7 @@ OUTPUT:
             dashscope.api_key = self.api_key
 
             response = dashscope.Generation.call(
-                model='qwen-plus',
+                model=self.r2v_polish_model_name,
                 messages=[
                     {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': draft_prompt}

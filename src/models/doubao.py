@@ -4,6 +4,7 @@ import logging
 import base64
 from typing import Tuple, Optional
 from .base import VideoGenModel
+from ..model_request_settings import MODEL_REQUEST_SETTINGS
 
 # Try to import Ark, handle if not installed (though user said they installed it)
 try:
@@ -17,14 +18,17 @@ class DoubaoModel(VideoGenModel):
     def __init__(self, config: dict):
         super().__init__(config)
         self.api_key = os.getenv("ARK_API_KEY")
-        self.model_name = config.get('params', {}).get('model_name', 'doubao-seedance-1-0-pro-fast-251015')
+        self.model_name = config.get('params', {}).get(
+            'model_name', MODEL_REQUEST_SETTINGS.doubao_model_name_default
+        )
+        self.base_url = MODEL_REQUEST_SETTINGS.doubao_base_url
         
         if not self.api_key:
             logger.warning("ARK_API_KEY not found in environment variables.")
             
         if Ark:
             self.client = Ark(
-                base_url="https://ark.cn-beijing.volces.com/api/v3",
+                base_url=self.base_url,
                 api_key=self.api_key
             )
         else:

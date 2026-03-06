@@ -2,6 +2,7 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 import time
 from pydantic import BaseModel, Field
+from ...model_request_settings import MODEL_REQUEST_SETTINGS
 
 class AspectRatio(str, Enum):
     SQUARE = "1:1"
@@ -76,7 +77,7 @@ class VideoTask(BaseModel):
     audio_url: Optional[str] = Field(None, description="URL of generated/uploaded audio")
     prompt_extend: bool = Field(True, description="Whether to use prompt extension")
     negative_prompt: Optional[str] = Field(None, description="Negative prompt")
-    model: str = Field("wan2.6-i2v", description="Model used for generation")
+    model: str = Field(MODEL_REQUEST_SETTINGS.wanx_i2v_model_name_default, description="Model used for generation")
     shot_type: str = Field("single", description="Shot type: 'single' or 'multi' (only for wan2.6-i2v)")
     generation_mode: str = Field("i2v", description="Generation mode: 'i2v' (image-to-video) or 'r2v' (reference-to-video)")
     reference_video_urls: List[str] = Field(default_factory=list, description="Reference video URLs for R2V generation (max 3)")
@@ -221,9 +222,9 @@ class StoryboardFrame(BaseModel):
 
 class ModelSettings(BaseModel):
     """Model selection settings for different generation stages"""
-    t2i_model: str = Field("wan2.6-t2i", description="Text-to-Image model for Assets")
-    i2i_model: str = Field("wan2.6-image", description="Image-to-Image model for Storyboard")
-    i2v_model: str = Field("wan2.6-i2v", description="Image-to-Video model for Motion")
+    t2i_model: str = Field(MODEL_REQUEST_SETTINGS.wanx_image_t2i_model_name_default, description="Text-to-Image model for Assets")
+    i2i_model: str = Field(MODEL_REQUEST_SETTINGS.wanx_image_i2i_model_name_default, description="Image-to-Image model for Storyboard")
+    i2v_model: str = Field(MODEL_REQUEST_SETTINGS.wanx_i2v_model_name_default, description="Image-to-Video model for Motion")
     character_aspect_ratio: str = Field("9:16", description="Aspect ratio for Characters (9:16, 16:9, 1:1)")
     scene_aspect_ratio: str = Field("16:9", description="Aspect ratio for Scenes (9:16, 16:9, 1:1)")
     prop_aspect_ratio: str = Field("1:1", description="Aspect ratio for Props (9:16, 16:9, 1:1)")

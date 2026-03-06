@@ -4,6 +4,7 @@ import jwt
 import logging
 from typing import Dict, Any, Tuple
 from .base import VideoGenModel
+from ..model_request_settings import MODEL_REQUEST_SETTINGS
 
 logger = logging.getLogger(__name__)
 
@@ -11,8 +12,10 @@ class KlingModel(VideoGenModel):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.api_key = config.get("api_key")
-        self.base_url = "https://api.klingai.com/v1"
-        self.model_name = config.get("params", {}).get("model_name", "kling-v2-5-turbo")
+        self.base_url = MODEL_REQUEST_SETTINGS.kling_base_url
+        self.model_name = config.get("params", {}).get(
+            "model_name", MODEL_REQUEST_SETTINGS.kling_model_name_default
+        )
 
     def _get_token(self) -> str:
         """Generate JWT token for Kling API."""
@@ -101,4 +104,3 @@ class KlingModel(VideoGenModel):
             except Exception as e:
                 logger.error(f"Error polling Kling task: {e}")
                 raise
-

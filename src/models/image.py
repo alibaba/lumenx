@@ -8,6 +8,7 @@ import dashscope
 from dashscope import ImageSynthesis
 from ..utils import get_logger
 from ..utils.oss_utils import OSSImageUploader
+from ..model_request_settings import MODEL_REQUEST_SETTINGS
 
 logger = get_logger(__name__)
 
@@ -38,6 +39,14 @@ class WanxImageModel(ImageGenModel):
     def __init__(self, config):
         super().__init__(config)
         self.params = config.get('params', {})
+        self.image_t2i_url = MODEL_REQUEST_SETTINGS.dashscope_image_t2i_url
+        self.image_i2i_url = MODEL_REQUEST_SETTINGS.dashscope_image_i2i_url
+        self.task_query_url_template = MODEL_REQUEST_SETTINGS.dashscope_task_query_url_template
+        self.default_t2i_model_name = MODEL_REQUEST_SETTINGS.wanx_image_t2i_model_name_default
+        self.default_i2i_model_name = MODEL_REQUEST_SETTINGS.wanx_image_i2i_model_name_default
+        self.http_t2i_models = set(MODEL_REQUEST_SETTINGS.wanx_image_http_t2i_model_names)
+        self.http_i2i_models = set(MODEL_REQUEST_SETTINGS.wanx_image_http_i2i_model_names)
+        self.four_ref_models = set(MODEL_REQUEST_SETTINGS.wanx_image_four_ref_models)
 
     @property
     def api_key(self):
@@ -63,11 +72,11 @@ class WanxImageModel(ImageGenModel):
         if model_name:
             final_model_name = model_name
         elif all_ref_paths:
-            # For I2I, use i2i_model_name if configured, otherwise default to wan2.5-i2i-preview
-            final_model_name = self.params.get('i2i_model_name', 'wan2.5-i2i-preview')
+            # For I2I, use i2i_model_name if configured, otherwise use configured default
+            final_model_name = self.params.get('i2i_model_name', self.default_i2i_model_name)
         else:
-            # For T2I, use model_name if configured, otherwise default to wan2.6-t2i
-            final_model_name = self.params.get('model_name', 'wan2.6-t2i')
+            # For T2I, use model_name if configured, otherwise use configured default
+            final_model_name = self.params.get('model_name', self.default_t2i_model_name)
 
         if all_ref_paths:
             logger.info(f"Using I2I model: {final_model_name} with {len(all_ref_paths)} reference images")
@@ -81,7 +90,7 @@ class WanxImageModel(ImageGenModel):
         kwargs.pop('model_name', None)
         
         # Determine reference image limit based on model
-        ref_limit = 4 if final_model_name == 'wan2.6-image' else 3
+        ref_limit = 4 if final_model_name in self.four_ref_models else 3
         if len(all_ref_paths) > ref_limit:
             logger.warning(f"Limiting reference images from {len(all_ref_paths)} to {ref_limit} for model {final_model_name}")
             all_ref_paths = all_ref_paths[:ref_limit]
@@ -92,12 +101,13 @@ class WanxImageModel(ImageGenModel):
 
         try:
             api_start_time = time.time()
-            # Use HTTP API for wan2.6 models (SDK not supported yet)
-            if final_model_name == 'wan2.6-t2i':
-                image_url = self._generate_wan26_http(prompt, size, n, negative_prompt)
-            elif final_model_name == 'wan2.6-image':
-                # wan2.6-image for I2I (requires reference images)
-                image_url = self._generate_wan26_image_http(prompt, size, n, negative_prompt, all_ref_paths)
+            # Use HTTP API for configured models (SDK not supported yet)
+            if final_model_name in self.http_t2i_models:
+                image_url = self._generate_wan26_http(prompt, size, n, negative_prompt, final_model_name)
+            elif final_model_name in self.http_i2i_models:
+                image_url = self._generate_wan26_image_http(
+                    prompt, size, n, negative_prompt, all_ref_paths, final_model_name
+                )
             else:
                 # Use SDK for other models
                 image_url = self._generate_sdk(prompt, final_model_name, size, n, negative_prompt, all_ref_paths,
@@ -119,9 +129,12 @@ class WanxImageModel(ImageGenModel):
             logger.error(traceback.format_exc())
             raise
 
-    def _generate_wan26_http(self, prompt: str, size: str, n: int, negative_prompt: str = None) -> str:
-        """Generate image using Wan 2.6 T2I via HTTP API (synchronous)."""
-        url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+    def _generate_wan26_http(
+        self, prompt: str, size: str, n: int, negative_prompt: str = None, model_name: str = None
+    ) -> str:
+        """Generate image using configured T2I HTTP API (synchronous)."""
+        model_name = model_name or self.default_t2i_model_name
+        url = self.image_t2i_url
         
         headers = {
             "Content-Type": "application/json",
@@ -129,7 +142,7 @@ class WanxImageModel(ImageGenModel):
         }
         
         payload = {
-            "model": "wan2.6-t2i",
+            "model": model_name,
             "input": {
                 "messages": [
                     {
@@ -154,7 +167,7 @@ class WanxImageModel(ImageGenModel):
         if negative_prompt:
             payload["parameters"]["negative_prompt"] = negative_prompt
         
-        logger.info(f"Calling Wan 2.6 T2I HTTP API...")
+        logger.info(f"Calling {model_name} HTTP API...")
         logger.info(f"Payload: {payload}")
         
         response = requests.post(url, headers=headers, json=payload, timeout=300)  # 5 minutes for slow API responses
@@ -187,9 +200,12 @@ class WanxImageModel(ImageGenModel):
         
         return image_url
 
-    def _generate_wan26_image_http(self, prompt: str, size: str, n: int, negative_prompt: str = None, ref_image_paths: list = None) -> str:
-        """Generate image using Wan 2.6 Image via HTTP API (asynchronous with polling)."""
-        create_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/image-generation/generation"
+    def _generate_wan26_image_http(
+        self, prompt: str, size: str, n: int, negative_prompt: str = None, ref_image_paths: list = None, model_name: str = None
+    ) -> str:
+        """Generate image using configured I2I HTTP API (asynchronous with polling)."""
+        model_name = model_name or self.default_i2i_model_name
+        create_url = self.image_i2i_url
         
         headers = {
             "Content-Type": "application/json",
@@ -238,7 +254,7 @@ class WanxImageModel(ImageGenModel):
                         logger.warning(f"Reference image not found: {path}")
         
         payload = {
-            "model": "wan2.6-image",
+            "model": model_name,
             "input": {
                 "messages": [
                     {
@@ -260,7 +276,7 @@ class WanxImageModel(ImageGenModel):
         if negative_prompt:
             payload["parameters"]["negative_prompt"] = negative_prompt
         
-        logger.info(f"Calling Wan 2.6 Image HTTP API (async)...")
+        logger.info(f"Calling {model_name} HTTP API (async)...")
         logger.info(f"Payload: {payload}")
         
         # Step 1: Create task
@@ -272,7 +288,7 @@ class WanxImageModel(ImageGenModel):
         if response.status_code != 200:
             error_data = response.json() if response.text else {}
             error_msg = error_data.get('message', response.text)
-            raise RuntimeError(f"Wan 2.6 Image task creation failed: {error_msg}")
+            raise RuntimeError(f"{model_name} task creation failed: {error_msg}")
         
         result = response.json()
         task_id = result.get('output', {}).get('task_id')
@@ -282,7 +298,7 @@ class WanxImageModel(ImageGenModel):
         logger.info(f"Task created: {task_id}")
         
         # Step 2: Poll for task completion
-        poll_url = f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}"
+        poll_url = self.task_query_url_template.format(task_id=task_id)
         poll_headers = {
             "Authorization": f"Bearer {self.api_key}"
         }
@@ -337,15 +353,15 @@ class WanxImageModel(ImageGenModel):
                     'Unknown error - check logs for full response'
                 )
                 
-                raise RuntimeError(f"Wan 2.6 Image task failed: {error_msg}")
+                raise RuntimeError(f"{model_name} task failed: {error_msg}")
 
             
             elif task_status in ['CANCELED', 'UNKNOWN']:
-                raise RuntimeError(f"Wan 2.6 Image task {task_status}: {poll_result}")
+                raise RuntimeError(f"{model_name} task {task_status}: {poll_result}")
             
             # PENDING or RUNNING - continue polling
         
-        raise RuntimeError(f"Wan 2.6 Image task timed out after {max_wait_time}s")
+        raise RuntimeError(f"{model_name} task timed out after {max_wait_time}s")
 
     def _generate_sdk(self, prompt: str, model_name: str, size: str, n: int, negative_prompt: str, all_ref_paths: list, kwargs: dict) -> str:
         """Generate image using Dashscope SDK (for older models)."""
@@ -402,7 +418,7 @@ class WanxImageModel(ImageGenModel):
             logger.info(f"DEBUG: ref_image_urls count: {len(ref_image_urls)}")
             
             # Limit is already handled in generate(), but we keep a safety slice here
-            ref_limit = 4 if model_name == 'wan2.6-image' else 3
+            ref_limit = 4 if model_name in self.four_ref_models else 3
             if len(ref_image_urls) > ref_limit:
                 logger.warning(f"Limiting reference images from {len(ref_image_urls)} to {ref_limit}")
                 ref_image_urls = ref_image_urls[:ref_limit]

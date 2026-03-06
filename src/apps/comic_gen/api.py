@@ -14,6 +14,7 @@ import traceback
 from .pipeline import ComicGenPipeline
 from .models import Script, VideoTask
 from .llm import ScriptProcessor
+from ...model_request_settings import MODEL_REQUEST_SETTINGS
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
 from ...utils import setup_logging
 from fastapi.responses import JSONResponse
@@ -666,7 +667,7 @@ class CreateVideoTaskRequest(BaseModel):
     prompt_extend: bool = True
     negative_prompt: Optional[str] = None
     batch_size: int = 1
-    model: str = "wan2.6-i2v"
+    model: str = MODEL_REQUEST_SETTINGS.wanx_i2v_model_name_default
     shot_type: str = "single"  # 'single' or 'multi' (only for wan2.6-i2v)
     generation_mode: str = "i2v"  # 'i2v' (image-to-video) or 'r2v' (reference-to-video)
     reference_video_urls: List[str] = []  # Reference video URLs for R2V (max 3)
@@ -1733,4 +1734,3 @@ async def reorder_frames(script_id: str, request: ReorderFramesRequest):
     pipeline._save_data()
     
     return {"status": "success", "message": "Frames reordered", "frame_count": len(script.frames)}
-
