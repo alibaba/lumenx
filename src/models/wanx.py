@@ -6,6 +6,7 @@ from dashscope import VideoSynthesis
 import dashscope
 from .base import VideoGenModel
 from ..utils import get_logger
+from ..model_request_settings import MODEL_REQUEST_SETTINGS
 
 from typing import Tuple
 
@@ -19,6 +20,13 @@ class WanxModel(VideoGenModel):
         super().__init__(config)
 
         self.params = config.get('params', {})
+        self.video_create_url = MODEL_REQUEST_SETTINGS.dashscope_video_create_url
+        self.task_query_url_template = MODEL_REQUEST_SETTINGS.dashscope_task_query_url_template
+        self.default_t2v_model_name = MODEL_REQUEST_SETTINGS.wanx_t2v_model_name_default
+        self.default_i2v_model_name = MODEL_REQUEST_SETTINGS.wanx_i2v_model_name_default
+        self.default_r2v_model_name = MODEL_REQUEST_SETTINGS.wanx_r2v_model_name_default
+        self.http_i2v_models = set(MODEL_REQUEST_SETTINGS.wanx_http_i2v_model_names)
+        self.http_r2v_models = set(MODEL_REQUEST_SETTINGS.wanx_http_r2v_model_names)
 
     @property
     def api_key(self):
@@ -36,10 +44,10 @@ class WanxModel(VideoGenModel):
             final_model_name = kwargs.get('model')
             logger.info(f"Using model from kwargs: {final_model_name}")
         elif img_path or kwargs.get('img_url'):
-            final_model_name = self.params.get('i2v_model_name', 'wan2.6-i2v')  # Default to I2V model
+            final_model_name = self.params.get('i2v_model_name', self.default_i2v_model_name)
             logger.info(f"Using I2V model: {final_model_name}")
         else:
-            final_model_name = self.params.get('model_name', 'wan2.5-t2v-preview')
+            final_model_name = self.params.get('model_name', self.default_t2v_model_name)
             logger.info(f"Using T2V model: {final_model_name}")
 
         size = self.params.get('size', '1280*720')
@@ -110,8 +118,8 @@ class WanxModel(VideoGenModel):
                     else:
                         logger.warning(f"OSS not configured, cannot sign Object Key in img_url: {img_url}")
 
-            # Use HTTP API for wan2.6-i2v, wan2.5-i2v, or wan2.6-r2v
-            if final_model_name in ['wan2.6-i2v', 'wan2.5-i2v']:
+            # Use HTTP API for configured I2V/R2V models
+            if final_model_name in self.http_i2v_models:
                 # Get shot_type from kwargs (only for wan I2V models)
                 shot_type = kwargs.get('shot_type', 'single')
                 video_url = self._generate_wan_i2v_http(
@@ -127,11 +135,11 @@ class WanxModel(VideoGenModel):
                     seed=seed,
                     shot_type=shot_type
                 )
-            elif final_model_name == 'wan2.6-r2v':
+            elif final_model_name in self.http_r2v_models:
                 # R2V generation
                 ref_video_urls = kwargs.get('ref_video_urls', [])
                 if not ref_video_urls:
-                    raise ValueError("ref_video_urls is required for wan2.6-r2v")
+                    raise ValueError(f"ref_video_urls is required for {final_model_name}")
                 
                 # Process ref_video_urls: Upload local files or sign Object Keys
                 processed_ref_urls = []
@@ -217,14 +225,15 @@ class WanxModel(VideoGenModel):
             logger.error(f"Error during generation: {e}")
             raise
 
-    def _generate_wan_i2v_http(self, prompt: str, img_url: str, model_name: str = "wan2.6-i2v",
+    def _generate_wan_i2v_http(self, prompt: str, img_url: str, model_name: str = None,
                                   resolution: str = "720P", 
                                   duration: int = 5, prompt_extend: bool = True,
                                   negative_prompt: str = None, audio_url: str = None,
                                   watermark: bool = False, seed: int = None,
                                   shot_type: str = "single") -> str:
         """Generate video using Wan I2V (2.5 or 2.6) via HTTP API (asynchronous with polling)."""
-        create_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis"
+        model_name = model_name or self.default_i2v_model_name
+        create_url = self.video_create_url
         
         headers = {
             "Content-Type": "application/json",
@@ -279,7 +288,7 @@ class WanxModel(VideoGenModel):
         logger.info(f"Task created: {task_id}")
         
         # Step 2: Poll for task completion
-        poll_url = f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}"
+        poll_url = self.task_query_url_template.format(task_id=task_id)
         poll_headers = {
             "Authorization": f"Bearer {self.api_key}"
         }
@@ -323,12 +332,13 @@ class WanxModel(VideoGenModel):
         
         raise RuntimeError(f"{model_name} task timed out after {max_wait_time}s")
 
-    def _generate_wan_r2v_http(self, prompt: str, ref_video_urls: list, model_name: str = "wan2.6-r2v",
+    def _generate_wan_r2v_http(self, prompt: str, ref_video_urls: list, model_name: str = None,
                                   size: str = "1280*720", 
                                   duration: int = 5, audio: bool = True,
                                   shot_type: str = "multi", seed: int = None) -> str:
         """Generate video using Wan R2V via HTTP API (asynchronous with polling)."""
-        create_url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis"
+        model_name = model_name or self.default_r2v_model_name
+        create_url = self.video_create_url
         
         headers = {
             "Content-Type": "application/json",
@@ -375,7 +385,7 @@ class WanxModel(VideoGenModel):
         logger.info(f"Task created: {task_id}")
         
         # Step 2: Poll for task completion
-        poll_url = f"https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}"
+        poll_url = self.task_query_url_template.format(task_id=task_id)
         poll_headers = {
             "Authorization": f"Bearer {self.api_key}"
         }

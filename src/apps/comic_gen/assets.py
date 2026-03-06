@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 from urllib.parse import quote
 from .models import Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, MAX_VARIANTS_PER_ASSET
 from ...models.image import WanxImageModel
+from ...model_request_settings import MODEL_REQUEST_SETTINGS
 from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 
@@ -138,7 +139,7 @@ class AssetGenerator:
                         effective_generation_prompt = generation_prompt
                         if ref_image_path:
                             # Override to I2I model when using reference image
-                            effective_model_name = i2i_model_name or "wan2.6-image"
+                            effective_model_name = i2i_model_name or MODEL_REQUEST_SETTINGS.wanx_image_i2i_model_name_default
                             logger.debug(f"Reverse generation: Using I2I model {effective_model_name} with reference image")
                             
                             # Enhance prompt for reverse generation to emphasize reference consistency (only if not already present)

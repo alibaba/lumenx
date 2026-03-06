@@ -4,6 +4,7 @@ import base64
 from typing import Tuple
 
 import dashscope
+from ..model_request_settings import MODEL_REQUEST_SETTINGS
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,9 @@ I2V_OPTIMIZATION_PROMPT = """你是一个AI视频提示词专家，我需要你�
 
 class QwenVLModel:
     def __init__(self, config: dict):
-        self.model_name = config.get('params', {}).get('model_name', 'qwen-vl-plus')
+        self.model_name = config.get('params', {}).get(
+            'model_name', MODEL_REQUEST_SETTINGS.qwen_vl_model_name_default
+        )
 
     @property
     def api_key(self):
