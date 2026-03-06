@@ -1518,8 +1518,19 @@ class ComicGenPipeline:
             logger.debug(f"[MERGE] FFmpeg stdout: {result.stdout.decode()[:500] if result.stdout else 'empty'}")
             logger.info(f"[MERGE] FFmpeg completed successfully")
             
-            # Update script
-            script.merged_video_url = f"video/{output_filename}"
+            # Update script with merged video path
+            # Use 'videos/' (plural) to match the /files/videos route
+            script.merged_video_url = f"videos/{output_filename}"
+            
+            # Verify file was created and log details
+            if os.path.exists(output_path):
+                file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+                logger.info(f"[MERGE] ✅ Merged video created successfully: {output_filename} ({file_size_mb:.2f} MB)")
+                logger.info(f"[MERGE] ✅ Video accessible at: /files/videos/{output_filename}")
+            else:
+                logger.error(f"[MERGE] ❌ Merged video file NOT found at: {output_path}")
+                raise RuntimeError(f"Video merge completed but output file not found: {output_path}")
+                
             self._save_data()
             
             # Cleanup list file

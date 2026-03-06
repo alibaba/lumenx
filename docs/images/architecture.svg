@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <!-- Drop Shadow Filter -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="blur"/>
+      <feOffset in="blur" dx="2" dy="4" result="offsetBlur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.2"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Gradients -->
+    <linearGradient id="gradFrontend" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E3F2FD"/>
+      <stop offset="100%" stop-color="#BBDEFB"/>
+    </linearGradient>
+    <linearGradient id="gradBackend" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E8F5E9"/>
+      <stop offset="100%" stop-color="#C8E6C9"/>
+    </linearGradient>
+    <linearGradient id="gradAI" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F3E5F5"/>
+      <stop offset="100%" stop-color="#E1BEE7"/>
+    </linearGradient>
+    <linearGradient id="gradStorage" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFF3E0"/>
+      <stop offset="100%" stop-color="#FFE0B2"/>
+    </linearGradient>
+
+    <!-- Arrowhead Marker -->
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#546E7A"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#f8f9fa"/>
+  
+  <!-- Title -->
+  <text x="600" y="50" text-anchor="middle" font-size="32" font-weight="700" fill="#263238" letter-spacing="1">LumenX Studio Architecture</text>
+  <text x="600" y="80" text-anchor="middle" font-size="16" fill="#78909C">High-Level System Design &amp; Data Flow</text>
+
+  <!-- Containers -->
+  <!-- Frontend Container -->
+  <g filter="url(#shadow)">
+    <rect x="50" y="120" width="320" height="600" rx="16" fill="#fff" stroke="#90CAF9" stroke-width="1"/>
+    <rect x="50" y="120" width="320" height="60" rx="16" fill="url(#gradFrontend)" clip-path="inset(0 0 540 0)"/> <!-- Header look -->
+    <path d="M50 180 L370 180" stroke="#90CAF9" stroke-width="1"/>
+    <text x="210" y="160" text-anchor="middle" font-size="20" font-weight="600" fill="#1565C0">Frontend Layer</text>
+    <text x="210" y="200" text-anchor="middle" font-size="12" fill="#546E7A">Client (Browser / Electron)</text>
+  </g>
+
+  <!-- Backend Container -->
+  <g filter="url(#shadow)">
+    <rect x="440" y="120" width="320" height="600" rx="16" fill="#fff" stroke="#A5D6A7" stroke-width="1"/>
+    <rect x="440" y="120" width="320" height="60" rx="16" fill="url(#gradBackend)" clip-path="inset(0 0 540 0)"/>
+    <path d="M440 180 L760 180" stroke="#A5D6A7" stroke-width="1"/>
+    <text x="600" y="160" text-anchor="middle" font-size="20" font-weight="600" fill="#2E7D32">Backend Layer</text>
+    <text x="600" y="200" text-anchor="middle" font-size="12" fill="#546E7A">Server (FastAPI)</text>
+  </g>
+
+  <!-- External Services Container -->
+  <g filter="url(#shadow)">
+    <rect x="830" y="120" width="320" height="280" rx="16" fill="#fff" stroke="#CE93D8" stroke-width="1"/>
+    <rect x="830" y="120" width="320" height="60" rx="16" fill="url(#gradAI)" clip-path="inset(0 0 220 0)"/>
+    <path d="M830 180 L1150 180" stroke="#CE93D8" stroke-width="1"/>
+    <text x="990" y="160" text-anchor="middle" font-size="20" font-weight="600" fill="#6A1B9A">AI Cloud Services</text>
+    <text x="990" y="200" text-anchor="middle" font-size="12" fill="#546E7A">Alibaba Cloud DashScope</text>
+  </g>
+
+  <!-- Storage Container -->
+  <g filter="url(#shadow)">
+    <rect x="830" y="440" width="320" height="280" rx="16" fill="#fff" stroke="#FFCC80" stroke-width="1"/>
+    <rect x="830" y="440" width="320" height="60" rx="16" fill="url(#gradStorage)" clip-path="inset(0 0 220 0)"/>
+    <path d="M830 500 L1150 500" stroke="#FFCC80" stroke-width="1"/>
+    <text x="990" y="480" text-anchor="middle" font-size="20" font-weight="600" fill="#EF6C00">Storage Layer</text>
+    <text x="990" y="520" text-anchor="middle" font-size="12" fill="#546E7A">Cloud OSS &amp; Local FS</text>
+  </g>
+
+  <!-- Modules (Cards) -->
+  <!-- Frontend Modules -->
+  <g transform="translate(85, 230)">
+    <rect width="250" height="70" rx="8" fill="#F5F9FF" stroke="#E3F2FD" stroke-width="1"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#1E88E5">Next.js App Router</text>
+    <text x="20" y="50" font-size="12" fill="#78909C">Pages, Layouts, Routing</text>
+  </g>
+  <g transform="translate(85, 320)">
+    <rect width="250" height="70" rx="8" fill="#F5F9FF" stroke="#E3F2FD" stroke-width="1"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#1E88E5">Storyboard Editor</text>
+    <text x="20" y="50" font-size="12" fill="#78909C">Canvas (Three.js), D&amp;D</text>
+  </g>
+  <g transform="translate(85, 410)">
+    <rect width="250" height="70" rx="8" fill="#F5F9FF" stroke="#E3F2FD" stroke-width="1"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#1E88E5">State Management</text>
+    <text x="20" y="50" font-size="12" fill="#78909C">Zustand Store</text>
+  </g>
+  <g transform="translate(85, 500)">
+    <rect width="250" height="70" rx="8" fill="#F5F9FF" stroke="#E3F2FD" stroke-width="1"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#1E88E5">API Client</text>
+    <text x="20" y="50" font-size="12" fill="#78909C">Axios, Streaming</text>
+  </g>
+
+  <!-- Backend Modules -->
+  <g transform="translate(475, 230)">
+    <rect width="250" height="70" rx="8" fill="#F1F8E9" stroke="#E8F5E9" stroke-width="1"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#43A047">FastAPI Core</text>
+    <text x="20" y="50" font-size="12" fill="#78909C">REST API, WebSocket</text>
+  </g>
+  <g transform="translate(475, 320)">
+    <rect width="250" height="70" rx="8" fill="#F1F8E9" stroke="#E8F5E9" stroke-width="1"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#43A047">Business Pipeline</text>
+    <text x="20" y="50" font-size="12" fill="#78909C">Orchestration, Task Queue</text>
+  </g>
+  <g transform="translate(475, 410)">
+    <rect width="250" height="70" rx="8" fill="#F1F8E9" stroke="#E8F5E9" stroke-width="1"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#43A047">Media Processing</text>
+    <text x="20" y="50" font-size="12" fill="#78909C">FFmpeg Wrapper, PIL</text>
+  </g>
+  <g transform="translate(475, 500)">
+    <rect width="250" height="70" rx="8" fill="#F1F8E9" stroke="#E8F5E9" stroke-width="1"/>
+    <text x="20" y="30" font-size="14" font-weight="600" fill="#43A047">Models Adapter</text>
+    <text x="20" y="50" font-size="12" fill="#78909C">Unified AI Interface</text>
+  </g>
+
+  <!-- AI Modules -->
+  <g transform="translate(865, 230)">
+    <rect width="250" height="60" rx="8" fill="#F3E5F5" stroke="#F3E5F5" stroke-width="1"/>
+    <text x="20" y="25" font-size="14" font-weight="600" fill="#8E24AA">Qwen (通义千问)</text>
+    <text x="20" y="45" font-size="12" fill="#78909C">Extract, Polish</text>
+  </g>
+  <g transform="translate(865, 310)">
+    <rect width="250" height="60" rx="8" fill="#F3E5F5" stroke="#F3E5F5" stroke-width="1"/>
+    <text x="20" y="25" font-size="14" font-weight="600" fill="#8E24AA">Wanx (通义万相)</text>
+    <text x="20" y="45" font-size="12" fill="#78909C">T2I, I2V, R2V</text>
+  </g>
+
+  <!-- Storage Modules -->
+  <g transform="translate(865, 550)">
+    <rect width="250" height="60" rx="8" fill="#FFF3E0" stroke="#FFF3E0" stroke-width="1"/>
+    <text x="20" y="25" font-size="14" font-weight="600" fill="#FB8C00">Aliyun OSS (Private)</text>
+    <text x="20" y="45" font-size="12" fill="#78909C">Cloud Assets Storage</text>
+  </g>
+  <g transform="translate(865, 630)">
+    <rect width="250" height="60" rx="8" fill="#FFF3E0" stroke="#FFF3E0" stroke-width="1"/>
+    <text x="20" y="25" font-size="14" font-weight="600" fill="#FB8C00">Local Configuration</text>
+    <text x="20" y="45" font-size="12" fill="#78909C">User Settings, Caches</text>
+  </g>
+
+  <!-- Connections (Curved) -->
+  <!-- Frontend -> Backend -->
+  <path d="M335 535 C 400 535, 400 265, 475 265" fill="none" stroke="#B0BEC5" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="5,5"/>
+  <rect x="375" y="390" width="60" height="24" rx="4" fill="#ECEFF1" stroke="#CFD8DC"/>
+  <text x="405" y="407" text-anchor="middle" font-size="10" fill="#546E7A">HTTP/WS</text>
+
+  <!-- Backend -> AI -->
+  <path d="M725 265 C 790 265, 790 260, 865 260" fill="none" stroke="#B0BEC5" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M725 265 C 790 265, 790 340, 865 340" fill="none" stroke="#B0BEC5" stroke-width="2" marker-end="url(#arrow)"/>
+  
+  <!-- Backend -> Storage -->
+  <path d="M725 445 C 790 445, 790 580, 865 580" fill="none" stroke="#B0BEC5" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M725 445 C 790 445, 790 660, 865 660" fill="none" stroke="#B0BEC5" stroke-width="2" marker-end="url(#arrow)"/>
+
+</svg>

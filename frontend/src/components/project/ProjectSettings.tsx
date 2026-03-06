@@ -154,7 +154,7 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
                                 <div className="bg-white/5 border border-white/10 rounded-lg p-4">
                                     <p className="text-xs text-gray-500 mb-2">生成时将应用的风格：</p>
                                     <p className="text-sm text-blue-400 italic">
-                                        "{selectedStyle.value} style{stylePrompt ? `, ${stylePrompt}` : ""}"
+                                        &quot;{selectedStyle.value} style{stylePrompt ? `, ${stylePrompt}` : ""}&quot;
                                     </p>
                                 </div>
                             )}

@@ -325,8 +325,20 @@ class WanxImageModel(ImageGenModel):
                 return image_url
             
             elif task_status == 'FAILED':
-                error_msg = poll_result.get('message', 'Unknown error')
+                # Log full response for debugging
+                logger.error(f"Task {task_id} failed. Full response: {poll_result}")
+                
+                # Try to extract error message from various possible fields
+                error_msg = (
+                    poll_result.get('output', {}).get('message', '') or
+                    poll_result.get('output', {}).get('code', '') or
+                    poll_result.get('message', '') or
+                    poll_result.get('code', '') or
+                    'Unknown error - check logs for full response'
+                )
+                
                 raise RuntimeError(f"Wan 2.6 Image task failed: {error_msg}")
+
             
             elif task_status in ['CANCELED', 'UNKNOWN']:
                 raise RuntimeError(f"Wan 2.6 Image task {task_status}: {poll_result}")

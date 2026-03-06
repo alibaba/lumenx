@@ -259,7 +259,7 @@ export default function VoiceActingStudio() {
 
                                         <div className="flex justify-between items-start gap-4">
                                             <p className="text-gray-200 text-lg font-serif leading-relaxed">
-                                                "{frame.dialogue}"
+                                                &quot;{frame.dialogue}&quot;
                                             </p>
 
                                             {/* Action Buttons */}

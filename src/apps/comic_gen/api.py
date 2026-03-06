@@ -42,6 +42,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],  # Allow browsers to access Content-Disposition for downloads
 )
 
 # Middleware to add cache headers to static files
@@ -376,12 +377,18 @@ async def update_env_config(config: EnvConfig):
         # Save to file
         save_user_config(config_dict)
         
-        # Reset OSS singleton to pick up new config
-        OSSImageUploader.reset_instance()
+        # Reset OSS singleton to pick up new config (non-blocking)
+        try:
+            OSSImageUploader.reset_instance()
+            logger.info("OSS instance reset successfully")
+        except Exception as oss_e:
+            # OSS reset failure should not block config saving
+            logger.warning(f"OSS reset failed (non-critical): {oss_e}")
         
         config_path = get_user_config_path()
         return {"status": "success", "message": f"Configuration saved to {config_path}"}
     except Exception as e:
+        logger.exception("Failed to save environment configuration")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1412,35 +1419,7 @@ async def get_env_config():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/config/env")
-async def save_env_config(config: EnvConfig):
-    """Save environment configuration to .env file and current environment."""
-    try:
-        # Get the .env file path (in project root)
-        env_path = ".env"
 
-        # Create .env file if it doesn't exist
-        if not os.path.exists(env_path):
-            with open(env_path, "w") as f:
-                f.write("# Auto-generated environment configuration\n")
-
-        # Update both file and environment
-        config_dict = config.dict(exclude_unset=True)
-        for key, value in config_dict.items():
-            if value is not None:
-                # Update environment variable
-                os.environ[key] = value
-                # Update .env file
-                set_key(env_path, key, value)
-
-        # Reload environment variables
-        load_dotenv(env_path, override=True)
-
-        return {"message": "Configuration saved successfully"}
-    except Exception as e:
-        import traceback
-        logger.exception("An error occurred")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================

@@ -117,7 +117,13 @@ class OSSImageUploader:
         else:
             try:
                 self.auth = oss2.Auth(self.access_key_id, self.access_key_secret)
-                self.bucket = oss2.Bucket(self.auth, self.endpoint, self.bucket_name)
+                # Set connection timeout to prevent long blocking on network issues
+                self.bucket = oss2.Bucket(
+                    self.auth, 
+                    self.endpoint, 
+                    self.bucket_name,
+                    connect_timeout=5  # 5 seconds connection timeout
+                )
                 logger.info(f"OSS initialized: bucket={self.bucket_name}, base_path={self.base_path}")
                 print(f"DEBUG: OSS init - SUCCESS: bucket={self.bucket_name}")
             except Exception as e:

@@ -65,6 +65,40 @@ dist_windows/
 # OS
 Thumbs.db
 
+# Frontend (Next.js)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.vercel
+
+# Logs
+*.log
+logs/
+.lumen-x/
+
+# Secrets (extra safety)
+*secret*
+*credential*
+*.pem
+*.key
+!*.pub.key
+
+# Project outputs
 static/output/
 output/
 static/
+
+# Internal development tools (not for public repo)
+.agent/
+GITHUB_RELEASE_CHECKLIST.md
+CLAUDE.md
+demand/
+
+# Build/packaging configs (keep templates only)
+*.spec
+!build.spec.template
+
+
+
+

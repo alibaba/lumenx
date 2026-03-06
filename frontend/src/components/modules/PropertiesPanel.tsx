@@ -303,7 +303,7 @@ function StoryboardInspector() {
         const characters = currentProject.characters?.filter((c: any) => selectedFrame.character_ids?.includes(c.id));
 
         // Construct prompt based on User Guide: Motion + Camera (+ Context)
-        let promptParts = [];
+        const promptParts = [];
 
         // 1. Motion / Action (Subject + Action)
         let motionPart = "";

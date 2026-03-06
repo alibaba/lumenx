@@ -54,16 +54,20 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
     const dashscopeKey = config.DASHSCOPE_API_KEY?.trim();
     const accessKeyId = config.ALIBABA_CLOUD_ACCESS_KEY_ID?.trim();
     const accessKeySecret = config.ALIBABA_CLOUD_ACCESS_KEY_SECRET?.trim();
+    const ossBucket = config.OSS_BUCKET_NAME?.trim();
+    const ossEndpoint = config.OSS_ENDPOINT?.trim();
 
     return dashscopeKey && dashscopeKey.length > 0 &&
       accessKeyId && accessKeyId.length > 0 &&
-      accessKeySecret && accessKeySecret.length > 0;
+      accessKeySecret && accessKeySecret.length > 0 &&
+      ossBucket && ossBucket.length > 0 &&
+      ossEndpoint && ossEndpoint.length > 0;
   };
 
   const handleSave = async () => {
     // 必填项校验：空值和空字符串都视为未填写
     if (!validateRequiredFields()) {
-      alert("请填写所有必填项：\n- DashScope API Key\n- 阿里云 Access Key ID\n- 阿里云 Access Key Secret");
+      alert("请填写所有必填项：\n- DashScope API Key\n- 阿里云 Access Key ID\n- 阿里云 Access Key Secret\n- OSS Bucket Name\n- OSS Endpoint");
       return;
     }
 
@@ -180,7 +184,7 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
               {/* OSS Configuration */}
               <div className="pt-4 border-t border-gray-800">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-white">OSS 配置（可选）</h3>
+                  <h3 className="text-lg font-semibold text-white">OSS 配置</h3>
                   <a
                     href="https://oss.console.aliyun.com/overview"
                     target="_blank"
@@ -194,7 +198,7 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
                 <div className="space-y-4">
                   <div>
                     <label className="flex items-center justify-between text-sm font-medium text-gray-300 mb-2">
-                      <span>OSS Bucket Name</span>
+                      <span>OSS Bucket Name <span className="text-red-500">*</span></span>
                       <span className="text-gray-500 font-normal">例: my-comic-bucket</span>
                     </label>
                     <input
@@ -208,7 +212,7 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
 
                   <div>
                     <label className="flex items-center justify-between text-sm font-medium text-gray-300 mb-2">
-                      <span>OSS Endpoint</span>
+                      <span>OSS Endpoint <span className="text-red-500">*</span></span>
                       <span className="text-gray-500 font-normal">例: oss-cn-hangzhou.aliyuncs.com</span>
                     </label>
                     <input
