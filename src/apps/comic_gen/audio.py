@@ -30,10 +30,10 @@ class AudioGenerator:
             ]
         else:
             return [
-                {"id": "longxiaochun", "name": "龙小淳 (Sweet Female)", "gender": "Female"},
-                {"id": "zhitian_emo", "name": "智甜 (Emotional Female)", "gender": "Female"},
-                {"id": "zhiyan_emo", "name": "智言 (Emotional Male)", "gender": "Male"},
-                {"id": "zhishu", "name": "智书 (Narrator)", "gender": "Male"},
+                {"id": "longxiaochun", "name": "龙小淳 (知性女) - CosyVoice", "gender": "Female"},
+                {"id": "longyue", "name": "龙悦 (温柔女) - CosyVoice", "gender": "Female"},
+                {"id": "longcheng", "name": "龙诚 (睿智青年) - CosyVoice", "gender": "Male"},
+                {"id": "longshu", "name": "龙书 (播报男) - CosyVoice", "gender": "Male"},
             ]
 
     def generate_dialogue(self, frame: StoryboardFrame, character: Character, speed: float = 1.0, pitch: float = 1.0) -> StoryboardFrame:
