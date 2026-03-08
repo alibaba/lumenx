@@ -1,11 +1,12 @@
 import os
 import logging
 import base64
+import time
 from typing import Tuple
 
-import dashscope
-
 logger = logging.getLogger(__name__)
+
+DASHSCOPE_OPENAI_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
 # System prompt template for I2V prompt optimization
 I2V_OPTIMIZATION_PROMPT = """你是一个AI视频提示词专家，我需要你帮我根据参考图和已上传的现有提示词，去优化和补充现有的让图生视频的提示词，要求：
@@ -39,6 +40,7 @@ I2V_OPTIMIZATION_PROMPT = """你是一个AI视频提示词专家，我需要你�
 class QwenVLModel:
     def __init__(self, config: dict):
         self.model_name = config.get('params', {}).get('model_name', 'qwen3.5-plus')
+        self._client = None
 
     @property
     def api_key(self):
@@ -47,6 +49,20 @@ class QwenVLModel:
             logger.warning("Dashscope API Key not found in config or environment variables.")
         return api_key
 
+    def _get_client(self):
+        """Get or create the OpenAI-compatible client (lazy, cached)."""
+        if self._client is None:
+            try:
+                from openai import OpenAI
+            except ImportError:
+                raise RuntimeError("openai package not installed. Run: pip install openai>=1.0.0")
+            self._client = OpenAI(
+                api_key=self.api_key,
+                base_url=DASHSCOPE_OPENAI_BASE_URL,
+                timeout=120.0,
+            )
+        return self._client
+
     def _encode_image_to_base64(self, image_path: str) -> str:
         """Convert local image to base64 string"""
         with open(image_path, "rb") as image_file:
@@ -54,61 +70,42 @@ class QwenVLModel:
 
     def optimize_prompt(self, image_path: str, original_prompt: str) -> Tuple[str, float]:
         """
-        Optimize prompt using Qwen-VL model
-        
+        Optimize prompt using Qwen-VL model via OpenAI-compatible API.
+
         Args:
             image_path: Path to the reference image
             original_prompt: Original user prompt
-            
+
         Returns:
             Tuple[str, float]: (optimized_prompt, duration)
         """
-        dashscope.api_key = self.api_key
-
-        try:
-            from dashscope import MultiModalConversation
-        except ImportError:
-            logger.error("dashscope package not found. Please install it.")
-            raise
-
-        import time
         start_time = time.time()
 
         # Prepare image URL
         if image_path.startswith('http'):
             image_url = image_path
         else:
-            # Convert to base64 data URL
             base64_image = self._encode_image_to_base64(image_path)
             ext = os.path.splitext(image_path)[1].lower()
             mime_type = "image/png" if ext == ".png" else "image/jpeg"
             image_url = f"data:{mime_type};base64,{base64_image}"
 
-        # Construct system prompt
         system_prompt = I2V_OPTIMIZATION_PROMPT.format(original_prompt=original_prompt)
 
-        # Call Qwen-VL API
-        messages = [
-            {
+        logger.info(f"Calling Qwen-VL {self.model_name} for prompt optimization...")
+        client = self._get_client()
+        response = client.chat.completions.create(
+            model=self.model_name,
+            messages=[{
                 'role': 'user',
                 'content': [
-                    {'image': image_url},
-                    {'text': system_prompt}
+                    {'type': 'image_url', 'image_url': {'url': image_url}},
+                    {'type': 'text', 'text': system_prompt},
                 ]
-            }
-        ]
-
-        logger.info(f"Calling Qwen-VL {self.model_name} for prompt optimization...")
-        response = MultiModalConversation.call(
-            model=self.model_name,
-            messages=messages
+            }]
         )
 
-        if response.status_code == 200:
-            optimized_prompt = response.output.choices[0].message.content[0]['text']
-            logger.info(f"Optimized prompt: {optimized_prompt[:100]}...")
-            duration = time.time() - start_time
-            return optimized_prompt, duration
-        else:
-            logger.error(f"Qwen-VL API error: {response}")
-            raise RuntimeError(f"Qwen-VL optimization failed: {response.message}")
+        optimized_prompt = response.choices[0].message.content
+        duration = time.time() - start_time
+        logger.info(f"Optimized prompt: {optimized_prompt[:100]}...")
+        return optimized_prompt, duration

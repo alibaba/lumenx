@@ -1437,18 +1437,6 @@ async def polish_r2v_prompt(request: PolishR2VPromptRequest):
 
 # ===== Environment Configuration Endpoints =====
 
-class EnvConfig(BaseModel):
-    DASHSCOPE_API_KEY: Optional[str] = None
-    ALIBABA_CLOUD_ACCESS_KEY_ID: Optional[str] = None
-    ALIBABA_CLOUD_ACCESS_KEY_SECRET: Optional[str] = None
-    OSS_BUCKET_NAME: Optional[str] = None
-    OSS_ENDPOINT: Optional[str] = None
-    OSS_BASE_PATH: Optional[str] = None
-    KLING_ACCESS_KEY: Optional[str] = None
-    KLING_SECRET_KEY: Optional[str] = None
-    VIDU_API_KEY: Optional[str] = None
-
-
 @app.get("/config/env")
 async def get_env_config():
     """Get current environment configuration."""

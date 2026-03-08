@@ -28,17 +28,25 @@ class KlingModel(VideoGenModel):
         self.access_key = config.get("access_key") or os.getenv("KLING_ACCESS_KEY", "")
         self.secret_key = config.get("secret_key") or os.getenv("KLING_SECRET_KEY", "")
         self.model_name = config.get("params", {}).get("model_name", "kling-v3")
+        self._cached_token = None
+        self._token_exp = 0
 
     def _get_token(self) -> str:
-        """Generate a signed JWT token using KLING_ACCESS_KEY / KLING_SECRET_KEY."""
+        """Generate a signed JWT token, cached until near expiry."""
         now = int(time.time())
+        # Reuse cached token if still valid (with 60s buffer)
+        if self._cached_token and now < self._token_exp - 60:
+            return self._cached_token
         headers = {"alg": "HS256", "typ": "JWT"}
+        exp = now + 1800
         payload = {
             "iss": self.access_key,
-            "exp": now + 1800,
+            "exp": exp,
             "nbf": now - 30,
         }
-        return jwt.encode(payload, self.secret_key, algorithm="HS256", headers=headers)
+        self._cached_token = jwt.encode(payload, self.secret_key, algorithm="HS256", headers=headers)
+        self._token_exp = exp
+        return self._cached_token
 
     def _auth_headers(self) -> Dict[str, str]:
         return {

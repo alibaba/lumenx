@@ -38,6 +38,9 @@ class ComicGenPipeline:
         # Format: { task_id: { status: str, progress: int, error: str, script_id: str, asset_id: str, created_at: float } }
         self.asset_generation_tasks: Dict[str, Dict[str, Any]] = {}
         self.video_generation_tasks: Dict[str, Dict[str, Any]] = {}
+        # Cached model instances for Kling/Vidu (lazily initialized)
+        self._kling_model = None
+        self._vidu_model = None
 
     # ... (existing methods)
 
@@ -1887,10 +1890,11 @@ class ComicGenPipeline:
             model_prefix = (task.model or "").split("-")[0] if task.model else ""
 
             if model_prefix in ("kling",):
-                # Use Kling model
-                from ...models.kling import KlingModel
-                kling_model = KlingModel({})
-                video_path, _ = kling_model.generate(
+                # Use Kling model (cached)
+                if self._kling_model is None:
+                    from ...models.kling import KlingModel
+                    self._kling_model = KlingModel({})
+                video_path, _ = self._kling_model.generate(
                     prompt=task.prompt,
                     output_path=output_path,
                     img_url=img_url,
@@ -1901,10 +1905,11 @@ class ComicGenPipeline:
                     aspect_ratio="16:9",
                 )
             elif model_prefix in ("vidu", "viduq2", "viduq3"):
-                # Use Vidu model
-                from ...models.vidu import ViduModel
-                vidu_model = ViduModel({})
-                video_path, _ = vidu_model.generate(
+                # Use Vidu model (cached)
+                if self._vidu_model is None:
+                    from ...models.vidu import ViduModel
+                    self._vidu_model = ViduModel({})
+                video_path, _ = self._vidu_model.generate(
                     prompt=task.prompt,
                     output_path=output_path,
                     img_url=img_url,

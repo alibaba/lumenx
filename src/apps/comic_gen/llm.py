@@ -17,6 +17,7 @@ def _strip_markdown_json(content: str) -> str:
     elif "```" in content:
         content = content.split("```")[1].split("```")[0]
     return content.strip()
+
 from ...utils import get_logger
 
 logger = get_logger(__name__)
