@@ -32,6 +32,7 @@ interface VideoCreatorProps {
 
 export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, params, onParamsChange }: VideoCreatorProps) {
     const currentProject = useProjectStore((state) => state.currentProject);
+    const updateProject = useProjectStore((state) => state.updateProject);
 
     // Helper function to generate motion description text
     const getMotionDescription = () => {
@@ -81,6 +82,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [castSlots, setCastSlots] = useState<{ url: string; name: string }[]>([]);
     const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null); // Selected frame for R2V
     const [generationMode, setGenerationMode] = useState<"i2v" | "r2v">("i2v"); // Local mode state
+    const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
 
     // Sync from parent params
     useEffect(() => {
@@ -88,6 +90,33 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             setGenerationMode(params.generationMode as "i2v" | "r2v");
         }
     }, [params.generationMode]);
+
+    const handleExtractLastFrame = async (frameId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!currentProject?.frames) return;
+
+        const frameIndex = currentProject.frames.findIndex((f: any) => f.id === frameId);
+        if (frameIndex <= 0) return;
+
+        const prevFrame = currentProject.frames[frameIndex - 1];
+        if (!prevFrame.selected_video_id) return;
+
+        const prevVideo = currentProject.video_tasks?.find(
+            (t: any) => t.id === prevFrame.selected_video_id && t.status === "completed"
+        );
+        if (!prevVideo) return;
+
+        setExtractingFrameId(frameId);
+        try {
+            const updatedProject = await api.extractLastFrame(currentProject.id, frameId, prevVideo.id);
+            updateProject(currentProject.id, updatedProject);
+        } catch (error: any) {
+            console.error("Failed to extract last frame:", error);
+            alert(error?.response?.data?.detail || "Failed to extract last frame");
+        } finally {
+            setExtractingFrameId(null);
+        }
+    };
 
     const handleFrameSelect = (frame: any) => {
         // Prefer rendered_image_url (from extracted last frame / uploaded image), fallback to image_url
@@ -580,9 +609,21 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                             <div className="bg-black/20 border border-white/10 rounded-xl p-4 min-h-[200px]">
                                 {activeTab === "storyboard" ? (
                                     <div className="space-y-4">
-                                        {currentProject?.frames && currentProject.frames.length > 0 ? (
+                                        {currentProject?.frames && currentProject.frames.length > 0 ? (() => {
+                                            const completedVideoIds = new Set(
+                                                currentProject.video_tasks
+                                                    ?.filter((t: any) => t.status === "completed")
+                                                    .map((t: any) => t.id) ?? []
+                                            );
+                                            return (
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[500px] overflow-y-auto custom-scrollbar pr-2 p-2">
-                                                {currentProject.frames.map((frame: any) => (
+                                                {currentProject.frames.map((frame: any, index: number) => {
+                                                    const prevFrame = index > 0 ? currentProject.frames![index - 1] : null;
+                                                    const prevVideoCompleted = prevFrame?.selected_video_id && completedVideoIds.has(prevFrame.selected_video_id);
+                                                    const isExtracting = extractingFrameId === frame.id;
+                                                    const hasExtracted = !!frame.rendered_image_url;
+
+                                                    return (
                                                     <div
                                                         key={frame.id}
                                                         onClick={() => handleFrameSelect(frame)}
@@ -609,10 +650,33 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                         <div className="absolute top-1 left-1 bg-black/60 px-1.5 rounded text-[10px] text-gray-300 backdrop-blur-sm">
                                                             #{frame.id.slice(0, 4)}
                                                         </div>
+                                                        {/* Extract Last Frame Button */}
+                                                        {prevVideoCompleted && (
+                                                            <button
+                                                                onClick={(e) => handleExtractLastFrame(frame.id, e)}
+                                                                disabled={isExtracting}
+                                                                className={`absolute bottom-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium backdrop-blur-sm transition-colors ${
+                                                                    hasExtracted
+                                                                        ? "bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-purple-500/20 hover:text-purple-300 hover:border-purple-500/30"
+                                                                        : "bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/40"
+                                                                } disabled:opacity-50`}
+                                                                title={hasExtracted ? "Re-extract previous video's last frame" : "Use previous video's last frame as input"}
+                                                            >
+                                                                {isExtracting ? (
+                                                                    <Loader2 size={10} className="animate-spin" />
+                                                                ) : hasExtracted ? (
+                                                                    <><Check size={10} /> Applied</>
+                                                                ) : (
+                                                                    <><Film size={10} /> Prev End Frame</>
+                                                                )}
+                                                            </button>
+                                                        )}
                                                     </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
-                                        ) : (
+                                            );
+                                        })() : (
                                             <div className="flex flex-col items-center justify-center h-[200px] text-gray-500 gap-2">
                                                 <Layout size={32} className="opacity-20" />
                                                 <p className="text-xs">No storyboard frames found.</p>

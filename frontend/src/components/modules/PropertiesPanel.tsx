@@ -42,7 +42,7 @@ export default function PropertiesPanel({ activeStep }: PropertiesPanelProps) {
         <motion.aside
             initial={{ x: 100, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="w-80 h-screen border-l border-glass-border bg-black/40 backdrop-blur-xl flex flex-col z-50"
+            className="w-64 h-full border-l border-glass-border bg-black/40 backdrop-blur-xl flex flex-col z-50"
         >
             <div className="p-4 border-b border-glass-border flex items-center justify-between">
                 <h2 className="font-display font-bold text-white flex items-center gap-2">

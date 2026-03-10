@@ -32,7 +32,7 @@ export default function PipelineSidebar({ activeStep, onStepChange, steps }: Pip
         <motion.aside
             initial={{ x: -100, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="w-64 h-screen border-r border-glass-border bg-black/40 backdrop-blur-xl flex flex-col z-50"
+            className="w-64 flex-1 min-h-0 border-r border-glass-border bg-black/40 backdrop-blur-xl flex flex-col z-50"
         >
             <div className="p-5 border-b border-glass-border">
                 <div className="flex gap-4 items-center">

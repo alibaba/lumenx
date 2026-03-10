@@ -39,3 +39,31 @@ body {
     @apply bg-white/5 hover:bg-white/10 backdrop-blur-sm border border-white/10 rounded-md px-4 py-2 transition-all active:scale-95;
   }
 }
+
+/* Fast tooltip via data-tip attribute — zero extra DOM, ~200ms delay */
+.btn-tip {
+  position: relative;
+}
+.btn-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  background: rgb(17, 24, 39);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgb(209, 213, 219);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  transition-delay: 0s;
+  z-index: 50;
+}
+.btn-tip:hover::after {
+  opacity: 1;
+  transition-delay: 0.25s;
+}

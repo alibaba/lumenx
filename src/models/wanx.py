@@ -111,7 +111,7 @@ class WanxModel(VideoGenModel):
                         logger.warning(f"OSS not configured, cannot sign Object Key in img_url: {img_url}")
 
             # Use HTTP API for wan2.6-i2v, wan2.5-i2v, or wan2.6-r2v
-            if final_model_name in ['wan2.6-i2v', 'wan2.5-i2v']:
+            if final_model_name in ['wan2.6-i2v', 'wan2.6-i2v-flash', 'wan2.5-i2v']:
                 # Get shot_type from kwargs (only for wan I2V models)
                 shot_type = kwargs.get('shot_type', 'single')
                 video_url = self._generate_wan_i2v_http(

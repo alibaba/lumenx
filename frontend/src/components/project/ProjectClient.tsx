@@ -77,7 +77,7 @@ export default function ProjectClient({ id }: { id: string }) {
             </div>
 
             {/* Left Sidebar */}
-            <div className="relative z-20 h-full flex flex-col">
+            <div className="relative z-20 h-full flex flex-col overflow-hidden">
                 {/* Back Button & Settings */}
                 <div className="p-4 border-b border-glass-border bg-black/40 backdrop-blur-xl flex justify-between items-center">
                     <button

@@ -71,15 +71,23 @@ export default function VideoAssembly() {
         if (!currentProject?.merged_video_url) return;
         setIsDownloading(true);
         try {
-            const url = getAssetUrl(currentProject.merged_video_url);
+            // Build download URL - use proxy in dev to avoid CORS, direct in production
+            const rawPath = currentProject.merged_video_url;
+            const cleanPath = rawPath.startsWith("/") ? rawPath.slice(1) : rawPath;
+            const isDev = process.env.NODE_ENV === "development";
+            const url = isDev
+                ? `/api-proxy/files/${cleanPath}`
+                : getAssetUrl(rawPath);
+
             const response = await fetch(url);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const blob = await response.blob();
             const blobUrl = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = blobUrl;
             a.download = `${currentProject.title || "merged"}_${currentProject.id}.mp4`;
             a.click();
-            URL.revokeObjectURL(blobUrl);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
         } catch (error) {
             console.error("Failed to download video:", error);
             alert("Failed to download video. Please try again.");
@@ -144,10 +152,14 @@ export default function VideoAssembly() {
                                             />
                                         ) : (
                                             <div className="w-full h-full relative">
-                                                <img
-                                                    src={getAssetUrl(frame.image_url)}
-                                                    className="w-full h-full object-cover opacity-50 grayscale"
-                                                />
+                                                {frame.image_url ? (
+                                                    <img
+                                                        src={getAssetUrl(frame.image_url)}
+                                                        className="w-full h-full object-cover opacity-50 grayscale"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full bg-white/5" />
+                                                )}
                                                 <div className="absolute inset-0 flex items-center justify-center">
                                                     {hasVideos ? (
                                                         <div className="bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded text-xs font-bold border border-yellow-500/50">

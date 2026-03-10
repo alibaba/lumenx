@@ -609,7 +609,7 @@ function WorkbenchPanel({
             </div>
 
             {/* Image Area with Variant Selector */}
-            <div className="flex-1 relative bg-black/40 p-4 flex flex-col overflow-hidden group">
+            <div className="flex-1 relative bg-black/40 p-4 flex flex-col overflow-y-auto group">
 
                 {/* Locked Overlay */}
                 {isLocked && (

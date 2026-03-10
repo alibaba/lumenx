@@ -497,21 +497,21 @@ export default function StoryboardComposer() {
                                         )}
 
                                         {/* Frame Actions */}
-                                        <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-white/5">
                                             <div className="flex items-center gap-1 mr-auto">
                                                 <button
                                                     onClick={(e) => handleMoveFrame(index, 'up', e)}
                                                     disabled={index === 0}
-                                                    className="p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    title="Move Up"
+                                                    className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    data-tip="Move Up"
                                                 >
                                                     <ArrowUp size={14} />
                                                 </button>
                                                 <button
                                                     onClick={(e) => handleMoveFrame(index, 'down', e)}
                                                     disabled={index === (currentProject.frames?.length || 0) - 1}
-                                                    className="p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    title="Move Down"
+                                                    className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    data-tip="Move Down"
                                                 >
                                                     <ArrowDown size={14} />
                                                 </button>
@@ -519,15 +519,15 @@ export default function StoryboardComposer() {
 
                                             <button
                                                 onClick={(e) => handleCopyFrame(frame.id, e)}
-                                                className="p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors"
-                                                title="Duplicate Frame"
+                                                className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors"
+                                                data-tip="Duplicate"
                                             >
                                                 <Copy size={14} />
                                             </button>
                                             <button
                                                 onClick={(e) => handleUploadFrameImage(frame.id, e)}
-                                                className="p-2 hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 rounded-lg transition-colors"
-                                                title="Upload Image"
+                                                className="btn-tip p-2 hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 rounded-lg transition-colors"
+                                                data-tip="Upload Image"
                                             >
                                                 <Upload size={14} />
                                             </button>
@@ -540,8 +540,8 @@ export default function StoryboardComposer() {
                                                     <button
                                                         onClick={(e) => handleExtractLastFrame(frame.id, e)}
                                                         disabled={extractingFrameId === frame.id}
-                                                        className="p-2 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 rounded-lg transition-colors disabled:opacity-50"
-                                                        title="Use Previous Frame's Last Frame"
+                                                        className="btn-tip p-2 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 rounded-lg transition-colors disabled:opacity-50"
+                                                        data-tip="Use Prev End Frame"
                                                     >
                                                         {extractingFrameId === frame.id ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}
                                                     </button>
@@ -549,8 +549,8 @@ export default function StoryboardComposer() {
                                             })()}
                                             <button
                                                 onClick={(e) => handleDeleteFrame(frame.id, e)}
-                                                className="p-2 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-lg transition-colors"
-                                                title="Delete Frame"
+                                                className="btn-tip p-2 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-lg transition-colors"
+                                                data-tip="Delete"
                                             >
                                                 <Trash2 size={14} />
                                             </button>
