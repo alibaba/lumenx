@@ -1,31 +1,80 @@
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Iterable, List, Optional, Tuple
 import json
 import os
 import re
 import time
 import uuid
+import shutil
 import subprocess
 import threading
 import platform
+from pathlib import Path
 from urllib.parse import quote
-from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig
+from .models import DEFAULT_I2I_MODEL, DEFAULT_I2V_MODEL, DEFAULT_T2I_MODEL, Script, GenerationStatus, VideoTask, Character, Scene, Prop, StoryAnalysis, StoryBeat, StoryboardFrame, Series, PromptConfig, ModelSettings, ArtDirection, ImageAsset, ImageVariant, AssetUnit
+from .frame_crop_composition import compose_frame_crops_from_manifest, resolve_manifest_path
 from .llm import ScriptProcessor
 from .assets import AssetGenerator
+from .prompt_recipes import build_storyboard_continuity_hint
 from .storyboard import StoryboardGenerator
 from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
 from ...utils import get_logger
-from ...utils.oss_utils import is_object_key
+from ...utils.media_refs import normalize_project_media_ref, output_media_ref
+from ...utils.oss_utils import extract_object_key_from_url, is_object_key
 from ...utils.provider_registry import resolve_provider_backend
 from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
 
 logger = get_logger(__name__)
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_OUTPUT_ROOT = (_PROJECT_ROOT / "output").resolve()
 
 # --- Security helpers ---
 
 # Allowed pattern for IDs used in file paths (UUID hex + hyphens)
 _SAFE_ID_RE = re.compile(r'^[a-zA-Z0-9_\-]+$')
+_SAFE_STORYBOARD_RENDER_STRATEGY_VERSION = 1
+_MEDICAL_CONTEXT_KEYWORDS = (
+    "医院",
+    "病房",
+    "病床",
+    "病号",
+    "病人",
+    "患者",
+    "肝病",
+    "医生",
+    "护士",
+    "治疗",
+    "住院",
+    "输液",
+    "medical",
+    "hospital",
+    "ward",
+    "patient",
+    "doctor",
+    "treatment",
+)
+_MINOR_CONTEXT_KEYWORDS = (
+    "小男孩",
+    "小女孩",
+    "儿童",
+    "童年",
+    "小学生",
+    "未成年",
+    "boy",
+    "girl",
+)
+_VULNERABLE_PATIENT_KEYWORDS = (
+    "病人",
+    "患者",
+    "病床",
+    "病号服",
+    "虚弱",
+    "患病",
+    "patient",
+    "hospital patient",
+    "illness",
+)
 
 
 def _validate_safe_id(value: str, label: str = "id") -> str:
@@ -46,6 +95,437 @@ def _safe_resolve_path(base_dir: str, untrusted_rel: str) -> str:
     if not resolved.startswith(base + os.sep) and resolved != base:
         raise ValueError(f"Path escapes base directory: {untrusted_rel}")
     return resolved
+
+
+def _resolve_reference_path(url: str | None) -> Optional[str]:
+    if not url:
+        return None
+    if is_object_key(url) or url.startswith("http"):
+        return url
+    if os.path.isabs(url) and os.path.exists(url):
+        return url
+    potential_path = _safe_resolve_path("output", url)
+    if os.path.exists(potential_path):
+        return potential_path
+    return None
+
+
+def _project_relative_path(path: str | Path) -> str:
+    resolved = Path(path).resolve()
+    try:
+        return resolved.relative_to(_PROJECT_ROOT).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
+def _ensure_output_path(path: str | Path) -> Path:
+    resolved = Path(path).resolve()
+    try:
+        resolved.relative_to(_OUTPUT_ROOT)
+    except ValueError as exc:
+        raise ValueError("Composed frame output must stay under output/.") from exc
+    return resolved
+
+
+def _ensure_project_path(path: str | Path, label: str) -> Path:
+    resolved = Path(path).resolve()
+    try:
+        resolved.relative_to(_PROJECT_ROOT)
+    except ValueError as exc:
+        raise ValueError(f"{label} must stay inside the project workspace.") from exc
+    return resolved
+
+
+def _resolve_fixture_crop_manifest_path(script: Script, frame: StoryboardFrame) -> Optional[Path]:
+    if not script.fixture_slug:
+        return None
+    match = re.search(r"frame_(\d+)", frame.id or "")
+    if not match:
+        return None
+
+    fixture_dirname = _fixture_slug_to_dirname(script.fixture_slug)
+    candidate = (
+        _PROJECT_ROOT
+        / "tests"
+        / "fixtures"
+        / "story_projects"
+        / fixture_dirname
+        / "generation_prompts"
+        / f"frame_{int(match.group(1))}"
+        / "crop_composition_manifest.json"
+    )
+    if candidate.exists():
+        return candidate
+    return None
+
+
+def _get_selected_frame_reference(frame: StoryboardFrame) -> Optional[str]:
+    if frame.rendered_image_asset and frame.rendered_image_asset.selected_id:
+        selected_variant = next(
+            (variant for variant in frame.rendered_image_asset.variants if variant.id == frame.rendered_image_asset.selected_id),
+            None,
+        )
+        if selected_variant and selected_variant.url:
+            return selected_variant.url
+    return frame.rendered_image_url or frame.image_url
+
+
+def _get_selected_image_asset_url(asset: Optional[ImageAsset]) -> Optional[str]:
+    if not asset or not asset.variants:
+        return None
+    if asset.selected_id:
+        selected_variant = next((variant for variant in asset.variants if variant.id == asset.selected_id), None)
+        if selected_variant and selected_variant.url:
+            return selected_variant.url
+    return asset.variants[0].url if asset.variants[0].url else None
+
+
+def _get_character_reference_url(character: Character) -> Optional[str]:
+    return (
+        _get_selected_image_asset_url(character.three_view_asset)
+        or _get_selected_image_asset_url(character.full_body_asset)
+        or _get_selected_image_asset_url(character.headshot_asset)
+        or character.three_view_image_url
+        or character.full_body_image_url
+        or character.headshot_image_url
+        or character.avatar_url
+        or character.image_url
+    )
+
+
+def _get_asset_image_reference_url(asset: Any) -> Optional[str]:
+    return _get_selected_image_asset_url(getattr(asset, "image_asset", None)) or getattr(asset, "image_url", None)
+
+
+def _normalize_style_reference_images(values: Any) -> List[str]:
+    if not isinstance(values, list):
+        return []
+
+    normalized: List[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        cleaned = extract_object_key_from_url(value).strip()
+        if cleaned:
+            normalized.append(cleaned)
+    return list(dict.fromkeys(normalized))
+
+
+def _build_art_direction_style_prompt(style_config: Optional[Dict[str, Any]]) -> str:
+    if not style_config:
+        return ""
+
+    parts = [
+        str(style_config.get("positive_prompt", "") or "").strip(),
+        str(style_config.get("moodboard_notes", "") or "").strip(),
+    ]
+    return ", ".join(part for part in parts if part)
+
+
+def _get_art_direction_reference_paths(style_config: Optional[Dict[str, Any]]) -> List[str]:
+    ref_image_paths: List[str] = []
+    for value in _normalize_style_reference_images((style_config or {}).get("reference_images", [])):
+        resolved = _resolve_reference_path(value)
+        if resolved:
+            ref_image_paths.append(resolved)
+    return list(dict.fromkeys(ref_image_paths))
+
+
+def _normalize_art_direction_style_config(style_config: Dict[str, Any]) -> Dict[str, Any]:
+    normalized = dict(style_config or {})
+    normalized["reference_images"] = _normalize_style_reference_images(normalized.get("reference_images", []))
+    normalized["moodboard_notes"] = str(normalized.get("moodboard_notes", "") or "").strip()
+    return normalized
+
+
+def _model_dump_compat(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if hasattr(value, "dict"):
+        return value.dict()
+    return value
+
+
+def _contains_any_keyword(text: str, keywords: Tuple[str, ...]) -> bool:
+    normalized = str(text or "").lower()
+    return any(keyword.lower() in normalized for keyword in keywords)
+
+
+def _join_context_parts(*values: Any) -> str:
+    parts: List[str] = []
+    for value in values:
+        if isinstance(value, (list, tuple, set)):
+            parts.extend(str(item or "") for item in value)
+        elif value is not None:
+            parts.append(str(value))
+    return "\n".join(part for part in parts if part)
+
+
+def _is_minor_character(character: Optional[Character]) -> bool:
+    if not character:
+        return False
+    age_text = str(character.age or "")
+    age_numbers = [int(value) for value in re.findall(r"\d+", age_text)]
+    if age_numbers:
+        return min(age_numbers) < 18
+
+    context = _join_context_parts(
+        character.name,
+        character.aliases,
+        character.description,
+        character.clothing,
+    )
+    return _contains_any_keyword(context, _MINOR_CONTEXT_KEYWORDS)
+
+
+def _is_vulnerable_patient_character(character: Optional[Character]) -> bool:
+    if not character:
+        return False
+    context = _join_context_parts(
+        character.name,
+        character.aliases,
+        character.description,
+        character.clothing,
+    )
+    return _contains_any_keyword(context, _VULNERABLE_PATIENT_KEYWORDS)
+
+
+def _uses_openai_image_edit_model(model_name: Optional[str]) -> bool:
+    normalized = str(model_name or "").strip().lower().replace("_", "-")
+    return normalized == DEFAULT_I2I_MODEL or normalized.startswith("gpt-image")
+
+
+def _build_safe_storyboard_render_strategy(
+    *,
+    frame: StoryboardFrame,
+    scene: Optional[Scene],
+    characters: Iterable[Character],
+    props: Iterable[Prop],
+    prompt: str,
+    ref_image_paths: List[str],
+    model_name: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    if not _uses_openai_image_edit_model(model_name):
+        return None
+    if len(ref_image_paths) < 1:
+        return None
+
+    characters_by_id = {character.id: character for character in characters}
+    props_by_id = {prop.id: prop for prop in props}
+    frame_characters = [characters_by_id.get(character_id) for character_id in frame.character_ids or []]
+    frame_props = [props_by_id.get(prop_id) for prop_id in frame.prop_ids or []]
+
+    minor_character_ids = [
+        character.id
+        for character in frame_characters
+        if character and _is_minor_character(character)
+    ]
+    vulnerable_patient_character_ids = [
+        character.id
+        for character in frame_characters
+        if character and _is_vulnerable_patient_character(character)
+    ]
+    context_text = _join_context_parts(
+        prompt,
+        frame.image_prompt_cn,
+        scene.name if scene else None,
+        scene.description if scene else None,
+        [character.description for character in frame_characters if character],
+        [prop.description for prop in frame_props if prop],
+    )
+
+    has_medical_context = _contains_any_keyword(context_text, _MEDICAL_CONTEXT_KEYWORDS)
+    has_minor_context = bool(minor_character_ids) or _contains_any_keyword(context_text, _MINOR_CONTEXT_KEYWORDS)
+    has_patient_context = bool(vulnerable_patient_character_ids) or _contains_any_keyword(
+        context_text,
+        _VULNERABLE_PATIENT_KEYWORDS,
+    )
+
+    if not (has_medical_context and has_minor_context):
+        return None
+
+    reason_codes = ["openai_multi_reference_edit_risk"]
+    if has_medical_context:
+        reason_codes.append("medical_context")
+    if has_minor_context:
+        reason_codes.append("minor_context")
+    if has_patient_context:
+        reason_codes.append("patient_context")
+
+    return {
+        "strategy_version": _SAFE_STORYBOARD_RENDER_STRATEGY_VERSION,
+        "mode": "staged_safe_storyboard",
+        "reason_codes": reason_codes,
+        "direct_multi_reference_edit_allowed": False,
+        "base_stage": {
+            "model_mode": "text_to_image",
+            "reference_policy": "no_reference_images",
+            "prompt_policy": "base_composition_first",
+        },
+        "follow_up_stages": [
+            {
+                "stage": "identity_refine",
+                "model_mode": "image_edit",
+                "reference_policy": "single_reference_per_pass",
+                "notes": "Use only after the base composition is approved; refine one subject or one prop at a time.",
+            },
+            {
+                "stage": "final_consistency_pass",
+                "model_mode": "image_edit",
+                "reference_policy": "single_reference_per_pass",
+                "notes": "Use targeted localized edits for wardrobe or prop alignment only.",
+            },
+        ],
+        "omitted_reference_count": len(ref_image_paths),
+        "omitted_reference_assets": list(ref_image_paths),
+        "detected_context": {
+            "has_medical_context": has_medical_context,
+            "has_minor_context": has_minor_context,
+            "has_patient_context": has_patient_context,
+            "minor_character_ids": minor_character_ids,
+            "vulnerable_patient_character_ids": vulnerable_patient_character_ids,
+        },
+    }
+
+
+_SHOT_BLOCK_RE = re.compile(
+    r"###\s*镜头\s*(?P<number>\d+)\s*[｜|]\s*(?P<time>[^｜|\n]+)\s*[｜|]\s*(?P<title>[^\n]+)\n(?P<body>.*?)(?=\n###\s*镜头\s*\d+\s*[｜|]|\Z)",
+    re.S,
+)
+_SECTION_RE_TEMPLATE = r"\*\*{name}\*\*\s*\n(?P<content>.*?)(?=\n\*\*[^*\n]+\*\*|\Z)"
+
+
+def _extract_markdown_section(body: str, name: str) -> str:
+    pattern = _SECTION_RE_TEMPLATE.format(name=re.escape(name))
+    match = re.search(pattern, body or "", re.S)
+    if not match:
+        return ""
+    return match.group("content").strip()
+
+
+def _strip_markdown_lines(value: str) -> str:
+    lines = []
+    for raw_line in str(value or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("- "):
+            line = line[2:].strip()
+        lines.append(line)
+    return "\n".join(lines).strip()
+
+
+def _fixture_slug_to_dirname(slug: str) -> str:
+    slug_map = {
+        "liuyi-that-day": "六一那天",
+        "六一那天": "六一那天",
+    }
+    return slug_map.get(slug, slug)
+
+
+def _slugify_fixture_dirname(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9_\-]+", "-", value or "").strip("-").lower()
+    return slug or value
+
+
+def _get_fixture_root_dir() -> str:
+    return os.path.join("tests", "fixtures", "story_projects")
+
+
+def _get_fixture_manifest_path(fixture_dir: str) -> str:
+    return os.path.join(fixture_dir, "project_manifest.json")
+
+
+def _build_fixture_reference_bindings(
+    *,
+    frame: StoryboardFrame,
+    scene: Scene,
+    characters: List[Character],
+    props: List[Prop],
+    order: int,
+    story_function: str,
+    notes: str,
+) -> Dict[str, Any]:
+    characters_by_id = {character.id: character for character in characters}
+    props_by_id = {prop.id: prop for prop in props}
+
+    return {
+        "reference_binding_version": 1,
+        "fixture_role": "golden_storyboard_frame",
+        "scene": {
+            "id": scene.id,
+            "name": scene.name,
+            "required": True,
+            "lock": True,
+        },
+        "characters": [
+            {
+                "id": character.id,
+                "name": character.name,
+                "required": True,
+                "lock_identity": True,
+                "preferred_reference": "full_body_asset",
+            }
+            for character_id in frame.character_ids
+            if (character := characters_by_id.get(character_id))
+        ],
+        "props": [
+            {
+                "id": prop.id,
+                "name": prop.name,
+                "required": True,
+                "lock_shape": True,
+                "preferred_reference": "image_asset",
+            }
+            for prop_id in frame.prop_ids
+            if (prop := props_by_id.get(prop_id))
+        ],
+        "continuity": {
+            "same_scene_lock": order > 1,
+            "prefer_previous_frame": order > 1,
+            "guardrail": "保持同一时空内的人物造型、场景布局、光线方向和关键道具位置连续。",
+        },
+        "style": {
+            "lock": True,
+            "guardrail": "写实电影感，真实中国面孔，禁止卡通化、动漫化、廉价短剧感。",
+        },
+        "quality_targets": [
+            "真人写实，不要卡通脸",
+            "角色身份、发型、年龄感和服装保持一致",
+            "场景空间结构、时间段和光线逻辑保持一致",
+            "关键道具不能丢失、变形或改色",
+            "画面中不要出现可读错误文字、水印或 logo",
+        ],
+        "story_function": story_function,
+        "director_notes": notes,
+    }
+
+
+def _image_asset_has_selected_or_any_variant(asset: Any) -> bool:
+    return bool(asset and getattr(asset, "variants", None))
+
+
+def _asset_has_static_reference(asset: Any) -> bool:
+    if not asset:
+        return False
+
+    reference_fields = (
+        "image_url",
+        "avatar_url",
+        "full_body_image_url",
+        "three_view_image_url",
+        "headshot_image_url",
+    )
+    if any(bool(getattr(asset, field, None)) for field in reference_fields):
+        return True
+
+    image_asset_fields = (
+        "image_asset",
+        "full_body_asset",
+        "three_view_asset",
+        "headshot_asset",
+    )
+    return any(_image_asset_has_selected_or_any_variant(getattr(asset, field, None)) for field in image_asset_fields)
 
 class ComicGenPipeline:
     def __init__(self, config: Dict[str, Any] = None):
@@ -69,8 +549,9 @@ class ComicGenPipeline:
         self.video_generation_tasks: Dict[str, Dict[str, Any]] = {}
         # Temporary cache for file import previews (import_id -> text)
         self._import_cache: Dict[str, str] = {}
-        # Cached model instances for Kling/Vidu (lazily initialized)
+        # Cached model instances for vendor video providers (lazily initialized)
         self._kling_model = None
+        self._seedance_model = None
         self._vidu_model = None
 
     def _resolve_video_backend(self, model_name: str) -> str:
@@ -91,16 +572,51 @@ class ComicGenPipeline:
             )
             return "dashscope"
 
+    def _collect_frame_asset_reference_paths(
+        self,
+        script: Script,
+        frame: StoryboardFrame,
+        scene: Optional[Scene],
+    ) -> List[str]:
+        """Resolve selected scene, character, and prop references for a frame."""
+        ref_image_paths: List[str] = []
+
+        def append_resolved(url: Optional[str]) -> None:
+            resolved = _resolve_reference_path(url)
+            if resolved and resolved not in ref_image_paths:
+                ref_image_paths.append(resolved)
+
+        target_scene = scene or next(
+            (item for item in script.scenes if item.id == frame.scene_id),
+            None,
+        )
+        if target_scene:
+            append_resolved(_get_asset_image_reference_url(target_scene))
+
+        characters_by_id = {character.id: character for character in script.characters}
+        for character_id in frame.character_ids or []:
+            character = characters_by_id.get(character_id)
+            if character:
+                append_resolved(_get_character_reference_url(character))
+
+        props_by_id = {prop.id: prop for prop in script.props}
+        for prop_id in frame.prop_ids or []:
+            prop = props_by_id.get(prop_id)
+            if prop:
+                append_resolved(_get_asset_image_reference_url(prop))
+
+        return ref_image_paths
+
     # ... (existing methods)
 
-    def export_project(self, script_id: str, options: Dict[str, Any]) -> str:
+    def export_project(self, script_id: str, options: Dict[str, Any]) -> Dict[str, Optional[str]]:
         """Step 7: Export project to final video."""
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
             
-        export_url = self.export_manager.render_project(script, options)
-        return export_url
+        export_result = self.export_manager.render_project(script, options)
+        return export_result
 
     def get_script(self, script_id: str) -> Optional[Script]:
         return self.scripts.get(script_id)
@@ -109,7 +625,7 @@ class ComicGenPipeline:
         if not os.path.exists(self.data_file):
             return {}
         try:
-            with open(self.data_file, 'r') as f:
+            with open(self.data_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 return {k: Script(**v) for k, v in data.items()}
         except Exception as e:
@@ -121,8 +637,8 @@ class ComicGenPipeline:
         with self._save_lock:
             try:
                 os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
-                with open(self.data_file, 'w') as f:
-                    json.dump({k: v.dict() for k, v in self.scripts.items()}, f, indent=2)
+                with open(self.data_file, 'w', encoding='utf-8') as f:
+                    json.dump({k: _model_dump_compat(v) for k, v in self.scripts.items()}, f, indent=2)
             except Exception as e:
                 logger.error(f"Failed to save data: {e}")
 
@@ -136,6 +652,907 @@ class ComicGenPipeline:
         self.scripts[script.id] = script
         self._save_data()
         return script
+
+    def list_fixture_story_projects(self) -> List[Dict[str, Any]]:
+        """Return bundled fixture story projects that can be imported from the UI."""
+        fixture_root = _get_fixture_root_dir()
+        if not os.path.isdir(fixture_root):
+            return []
+
+        fixtures: List[Dict[str, Any]] = []
+        for entry in sorted(os.listdir(fixture_root)):
+            fixture_dir = os.path.join(fixture_root, entry)
+            if not os.path.isdir(fixture_dir):
+                continue
+
+            manifest_path = _get_fixture_manifest_path(fixture_dir)
+            if not os.path.exists(manifest_path):
+                continue
+
+            try:
+                metadata = self._load_fixture_metadata(entry, fixture_dir)
+                fixtures.append(metadata)
+            except Exception as e:
+                logger.warning("Skipping invalid fixture story project %s: %s", entry, e)
+
+        return fixtures
+
+    def _load_fixture_metadata(self, dirname: str, fixture_dir: str) -> Dict[str, Any]:
+        manifest_path = _get_fixture_manifest_path(fixture_dir)
+        with open(manifest_path, "r", encoding="utf-8") as handle:
+            manifest = json.load(handle)
+
+        fixture_name = str(manifest.get("project_name") or dirname)
+        slug = str(manifest.get("slug") or _slugify_fixture_dirname(dirname))
+        notes = manifest.get("notes") if isinstance(manifest.get("notes"), list) else []
+        description = str(
+            manifest.get("description")
+            or next((note for note in notes if isinstance(note, str) and note.strip()), "")
+            or "本地样板项目，可一键导入为真实项目。"
+        )
+
+        source_files = [item for item in manifest.get("source_files", []) if isinstance(item, dict)]
+        reference_images = [item for item in manifest.get("reference_images", []) if isinstance(item, dict)]
+        reference_assets = [item for item in manifest.get("reference_assets", []) if isinstance(item, dict)]
+        imported_project = self._find_imported_fixture_project(slug, fixture_name)
+        model_settings = manifest.get("model_settings", {}) if isinstance(manifest.get("model_settings"), dict) else {}
+        parser = str(manifest.get("parser") or "seedance_storyboard_markdown")
+
+        return {
+            "slug": slug,
+            "name": fixture_name,
+            "project_type": manifest.get("project_type") or "storyboard_fixture",
+            "description": description,
+            "parser": parser,
+            "dirname": dirname,
+            "source_count": len(source_files),
+            "reference_count": len(reference_images) + len(reference_assets),
+            "source_files": source_files,
+            "reference_images": reference_images,
+            "reference_assets": reference_assets,
+            "model_settings": model_settings,
+            "notes": notes,
+            "is_imported": imported_project is not None,
+            "project_id": imported_project.id if imported_project else None,
+            "frame_count": self._count_fixture_storyboard_frames(fixture_dir, source_files, parser),
+        }
+
+    def _count_fixture_storyboard_frames(
+        self,
+        fixture_dir: str,
+        source_files: List[Dict[str, Any]],
+        parser: str,
+    ) -> int:
+        if parser != "seedance_storyboard_markdown":
+            return 0
+
+        prompt_doc_rel = next(
+            (
+                item.get("path")
+                for item in source_files
+                if item.get("role") == "storyboard_prompt_doc"
+            ),
+            None,
+        )
+        if not prompt_doc_rel:
+            return 0
+
+        prompt_doc_path = _safe_resolve_path(fixture_dir, str(prompt_doc_rel))
+        if not os.path.exists(prompt_doc_path):
+            return 0
+
+        with open(prompt_doc_path, "r", encoding="utf-8") as handle:
+            return len(list(_SHOT_BLOCK_RE.finditer(handle.read())))
+
+    def _find_imported_fixture_project(self, slug: str, fixture_name: str) -> Optional[Script]:
+        return next(
+            (
+                script
+                for script in self.scripts.values()
+                if (
+                    script.fixture_slug == slug
+                    or (
+                        script.title == fixture_name
+                        and (
+                            script.style_prompt == f"fixture:{fixture_name}"
+                            or script.fixture_name == fixture_name
+                        )
+                    )
+                )
+            ),
+            None,
+        )
+
+    def _resolve_fixture_story_project(self, slug: str) -> Tuple[str, str, Dict[str, Any]]:
+        fixture_root = _get_fixture_root_dir()
+        fixture_name = _fixture_slug_to_dirname(slug)
+        candidates = []
+        if fixture_name:
+            candidates.append(os.path.join(fixture_root, fixture_name))
+
+        if os.path.isdir(fixture_root):
+            for entry in sorted(os.listdir(fixture_root)):
+                fixture_dir = os.path.join(fixture_root, entry)
+                manifest_path = _get_fixture_manifest_path(fixture_dir)
+                if not os.path.isdir(fixture_dir) or not os.path.exists(manifest_path):
+                    continue
+                with open(manifest_path, "r", encoding="utf-8") as handle:
+                    manifest = json.load(handle)
+                manifest_slug = str(manifest.get("slug") or _slugify_fixture_dirname(entry))
+                manifest_name = str(manifest.get("project_name") or entry)
+                if slug in {manifest_slug, manifest_name, entry}:
+                    return entry, fixture_dir, manifest
+
+        for fixture_dir in candidates:
+            manifest_path = _get_fixture_manifest_path(fixture_dir)
+            if os.path.exists(manifest_path):
+                with open(manifest_path, "r", encoding="utf-8") as handle:
+                    return os.path.basename(fixture_dir), fixture_dir, json.load(handle)
+
+        raise ValueError(f"Fixture story project not found: {slug}")
+
+    def import_fixture_story_project(self, slug: str) -> Script:
+        """Create or reuse a local fixture story project for UI smoke testing."""
+        fixture_dirname, fixture_dir, manifest = self._resolve_fixture_story_project(slug)
+        fixture_name = str(manifest.get("project_name") or fixture_dirname)
+        fixture_slug = str(manifest.get("slug") or _slugify_fixture_dirname(fixture_dirname))
+        existing = self._find_imported_fixture_project(fixture_slug, fixture_name)
+
+        parser = str(manifest.get("parser") or "seedance_storyboard_markdown")
+        if parser != "seedance_storyboard_markdown":
+            raise ValueError(f"Unsupported fixture parser for {slug}: {parser}")
+
+        prompt_doc_rel = next(
+            (
+                item.get("path")
+                for item in manifest.get("source_files", [])
+                if item.get("role") == "storyboard_prompt_doc"
+            ),
+            None,
+        )
+        if not prompt_doc_rel:
+            raise ValueError(f"Fixture story project {slug} is missing storyboard prompt doc")
+
+        prompt_doc_path = _safe_resolve_path(fixture_dir, prompt_doc_rel)
+        with open(prompt_doc_path, "r", encoding="utf-8") as handle:
+            markdown_text = handle.read()
+
+        reference_rel = next(
+            (
+                item.get("path")
+                for item in manifest.get("reference_images", [])
+                if item.get("role") == "storyboard_reference_collage"
+            ),
+            "",
+        )
+        reference_media_ref = self._copy_fixture_reference_image(fixture_slug, fixture_dir, reference_rel)
+        script = self._build_fixture_script_from_markdown(
+            title=fixture_name,
+            fixture_slug=fixture_slug,
+            fixture_project_type=str(manifest.get("project_type") or ""),
+            markdown_text=markdown_text,
+            manifest=manifest,
+            reference_media_ref=reference_media_ref,
+        )
+        self._apply_fixture_reference_assets(script, fixture_dir, manifest)
+
+        if existing:
+            script = self._refresh_existing_fixture_project(existing, script)
+
+        self.scripts[script.id] = script
+        self._save_data()
+        return script
+
+    def _refresh_existing_fixture_project(self, existing: Script, fresh: Script) -> Script:
+        """Refresh a reused fixture with the latest template while preserving stable identity."""
+        fresh.id = existing.id
+        fresh.created_at = existing.created_at
+        fresh.updated_at = time.time()
+
+        existing_frames = {frame.id: frame for frame in existing.frames}
+        for frame in fresh.frames:
+            existing_frame = existing_frames.get(frame.id)
+            if not existing_frame:
+                continue
+
+            same_binding = (
+                frame.scene_id == existing_frame.scene_id
+                and frame.character_ids == existing_frame.character_ids
+                and frame.prop_ids == existing_frame.prop_ids
+            )
+            if not same_binding:
+                continue
+
+            frame.image_url = existing_frame.image_url
+            frame.image_asset = existing_frame.image_asset
+            frame.rendered_image_url = existing_frame.rendered_image_url
+            frame.rendered_image_asset = existing_frame.rendered_image_asset
+            frame.status = existing_frame.status
+            frame.updated_at = existing_frame.updated_at
+
+        return fresh
+
+    def _copy_fixture_reference_image(self, fixture_name: str, fixture_dir: str, reference_rel: str) -> Optional[str]:
+        if not reference_rel:
+            return None
+        source_path = _safe_resolve_path(fixture_dir, reference_rel)
+        if not os.path.exists(source_path):
+            return None
+        _, ext = os.path.splitext(source_path)
+        safe_name = re.sub(r"[^a-zA-Z0-9_\-]+", "-", fixture_name).strip("-") or "fixture"
+        output_dir = os.path.join("output", "uploads", "fixtures")
+        os.makedirs(output_dir, exist_ok=True)
+        dest_path = os.path.join(output_dir, f"{safe_name}-storyboard-reference{ext or '.png'}")
+        shutil.copyfile(source_path, dest_path)
+        return output_media_ref(dest_path)
+
+    def _copy_fixture_reference_asset(self, fixture_dir: str, reference_rel: str) -> Optional[str]:
+        if not reference_rel:
+            return None
+        source_path = _safe_resolve_path(fixture_dir, reference_rel)
+        if not os.path.exists(source_path):
+            return None
+        output_dir = os.path.join("output", "uploads", "fixtures")
+        os.makedirs(output_dir, exist_ok=True)
+        dest_path = os.path.join(output_dir, os.path.basename(source_path))
+        shutil.copyfile(source_path, dest_path)
+        return output_media_ref(dest_path)
+
+    def _apply_fixture_reference_assets(self, script: Script, fixture_dir: str, manifest: Dict[str, Any]) -> None:
+        reference_assets = [item for item in manifest.get("reference_assets", []) if isinstance(item, dict)]
+        if not reference_assets:
+            return
+
+        for item in reference_assets:
+            asset_type = str(item.get("asset_type") or "").strip().lower()
+            asset_id = str(item.get("asset_id") or "").strip()
+            upload_type = str(item.get("upload_type") or "image").strip()
+            source_rel = str(item.get("path") or "").strip()
+            if not asset_type or not asset_id or not source_rel:
+                continue
+
+            copied_ref = self._copy_fixture_reference_asset(fixture_dir, source_rel)
+            if not copied_ref:
+                logger.warning("Skipping missing fixture reference asset %s/%s", asset_type, asset_id)
+                continue
+
+            prompt_used = str(item.get("prompt_used") or item.get("label") or item.get("description") or "").strip()
+            locked = bool(item.get("locked", item.get("lock", True)))
+
+            self._bind_fixture_reference_asset(
+                script,
+                asset_type=asset_type,
+                asset_id=asset_id,
+                upload_type=upload_type,
+                image_url=copied_ref,
+                prompt_used=prompt_used,
+                locked=locked,
+            )
+
+    def _bind_fixture_reference_asset(
+        self,
+        script: Script,
+        *,
+        asset_type: str,
+        asset_id: str,
+        upload_type: str,
+        image_url: str,
+        prompt_used: str,
+        locked: bool,
+    ) -> None:
+        now = time.time()
+        variant_id = f"{asset_id}_{upload_type}_fixture"
+
+        def make_variant() -> ImageVariant:
+            return ImageVariant(
+                id=variant_id,
+                url=image_url,
+                prompt_used=prompt_used or None,
+                is_uploaded_source=True,
+                upload_type=upload_type,
+            )
+
+        if asset_type == "character":
+            target = next((item for item in script.characters if item.id == asset_id), None)
+            if not target:
+                logger.warning("Fixture character not found: %s", asset_id)
+                return
+
+            legacy_variant = make_variant()
+            unit_variant = make_variant()
+
+            if upload_type == "full_body":
+                target.full_body = AssetUnit(
+                    selected_image_id=variant_id,
+                    image_variants=[unit_variant],
+                    image_prompt=prompt_used or target.description,
+                    image_updated_at=now,
+                )
+                if target.full_body_asset is None:
+                    target.full_body_asset = ImageAsset()
+                target.full_body_asset.variants = [legacy_variant]
+                target.full_body_asset.selected_id = variant_id
+                target.full_body_image_url = image_url
+                target.image_url = image_url
+            elif upload_type == "head_shot":
+                target.head_shot = AssetUnit(
+                    selected_image_id=variant_id,
+                    image_variants=[unit_variant],
+                    image_prompt=prompt_used or target.description,
+                    image_updated_at=now,
+                )
+                if target.headshot_asset is None:
+                    target.headshot_asset = ImageAsset()
+                target.headshot_asset.variants = [legacy_variant]
+                target.headshot_asset.selected_id = variant_id
+                target.headshot_image_url = image_url
+                target.avatar_url = image_url
+            elif upload_type == "three_views":
+                target.three_views = AssetUnit(
+                    selected_image_id=variant_id,
+                    image_variants=[unit_variant],
+                    image_prompt=prompt_used or target.description,
+                    image_updated_at=now,
+                )
+                if target.three_view_asset is None:
+                    target.three_view_asset = ImageAsset()
+                target.three_view_asset.variants = [legacy_variant]
+                target.three_view_asset.selected_id = variant_id
+                target.three_view_image_url = image_url
+            else:
+                logger.warning("Unsupported fixture character upload type: %s", upload_type)
+                return
+
+            target.locked = locked
+            target.status = GenerationStatus.COMPLETED
+            target.is_consistent = True
+            target.full_body_updated_at = now
+            if upload_type == "head_shot":
+                target.headshot_updated_at = now
+            elif upload_type == "three_views":
+                target.three_view_updated_at = now
+            return
+
+        if asset_type == "scene":
+            target = next((item for item in script.scenes if item.id == asset_id), None)
+            if not target:
+                logger.warning("Fixture scene not found: %s", asset_id)
+                return
+
+            target.image_asset = ImageAsset(
+                selected_id=variant_id,
+                variants=[make_variant()],
+            )
+            target.image_url = image_url
+            target.image_prompt = prompt_used or target.description
+            target.locked = locked
+            target.status = GenerationStatus.COMPLETED
+            return
+
+        if asset_type == "prop":
+            target = next((item for item in script.props if item.id == asset_id), None)
+            if not target:
+                logger.warning("Fixture prop not found: %s", asset_id)
+                return
+
+            target.image_asset = ImageAsset(
+                selected_id=variant_id,
+                variants=[make_variant()],
+            )
+            target.image_url = image_url
+            target.image_prompt = prompt_used or target.description
+            target.locked = locked
+            target.status = GenerationStatus.COMPLETED
+            return
+
+        logger.warning("Unsupported fixture asset type: %s", asset_type)
+
+    def _build_fixture_script_from_markdown(
+        self,
+        *,
+        title: str,
+        fixture_slug: str,
+        fixture_project_type: str,
+        markdown_text: str,
+        manifest: Dict[str, Any],
+        reference_media_ref: Optional[str],
+    ) -> Script:
+        script_id = str(uuid.uuid4())
+        now = time.time()
+        characters = self._build_default_liuyi_characters()
+        scenes = self._build_default_liuyi_scenes()
+        props = self._build_default_liuyi_props(reference_media_ref)
+        scene_lookup = {scene.name: scene for scene in scenes}
+        scene_by_id = {scene.id: scene for scene in scenes}
+        character_by_id = {char.id: char for char in characters}
+        prop_by_id = {prop.id: prop for prop in props}
+        scene_keywords = {
+            "医院": scene_lookup["中国医院普通病房"],
+            "病房": scene_lookup["中国医院普通病房"],
+            "床头": scene_lookup["中国医院普通病房"],
+            "操场": scene_lookup["2008 年六一小学操场"],
+            "舞台": scene_lookup["2008 年六一小学操场"],
+            "校门": scene_lookup["2008 年小学校门口"],
+            "家中": scene_lookup["家中夜晚书桌"],
+            "台灯": scene_lookup["家中夜晚书桌"],
+            "2026": scene_lookup["2026 年肝病科病房"],
+        }
+        default_scene = scene_lookup["2008 年六一小学操场"]
+        fixture_scene_by_order = {
+            1: "liuyi_scene_school_playground",
+            2: "liuyi_scene_school_playground",
+            3: "liuyi_scene_hospital_room",
+            4: "liuyi_scene_hospital_room",
+            5: "liuyi_scene_hospital_room",
+            6: "liuyi_scene_school_playground",
+            7: "liuyi_scene_hospital_room",
+            8: "liuyi_scene_school_gate",
+            9: "liuyi_scene_funeral_hall",
+            10: "liuyi_scene_home_desk",
+            11: "liuyi_scene_home_desk",
+            12: "liuyi_scene_exam_admission",
+            13: "liuyi_scene_medical_school",
+            14: "liuyi_scene_doctor_office",
+            15: "liuyi_scene_2026_ward",
+            16: "liuyi_scene_2026_ward",
+            17: "liuyi_scene_2026_ward",
+            18: "liuyi_scene_hospital_corridor",
+        }
+        fixture_character_ids_by_order = {
+            2: ["liuyi_char_xiaoqi_child"],
+            3: ["liuyi_char_father"],
+            4: ["liuyi_char_father", "liuyi_char_mother"],
+            5: ["liuyi_char_father", "liuyi_char_mother"],
+            6: ["liuyi_char_xiaoqi_child"],
+            7: ["liuyi_char_mother"],
+            8: ["liuyi_char_xiaoqi_child", "liuyi_char_mother"],
+            9: ["liuyi_char_xiaoqi_child", "liuyi_char_father"],
+            10: ["liuyi_char_xiaoqi_child", "liuyi_char_father"],
+            11: ["liuyi_char_xiaoqi_young"],
+            12: ["liuyi_char_xiaoqi_young"],
+            13: ["liuyi_char_xiaoqi_young"],
+            14: ["liuyi_char_xiaoqi_adult"],
+            15: ["liuyi_char_xiaoqi_adult", "liuyi_char_boy", "liuyi_char_boy_father"],
+            16: ["liuyi_char_xiaoqi_adult", "liuyi_char_boy", "liuyi_char_boy_father"],
+            17: ["liuyi_char_xiaoqi_adult", "liuyi_char_boy", "liuyi_char_boy_father"],
+            18: ["liuyi_char_xiaoqi_adult"],
+        }
+        fixture_prop_ids_by_order = {
+            2: ["liuyi_prop_child_drawing"],
+            3: ["liuyi_prop_white_bear", "liuyi_prop_paper_bag"],
+            4: ["liuyi_prop_white_bear", "liuyi_prop_paper_bag"],
+            5: ["liuyi_prop_white_bear", "liuyi_prop_paper_bag"],
+            7: ["liuyi_prop_paper_bag"],
+            8: ["liuyi_prop_white_bear", "liuyi_prop_paper_bag"],
+            9: ["liuyi_prop_white_bear", "liuyi_prop_father_memorial_portrait"],
+            10: ["liuyi_prop_white_bear", "liuyi_prop_family_photo", "liuyi_prop_notebook_pencil"],
+            11: ["liuyi_prop_white_bear", "liuyi_prop_notebook_pencil"],
+            12: ["liuyi_prop_white_bear", "liuyi_prop_admission_notice"],
+            13: ["liuyi_prop_medical_textbooks"],
+            14: ["liuyi_prop_white_bear", "liuyi_prop_medical_textbooks"],
+            15: ["liuyi_prop_childrens_day_balloons"],
+            16: ["liuyi_prop_childrens_day_balloons"],
+            17: ["liuyi_prop_childrens_day_balloons"],
+            18: ["liuyi_prop_white_bear", "liuyi_prop_medical_textbooks"],
+        }
+
+        frames: List[StoryboardFrame] = []
+        story_beats: List[StoryBeat] = []
+        for match in _SHOT_BLOCK_RE.finditer(markdown_text or ""):
+            order = int(match.group("number"))
+            time_range = match.group("time").strip()
+            shot_title = match.group("title").strip()
+            body = match.group("body")
+            story_function = _strip_markdown_lines(_extract_markdown_section(body, "剧情功能"))
+            visual_content = _strip_markdown_lines(_extract_markdown_section(body, "画面内容"))
+            still_prompt = _strip_markdown_lines(_extract_markdown_section(body, "静帧画面提示词"))
+            video_prompt = _strip_markdown_lines(_extract_markdown_section(body, "Seedance 2.0 图生视频提示词"))
+            dialogue = _strip_markdown_lines(_extract_markdown_section(body, "台词 / 旁白"))
+            notes = _strip_markdown_lines(_extract_markdown_section(body, "注意事项"))
+            sound_design = _strip_markdown_lines(_extract_markdown_section(body, "声音设计"))
+            combined_text = "\n".join([shot_title, visual_content, still_prompt, dialogue, notes])
+
+            scene = scene_by_id.get(fixture_scene_by_order.get(order)) or next(
+                (candidate for keyword, candidate in scene_keywords.items() if keyword in combined_text),
+                default_scene,
+            )
+            character_ids = [
+                char_id
+                for char_id in fixture_character_ids_by_order.get(order, [])
+                if char_id in character_by_id
+            ]
+            prop_ids = [
+                prop_id
+                for prop_id in fixture_prop_ids_by_order.get(order, [])
+                if prop_id in prop_by_id
+            ]
+            beat_id = f"liuyi_beat_{order:02d}"
+            beat_title = f"镜头 {order:02d}｜{shot_title}"
+            composition_data = _build_fixture_reference_bindings(
+                frame=StoryboardFrame(
+                    id=f"liuyi_frame_{order:02d}",
+                    scene_id=scene.id,
+                    character_ids=character_ids,
+                    prop_ids=prop_ids,
+                ),
+                scene=scene,
+                characters=characters,
+                props=props,
+                order=order,
+                story_function=story_function,
+                notes=notes,
+            )
+
+            story_beats.append(
+                StoryBeat(
+                    id=beat_id,
+                    order=order,
+                    title=beat_title,
+                    chapter_order=1,
+                    chapter_title="18 镜头分镜提示词",
+                    summary=story_function or visual_content,
+                    action_summary=visual_content,
+                    dialogue_excerpt=dialogue,
+                    storyboard_goal=still_prompt,
+                    scene_id=scene.id,
+                    scene_name=scene.name,
+                    character_ids=character_ids,
+                    character_names=[char.name for char in characters if char.id in character_ids],
+                    prop_ids=prop_ids,
+                    prop_names=[prop.name for prop in props if prop.id in prop_ids],
+                    source_excerpt=combined_text[:500],
+                    storyboard_focus=f"{time_range}｜{story_function}" if story_function else time_range,
+                )
+            )
+            frames.append(
+                StoryboardFrame(
+                    id=f"liuyi_frame_{order:02d}",
+                    scene_id=scene.id,
+                    story_beat_id=beat_id,
+                    story_beat_title=beat_title,
+                    story_beat_order=order,
+                    chapter_order=1,
+                    chapter_title="18 镜头分镜提示词",
+                    character_ids=character_ids,
+                    prop_ids=prop_ids,
+                    action_description=visual_content,
+                    dialogue=dialogue or None,
+                    camera_angle="Medium Shot",
+                    camera_movement=video_prompt,
+                    composition=notes,
+                    atmosphere=sound_design,
+                    image_prompt=still_prompt,
+                    image_prompt_cn=still_prompt,
+                    video_prompt=video_prompt,
+                    composition_data=composition_data,
+                    status=GenerationStatus.PENDING,
+                )
+            )
+
+        model_settings = manifest.get("model_settings", {}) if isinstance(manifest, dict) else {}
+        story_analysis = self.script_processor.build_story_analysis(markdown_text, characters, scenes, props)
+        story_analysis.scene_beats = story_beats
+        story_analysis.plot_points = [beat.summary for beat in story_beats[:5] if beat.summary]
+        story_analysis.summary = "《六一那天》18 镜头写实情绪短片分镜测试项目，围绕六一校园、医院离别、白色毛绒小熊和成年后的回望展开。"
+
+        return Script(
+            id=script_id,
+            title=title,
+            fixture_slug=fixture_slug,
+            fixture_name=title,
+            fixture_project_type=fixture_project_type or None,
+            original_text=markdown_text,
+            characters=characters,
+            scenes=scenes,
+            props=props,
+            frames=frames,
+            style_preset="realistic",
+            style_prompt=f"fixture:{title}",
+            art_direction=self._build_liuyi_art_direction(reference_media_ref),
+            model_settings=ModelSettings(
+                t2i_model=model_settings.get("t2i_model", DEFAULT_T2I_MODEL),
+                i2i_model=model_settings.get("i2i_model", DEFAULT_I2I_MODEL),
+                i2v_model=DEFAULT_I2V_MODEL,
+                character_aspect_ratio=model_settings.get("character_aspect_ratio", "9:16"),
+                scene_aspect_ratio=model_settings.get("scene_aspect_ratio", "16:9"),
+                prop_aspect_ratio=model_settings.get("prop_aspect_ratio", "1:1"),
+                storyboard_aspect_ratio=model_settings.get("storyboard_aspect_ratio", "16:9"),
+            ),
+            story_analysis=story_analysis,
+            created_at=now,
+            updated_at=now,
+        )
+
+    def _build_default_liuyi_characters(self) -> List[Character]:
+        return [
+            Character(
+                id="liuyi_char_xiaoqi_child",
+                name="小琪",
+                aliases=["10 岁小琪", "中国小女孩"],
+                description="10 岁中国小女孩，小学四年级，黑色齐肩短发，清秀偏瘦，眼神敏感克制。",
+                age="10 岁",
+                gender="女",
+                clothing="浅蓝白色六一演出服",
+                visual_weight=5,
+                locked=True,
+                status=GenerationStatus.PENDING,
+            ),
+            Character(
+                id="liuyi_char_xiaoqi_young",
+                name="青年小琪",
+                aliases=["18 岁小琪", "年轻小琪", "医学院小琪"],
+                description="18-20 岁中国女孩小琪，黑发扎起，眼神疲惫但专注，从高中毕业到医学院白大褂阶段，保留童年小琪的清秀轮廓。",
+                age="18-20 岁",
+                gender="女",
+                clothing="白色短袖校服或干净白大褂，按镜头阶段变化",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Character(
+                id="liuyi_char_xiaoqi_adult",
+                name="成年小琪",
+                aliases=["28 岁小琪", "女医生小琪", "年轻女医生"],
+                description="28 岁中国年轻女医生，黑色低马尾，面容温柔但坚定，气质克制专业，会蹲下与孩子平视。",
+                age="28 岁",
+                gender="女",
+                clothing="干净长款白大褂，简洁胸牌不可读",
+                visual_weight=5,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Character(
+                id="liuyi_char_mother",
+                name="母亲",
+                aliases=["妈妈"],
+                description="30 多岁中国母亲，面容疲惫温柔，眼睛常因压抑哭意而发红，表演克制。",
+                age="30 多岁",
+                gender="女",
+                clothing="朴素日常外套，医院和校门段保持现实质感",
+                visual_weight=5,
+                locked=True,
+                status=GenerationStatus.PENDING,
+            ),
+            Character(
+                id="liuyi_char_father",
+                name="父亲",
+                aliases=["爸爸"],
+                description="40 岁左右中国父亲，病中消瘦苍白，眼神虚弱但温柔，是小熊礼物的托付者。",
+                age="40 岁左右",
+                gender="男",
+                clothing="蓝白病号服",
+                visual_weight=4,
+                locked=True,
+                status=GenerationStatus.PENDING,
+            ),
+            Character(
+                id="liuyi_char_boy",
+                name="小男孩",
+                aliases=["2026 年小男孩", "男孩"],
+                description="7-9 岁中国男孩，短发，穿浅色儿童节演出服，眼神天真又不安，期待父亲能去看自己的表演。",
+                age="7-9 岁",
+                gender="男",
+                clothing="浅色儿童节演出服",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Character(
+                id="liuyi_char_boy_father",
+                name="小男孩的父亲",
+                aliases=["2026 年父亲", "病床上的父亲"],
+                description="30 多岁到 40 岁中国男性肝病患者，躺在普通医院病床上，脸色苍白但清醒，看到孩子时努力微笑。",
+                age="30 多岁到 40 岁",
+                gender="男",
+                clothing="普通医院病号服",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+        ]
+
+    def _build_default_liuyi_scenes(self) -> List[Scene]:
+        return [
+            Scene(
+                id="liuyi_scene_school_playground",
+                name="2008 年六一小学操场",
+                description="中国小学操场，红色塑胶跑道、教学楼、彩旗和临时舞台，上午暖金色阳光，普通校园活动质感。",
+                time_of_day="上午",
+                lighting_mood="温暖金色自然光",
+                visual_weight=5,
+                locked=True,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_hospital_room",
+                name="中国医院普通病房",
+                description="中国三甲医院普通病房，蓝白床单、冷白灯、床头柜和浅蓝绿色医用隐私帘，氛围安静沉重。",
+                time_of_day="白天",
+                lighting_mood="冷白蓝色医院灯光",
+                visual_weight=5,
+                locked=True,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_school_gate",
+                name="2008 年小学校门口",
+                description="演出后的小学校门口，铁艺校门、绿树和散去的人群，温暖日光中带悲伤。",
+                time_of_day="白天",
+                lighting_mood="柔和自然光",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_funeral_hall",
+                name="2008 年葬礼灵堂",
+                description="中国家庭葬礼灵堂，中央父亲黑白遗照、白色花束和素色布置，安静克制，不阴森恐怖。",
+                time_of_day="白天",
+                lighting_mood="柔和低饱和光线",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_home_desk",
+                name="家中夜晚书桌",
+                description="家中夜晚，暖黄台灯、书桌、纸张和旧物，适合表现翻书、写字、回忆与克制情绪。",
+                time_of_day="夜晚",
+                lighting_mood="暖黄台灯光",
+                visual_weight=3,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_exam_admission",
+                name="2016 年高考录取书桌",
+                description="中国高中毕业季书桌，堆满高考资料、试卷、闹钟和录取通知书，夏天自然光，旧白色小熊在桌角。",
+                time_of_day="白天",
+                lighting_mood="夏天暖色自然光",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_medical_school",
+                name="中国医学院教室或实验楼走廊",
+                description="中国医学院教室、实验室或实验楼走廊，白色工作台、显微镜、试剂瓶、厚重医学教材，冷白灯光。",
+                time_of_day="白天",
+                lighting_mood="冷白光与自然光混合",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_doctor_office",
+                name="2026 年医生办公室",
+                description="中国医院医生办公室，桌上有病历夹、医学书和听诊器，桌角坐着旧白色毛绒小熊，清晨冷白光中带暖阳。",
+                time_of_day="清晨",
+                lighting_mood="冷白光中带一点暖阳",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_2026_ward",
+                name="2026 年肝病科病房",
+                description="中国医院普通肝病科病房，蓝白床单、输液架、床头柜和窗边柔和晨光，父亲躺在病床上，小男孩拿彩色气球。",
+                time_of_day="清晨",
+                lighting_mood="柔和晨光，冷白转温暖",
+                visual_weight=5,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Scene(
+                id="liuyi_scene_hospital_corridor",
+                name="2026 年医院走廊",
+                description="宽敞中国医院走廊，白墙和地砖，窗外晨光洒入，安静通透，适合成年小琪背影前行。",
+                time_of_day="清晨",
+                lighting_mood="温暖希望感晨光",
+                visual_weight=4,
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+        ]
+
+    def _build_default_liuyi_props(self, reference_media_ref: Optional[str]) -> List[Prop]:
+        reference_asset = ImageAsset(
+            selected_id="liuyi_reference_collage",
+            variants=[
+                ImageVariant(
+                    id="liuyi_reference_collage",
+                    url=reference_media_ref,
+                    prompt_used="用户提供的分镜参考图拼图",
+                    is_uploaded_source=True,
+                    upload_type="image",
+                )
+            ],
+        ) if reference_media_ref else None
+        return [
+            Prop(
+                id="liuyi_prop_white_bear",
+                name="白色毛绒小熊",
+                description="白色毛绒小熊，脖子系蓝色丝带，是父亲托付给小琪的核心礼物，所有镜头必须保持一致。",
+                image_asset=reference_asset or ImageAsset(),
+                image_url=reference_media_ref,
+                locked=True,
+                status=GenerationStatus.PENDING,
+            ),
+            Prop(
+                id="liuyi_prop_paper_bag",
+                name="浅色纸袋",
+                description="浅色礼物纸袋，袋口露出白色毛绒小熊和蓝色丝带，纸袋有真实纸质褶皱。",
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Prop(
+                id="liuyi_prop_child_drawing",
+                name="儿童画",
+                description="小琪手里攥着的微皱儿童画，画面可有手写痕迹但不要生成清晰可读文字。",
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Prop(
+                id="liuyi_prop_family_photo",
+                name="父女合照",
+                description="普通深色相框里的父女生活照，父亲蹲在女儿身边整理红领巾，温暖生活感，不是遗照。",
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Prop(
+                id="liuyi_prop_father_memorial_portrait",
+                name="父亲遗照",
+                description="普通深色相框中的父亲黑白遗照，照片里中年父亲笑得温和，只用于葬礼灵堂镜头。",
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Prop(
+                id="liuyi_prop_notebook_pencil",
+                name="作文本和铅笔",
+                description="朴素小学生作文本与黄色木质铅笔，纸面文字不可读，承载小琪写下理想的镜头。",
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Prop(
+                id="liuyi_prop_admission_notice",
+                name="录取通知书",
+                description="正式白色通知信封或录取通知书，干净整齐，文字不可读，和高考资料、旧小熊一起出现。",
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Prop(
+                id="liuyi_prop_medical_textbooks",
+                name="医学教材和病历夹",
+                description="厚重医学教材、白色或浅蓝色病历夹，胸牌和文件文字都不可读，用于医学院和医生办公室阶段。",
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+            Prop(
+                id="liuyi_prop_childrens_day_balloons",
+                name="儿童节气球",
+                description="红黄蓝彩色圆形气球，细绳自然下垂，小男孩攥着气球线，儿童节氛围轻轻点到。",
+                locked=False,
+                status=GenerationStatus.PENDING,
+            ),
+        ]
+
+    def _build_liuyi_art_direction(self, reference_media_ref: Optional[str]) -> ArtDirection:
+        style_config = {
+            "id": "liuyi_realistic_cinema",
+            "name": "六一那天写实电影感",
+            "description": "中国现实题材，克制表演，儿童节暖金色与医院冷白蓝色形成情绪对比。",
+            "positive_prompt": "写实电影感，中国现实题材，真实中国面孔，自然表演，克制情绪，浅景深，柔和自然光，轻微胶片颗粒，画面干净",
+            "negative_prompt": "卡通，动画感，夸张表情，恐怖，血腥，手指畸形，多余手指，脸部变形，欧美面孔，科幻医院，过度磨皮，过曝，低清晰度，水印，logo，乱码文字，可读错误文字，廉价短剧感",
+            "reference_images": [reference_media_ref] if reference_media_ref else [],
+            "moodboard_notes": "童年校园段偏暖金色，医院临终段偏冷白蓝色，家中夜晚段为暖黄台灯光，2026 年医院段由冷白逐渐转为温暖晨光。",
+            "is_custom": False,
+        }
+        return ArtDirection(
+            selected_style_id="liuyi_realistic_cinema",
+            style_config=style_config,
+            custom_styles=[],
+            ai_recommendations=[],
+        )
     
     def reparse_project(self, script_id: str, text: str) -> Script:
         """Re-parse the text for an existing project, replacing all entities."""
@@ -176,12 +1593,21 @@ class ComicGenPipeline:
         sorted_chars = sorted(script.characters, key=lambda c: 0 if not c.base_character_id else 1)
 
         for char in sorted_chars:
+            if char.locked and _asset_has_static_reference(char):
+                logger.info("Skipping locked character master reference: %s", char.id)
+                continue
             self.generate_asset(script_id, char.id, "character")
             
         for scene in script.scenes:
+            if scene.locked and _asset_has_static_reference(scene):
+                logger.info("Skipping locked scene master reference: %s", scene.id)
+                continue
             self.generate_asset(script_id, scene.id, "scene")
             
         for prop in script.props:
+            if prop.locked and _asset_has_static_reference(prop):
+                logger.info("Skipping locked prop master reference: %s", prop.id)
+                continue
             self.generate_asset(script_id, prop.id, "prop")
             
         self._save_data()
@@ -223,7 +1649,7 @@ class ComicGenPipeline:
         if apply_style:
             if script.art_direction and script.art_direction.style_config:
                 # Use Art Direction (highest priority)
-                effective_positive_prompt = script.art_direction.style_config.get('positive_prompt', '')
+                effective_positive_prompt = _build_art_direction_style_prompt(script.art_direction.style_config)
                 # Append global negative prompt if not overridden or append to it?
                 # Let's append global negative prompt to the specific one for better results
                 global_neg = script.art_direction.style_config.get('negative_prompt', '')
@@ -256,11 +1682,17 @@ class ComicGenPipeline:
         target_asset = next((a for a in asset_list if a.id == asset_id), None)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+        if target_asset.locked and _asset_has_static_reference(target_asset):
+            raise ValueError(f"{asset_type.capitalize()} {asset_id} is locked. Unlock it before regenerating the master reference.")
         
         target_asset.status = GenerationStatus.PROCESSING
         self._save_data()
         
         try:
+            style_reference_paths = _get_art_direction_reference_paths(
+                script.art_direction.style_config if script.art_direction else None
+            )
+
             # Generate with Art Direction style injected
             if asset_type == "character":
                 # Pass generation_type and specific prompt if available
@@ -280,12 +1712,31 @@ class ComicGenPipeline:
                     batch_size=batch_size,
                     model_name=t2i_model,
                     i2i_model_name=i2i_model,
-                    size=effective_size
+                    size=effective_size,
+                    style_reference_paths=style_reference_paths,
                 )
             elif asset_type == "scene":
-                self.asset_generator.generate_scene(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=t2i_model, size=effective_size)
+                self.asset_generator.generate_scene(
+                    target_asset,
+                    effective_positive_prompt,
+                    effective_negative_prompt,
+                    batch_size=batch_size,
+                    model_name=t2i_model,
+                    size=effective_size,
+                    prompt=prompt or "",
+                    style_reference_paths=style_reference_paths,
+                )
             elif asset_type == "prop":
-                self.asset_generator.generate_prop(target_asset, effective_positive_prompt, effective_negative_prompt, batch_size=batch_size, model_name=t2i_model, size=effective_size)
+                self.asset_generator.generate_prop(
+                    target_asset,
+                    effective_positive_prompt,
+                    effective_negative_prompt,
+                    batch_size=batch_size,
+                    model_name=t2i_model,
+                    size=effective_size,
+                    prompt=prompt or "",
+                    style_reference_paths=style_reference_paths,
+                )
                 
             target_asset.status = GenerationStatus.COMPLETED
         except Exception as e:
@@ -321,6 +1772,8 @@ class ComicGenPipeline:
         target_asset = next((a for a in asset_list if a.id == asset_id), None)
         if not target_asset:
             raise ValueError(f"{asset_type.capitalize()} {asset_id} not found")
+        if target_asset.locked and _asset_has_static_reference(target_asset):
+            raise ValueError(f"{asset_type.capitalize()} {asset_id} is locked. Unlock it before regenerating the master reference.")
         
         target_asset.status = GenerationStatus.PROCESSING
         
@@ -400,7 +1853,7 @@ class ComicGenPipeline:
         asset_type = task["asset_type"]
         positive_prompt = params.get("effective_positive_prompt", "")
         negative_prompt = params.get("effective_negative_prompt", "")
-        t2i_model = params.get("t2i_model", "wan2.6-t2i")
+        t2i_model = params.get("t2i_model", DEFAULT_T2I_MODEL)
         effective_size = params.get("effective_size", "576*1024")
         batch_size = params.get("batch_size", 1)
         generation_type = params.get("generation_type", "all")
@@ -422,7 +1875,7 @@ class ComicGenPipeline:
                 raise ValueError(f"Scene {asset_id} not found in series")
             self.asset_generator.generate_scene(
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
-                batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                batch_size=batch_size, model_name=t2i_model, size=effective_size, prompt=prompt or "",
             )
         elif asset_type == "prop":
             target = next((p for p in series.props if p.id == asset_id), None)
@@ -430,7 +1883,7 @@ class ComicGenPipeline:
                 raise ValueError(f"Prop {asset_id} not found in series")
             self.asset_generator.generate_prop(
                 target, positive_prompt=positive_prompt, negative_prompt=negative_prompt,
-                batch_size=batch_size, model_name=t2i_model, size=effective_size,
+                batch_size=batch_size, model_name=t2i_model, size=effective_size, prompt=prompt or "",
             )
         else:
             raise ValueError(f"Unknown asset type: {asset_type}")
@@ -841,10 +2294,12 @@ class ComicGenPipeline:
         if not script:
             raise ValueError("Script not found")
         
+        normalized_style_config = _normalize_art_direction_style_config(style_config)
+
         # Create Art Direction object
         art_direction = ArtDirection(
             selected_style_id=selected_style_id,
-            style_config=style_config,
+            style_config=normalized_style_config,
             custom_styles=custom_styles or [],
             ai_recommendations=ai_recommendations or []
         )
@@ -855,6 +2310,350 @@ class ComicGenPipeline:
         return script
 
     # === STORYBOARD DRAMATIZATION v2 ===
+
+    def _build_storyboard_entities_json(
+        self,
+        all_characters: List[Character],
+        all_scenes: List[Scene],
+        all_props: List[Any],
+    ) -> Dict[str, Any]:
+        return {
+            "characters": [{"id": c.id, "name": c.name, "description": c.description} for c in all_characters],
+            "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in all_scenes],
+            "props": [{"id": p.id, "name": p.name, "description": p.description} for p in all_props],
+        }
+
+    def _find_story_beat(self, story_analysis: Optional[StoryAnalysis], beat_id: str) -> Optional[StoryBeat]:
+        if not story_analysis or not beat_id:
+            return None
+        return next((beat for beat in story_analysis.scene_beats if beat.id == beat_id), None)
+
+    def _resolve_story_beat_for_frame(
+        self,
+        frame_data: Dict[str, Any],
+        story_analysis: Optional[StoryAnalysis],
+        *,
+        sequence_cursor: int = 0,
+        default_beat: Optional[StoryBeat] = None,
+    ) -> Optional[StoryBeat]:
+        explicit_id = str(frame_data.get("story_beat_id", "") or "").strip()
+        explicit_title = str(frame_data.get("story_beat_title", "") or "").strip()
+        scene_ref_name = str(frame_data.get("scene_ref_name", "") or "").strip()
+        character_names = {
+            str(name or "").strip()
+            for name in frame_data.get("character_ref_names", []) or []
+            if str(name or "").strip()
+        }
+        prop_names = {
+            str(name or "").strip()
+            for name in frame_data.get("prop_ref_names", []) or []
+            if str(name or "").strip()
+        }
+
+        logger.debug(
+            "Story beat resolve start: explicit_id=%s explicit_title=%s scene_ref=%s character_refs=%s prop_refs=%s sequence_cursor=%s candidate_count=%s",
+            explicit_id or "-",
+            explicit_title or "-",
+            scene_ref_name or "-",
+            sorted(character_names) or [],
+            sorted(prop_names) or [],
+            sequence_cursor,
+            len(story_analysis.scene_beats) if story_analysis and story_analysis.scene_beats else 0,
+        )
+
+        if default_beat:
+            logger.debug(
+                "Story beat resolve: using default beat beat_id=%s order=%s title=%s chapter_order=%s chapter_title=%s",
+                default_beat.id,
+                default_beat.order,
+                default_beat.title,
+                default_beat.chapter_order,
+                default_beat.chapter_title or "-",
+            )
+            return default_beat
+        if not story_analysis or not story_analysis.scene_beats:
+            logger.debug("Story beat resolve: no structured beats available, returning None")
+            return None
+
+        if explicit_id:
+            matched = self._find_story_beat(story_analysis, explicit_id)
+            logger.debug(
+                "Story beat resolve: explicit id lookup beat_id=%s matched=%s",
+                explicit_id,
+                matched.id if matched else "none",
+            )
+            if matched:
+                return matched
+
+        if explicit_title:
+            for beat in story_analysis.scene_beats:
+                if beat.title == explicit_title or explicit_title in beat.title or beat.title in explicit_title:
+                    logger.debug(
+                        "Story beat resolve: explicit title lookup matched beat_id=%s order=%s title=%s",
+                        beat.id,
+                        beat.order,
+                        beat.title,
+                    )
+                    return beat
+            logger.debug("Story beat resolve: explicit title lookup found no direct match for title=%s", explicit_title)
+
+        best_match: Optional[StoryBeat] = None
+        best_score = 0.0
+        for beat in story_analysis.scene_beats:
+            beat_scene_name = str(beat.scene_name or beat.location_hint or "").strip()
+            scene_score = 0.0
+            scene_match_detail = "none"
+            if scene_ref_name and beat_scene_name:
+                if beat_scene_name == scene_ref_name:
+                    scene_score += 5
+                    scene_match_detail = "exact(+5)"
+                elif scene_ref_name in beat_scene_name or beat_scene_name in scene_ref_name:
+                    scene_score += 3
+                    scene_match_detail = "partial(+3)"
+
+            beat_character_names = {
+                str(name or "").strip()
+                for name in beat.character_names
+                if str(name or "").strip()
+            }
+            beat_prop_names = {
+                str(name or "").strip()
+                for name in beat.prop_names
+                if str(name or "").strip()
+            }
+            matched_characters = sorted(character_names.intersection(beat_character_names))
+            matched_props = sorted(prop_names.intersection(beat_prop_names))
+            character_score = 2 * len(matched_characters)
+            prop_score = 1 * len(matched_props)
+            sequence_bonus = 0.25 if beat.order >= sequence_cursor else 0.0
+            score = scene_score + character_score + prop_score + sequence_bonus
+
+            logger.debug(
+                "Story beat resolve candidate: beat_id=%s order=%s title=%s scene_match=%s scene_score=%.2f matched_characters=%s character_score=%.2f matched_props=%s prop_score=%.2f sequence_bonus=%.2f total=%.2f",
+                beat.id,
+                beat.order,
+                beat.title,
+                scene_match_detail,
+                scene_score,
+                matched_characters or [],
+                character_score,
+                matched_props or [],
+                prop_score,
+                sequence_bonus,
+                score,
+            )
+
+            if score > best_score:
+                best_score = score
+                best_match = beat
+
+        logger.debug(
+            "Story beat resolve result: best_match=%s best_order=%s best_title=%s best_score=%.2f sequence_cursor=%s",
+            best_match.id if best_match else "none",
+            best_match.order if best_match else "none",
+            best_match.title if best_match else "none",
+            best_score,
+            sequence_cursor,
+        )
+        if best_match and best_score > 0:
+            return best_match
+
+        if len(story_analysis.scene_beats) == 1:
+            logger.debug(
+                "Story beat resolve: falling back to the only structured beat beat_id=%s order=%s title=%s",
+                story_analysis.scene_beats[0].id,
+                story_analysis.scene_beats[0].order,
+                story_analysis.scene_beats[0].title,
+            )
+            return story_analysis.scene_beats[0]
+
+        return None
+
+    def _convert_raw_frames_to_storyboard_frames(
+        self,
+        raw_frames: List[Dict[str, Any]],
+        all_characters: List[Character],
+        all_scenes: List[Scene],
+        all_props: List[Any],
+        story_analysis: Optional[StoryAnalysis],
+        *,
+        default_beat: Optional[StoryBeat] = None,
+    ) -> List[StoryboardFrame]:
+        new_frames: List[StoryboardFrame] = []
+        current_beat_order = default_beat.order if default_beat else 0
+
+        for frame_data in raw_frames:
+            scene_ref_name = str(frame_data.get("scene_ref_name", "") or "").strip()
+            scene_id = None
+            for scene in all_scenes:
+                if scene.name == scene_ref_name or (scene_ref_name and scene_ref_name in scene.name):
+                    scene_id = scene.id
+                    break
+            if not scene_id and all_scenes:
+                scene_id = all_scenes[0].id
+            elif not scene_id:
+                scene_id = str(uuid.uuid4())
+
+            character_ids: List[str] = []
+            for char_name in frame_data.get("character_ref_names", []) or []:
+                for char in all_characters:
+                    if char.name == char_name or (char_name and char_name in char.name):
+                        character_ids.append(char.id)
+                        break
+
+            prop_ids: List[str] = []
+            for prop_name in frame_data.get("prop_ref_names", []) or []:
+                for prop in all_props:
+                    if prop.name == prop_name or (prop_name and prop_name in prop.name):
+                        prop_ids.append(prop.id)
+                        break
+
+            story_beat = self._resolve_story_beat_for_frame(
+                frame_data,
+                story_analysis,
+                sequence_cursor=current_beat_order,
+                default_beat=default_beat,
+            )
+            if story_beat:
+                current_beat_order = max(current_beat_order, story_beat.order)
+
+            dialogue = frame_data.get("dialogue")
+            speaker = frame_data.get("speaker")
+            if isinstance(dialogue, dict):
+                speaker = dialogue.get("speaker") or speaker
+                dialogue = dialogue.get("text")
+
+            new_frames.append(
+                StoryboardFrame(
+                    id=str(uuid.uuid4()),
+                    scene_id=scene_id,
+                    story_beat_id=story_beat.id if story_beat else str(frame_data.get("story_beat_id", "") or "").strip() or None,
+                    story_beat_title=story_beat.title if story_beat else str(frame_data.get("story_beat_title", "") or "").strip() or None,
+                    story_beat_order=story_beat.order if story_beat else None,
+                    chapter_order=story_beat.chapter_order if story_beat else frame_data.get("chapter_order"),
+                    chapter_title=story_beat.chapter_title if story_beat else str(frame_data.get("chapter_title", "") or "").strip() or None,
+                    character_ids=character_ids,
+                    prop_ids=prop_ids,
+                    action_description=frame_data.get("action_description", ""),
+                    visual_atmosphere=frame_data.get("visual_atmosphere"),
+                    shot_size=frame_data.get("shot_size"),
+                    camera_angle=frame_data.get("camera_angle", "平视"),
+                    camera_movement=frame_data.get("camera_movement"),
+                    dialogue=dialogue,
+                    speaker=speaker,
+                    status=GenerationStatus.PENDING,
+                )
+            )
+
+        return new_frames
+
+    def _replace_story_beat_frames(
+        self,
+        script: Script,
+        beat_id: str,
+        new_frames: List[StoryboardFrame],
+        story_analysis: Optional[StoryAnalysis],
+    ) -> None:
+        existing_indices = [index for index, frame in enumerate(script.frames) if frame.story_beat_id == beat_id]
+        remaining_frames = [frame for frame in script.frames if frame.story_beat_id != beat_id]
+
+        if existing_indices:
+            insert_at = sum(
+                1
+                for frame in script.frames[: min(existing_indices)]
+                if frame.story_beat_id != beat_id
+            )
+        else:
+            target_beat = self._find_story_beat(story_analysis, beat_id)
+            target_order = target_beat.order if target_beat else None
+            insert_at = len(remaining_frames)
+            if target_order is not None:
+                for index, frame in enumerate(remaining_frames):
+                    frame_order = frame.story_beat_order if frame.story_beat_order is not None else float("inf")
+                    if frame_order > target_order:
+                        insert_at = index
+                        break
+
+        script.frames = remaining_frames[:insert_at] + new_frames + remaining_frames[insert_at:]
+
+    def get_story_analysis(self, script_id: str) -> StoryAnalysis:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+
+        if script.story_analysis and script.story_analysis.scene_beats:
+            return script.story_analysis
+
+        resolved = self.resolve_episode_assets(script)
+        story_analysis = self.script_processor.build_story_analysis(
+            script.original_text,
+            resolved["characters"],
+            resolved["scenes"],
+            resolved["props"],
+        )
+        script.story_analysis = story_analysis
+        script.updated_at = time.time()
+        self._save_data()
+        return story_analysis
+
+    def update_story_beat(self, script_id: str, beat_id: str, **updates) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+
+        story_analysis = self.get_story_analysis(script_id)
+        beat = self._find_story_beat(story_analysis, beat_id)
+        if not beat:
+            raise ValueError("Story beat not found")
+
+        allowed_fields = ("action_summary", "dialogue_excerpt", "storyboard_goal")
+        for field in allowed_fields:
+            if field in updates and updates[field] is not None:
+                setattr(beat, field, str(updates[field]).strip())
+
+        script.story_analysis = story_analysis
+        script.updated_at = time.time()
+        self._save_data()
+        return script
+
+    def analyze_story_beat_to_frames(self, script_id: str, beat_id: str) -> Script:
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+
+        logger.info(f"Analyzing story beat %s to frames for project %s", beat_id, script_id)
+        resolved = self.resolve_episode_assets(script)
+        all_characters = resolved["characters"]
+        all_scenes = resolved["scenes"]
+        all_props = resolved["props"]
+        entities_json = self._build_storyboard_entities_json(all_characters, all_scenes, all_props)
+        story_analysis = self.get_story_analysis(script_id)
+        target_beat = self._find_story_beat(story_analysis, beat_id)
+        if not target_beat:
+            raise ValueError("Story beat not found")
+
+        raw_frames = self.script_processor.analyze_to_storyboard(
+            text=script.original_text,
+            entities_json=entities_json,
+            story_analysis=story_analysis,
+            target_beat_id=beat_id,
+        )
+        if not raw_frames:
+            raise RuntimeError("AI 场次分镜重算未返回任何帧数据，请重试。")
+
+        new_frames = self._convert_raw_frames_to_storyboard_frames(
+            raw_frames,
+            all_characters,
+            all_scenes,
+            all_props,
+            story_analysis,
+            default_beat=target_beat,
+        )
+        self._replace_story_beat_frames(script, beat_id, new_frames, story_analysis)
+        script.story_analysis = story_analysis
+        script.updated_at = time.time()
+        self._save_data()
+        return script
 
     def analyze_text_to_frames(self, script_id: str, text: str) -> Script:
         """
@@ -872,78 +2671,32 @@ class ComicGenPipeline:
         all_characters = resolved["characters"]
         all_scenes = resolved["scenes"]
         all_props = resolved["props"]
+        entities_json = self._build_storyboard_entities_json(all_characters, all_scenes, all_props)
 
-        # Build entities JSON from resolved characters, scenes, props
-        entities_json = {
-            "characters": [{"id": c.id, "name": c.name, "description": c.description} for c in all_characters],
-            "scenes": [{"id": s.id, "name": s.name, "description": s.description} for s in all_scenes],
-            "props": [{"id": p.id, "name": p.name, "description": p.description} for p in all_props],
-        }
+        story_analysis = (
+            script.story_analysis
+            if script.original_text == text and getattr(script, "story_analysis", None)
+            else self.script_processor.build_story_analysis(text, all_characters, all_scenes, all_props)
+        )
 
         # Call LLM to analyze text (may raise RuntimeError on parse failure)
-        raw_frames = self.script_processor.analyze_to_storyboard(text, entities_json)
+        raw_frames = self.script_processor.analyze_to_storyboard(text, entities_json, story_analysis)
 
         if not raw_frames:
             raise RuntimeError("AI 分镜分析未返回任何帧数据，请重试。")
 
-        # Convert raw frame dicts to StoryboardFrame objects
-        new_frames = []
-        for idx, frame_data in enumerate(raw_frames):
-            # Resolve scene ID by name
-            scene_ref_name = frame_data.get("scene_ref_name", "")
-            scene_id = None
-            for scene in all_scenes:
-                if scene.name == scene_ref_name or scene_ref_name in scene.name:
-                    scene_id = scene.id
-                    break
-            if not scene_id and all_scenes:
-                scene_id = all_scenes[0].id  # Fallback to first scene
-            elif not scene_id:
-                scene_id = str(uuid.uuid4())  # Generate a placeholder ID
+        new_frames = self._convert_raw_frames_to_storyboard_frames(
+            raw_frames,
+            all_characters,
+            all_scenes,
+            all_props,
+            story_analysis,
+        )
 
-            # Resolve character IDs by names
-            char_ref_names = frame_data.get("character_ref_names", [])
-            character_ids = []
-            for char_name in char_ref_names:
-                for char in all_characters:
-                    if char.name == char_name or char_name in char.name:
-                        character_ids.append(char.id)
-                        break
-
-            # Resolve prop IDs by names
-            prop_ref_names = frame_data.get("prop_ref_names", [])
-            prop_ids = []
-            for prop_name in prop_ref_names:
-                for prop in all_props:
-                    if prop.name == prop_name or prop_name in prop.name:
-                        prop_ids.append(prop.id)
-                        break
-            
-            frame = StoryboardFrame(
-                id=str(uuid.uuid4()),
-                scene_id=scene_id,
-                character_ids=character_ids,
-                prop_ids=prop_ids,
-                # Action description - now a unified field combining character acting and physics
-                action_description=frame_data.get("action_description", ""),
-                # Visual atmosphere
-                visual_atmosphere=frame_data.get("visual_atmosphere"),
-                # Camera parameters
-                shot_size=frame_data.get("shot_size"),
-                camera_angle=frame_data.get("camera_angle", "平视"),
-                camera_movement=frame_data.get("camera_movement"),
-                # Dialogue
-                dialogue=frame_data.get("dialogue"),
-                speaker=frame_data.get("speaker"),
-                # Status
-                status=GenerationStatus.PENDING
-            )
-            new_frames.append(frame)
-        
-        # Replace existing frames with new ones
         script.frames = new_frames
+        script.story_analysis = story_analysis
         script.updated_at = time.time()
-        
+
         logger.info(f"Generated {len(new_frames)} frames from text analysis")
         self._save_data()
         return script
@@ -1301,37 +3054,67 @@ class ComicGenPipeline:
             
             # Resolve multiple paths
             for url in ref_image_urls:
-                if not url:
-                    continue
-                if is_object_key(url) or url.startswith("http"):
-                    ref_image_paths.append(url)
-                else:
-                    potential_path = _safe_resolve_path("output", url)
-                    if os.path.exists(potential_path):
-                        ref_image_paths.append(potential_path)
+                resolved_url = _resolve_reference_path(url)
+                if resolved_url:
+                    ref_image_paths.append(resolved_url)
             
             # Also handle single path if provided (legacy support)
             if ref_image_url and ref_image_url not in ref_image_urls:
-                if is_object_key(ref_image_url) or ref_image_url.startswith("http"):
-                    if ref_image_url not in ref_image_paths:
-                        ref_image_paths.append(ref_image_url)
-                else:
-                    potential_path = _safe_resolve_path("output", ref_image_url)
-                    if os.path.exists(potential_path):
-                        if potential_path not in ref_image_paths:
-                            ref_image_paths.append(potential_path)
-            
-            # Use the first path as ref_image_path for legacy generator support if needed
-            ref_image_path = ref_image_paths[0] if ref_image_paths else None
-            
-            # Use the prompt as-is from frontend (already contains style)
-            final_prompt = prompt
-            
-            # Update frame with final prompt
-            frame.image_prompt = final_prompt
+                resolved_single = _resolve_reference_path(ref_image_url)
+                if resolved_single and resolved_single not in ref_image_paths:
+                    ref_image_paths.append(resolved_single)
+
+            continuity_lock = True
+            if composition_data and "continuity_lock" in composition_data:
+                continuity_lock = bool(composition_data.get("continuity_lock"))
             
             # Find scene for this frame
             scene = next((s for s in script.scenes if s.id == frame.scene_id), None)
+            frame_index = script.frames.index(frame)
+            previous_frame = script.frames[frame_index - 1] if frame_index > 0 else None
+            next_frame = script.frames[frame_index + 1] if frame_index < len(script.frames) - 1 else None
+
+            if continuity_lock and previous_frame and previous_frame.scene_id == frame.scene_id:
+                previous_ref = _resolve_reference_path(_get_selected_frame_reference(previous_frame))
+                if previous_ref and previous_ref not in ref_image_paths:
+                    ref_image_paths.insert(0, previous_ref)
+
+            if continuity_lock and next_frame and next_frame.scene_id == frame.scene_id:
+                next_ref = _resolve_reference_path(_get_selected_frame_reference(next_frame))
+                if next_ref and next_ref not in ref_image_paths:
+                    ref_image_paths.append(next_ref)
+
+            for asset_ref in self._collect_frame_asset_reference_paths(script, frame, scene):
+                if asset_ref not in ref_image_paths:
+                    ref_image_paths.append(asset_ref)
+
+            style_config = script.art_direction.style_config if script.art_direction else None
+            for style_ref in _get_art_direction_reference_paths(style_config):
+                if style_ref not in ref_image_paths:
+                    ref_image_paths.append(style_ref)
+
+            continuity_hint = ""
+            if continuity_lock and ((previous_frame and previous_frame.scene_id == frame.scene_id) or (
+                next_frame and next_frame.scene_id == frame.scene_id
+            )):
+                continuity_hint = build_storyboard_continuity_hint(
+                    scene_name=scene.name if scene else None,
+                    previous_action=previous_frame.action_description if previous_frame and previous_frame.scene_id == frame.scene_id else None,
+                    next_action=next_frame.action_description if next_frame and next_frame.scene_id == frame.scene_id else None,
+                )
+
+            # Use the prompt as-is from frontend, but append continuity guardrails when this is the same scene.
+            core_prompt = prompt or ""
+            final_prompt = core_prompt
+            style_prompt = _build_art_direction_style_prompt(style_config)
+            if style_prompt and style_prompt not in final_prompt:
+                final_prompt = f"{style_prompt}. {final_prompt}".strip(". ").strip()
+            if continuity_hint and continuity_hint not in final_prompt:
+                final_prompt = f"{final_prompt.rstrip()} {continuity_hint}".strip()
+
+            # Remove duplicates and expose first path for legacy support
+            ref_image_paths = list(dict.fromkeys(ref_image_paths))
+            frame.image_prompt = final_prompt
 
             # Get effective size from storyboard_aspect_ratio
             from .assets import ASPECT_RATIO_TO_SIZE
@@ -1340,7 +3123,39 @@ class ComicGenPipeline:
             
             # Use model from settings
             i2i_model = script.model_settings.i2i_model
-            logger.info(f"Rendering frame {frame_id} using model {i2i_model} with {len(ref_image_paths)} reference images")
+            render_model = i2i_model
+            suppress_auto_references = False
+            safe_render_strategy = _build_safe_storyboard_render_strategy(
+                frame=frame,
+                scene=scene,
+                characters=script.characters,
+                props=script.props,
+                prompt=core_prompt,
+                ref_image_paths=ref_image_paths,
+                model_name=i2i_model,
+            )
+            if safe_render_strategy:
+                frame.composition_data = dict(frame.composition_data or {})
+                frame.composition_data["render_strategy"] = safe_render_strategy
+                suppress_auto_references = True
+                ref_image_paths = []
+                render_model = script.model_settings.t2i_model
+                staged_prompt_note = (
+                    "分阶段基础构图要求：本次先生成完整基础构图，不使用参考图直接图编；"
+                    "人物保持日常、清醒、克制，不出现手术、血液、插管、急救、伤口或危重画面；"
+                    "后续只用单参考图局部编辑分别校准人物身份、服装和道具。"
+                )
+                if staged_prompt_note not in final_prompt:
+                    final_prompt = f"{final_prompt.rstrip()}\n\n{staged_prompt_note}".strip()
+                frame.image_prompt = final_prompt
+                logger.info(
+                    "Using staged safe storyboard render for frame %s; omitted %s references.",
+                    frame_id,
+                    safe_render_strategy["omitted_reference_count"],
+                )
+
+            ref_image_path = ref_image_paths[0] if ref_image_paths else None
+            logger.info(f"Rendering frame {frame_id} using model {render_model} with {len(ref_image_paths)} reference images")
             if len(ref_image_urls) > 0:
                 logger.debug(f"Original reference URLs from frontend: {ref_image_urls}")
 
@@ -1354,7 +3169,9 @@ class ComicGenPipeline:
                 prompt=final_prompt,
                 batch_size=batch_size,
                 size=effective_size,
-                model_name=i2i_model
+                model_name=render_model,
+                raise_on_error=True,
+                suppress_auto_references=suppress_auto_references,
             )
             
             self._save_data()
@@ -1383,6 +3200,119 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
+    def compose_frame_crops(
+        self,
+        script_id: str,
+        frame_id: str,
+        manifest_path: Optional[str] = None,
+        output_path: Optional[str] = None,
+        verify: bool = True,
+    ) -> Script:
+        """Compose edited crop outputs into a selected rendered frame variant."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+
+        frame = next((f for f in script.frames if f.id == frame_id), None)
+        if not frame:
+            raise ValueError(f"Frame {frame_id} not found")
+
+        frame.status = GenerationStatus.PROCESSING
+        self._save_data()
+
+        try:
+            if manifest_path:
+                resolved_manifest_path = _ensure_project_path(
+                    resolve_manifest_path(manifest_path),
+                    "manifest_path",
+                )
+            else:
+                resolved_manifest_path = _resolve_fixture_crop_manifest_path(script, frame)
+                if not resolved_manifest_path:
+                    raise ValueError(
+                        f"No default crop composition manifest found for frame {frame_id}."
+                    )
+
+            resolved_output_override = None
+            if output_path:
+                resolved_output_override = _ensure_output_path(
+                    resolve_manifest_path(output_path)
+                )
+
+            compose_result = compose_frame_crops_from_manifest(
+                resolved_manifest_path,
+                out_override=resolved_output_override,
+                verify=verify,
+            )
+            composed_path = _ensure_output_path(compose_result["output_image"])
+
+            from ...utils.oss_utils import OSSImageUploader
+
+            uploader = OSSImageUploader()
+            oss_url = uploader.upload_image(str(composed_path))
+            image_url = oss_url if oss_url else output_media_ref(str(composed_path))
+
+            variant = ImageVariant(
+                id=str(uuid.uuid4()),
+                url=image_url,
+                prompt_used=(
+                    "Composed frame crops from "
+                    f"{_project_relative_path(resolved_manifest_path)}"
+                ),
+                is_uploaded_source=False,
+                upload_type="image",
+            )
+
+            if not frame.rendered_image_asset:
+                frame.rendered_image_asset = ImageAsset()
+
+            frame.rendered_image_asset.variants.append(variant)
+            frame.rendered_image_asset.selected_id = variant.id
+            frame.rendered_image_url = image_url
+            frame.image_url = image_url
+            frame.status = GenerationStatus.COMPLETED
+            frame.updated_at = time.time()
+
+            crop_composition = {
+                "source": "compose_frame_crops",
+                "manifest_path": _project_relative_path(resolved_manifest_path),
+                "base_image": _project_relative_path(compose_result["base_image"]),
+                "output_image": output_media_ref(str(composed_path)),
+                "image_url": image_url,
+                "frame_id": compose_result.get("frame_id") or frame_id,
+                "project_slug": compose_result.get("project_slug") or script.fixture_slug,
+                "schema_version": compose_result.get("schema_version"),
+                "verified": verify,
+                "composed_at": time.time(),
+                "crops": [
+                    {
+                        "id": crop["id"],
+                        "role": crop.get("role"),
+                        "bbox": crop["bbox"],
+                        "base_crop": (
+                            _project_relative_path(crop["base_crop"])
+                            if crop.get("base_crop")
+                            else None
+                        ),
+                        "edited_crop": _project_relative_path(crop["edited_crop"]),
+                        "prompt": crop.get("prompt"),
+                        "reference_images": list(crop.get("reference_images") or []),
+                    }
+                    for crop in compose_result["crops"]
+                ],
+            }
+            frame.composition_data = dict(frame.composition_data or {})
+            frame.composition_data["crop_composition"] = crop_composition
+
+            script.updated_at = time.time()
+            self._save_data()
+            return script
+        except Exception:
+            frame.status = GenerationStatus.FAILED
+            frame.updated_at = time.time()
+            self._save_data()
+            raise
+
     def generate_video(self, script_id: str) -> Script:
         """Step 4: Generate video clips."""
         script = self.scripts.get(script_id)
@@ -1393,7 +3323,7 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
-    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = "wan2.6-i2v", frame_id: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None) -> Tuple[Script, str]:
+    def create_video_task(self, script_id: str, image_url: str, prompt: str, duration: int = 5, seed: int = None, resolution: str = "720p", generate_audio: bool = False, audio_url: str = None, prompt_extend: bool = True, negative_prompt: str = None, model: str = DEFAULT_I2V_MODEL, frame_id: str = None, aspect_ratio: str = None, watermark: bool = False, camera_fixed: bool = None, reference_audio_url: str = None, seedance_reference_mode: str = None, seedance_workflow: str = None, seedance_extend_mode: str = None, seedance_edit_mode: str = None, shot_type: str = "single", generation_mode: str = "i2v", reference_video_urls: list = None, mode: str = None, sound: str = None, cfg_scale: float = None, vidu_audio: bool = None, movement_amplitude: str = None) -> Tuple[Script, str]:
         """Creates a new video generation task."""
         script = self.get_script(script_id)
         if not script:
@@ -1448,6 +3378,14 @@ class ComicGenPipeline:
             prompt_extend=prompt_extend,
             negative_prompt=negative_prompt,
             model=model,
+            aspect_ratio=aspect_ratio,
+            watermark=watermark,
+            camera_fixed=camera_fixed,
+            reference_audio_url=reference_audio_url,
+            seedance_reference_mode=seedance_reference_mode,
+            seedance_workflow=seedance_workflow,
+            seedance_extend_mode=seedance_extend_mode,
+            seedance_edit_mode=seedance_edit_mode,
             shot_type=shot_type,
             generation_mode=generation_mode,
             reference_video_urls=reference_video_urls or [],
@@ -1528,7 +3466,7 @@ class ComicGenPipeline:
         from ...utils.oss_utils import OSSImageUploader
         uploader = OSSImageUploader()
         oss_url = uploader.upload_image(output_path)
-        image_url = oss_url if oss_url else os.path.relpath(output_path, "output")
+        image_url = oss_url if oss_url else output_media_ref(output_path)
 
         # Create new variant
         variant = ImageVariant(
@@ -1557,7 +3495,8 @@ class ComicGenPipeline:
         from .models import ImageVariant, ImageAsset
 
         # Validate that image_path is inside the output directory
-        safe_path = _safe_resolve_path("output", os.path.relpath(image_path, "output") if os.path.isabs(image_path) else image_path)
+        safe_rel_path = output_media_ref(image_path) if os.path.isabs(image_path) else normalize_project_media_ref(image_path)
+        safe_path = _safe_resolve_path("output", safe_rel_path)
 
         script = self.get_script(script_id)
         if not script:
@@ -1571,7 +3510,7 @@ class ComicGenPipeline:
         from ...utils.oss_utils import OSSImageUploader
         uploader = OSSImageUploader()
         oss_url = uploader.upload_image(safe_path)
-        image_url = oss_url if oss_url else os.path.relpath(safe_path, "output")
+        image_url = oss_url if oss_url else output_media_ref(safe_path)
 
         # Create new variant
         variant = ImageVariant(
@@ -2013,6 +3952,7 @@ class ComicGenPipeline:
             model_name_lower = model_name.lower()
             backend = self._resolve_video_backend(model_name)
             use_vendor_kling = backend == "vendor" and model_name_lower.startswith("kling-")
+            use_vendor_seedance = backend == "vendor" and model_name_lower.startswith("doubao-seedance-")
             use_vendor_vidu = backend == "vendor" and (
                 model_name_lower.startswith("vidu")
                 or model_name_lower.startswith("viduq2")
@@ -2036,6 +3976,47 @@ class ComicGenPipeline:
                     mode=task.mode or "std",
                     sound=task.sound or "off",
                     cfg_scale=task.cfg_scale,
+                )
+            elif use_vendor_seedance:
+                if self._seedance_model is None:
+                    from ...models.seedance import SeedanceModel
+                    self._seedance_model = SeedanceModel({})
+                if final_audio_url:
+                    logger.warning(
+                        "Seedance currently does not support audio_url-driven video generation. "
+                        "Ignoring audio_url for task %s.",
+                        task.id,
+                    )
+                reference_mode = task.seedance_reference_mode or (
+                    "combo" if task.image_url and task.reference_video_urls else
+                    "video" if task.reference_video_urls else
+                    "image"
+                )
+                workflow = task.seedance_workflow or "standard"
+                workflow_mode = None
+                if workflow == "extend":
+                    workflow_mode = task.seedance_extend_mode or "continue"
+                elif workflow == "edit":
+                    workflow_mode = task.seedance_edit_mode or "subject_replace"
+                video_path, _ = self._seedance_model.generate(
+                    prompt=task.prompt,
+                    output_path=output_path,
+                    img_url=img_url,
+                    img_path=img_path,
+                    duration=task.duration,
+                    model=task.model,
+                    resolution=task.resolution,
+                    aspect_ratio=task.aspect_ratio or "adaptive",
+                    seed=task.seed,
+                    generate_audio=final_generate_audio,
+                    audio_url=final_audio_url,
+                    reference_audio_url=task.reference_audio_url,
+                    reference_video_urls=task.reference_video_urls,
+                    reference_mode=reference_mode,
+                    workflow=workflow,
+                    workflow_mode=workflow_mode,
+                    watermark=bool(task.watermark),
+                    camera_fixed=task.camera_fixed,
                 )
             elif use_vendor_vidu:
                 # Use Vidu model (cached)
@@ -2077,7 +4058,7 @@ class ComicGenPipeline:
                     subject_motion=None
                 )
             
-            task.video_url = os.path.relpath(output_path, "output")
+            task.video_url = output_media_ref(output_path)
             task.status = "completed"
             
             # Sync with asset if this is an asset video
@@ -2188,7 +4169,7 @@ class ComicGenPipeline:
             status="pending",
             duration=duration,
             resolution=resolution,
-            model="wan2.6-i2v", # Asset video uses I2V
+            model=script.model_settings.i2v_model or DEFAULT_I2V_MODEL, # Asset video uses project's I2V model
             created_at=time.time()
         )
         
@@ -2252,6 +4233,22 @@ class ComicGenPipeline:
         self._save_data()
         return script
 
+    def _get_frame_audio_duration(self, script: Script, frame: StoryboardFrame) -> float:
+        """Resolve a frame duration from its selected video task or fall back to a safe default."""
+        selected_task = None
+        if frame.selected_video_id:
+            selected_task = next((task for task in script.video_tasks if task.id == frame.selected_video_id), None)
+        if not selected_task and frame.video_url:
+            selected_task = next((task for task in script.video_tasks if task.video_url == frame.video_url), None)
+
+        if selected_task and selected_task.duration:
+            try:
+                return max(1.0, float(selected_task.duration))
+            except (TypeError, ValueError):
+                pass
+
+        return 5.0
+
     def generate_audio(self, script_id: str) -> Script:
         """Step 5: Generate audio (Dialogue & SFX)."""
         script = self.scripts.get(script_id)
@@ -2261,6 +4258,8 @@ class ComicGenPipeline:
         logger.info(f"Generating audio for script {script.id}")
         
         for frame in script.frames:
+            frame.audio_error = None
+
             # Generate Dialogue
             if frame.dialogue:
                 speaker = None
@@ -2275,18 +4274,66 @@ class ComicGenPipeline:
                         volume=speaker.voice_volume
                     )
             
+            frame_duration = self._get_frame_audio_duration(script, frame)
+
             # Generate SFX (Text-to-Audio)
             if frame.action_description:
-                self.audio_generator.generate_sfx(frame)
+                self.audio_generator.generate_sfx(frame, duration=min(frame_duration, 3.0))
                 
             # Generate SFX (Video-to-Audio) - if video exists
             if frame.video_url:
                 self.audio_generator.generate_sfx_from_video(frame)
                 
             # Generate BGM
-            # Simple logic: generate BGM for every frame (or scene start)
-            self.audio_generator.generate_bgm(frame)
+            self.audio_generator.generate_bgm(
+                frame,
+                duration=frame_duration,
+                context=" ".join(
+                    value for value in [frame.action_description or "", frame.dialogue or "", frame.visual_atmosphere or ""] if value
+                ),
+            )
                 
+        self._save_data()
+        return script
+
+    def generate_sfx(self, script_id: str) -> Script:
+        """Step 5a: Generate only SFX tracks for all frames."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+
+        logger.info(f"Generating SFX for script {script.id}")
+
+        for frame in script.frames:
+            frame.audio_error = None
+            if frame.action_description:
+                frame_duration = self._get_frame_audio_duration(script, frame)
+                self.audio_generator.generate_sfx(frame, duration=min(frame_duration, 3.0))
+            if frame.video_url:
+                self.audio_generator.generate_sfx_from_video(frame)
+
+        self._save_data()
+        return script
+
+    def generate_bgm(self, script_id: str) -> Script:
+        """Step 5b: Generate only BGM tracks for all frames."""
+        script = self.scripts.get(script_id)
+        if not script:
+            raise ValueError("Script not found")
+
+        logger.info(f"Generating BGM for script {script.id}")
+
+        for frame in script.frames:
+            frame.audio_error = None
+            frame_duration = self._get_frame_audio_duration(script, frame)
+            self.audio_generator.generate_bgm(
+                frame,
+                duration=frame_duration,
+                context=" ".join(
+                    value for value in [frame.action_description or "", frame.dialogue or "", frame.visual_atmosphere or ""] if value
+                ),
+            )
+
         self._save_data()
         return script
 
@@ -2300,6 +4347,7 @@ class ComicGenPipeline:
         if not frame:
             raise ValueError("Frame not found")
             
+        frame.audio_error = None
         if frame.dialogue:
             speaker = None
             if frame.character_ids:
@@ -2598,7 +4646,7 @@ class ComicGenPipeline:
         try:
             os.makedirs(os.path.dirname(self.series_data_file) or ".", exist_ok=True)
             with open(self.series_data_file, 'w') as f:
-                json.dump({k: v.model_dump() for k, v in self.series_store.items()}, f, indent=2)
+                json.dump({k: _model_dump_compat(v) for k, v in self.series_store.items()}, f, indent=2)
         except Exception as e:
             logger.error(f"Failed to save series data: {e}")
 

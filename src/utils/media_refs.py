@@ -33,6 +33,23 @@ def _output_root(project_root: Optional[str] = None) -> Path:
     return _project_root(project_root) / "output"
 
 
+def normalize_project_media_ref(value: str) -> str:
+    if not isinstance(value, str):
+        return value
+    return value.strip().replace("\\", "/")
+
+
+def output_media_ref(path: str, *, project_root: Optional[str] = None) -> str:
+    output_root = _output_root(project_root).resolve()
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = (_project_root(project_root) / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    rel_path = os.path.relpath(str(candidate), str(output_root))
+    return normalize_project_media_ref(rel_path)
+
+
 def _is_under(path: Path, parent: Path) -> bool:
     try:
         path.resolve().relative_to(parent.resolve())
@@ -42,7 +59,15 @@ def _is_under(path: Path, parent: Path) -> bool:
 
 
 def _normalized_oss_base_path(oss_base_path: Optional[str] = None) -> str:
-    value = oss_base_path if oss_base_path is not None else os.getenv("OSS_BASE_PATH", "lumenx")
+    if oss_base_path is not None:
+        value = oss_base_path
+    else:
+        value = (
+            os.getenv("OSS_BASE_PATH")
+            or os.getenv("TOS_BASE_PATH")
+            or os.getenv("OBJECT_STORAGE_BASE_PATH")
+            or "lumenx"
+        )
     return str(value).strip().strip("'\"/ ")
 
 
@@ -60,20 +85,22 @@ def classify_media_ref(
     if not raw:
         return MEDIA_REF_UNKNOWN
 
-    if raw.startswith("data:"):
+    normalized = normalize_project_media_ref(raw)
+
+    if normalized.startswith("data:"):
         return MEDIA_REF_DATA_URI
 
-    if raw.startswith("blob:"):
+    if normalized.startswith("blob:"):
         return MEDIA_REF_BLOB_URL
 
-    if raw.startswith(("http://", "https://")):
+    if normalized.startswith(("http://", "https://")):
         return MEDIA_REF_REMOTE_URL
 
     output_root = _output_root(project_root)
     if os.path.isabs(raw):
         return MEDIA_REF_LOCAL_PATH if _is_under(Path(raw), output_root) else MEDIA_REF_UNKNOWN
 
-    relative = raw.lstrip("/")
+    relative = normalized.lstrip("/")
     if relative.startswith(LOCAL_MEDIA_PREFIXES):
         return MEDIA_REF_LOCAL_PATH
 
@@ -99,7 +126,7 @@ def resolve_local_media_path(value: str, *, project_root: Optional[str] = None) 
         abs_path = Path(raw).resolve()
         return str(abs_path) if _is_under(abs_path, output_root) else None
 
-    relative = raw.lstrip("/")
+    relative = normalize_project_media_ref(raw).lstrip("/")
     if relative.startswith("output/"):
         relative = relative[len("output/") :]
     elif relative.startswith("outputs/"):

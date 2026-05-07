@@ -1,8 +1,9 @@
-import os
-import logging
 import base64
+import logging
+import mimetypes
+import os
 import time
-from typing import Tuple
+from typing import Any, Tuple
 
 from ..utils.endpoints import get_provider_base_url
 
@@ -37,75 +38,160 @@ I2V_OPTIMIZATION_PROMPT = """你是一个AI视频提示词专家，我需要你�
 用户现有提示词：{original_prompt}"""
 
 
+def _first_non_empty(*values: str) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _normalize_openai_base_url(base_url: str) -> str:
+    normalized = (base_url or "").strip().rstrip("/")
+    for suffix in ("/chat/completions", "/responses"):
+        if normalized.endswith(suffix):
+            normalized = normalized[: -len(suffix)]
+            break
+    return normalized.rstrip("/")
+
+
+def _looks_like_multimodal_model(model_name: str) -> str:
+    normalized = (model_name or "").strip()
+    lowered = normalized.lower()
+    if not normalized:
+        return ""
+    if any(token in lowered for token in ("vl", "vision", "qvq")):
+        return normalized
+    return ""
+
+
 class QwenVLModel:
     def __init__(self, config: dict):
-        self.model_name = config.get('params', {}).get('model_name', 'qwen3.5-plus')
+        self.params = config.get("params", {})
+        configured_model = _first_non_empty(
+            self.params.get("model_name"),
+            os.getenv("OPENAI_MULTIMODAL_MODEL"),
+        )
+        fallback_model = _first_non_empty(
+            _looks_like_multimodal_model(os.getenv("OPENAI_MODEL")),
+            "qwen-vl-max",
+        )
+        self.model_name = configured_model or fallback_model
         self._client = None
+
+        if not configured_model and _looks_like_multimodal_model(os.getenv("OPENAI_MODEL")):
+            logger.info(
+                "OPENAI_MULTIMODAL_MODEL not configured; falling back to OPENAI_MODEL=%s for multimodal prompt optimization.",
+                os.getenv("OPENAI_MODEL"),
+            )
 
     @property
     def api_key(self):
-        api_key = os.getenv("DASHSCOPE_API_KEY")
+        api_key = _first_non_empty(
+            self.params.get("api_key"),
+            os.getenv("OPENAI_MULTIMODAL_API_KEY"),
+            os.getenv("OPENAI_API_KEY"),
+            os.getenv("DASHSCOPE_API_KEY"),
+        )
         if not api_key:
-            logger.warning("Dashscope API Key not found in config or environment variables.")
+            logger.warning("Multimodal API key not found in config or environment variables.")
         return api_key
+
+    @property
+    def base_url(self) -> str:
+        configured_base_url = _first_non_empty(
+            self.params.get("base_url"),
+            os.getenv("OPENAI_MULTIMODAL_BASE_URL"),
+            os.getenv("OPENAI_BASE_URL"),
+        )
+        if configured_base_url:
+            return _normalize_openai_base_url(configured_base_url)
+
+        if os.getenv("DASHSCOPE_API_KEY"):
+            return f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1"
+
+        return "https://api.openai.com/v1"
 
     def _get_client(self):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
         if self._client is None:
             try:
                 from openai import OpenAI
-            except ImportError:
-                raise RuntimeError("openai package not installed. Run: pip install openai>=1.0.0")
+            except ImportError as exc:
+                raise RuntimeError(
+                    "openai package not installed. Run: pip install openai>=1.0.0"
+                ) from exc
+
             self._client = OpenAI(
                 api_key=self.api_key,
-                base_url=f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1",
+                base_url=self.base_url,
                 timeout=120.0,
             )
         return self._client
 
     def _encode_image_to_base64(self, image_path: str) -> str:
-        """Convert local image to base64 string"""
+        """Convert local image to base64 string."""
         with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
+            return base64.b64encode(image_file.read()).decode("utf-8")
+
+    def _to_image_url(self, image_path: str) -> str:
+        if image_path.startswith(("http://", "https://", "data:")):
+            return image_path
+
+        base64_image = self._encode_image_to_base64(image_path)
+        mime_type, _ = mimetypes.guess_type(image_path)
+        return f"data:{mime_type or 'image/png'};base64,{base64_image}"
+
+    def _extract_text(self, content: Any) -> str:
+        if isinstance(content, str):
+            return content.strip()
+
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    parts.append(item.get("text", ""))
+                elif hasattr(item, "text"):
+                    parts.append(getattr(item, "text", ""))
+            return "\n".join(part for part in parts if part).strip()
+
+        return str(content or "").strip()
 
     def optimize_prompt(self, image_path: str, original_prompt: str) -> Tuple[str, float]:
         """
-        Optimize prompt using Qwen-VL model via OpenAI-compatible API.
+        Optimize prompt using an OpenAI-compatible multimodal model.
 
         Args:
-            image_path: Path to the reference image
+            image_path: Path or URL to the reference image
             original_prompt: Original user prompt
 
         Returns:
             Tuple[str, float]: (optimized_prompt, duration)
         """
         start_time = time.time()
-
-        # Prepare image URL
-        if image_path.startswith('http'):
-            image_url = image_path
-        else:
-            base64_image = self._encode_image_to_base64(image_path)
-            ext = os.path.splitext(image_path)[1].lower()
-            mime_type = "image/png" if ext == ".png" else "image/jpeg"
-            image_url = f"data:{mime_type};base64,{base64_image}"
-
+        image_url = self._to_image_url(image_path)
         system_prompt = I2V_OPTIMIZATION_PROMPT.format(original_prompt=original_prompt)
 
-        logger.info(f"Calling Qwen-VL {self.model_name} for prompt optimization...")
+        logger.info(
+            "Calling multimodal prompt optimizer with model=%s, base_url=%s",
+            self.model_name,
+            self.base_url,
+        )
+
         client = self._get_client()
         response = client.chat.completions.create(
             model=self.model_name,
-            messages=[{
-                'role': 'user',
-                'content': [
-                    {'type': 'image_url', 'image_url': {'url': image_url}},
-                    {'type': 'text', 'text': system_prompt},
-                ]
-            }]
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                        {"type": "text", "text": system_prompt},
+                    ],
+                }
+            ],
         )
 
-        optimized_prompt = response.choices[0].message.content
+        optimized_prompt = self._extract_text(response.choices[0].message.content)
         duration = time.time() - start_time
-        logger.info(f"Optimized prompt: {optimized_prompt[:100]}...")
+        logger.info("Optimized prompt: %s...", optimized_prompt[:100])
         return optimized_prompt, duration

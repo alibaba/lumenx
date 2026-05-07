@@ -1,14 +1,45 @@
 import os
 import uuid
 import time
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from urllib.parse import quote
-from .models import Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, MAX_VARIANTS_PER_ASSET
+from .models import Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant, MAX_VARIANTS_PER_ASSET, DEFAULT_I2I_MODEL
+from .prompt_recipes import (
+    build_style_guardrails,
+    build_character_prompt,
+    build_prop_prompt,
+    build_scene_prompt,
+    merge_negative_prompt,
+)
 from ...models.image import WanxImageModel
 from ...utils import get_logger
+from ...utils.media_refs import output_media_ref
 from ...utils.oss_utils import is_object_key
 
 logger = get_logger(__name__)
+
+
+def _append_style_suffix(base_prompt: str, style_suffix: Optional[str]) -> str:
+    cleaned = (base_prompt or "").strip()
+    if not style_suffix:
+        return cleaned
+    if style_suffix in cleaned:
+        return cleaned
+    return f"{cleaned.rstrip(' ,.;')}, {style_suffix}"
+
+
+def _compose_prompt_with_guardrails(
+    base_prompt: str,
+    *,
+    style_suffix: Optional[str],
+    negative_prompt: str,
+    asset_kind: str,
+) -> tuple[str, str]:
+    positive_guardrail, negative_guardrail = build_style_guardrails(base_prompt, style_suffix, asset_kind=asset_kind)
+    generation_prompt = _append_style_suffix(base_prompt, style_suffix)
+    generation_prompt = _append_style_suffix(generation_prompt, positive_guardrail)
+    final_negative_prompt = merge_negative_prompt(negative_prompt, negative_guardrail)
+    return generation_prompt, final_negative_prompt
 
 def cleanup_old_variants(image_asset: ImageAsset) -> None:
     """
@@ -44,6 +75,14 @@ ASPECT_RATIO_TO_SIZE = {
     "1:1": "1024*1024",   # Square
 }
 
+
+def _raise_asset_generation_error(last_error: Optional[Exception]) -> None:
+    if last_error:
+        message = str(last_error).strip()
+        if message:
+            raise RuntimeError(f"生成失败：{message}")
+    raise RuntimeError("生成失败，请检查 API 配置或修改描述内容后重试。")
+
 class AssetGenerator:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
@@ -51,7 +90,7 @@ class AssetGenerator:
         self.model = WanxImageModel(self.config.get('model', {}))
         self.output_dir = self.config.get('output_dir', 'output/assets')
 
-    def generate_character(self, character: Character, generation_type: str = "all", prompt: str = "", positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, i2i_model_name: str = None, size: str = None) -> Character:
+    def generate_character(self, character: Character, generation_type: str = "all", prompt: str = "", positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, i2i_model_name: str = None, size: str = None, style_reference_paths: Optional[List[str]] = None) -> Character:
         """
         Generates character assets based on generation_type.
         Types: 'full_body', 'three_view', 'headshot', 'all'
@@ -69,17 +108,19 @@ class AssetGenerator:
             if generation_type in ["all", "full_body"]:
                 # Use provided prompt or construct default
                 if not prompt:
-                    # Default prompt - no style included, emphasize clean background
-                    # If there's a reference image (reverse generation), emphasize consistency
-                    base_prompt = f"Full body character design of {character.name}, concept art. {character.description}. Standing pose, neutral expression, no emotion, looking at viewer. Clean white background, isolated, no other objects, no scenery, simple background, high quality, masterpiece."
+                    base_prompt = build_character_prompt(character, "full_body")
                 else:
                     base_prompt = prompt
                 
                 # Save the user's prompt WITHOUT style suffix
                 character.full_body_prompt = base_prompt
                 
-                # Generate the image with style suffix appended
-                generation_prompt = f"{base_prompt}, {style_suffix}" if style_suffix and style_suffix not in base_prompt else base_prompt
+                generation_prompt, final_negative_prompt = _compose_prompt_with_guardrails(
+                    base_prompt,
+                    style_suffix=style_suffix,
+                    negative_prompt=negative_prompt,
+                    asset_kind="character",
+                )
                 
                 # Check for base character reference (for variants)
                 ref_image_path = None
@@ -127,18 +168,19 @@ class AssetGenerator:
 
                 # Batch Generation Loop
                 successful_generations = 0
+                last_error = None
                 for i in range(batch_size):
                     try:
                         variant_id = str(uuid.uuid4())
                         fullbody_path = os.path.join(self.output_dir, 'characters', f"{character.id}_fullbody_{variant_id}.png")
                         os.makedirs(os.path.dirname(fullbody_path), exist_ok=True)
                         
-                        # Select model: use I2I model (wan2.6-image) when reference image is provided
+                        # Select model: use configured I2I model when reference image is provided
                         effective_model_name = model_name
                         effective_generation_prompt = generation_prompt
                         if ref_image_path:
                             # Override to I2I model when using reference image
-                            effective_model_name = i2i_model_name or "wan2.6-image"
+                            effective_model_name = i2i_model_name or DEFAULT_I2I_MODEL
                             logger.debug(f"Reverse generation: Using I2I model {effective_model_name} with reference image")
                             
                             # Enhance prompt for reverse generation to emphasize reference consistency (only if not already present)
@@ -147,9 +189,17 @@ class AssetGenerator:
                                 effective_generation_prompt = f"{reverse_enhancement}{generation_prompt}"
                                 logger.debug(f"Reverse generation enhanced prompt: {effective_generation_prompt[:100]}...")
                         
-                        self.model.generate(effective_generation_prompt, fullbody_path, ref_image_path=ref_image_path, negative_prompt=negative_prompt, model_name=effective_model_name, size=effective_size)
+                        self.model.generate(
+                            effective_generation_prompt,
+                            fullbody_path,
+                            ref_image_path=ref_image_path,
+                            ref_image_paths=style_reference_paths,
+                            negative_prompt=final_negative_prompt,
+                            model_name=effective_model_name,
+                            size=effective_size,
+                        )
                         
-                        rel_fullbody_path = os.path.relpath(fullbody_path, "output")
+                        rel_fullbody_path = output_media_ref(fullbody_path)
                         
                         # Store in ImageAsset
                         if not character.full_body_asset:
@@ -180,6 +230,7 @@ class AssetGenerator:
                         if i < batch_size - 1:
                             time.sleep(1)
                     except Exception as e:
+                        last_error = e
                         logger.error(f"Failed to generate full body variant {i+1}/{batch_size}: {e}")
                         # Continue with next variant instead of stopping entirely
                         continue
@@ -203,7 +254,7 @@ class AssetGenerator:
                 
                 # Raise exception if all variants failed
                 if successful_generations == 0:
-                    raise RuntimeError("生成失败，请检查 API 配置或修改描述内容后重试。")
+                    _raise_asset_generation_error(last_error)
                 
                 # Mark downstream as inconsistent if generating only full body
                 if generation_type == "full_body":
@@ -276,28 +327,43 @@ class AssetGenerator:
             # 2. Three View Sheet (Derived)
             if generation_type in ["all", "three_view"]:
                 if not prompt or generation_type == "all":
-                    # Add reference consistency emphasis
-                    base_prompt = f"Character Reference Sheet for {character.name}. {character.description}. Three-view character design: Front view, Side view, and Back view. STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, and clothing as the reference image. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background, clean lines, studio lighting, high quality."
+                    base_prompt = build_character_prompt(character, "three_view", strict_reference=True)
                 else:
                     base_prompt = prompt
                 
                 # Save the user's prompt WITHOUT style suffix
                 character.three_view_prompt = base_prompt
                 
-                # Generate with style suffix appended
-                generation_prompt = f"{base_prompt}, {style_suffix}" if style_suffix and style_suffix not in base_prompt else base_prompt
-                
-                sheet_negative = negative_prompt + ", background, scenery, landscape, shadows, complex background, text, watermark, messy, distorted, extra limbs"
+                generation_prompt, final_negative_prompt = _compose_prompt_with_guardrails(
+                    base_prompt,
+                    style_suffix=style_suffix,
+                    negative_prompt=negative_prompt,
+                    asset_kind="character",
+                )
+
+                sheet_negative = merge_negative_prompt(
+                    final_negative_prompt,
+                    "background, scenery, landscape, shadows, complex background, text, watermark, messy, distorted, extra limbs",
+                )
 
                 successful_generations = 0
+                last_error = None
                 for i in range(batch_size):
                     try:
                         variant_id = str(uuid.uuid4())
                         sheet_path = os.path.join(self.output_dir, 'characters', f"{character.id}_sheet_{variant_id}.png")
                         
-                        self.model.generate(generation_prompt, sheet_path, ref_image_path=fullbody_path, negative_prompt=sheet_negative, ref_strength=0.8, model_name=i2i_model_name)
+                        self.model.generate(
+                            generation_prompt,
+                            sheet_path,
+                            ref_image_path=fullbody_path,
+                            ref_image_paths=style_reference_paths,
+                            negative_prompt=sheet_negative,
+                            ref_strength=0.8,
+                            model_name=i2i_model_name,
+                        )
                         
-                        rel_sheet_path = os.path.relpath(sheet_path, "output")
+                        rel_sheet_path = output_media_ref(sheet_path)
                         
                         if not character.three_view_asset:
                             from .models import ImageAsset
@@ -326,6 +392,7 @@ class AssetGenerator:
                         if i < batch_size - 1:
                             time.sleep(1)
                     except Exception as e:
+                        last_error = e
                         logger.error(f"Failed to generate three view variant {i+1}/{batch_size}: {e}")
                         continue
                     
@@ -349,31 +416,43 @@ class AssetGenerator:
                 
                 # Raise exception if all variants failed
                 if successful_generations == 0:
-                    raise RuntimeError("生成失败，请检查 API 配置或修改描述内容后重试。")
+                    _raise_asset_generation_error(last_error)
 
             # 3. Headshot (Derived)
             if generation_type in ["all", "headshot"]:
                 if not prompt or generation_type == "all":
-                    # Add reference consistency emphasis
-                    base_prompt = f"Close-up portrait of the SAME character {character.name}. {character.description}. STRICTLY MAINTAIN the SAME face, hairstyle, skin tone, and facial features as the reference image. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece."
+                    base_prompt = build_character_prompt(character, "headshot", strict_reference=True)
                 else:
                     base_prompt = prompt
                 
                 # Save the user's prompt WITHOUT style suffix
                 character.headshot_prompt = base_prompt
                 
-                # Generate with style suffix appended
-                generation_prompt = f"{base_prompt}, {style_suffix}" if style_suffix and style_suffix not in base_prompt else base_prompt
+                generation_prompt, final_negative_prompt = _compose_prompt_with_guardrails(
+                    base_prompt,
+                    style_suffix=style_suffix,
+                    negative_prompt=negative_prompt,
+                    asset_kind="character",
+                )
                 
                 successful_generations = 0
+                last_error = None
                 for i in range(batch_size):
                     try:
                         variant_id = str(uuid.uuid4())
                         avatar_path = os.path.join(self.output_dir, 'characters', f"{character.id}_avatar_{variant_id}.png")
                         
-                        self.model.generate(generation_prompt, avatar_path, ref_image_path=fullbody_path, negative_prompt=negative_prompt, ref_strength=0.8, model_name=i2i_model_name)
+                        self.model.generate(
+                            generation_prompt,
+                            avatar_path,
+                            ref_image_path=fullbody_path,
+                            ref_image_paths=style_reference_paths,
+                            negative_prompt=final_negative_prompt,
+                            ref_strength=0.8,
+                            model_name=i2i_model_name,
+                        )
                         
-                        rel_avatar_path = os.path.relpath(avatar_path, "output")
+                        rel_avatar_path = output_media_ref(avatar_path)
                         
                         if not character.headshot_asset:
                             from .models import ImageAsset
@@ -402,6 +481,7 @@ class AssetGenerator:
                         if i < batch_size - 1:
                             time.sleep(1)
                     except Exception as e:
+                        last_error = e
                         logger.error(f"Failed to generate headshot variant {i+1}/{batch_size}: {e}")
                         continue
 
@@ -425,7 +505,7 @@ class AssetGenerator:
                 
                 # Raise exception if all variants failed
                 if successful_generations == 0:
-                    raise RuntimeError("生成失败，请检查 API 配置或修改描述内容后重试。")
+                    _raise_asset_generation_error(last_error)
 
             # Update consistency status (Legacy support, but also useful for quick checks)
             if generation_type == "all":
@@ -443,7 +523,7 @@ class AssetGenerator:
             
         return character
 
-    def generate_scene(self, scene: Scene, positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, size: str = None) -> Scene:
+    def generate_scene(self, scene: Scene, positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, size: str = None, prompt: str = "", style_reference_paths: Optional[List[str]] = None) -> Scene:
         """Generates a scene reference image."""
         scene.status = GenerationStatus.PROCESSING
         
@@ -454,7 +534,14 @@ class AssetGenerator:
         # Default size for scenes (landscape)
         effective_size = size or "1024*576"
         
-        prompt = f"Scene Concept Art: {scene.name}. {scene.description}. High quality, detailed. {positive_prompt}"
+        base_prompt = prompt or build_scene_prompt(scene)
+        scene.image_prompt = base_prompt
+        generation_prompt, final_negative_prompt = _compose_prompt_with_guardrails(
+            base_prompt,
+            style_suffix=positive_prompt,
+            negative_prompt=negative_prompt,
+            asset_kind="scene",
+        )
         
         try:
             for _ in range(batch_size):
@@ -462,9 +549,16 @@ class AssetGenerator:
                 output_path = os.path.join(self.output_dir, 'scenes', f"{scene.id}_{variant_id}.png")
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 
-                image_path, _ = self.model.generate(prompt, output_path, negative_prompt=negative_prompt, model_name=model_name, size=effective_size)
+                image_path, _ = self.model.generate(
+                    generation_prompt,
+                    output_path,
+                    ref_image_paths=style_reference_paths,
+                    negative_prompt=final_negative_prompt,
+                    model_name=model_name,
+                    size=effective_size,
+                )
                 
-                rel_path = os.path.relpath(output_path, "output")
+                rel_path = output_media_ref(output_path)
                 
                 if not scene.image_asset:
                     from .models import ImageAsset
@@ -475,7 +569,7 @@ class AssetGenerator:
                     id=variant_id,
                     url=rel_path,
                     created_at=time.time(),
-                    prompt_used=prompt
+                    prompt_used=generation_prompt
                 )
                 scene.image_asset.variants.insert(0, variant)
                 
@@ -505,7 +599,7 @@ class AssetGenerator:
             
         return scene
 
-    def generate_prop(self, prop: Prop, positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, size: str = None) -> Prop:
+    def generate_prop(self, prop: Prop, positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, size: str = None, prompt: str = "", style_reference_paths: Optional[List[str]] = None) -> Prop:
         """Generates a prop reference image."""
         prop.status = GenerationStatus.PROCESSING
         
@@ -516,7 +610,14 @@ class AssetGenerator:
         # Default size for props (square)
         effective_size = size or "1024*1024"
         
-        prompt = f"Prop Design: {prop.name}. {prop.description}. Isolated on white background, high quality, detailed. {positive_prompt}"
+        base_prompt = prompt or build_prop_prompt(prop)
+        prop.image_prompt = base_prompt
+        generation_prompt, final_negative_prompt = _compose_prompt_with_guardrails(
+            base_prompt,
+            style_suffix=positive_prompt,
+            negative_prompt=negative_prompt,
+            asset_kind="prop",
+        )
         
         try:
             for _ in range(batch_size):
@@ -524,9 +625,16 @@ class AssetGenerator:
                 output_path = os.path.join(self.output_dir, 'props', f"{prop.id}_{variant_id}.png")
                 os.makedirs(os.path.dirname(output_path), exist_ok=True)
                 
-                image_path, _ = self.model.generate(prompt, output_path, negative_prompt=negative_prompt, model_name=model_name, size=effective_size)
+                image_path, _ = self.model.generate(
+                    generation_prompt,
+                    output_path,
+                    ref_image_paths=style_reference_paths,
+                    negative_prompt=final_negative_prompt,
+                    model_name=model_name,
+                    size=effective_size,
+                )
                 
-                rel_path = os.path.relpath(output_path, "output")
+                rel_path = output_media_ref(output_path)
                 
                 if not prop.image_asset:
                     from .models import ImageAsset
@@ -537,7 +645,7 @@ class AssetGenerator:
                     id=variant_id,
                     url=rel_path,
                     created_at=time.time(),
-                    prompt_used=prompt
+                    prompt_used=generation_prompt
                 )
                 prop.image_asset.variants.insert(0, variant)
                 

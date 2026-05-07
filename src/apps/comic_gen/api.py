@@ -9,11 +9,13 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import os
 import shutil
+import sys
 import uuid
 import logging
 import traceback
 from .pipeline import ComicGenPipeline
 from .models import (
+    DEFAULT_I2V_MODEL,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -22,7 +24,21 @@ from .models import (
     VideoTask,
 )
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT
-from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
+from ...models.image import (
+    DEFAULT_OPENAI_IMAGE_BASE_URL,
+    DEFAULT_OPENAI_IMAGE_EDIT_BASE_URL,
+    DEFAULT_OPENAI_IMAGE_EDIT_MODEL,
+    DEFAULT_OPENAI_IMAGE_MODEL,
+)
+from ...utils.oss_utils import (
+    OSSImageUploader,
+    get_object_storage_bucket_name,
+    get_object_storage_endpoint,
+    get_object_storage_provider,
+    get_object_storage_region,
+    get_oss_base_path,
+    sign_oss_urls_in_data,
+)
 from ...utils import setup_logging
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv, set_key
@@ -33,14 +49,48 @@ logger = logging.getLogger(__name__)
 # Setup logging to user directory
 setup_logging()
 
-# Use absolute path for .env file (api.py is in src/apps/comic_gen/)
-_project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-env_path = os.path.join(_project_root, ".env")
+DEV_CONFIG_PATH_ENV_VAR = "LUMENX_DEV_CONFIG_PATH"
+
+
+def _model_dump_compat(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if hasattr(value, "dict"):
+        return value.dict()
+    return value
+
+
+def _get_project_root() -> str:
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
+def _resolve_dev_config_path() -> str:
+    configured_path = (os.getenv(DEV_CONFIG_PATH_ENV_VAR) or "").strip()
+    if configured_path:
+        if not os.path.isabs(configured_path):
+            configured_path = os.path.abspath(os.path.join(_get_project_root(), configured_path))
+        return configured_path
+    return os.path.join(_get_project_root(), ".env")
+
+
+def _ensure_config_parent_dir(config_path: str) -> None:
+    parent_dir = os.path.dirname(config_path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+
+
+env_path = _resolve_dev_config_path()
 if os.path.exists(env_path):
     load_dotenv(env_path, override=True)
 
-# Debug: Print OSS configuration at startup
-logger.info(f"STARTUP: OSS_ENDPOINT={os.getenv('OSS_ENDPOINT')}, OSS_BUCKET_NAME={os.getenv('OSS_BUCKET_NAME')}, OSS_BASE_PATH={os.getenv('OSS_BASE_PATH')}")
+# Debug: Print object storage configuration at startup
+logger.info(
+    "STARTUP: STORAGE_PROVIDER=%s, OBJECT_STORAGE_ENDPOINT=%s, OBJECT_STORAGE_BUCKET_NAME=%s, OBJECT_STORAGE_BASE_PATH=%s",
+    get_object_storage_provider() or "local",
+    get_object_storage_endpoint(),
+    get_object_storage_bucket_name(),
+    get_oss_base_path(),
+)
 
 
 
@@ -82,16 +132,28 @@ pipeline = ComicGenPipeline()
 
 @app.get("/debug/config")
 async def debug_config():
-    """Diagnostic endpoint to check OSS and path configuration."""
+    """Diagnostic endpoint to check object storage and path configuration."""
     uploader = OSSImageUploader()
     return {
+        "storage_provider": uploader.provider or "local",
+        "object_storage_configured": uploader.is_configured,
+        "storage_client_initialized": uploader.bucket is not None,
+        "object_storage_bucket_name": get_object_storage_bucket_name(uploader.provider),
+        "object_storage_endpoint": get_object_storage_endpoint(uploader.provider),
+        "object_storage_region": get_object_storage_region(uploader.provider),
+        "object_storage_base_path": get_oss_base_path(),
         "oss_configured": uploader.is_configured,
         "oss_bucket_initialized": uploader.bucket is not None,
-        "oss_base_path": os.getenv("OSS_BASE_PATH", "lumenx"),
+        "oss_base_path": get_oss_base_path(),
         "output_dir_exists": os.path.exists("output"),
         "output_contents": os.listdir("output") if os.path.exists("output") else [],
         "cwd": os.getcwd(),
         "env_vars_present": {
+            "OBJECT_STORAGE_PROVIDER": bool(os.getenv("OBJECT_STORAGE_PROVIDER")),
+            "OBJECT_STORAGE_ENDPOINT": bool(os.getenv("OBJECT_STORAGE_ENDPOINT")),
+            "OBJECT_STORAGE_BUCKET_NAME": bool(os.getenv("OBJECT_STORAGE_BUCKET_NAME")),
+            "OBJECT_STORAGE_REGION": bool(os.getenv("OBJECT_STORAGE_REGION")),
+            "TOS_ACCESS_KEY_ID": bool(os.getenv("TOS_ACCESS_KEY_ID")),
             "OSS_ENDPOINT": bool(os.getenv("OSS_ENDPOINT")),
             "OSS_BUCKET_NAME": bool(os.getenv("OSS_BUCKET_NAME")),
             "ALIBABA_CLOUD_ACCESS_KEY_ID": bool(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")),
@@ -99,7 +161,7 @@ async def debug_config():
     }
 
 def signed_response(data):
-    """Helper to sign OSS URLs in data before returning to frontend.
+    """Helper to sign object-storage URLs in data before returning to frontend.
     
     Handles Pydantic models, lists of models, and dicts.
     Returns a JSONResponse with signed URLs.
@@ -115,10 +177,10 @@ def signed_response(data):
     else:
         processed_data = data
     
-    # Check if OSS is configured
+    # Check if object storage is configured
     uploader = OSSImageUploader()
     if uploader.is_configured:
-        # OSS mode: sign URLs in the data
+        # Object storage mode: sign URLs in the data
         processed_data = sign_oss_urls_in_data(processed_data, uploader)
     
     # Return JSONResponse directly to avoid Pydantic re-validation stripping fields
@@ -160,7 +222,7 @@ class UpdateAssetAttributesRequest(BaseModel):
 @app.get("/system/check")
 async def check_system():
     """Check system dependencies (ffmpeg, etc.) and configuration."""
-    from utils.system_check import run_system_checks
+    from ...utils.system_check import run_system_checks
     return run_system_checks()
 
 
@@ -169,7 +231,7 @@ async def check_system():
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
-    """Uploads a file and returns its URL (OSS if configured, else local)."""
+    """Uploads a file and returns its URL (object storage if configured, else local)."""
     try:
         file_ext = os.path.splitext(file.filename)[1]
         filename = f"{uuid.uuid4()}{file_ext}"
@@ -178,7 +240,7 @@ async def upload_file(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # Try uploading to OSS
+        # Try uploading to configured object storage
         oss_url = OSSImageUploader().upload_image(file_path)
         if oss_url:
             return signed_response({"url": oss_url})
@@ -220,7 +282,7 @@ async def upload_asset(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # 2. Upload to OSS
+        # 2. Upload to configured object storage
         uploader = OSSImageUploader()
         oss_url = uploader.upload_image(file_path)
         if not oss_url:
@@ -263,6 +325,29 @@ async def create_project(request: CreateProjectRequest, skip_analysis: bool = Fa
         partial(pipeline.create_project, request.title, request.text, skip_analysis)
     )
     return signed_response(result)
+
+
+@app.get("/projects/fixtures", response_model=List[dict])
+async def list_fixture_story_projects():
+    """List bundled fixture story projects that can be imported from the UI."""
+    try:
+        return signed_response(pipeline.list_fixture_story_projects())
+    except Exception as e:
+        logger.exception("Failed to list fixture story projects")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/fixtures/{fixture_slug}/import", response_model=Script)
+async def import_fixture_story_project(fixture_slug: str):
+    """Create or reuse a bundled fixture story project for UI testing."""
+    try:
+        result = pipeline.import_fixture_story_project(fixture_slug)
+        return signed_response(result)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to import fixture story project")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 
@@ -505,7 +590,7 @@ async def generate_series_asset(series_id: str, request: GenerateAssetRequest, b
             request.model_name
         )
         background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
-        response_data = series.dict()
+        response_data = _model_dump_compat(series)
         response_data["_task_id"] = task_id
         return signed_response(response_data)
     except ValueError as e:
@@ -624,7 +709,7 @@ async def import_file_confirm(request: ConfirmImportRequest):
         # Prefer import_id from cache, fallback to request.text
         text = None
         if request.import_id:
-            text = pipeline._import_cache.pop(request.import_id, None)
+            text = pipeline._import_cache.get(request.import_id)
         if not text:
             text = request.text
         if not text:
@@ -640,6 +725,8 @@ async def import_file_confirm(request: ConfirmImportRequest):
                 request.description,
             )
         )
+        if request.import_id:
+            pipeline._import_cache.pop(request.import_id, None)
         return signed_response(result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -649,7 +736,34 @@ async def import_file_confirm(request: ConfirmImportRequest):
 
 
 class EnvConfig(ProviderRoutingConfig):
+    IMAGE_PROVIDER: Optional[str] = None
+    IMAGE_EDIT_PROVIDER: Optional[str] = None
+    TTS_PROVIDER: Optional[str] = None
+    LLM_PROVIDER: Optional[str] = None
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_BASE_URL: Optional[str] = None
+    OPENAI_MODEL: Optional[str] = None
+    OPENAI_IMAGE_API_KEY: Optional[str] = None
+    OPENAI_IMAGE_EDIT_API_KEY: Optional[str] = None
+    OPENAI_IMAGE_BASE_URL: Optional[str] = None
+    OPENAI_IMAGE_EDIT_BASE_URL: Optional[str] = None
+    OPENAI_IMAGE_MODEL: Optional[str] = None
+    OPENAI_IMAGE_EDIT_MODEL: Optional[str] = None
+    OPENAI_TTS_API_KEY: Optional[str] = None
+    OPENAI_TTS_BASE_URL: Optional[str] = None
+    OPENAI_TTS_MODEL: Optional[str] = None
+    OPENAI_MULTIMODAL_API_KEY: Optional[str] = None
+    OPENAI_MULTIMODAL_BASE_URL: Optional[str] = None
+    OPENAI_MULTIMODAL_MODEL: Optional[str] = None
+    ARK_API_KEY: Optional[str] = None
     DASHSCOPE_API_KEY: Optional[str] = None
+    OBJECT_STORAGE_PROVIDER: Optional[str] = None
+    OBJECT_STORAGE_BUCKET_NAME: Optional[str] = None
+    OBJECT_STORAGE_ENDPOINT: Optional[str] = None
+    OBJECT_STORAGE_REGION: Optional[str] = None
+    OBJECT_STORAGE_BASE_PATH: Optional[str] = None
+    TOS_ACCESS_KEY_ID: Optional[str] = None
+    TOS_SECRET_ACCESS_KEY: Optional[str] = None
     ALIBABA_CLOUD_ACCESS_KEY_ID: Optional[str] = None
     ALIBABA_CLOUD_ACCESS_KEY_SECRET: Optional[str] = None
     OSS_BUCKET_NAME: Optional[str] = None
@@ -661,6 +775,27 @@ class EnvConfig(ProviderRoutingConfig):
     endpoint_overrides: Dict[str, str] = Field(default_factory=dict)
 
 
+MASKED_SECRET_PLACEHOLDER = "********"
+DEFAULT_OPENAI_TTS_MODEL = "qwen3-tts-flash"
+DEFAULT_OPENAI_MULTIMODAL_MODEL = "qwen-vl-max"
+SENSITIVE_ENV_KEYS = {
+    "OPENAI_API_KEY",
+    "OPENAI_IMAGE_API_KEY",
+    "OPENAI_IMAGE_EDIT_API_KEY",
+    "OPENAI_TTS_API_KEY",
+    "OPENAI_MULTIMODAL_API_KEY",
+    "ARK_API_KEY",
+    "DASHSCOPE_API_KEY",
+    "TOS_ACCESS_KEY_ID",
+    "TOS_SECRET_ACCESS_KEY",
+    "ALIBABA_CLOUD_ACCESS_KEY_ID",
+    "ALIBABA_CLOUD_ACCESS_KEY_SECRET",
+    "KLING_ACCESS_KEY",
+    "KLING_SECRET_KEY",
+    "VIDU_API_KEY",
+}
+
+
 def _normalize_provider_mode(value: Optional[str]) -> str:
     normalized = (value or "").strip().lower()
     if normalized in (ProviderBackend.DASHSCOPE.value, ProviderBackend.VENDOR.value):
@@ -668,10 +803,123 @@ def _normalize_provider_mode(value: Optional[str]) -> str:
     return ProviderBackend.DASHSCOPE.value
 
 
+def _normalize_image_provider(value: Optional[str]) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized == "dashscope":
+        return "dashscope"
+    return "openai"
+
+
+def _normalize_tts_provider(value: Optional[str]) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized == "dashscope":
+        return "dashscope"
+    return "openai"
+
+
+def _current_image_provider() -> str:
+    explicit = (os.getenv("IMAGE_PROVIDER") or "").strip().lower()
+    if explicit in {"openai", "dashscope"}:
+        return explicit
+    if any(
+        [
+            os.getenv("OPENAI_IMAGE_MODEL"),
+            os.getenv("OPENAI_IMAGE_EDIT_MODEL"),
+            os.getenv("OPENAI_IMAGE_BASE_URL"),
+            os.getenv("OPENAI_IMAGE_EDIT_BASE_URL"),
+            os.getenv("OPENAI_IMAGE_API_KEY"),
+        ]
+    ):
+        return "openai"
+    if os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_BASE_URL"):
+        return "openai"
+    if os.getenv("DASHSCOPE_API_KEY"):
+        return "dashscope"
+    return "openai"
+
+
+def _current_image_edit_provider() -> str:
+    explicit = (os.getenv("IMAGE_EDIT_PROVIDER") or "").strip().lower()
+    if explicit in {"openai", "dashscope"}:
+        return explicit
+    if any(
+        [
+            os.getenv("OPENAI_IMAGE_EDIT_MODEL"),
+            os.getenv("OPENAI_IMAGE_EDIT_BASE_URL"),
+            os.getenv("OPENAI_IMAGE_EDIT_API_KEY"),
+        ]
+    ):
+        return "openai"
+    return _current_image_provider()
+
+
+def _current_tts_provider() -> str:
+    explicit = (os.getenv("TTS_PROVIDER") or "").strip().lower()
+    if explicit in {"openai", "dashscope"}:
+        return explicit
+    if any(
+        [
+            os.getenv("OPENAI_TTS_MODEL"),
+            os.getenv("OPENAI_TTS_BASE_URL"),
+            os.getenv("OPENAI_TTS_API_KEY"),
+        ]
+    ):
+        return "openai"
+    if os.getenv("OPENAI_API_KEY") and os.getenv("OPENAI_BASE_URL"):
+        return "openai"
+    if os.getenv("DASHSCOPE_API_KEY"):
+        return "dashscope"
+    return "openai"
+
+
+def _first_non_empty_env(*keys: str) -> str:
+    for key in keys:
+        value = os.getenv(key)
+        if value and value.strip():
+            return value.strip()
+    return ""
+
+
+def _first_non_empty_value(*values: Optional[str]) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _current_multimodal_base_url() -> str:
+    explicit = _first_non_empty_env("OPENAI_MULTIMODAL_BASE_URL", "OPENAI_BASE_URL")
+    if explicit:
+        return explicit
+    if os.getenv("DASHSCOPE_API_KEY"):
+        from ...utils.endpoints import get_provider_base_url
+
+        return f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1"
+    return ""
+
+
+def _looks_like_multimodal_model(model_name: Optional[str]) -> str:
+    normalized = (model_name or "").strip()
+    lowered = normalized.lower()
+    if not normalized:
+        return ""
+    if any(token in lowered for token in ("vl", "vision", "qvq")):
+        return normalized
+    return ""
+
+
+def _mask_secret_value(value: str) -> str:
+    return MASKED_SECRET_PLACEHOLDER if value else ""
+
+
+def _is_masked_secret_value(value: Optional[str]) -> bool:
+    return isinstance(value, str) and value == MASKED_SECRET_PLACEHOLDER
+
+
 def get_user_config_path() -> str:
     """
     Returns the path to the user config file.
-    - Development mode: Uses .env in project root
+    - Development mode: Uses custom dev config path or .env in project root
     - Packaged app mode: Uses ~/.lumen-x/config.json
     """
     from ...utils import get_user_data_dir
@@ -685,10 +933,7 @@ def get_user_config_path() -> str:
         os.makedirs(config_dir, exist_ok=True)
         return os.path.join(config_dir, "config.json")
     else:
-        # Use .env in project root for development
-        # Get absolute path to project root (api.py is in src/apps/comic_gen/)
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        return os.path.join(project_root, ".env")
+        return _resolve_dev_config_path()
 
 
 
@@ -714,6 +959,7 @@ def load_user_config():
 def save_user_config(config_dict: dict):
     """Saves user config to file."""
     config_path = get_user_config_path()
+    _ensure_config_parent_dir(config_path)
 
     if config_path.endswith(".json"):
         # JSON config for packaged app
@@ -726,10 +972,13 @@ def save_user_config(config_dict: dict):
             except:
                 pass
         existing_config.update(config_dict)
-        with open(config_path, "w") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             json.dump(existing_config, f, indent=2)
     else:
         # .env for development
+        if not os.path.exists(config_path):
+            with open(config_path, "a", encoding="utf-8"):
+                pass
         for key, value in config_dict.items():
             if value is not None:
                 set_key(config_path, key, value)
@@ -749,11 +998,13 @@ def remove_user_config_keys(keys: list):
                     existing_config = json.load(f)
                 for key in keys:
                     existing_config.pop(key, None)
-                with open(config_path, "w") as f:
+                with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(existing_config, f, indent=2)
             except Exception as e:
                 logger.warning(f"Failed to remove keys from config: {e}")
     else:
+        if not os.path.exists(config_path):
+            return
         from dotenv import unset_key
         for key in keys:
             try:
@@ -763,7 +1014,6 @@ def remove_user_config_keys(keys: list):
 
 
 # Load user config on startup
-import sys
 load_user_config()
 
 
@@ -784,7 +1034,7 @@ async def get_config_info():
 async def update_env_config(config: EnvConfig):
     """Updates environment configuration and saves to config file."""
     try:
-        raw_config = config.dict(exclude_unset=True)
+        raw_config = config.model_dump(exclude_unset=True)
 
         # Extract endpoint_overrides and flatten into config_dict
         endpoint_overrides = raw_config.pop("endpoint_overrides", {})
@@ -794,8 +1044,14 @@ async def update_env_config(config: EnvConfig):
         for key, value in raw_config.items():
             if value is None:
                 continue
+            if key in SENSITIVE_ENV_KEYS and _is_masked_secret_value(value):
+                continue
             if isinstance(value, ProviderBackend):
                 config_dict[key] = value.value
+            elif key in {"IMAGE_PROVIDER", "IMAGE_EDIT_PROVIDER"}:
+                config_dict[key] = _normalize_image_provider(value)
+            elif key == "TTS_PROVIDER":
+                config_dict[key] = _normalize_tts_provider(value)
             else:
                 config_dict[key] = value
 
@@ -822,13 +1078,13 @@ async def update_env_config(config: EnvConfig):
         save_user_config(config_dict)
         remove_user_config_keys(keys_to_remove)
 
-        # Reset OSS singleton to pick up new config (non-blocking)
+        # Reset object storage singleton to pick up new config (non-blocking)
         try:
             OSSImageUploader.reset_instance()
-            logger.info("OSS instance reset successfully")
+            logger.info("Object storage instance reset successfully")
         except Exception as oss_e:
-            # OSS reset failure should not block config saving
-            logger.warning(f"OSS reset failed (non-critical): {oss_e}")
+            # Object storage reset failure should not block config saving
+            logger.warning(f"Object storage reset failed (non-critical): {oss_e}")
 
         config_path = get_user_config_path()
         return {"status": "success", "message": f"Configuration saved to {config_path}"}
@@ -1029,6 +1285,47 @@ class AnalyzeToStoryboardRequest(BaseModel):
     text: str
 
 
+class UpdateStoryBeatRequest(BaseModel):
+    action_summary: Optional[str] = None
+    dialogue_excerpt: Optional[str] = None
+    storyboard_goal: Optional[str] = None
+
+
+class AnalyzeBeatStoryboardRequest(BaseModel):
+    beat_id: str
+
+
+@app.get("/projects/{script_id}/story_analysis")
+async def get_story_analysis(script_id: str):
+    """Returns the structured story analysis for a project."""
+    try:
+        return signed_response(pipeline.get_story_analysis(script_id))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in get_story_analysis: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/projects/{script_id}/story_analysis/beats/{beat_id}")
+async def update_story_beat(script_id: str, beat_id: str, request: UpdateStoryBeatRequest):
+    """Updates editable fields on a single structured story beat."""
+    try:
+        updated_script = pipeline.update_story_beat(
+            script_id,
+            beat_id,
+            action_summary=request.action_summary,
+            dialogue_excerpt=request.dialogue_excerpt,
+            storyboard_goal=request.storyboard_goal,
+        )
+        return signed_response(updated_script)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in update_story_beat: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/projects/{script_id}/storyboard/analyze")
 async def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
     """
@@ -1042,6 +1339,21 @@ async def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequ
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error in analyze_to_storyboard: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/projects/{script_id}/storyboard/analyze_beat")
+async def analyze_story_beat_to_storyboard(script_id: str, request: AnalyzeBeatStoryboardRequest):
+    """
+    Re-analyzes storyboard frames for a single structured beat only.
+    """
+    try:
+        updated_script = pipeline.analyze_story_beat_to_frames(script_id, request.beat_id)
+        return signed_response(updated_script)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in analyze_story_beat_to_storyboard: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1120,7 +1432,15 @@ class CreateVideoTaskRequest(BaseModel):
     prompt_extend: bool = True
     negative_prompt: Optional[str] = None
     batch_size: int = 1
-    model: str = "wan2.6-i2v"
+    model: str = DEFAULT_I2V_MODEL
+    aspect_ratio: Optional[str] = None
+    watermark: bool = False
+    camera_fixed: Optional[bool] = None
+    reference_audio_url: Optional[str] = None
+    seedance_reference_mode: Optional[str] = None
+    seedance_workflow: Optional[str] = None
+    seedance_extend_mode: Optional[str] = None
+    seedance_edit_mode: Optional[str] = None
     shot_type: str = "single"  # 'single' or 'multi' (only for wan2.6-i2v)
     generation_mode: str = "i2v"  # 'i2v' (image-to-video) or 'r2v' (reference-to-video)
     reference_video_urls: List[str] = []  # Reference video URLs for R2V (max 3)
@@ -1160,6 +1480,14 @@ async def create_video_task(script_id: str, request: CreateVideoTaskRequest, bac
                 prompt_extend=request.prompt_extend,
                 negative_prompt=request.negative_prompt,
                 model=request.model,
+                aspect_ratio=request.aspect_ratio,
+                watermark=request.watermark,
+                camera_fixed=request.camera_fixed,
+                reference_audio_url=request.reference_audio_url,
+                seedance_reference_mode=request.seedance_reference_mode,
+                seedance_workflow=request.seedance_workflow,
+                seedance_extend_mode=request.seedance_extend_mode,
+                seedance_edit_mode=request.seedance_edit_mode,
                 shot_type=request.shot_type,
                 generation_mode=request.generation_mode,
                 reference_video_urls=request.reference_video_urls,
@@ -1561,12 +1889,9 @@ async def generate_line_audio(script_id: str, frame_id: str, request: GenerateLi
 
 @app.post("/projects/{script_id}/mix/generate_sfx", response_model=Script)
 async def generate_mix_sfx(script_id: str):
-    """Triggers Video-to-Audio SFX generation for all frames."""
-    # Re-using generate_audio for now as it covers everything, 
-    # but ideally we'd have granular methods in pipeline.
-    # Let's just call generate_audio again, it's idempotent-ish.
+    """Generate SFX tracks for all frames in the project."""
     try:
-        updated_script = pipeline.generate_audio(script_id)
+        updated_script = pipeline.generate_sfx(script_id)
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1574,9 +1899,9 @@ async def generate_mix_sfx(script_id: str):
 
 @app.post("/projects/{script_id}/mix/generate_bgm", response_model=Script)
 async def generate_mix_bgm(script_id: str):
-    """Triggers BGM generation."""
+    """Generate BGM tracks for all frames in the project."""
     try:
-        updated_script = pipeline.generate_audio(script_id)
+        updated_script = pipeline.generate_bgm(script_id)
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1721,6 +2046,31 @@ async def render_frame(script_id: str, request: RenderFrameRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ComposeFrameCropsRequest(BaseModel):
+    manifest_path: Optional[str] = None
+    output_path: Optional[str] = None
+    verify: bool = True
+
+
+@app.post("/projects/{script_id}/frames/{frame_id}/compose_crops", response_model=Script)
+async def compose_frame_crops(script_id: str, frame_id: str, request: ComposeFrameCropsRequest):
+    """Composes edited crop outputs into the frame's rendered image asset."""
+    try:
+        updated_script = pipeline.compose_frame_crops(
+            script_id,
+            frame_id,
+            request.manifest_path,
+            request.output_path,
+            request.verify,
+        )
+        return signed_response(updated_script)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error composing crops for frame {frame_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class SelectVideoRequest(BaseModel):
     video_id: str
 
@@ -1807,26 +2157,29 @@ class ExportRequest(BaseModel):
     format: str = "mp4"
     subtitles: str = "none"
 
-@app.post("/projects/{script_id}/export")
-async def export_project(script_id: str, request: ExportRequest):
-    """Export project video by merging all selected frame videos.
 
-    Currently delegates to the existing merge_videos pipeline.
-    resolution/format/subtitles parameters are accepted but not yet applied
-    (requires FFmpeg pipeline iteration).
-    """
+class ExportResponse(BaseModel):
+    url: str
+    subtitle_url: Optional[str] = None
+    subtitle_format: Optional[str] = None
+    format: Optional[str] = None
+    resolution: Optional[str] = None
+
+
+@app.post("/projects/{script_id}/export", response_model=ExportResponse)
+async def export_project(script_id: str, request: ExportRequest):
+    """Export project video with real transcode, scaling and subtitle handling."""
     try:
         script = pipeline.get_script(script_id)
         if not script:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        # If already merged, return existing URL directly
-        if script.merged_video_url:
-            return signed_response({"url": script.merged_video_url})
+        if not script.merged_video_url:
+            script = pipeline.merge_videos(script_id)
 
-        # Otherwise, run merge pipeline
-        merged_script = pipeline.merge_videos(script_id)
-        return signed_response({"url": merged_script.merged_video_url})
+        options = request.model_dump() if hasattr(request, "model_dump") else request.dict()
+        export_result = pipeline.export_project(script_id, options)
+        return signed_response(export_result)
     except HTTPException:
         raise
     except ValueError as e:
@@ -2012,15 +2365,69 @@ async def get_env_config():
                 endpoint_overrides[env_key] = value
 
         return {
-            "DASHSCOPE_API_KEY": os.getenv("DASHSCOPE_API_KEY", ""),
-            "ALIBABA_CLOUD_ACCESS_KEY_ID": os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID", ""),
-            "ALIBABA_CLOUD_ACCESS_KEY_SECRET": os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", ""),
-            "OSS_BUCKET_NAME": os.getenv("OSS_BUCKET_NAME", ""),
-            "OSS_ENDPOINT": os.getenv("OSS_ENDPOINT", ""),
-            "OSS_BASE_PATH": os.getenv("OSS_BASE_PATH", ""),
-            "KLING_ACCESS_KEY": os.getenv("KLING_ACCESS_KEY", ""),
-            "KLING_SECRET_KEY": os.getenv("KLING_SECRET_KEY", ""),
-            "VIDU_API_KEY": os.getenv("VIDU_API_KEY", ""),
+            "IMAGE_PROVIDER": _current_image_provider(),
+            "IMAGE_EDIT_PROVIDER": _current_image_edit_provider(),
+            "TTS_PROVIDER": _current_tts_provider(),
+            "LLM_PROVIDER": os.getenv("LLM_PROVIDER", "dashscope"),
+            "OPENAI_API_KEY": _mask_secret_value(os.getenv("OPENAI_API_KEY", "")),
+            "OPENAI_BASE_URL": os.getenv("OPENAI_BASE_URL", ""),
+            "OPENAI_MODEL": os.getenv("OPENAI_MODEL", ""),
+            "OPENAI_IMAGE_API_KEY": _mask_secret_value(os.getenv("OPENAI_IMAGE_API_KEY", "")),
+            "OPENAI_IMAGE_EDIT_API_KEY": _mask_secret_value(os.getenv("OPENAI_IMAGE_EDIT_API_KEY", "")),
+            "OPENAI_IMAGE_BASE_URL": _first_non_empty_value(
+                os.getenv("OPENAI_IMAGE_BASE_URL"),
+                DEFAULT_OPENAI_IMAGE_BASE_URL,
+            ),
+            "OPENAI_IMAGE_EDIT_BASE_URL": _first_non_empty_value(
+                os.getenv("OPENAI_IMAGE_EDIT_BASE_URL"),
+                DEFAULT_OPENAI_IMAGE_EDIT_BASE_URL,
+            ),
+            "OPENAI_IMAGE_MODEL": _first_non_empty_value(
+                os.getenv("OPENAI_IMAGE_MODEL"),
+                DEFAULT_OPENAI_IMAGE_MODEL,
+            ),
+            "OPENAI_IMAGE_EDIT_MODEL": _first_non_empty_value(
+                os.getenv("OPENAI_IMAGE_EDIT_MODEL"),
+                DEFAULT_OPENAI_IMAGE_EDIT_MODEL,
+            ),
+            "OPENAI_TTS_API_KEY": _mask_secret_value(
+                _first_non_empty_env("OPENAI_TTS_API_KEY", "OPENAI_API_KEY")
+            ),
+            "OPENAI_TTS_BASE_URL": _first_non_empty_env("OPENAI_TTS_BASE_URL", "OPENAI_BASE_URL"),
+            "OPENAI_TTS_MODEL": _first_non_empty_value(
+                os.getenv("OPENAI_TTS_MODEL"),
+                DEFAULT_OPENAI_TTS_MODEL,
+            ),
+            "OPENAI_MULTIMODAL_API_KEY": _mask_secret_value(
+                _first_non_empty_env(
+                    "OPENAI_MULTIMODAL_API_KEY",
+                    "OPENAI_API_KEY",
+                    "DASHSCOPE_API_KEY",
+                )
+            ),
+            "OPENAI_MULTIMODAL_BASE_URL": _current_multimodal_base_url(),
+            "OPENAI_MULTIMODAL_MODEL": _first_non_empty_value(
+                os.getenv("OPENAI_MULTIMODAL_MODEL"),
+                _looks_like_multimodal_model(os.getenv("OPENAI_MODEL")),
+                DEFAULT_OPENAI_MULTIMODAL_MODEL,
+            ),
+            "ARK_API_KEY": _mask_secret_value(os.getenv("ARK_API_KEY", "")),
+            "DASHSCOPE_API_KEY": _mask_secret_value(os.getenv("DASHSCOPE_API_KEY", "")),
+            "OBJECT_STORAGE_PROVIDER": get_object_storage_provider(),
+            "OBJECT_STORAGE_BUCKET_NAME": get_object_storage_bucket_name(),
+            "OBJECT_STORAGE_ENDPOINT": get_object_storage_endpoint(),
+            "OBJECT_STORAGE_REGION": get_object_storage_region(),
+            "OBJECT_STORAGE_BASE_PATH": get_oss_base_path(),
+            "TOS_ACCESS_KEY_ID": _mask_secret_value(os.getenv("TOS_ACCESS_KEY_ID", "")),
+            "TOS_SECRET_ACCESS_KEY": _mask_secret_value(os.getenv("TOS_SECRET_ACCESS_KEY", "")),
+            "ALIBABA_CLOUD_ACCESS_KEY_ID": _mask_secret_value(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "")),
+            "ALIBABA_CLOUD_ACCESS_KEY_SECRET": _mask_secret_value(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")),
+            "OSS_BUCKET_NAME": get_object_storage_bucket_name(),
+            "OSS_ENDPOINT": get_object_storage_endpoint(),
+            "OSS_BASE_PATH": get_oss_base_path(),
+            "KLING_ACCESS_KEY": _mask_secret_value(os.getenv("KLING_ACCESS_KEY", "")),
+            "KLING_SECRET_KEY": _mask_secret_value(os.getenv("KLING_SECRET_KEY", "")),
+            "VIDU_API_KEY": _mask_secret_value(os.getenv("VIDU_API_KEY", "")),
             "KLING_PROVIDER_MODE": _normalize_provider_mode(os.getenv("KLING_PROVIDER_MODE")),
             "VIDU_PROVIDER_MODE": _normalize_provider_mode(os.getenv("VIDU_PROVIDER_MODE")),
             "PIXVERSE_PROVIDER_MODE": _normalize_provider_mode(os.getenv("PIXVERSE_PROVIDER_MODE")),

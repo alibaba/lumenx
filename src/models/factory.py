@@ -15,5 +15,8 @@ class ModelFactory:
         elif model_name in ('vidu', 'viduq3-pro', 'viduq3-turbo'):
             from .vidu import ViduModel
             return ViduModel(config.get('model') or {})
+        elif model_name in ('seedance', 'doubao-seedance-2-0-260128') or str(model_name).startswith('doubao-seedance-'):
+            from .seedance import SeedanceModel
+            return SeedanceModel(config.get('model') or {})
         else:
             raise ValueError(f"Unknown model: {model_name}")

@@ -3,6 +3,7 @@ from typing import Dict, Any
 from .models import StoryboardFrame, GenerationStatus
 from ...models.wanx import WanxModel
 from ...utils import get_logger
+from ...utils.media_refs import output_media_ref
 
 logger = get_logger(__name__)
 
@@ -51,7 +52,7 @@ class VideoGenerator:
             )
             
             # Upload to OSS if configured
-            video_url = os.path.relpath(output_path, "output")
+            video_url = output_media_ref(output_path)
             try:
                 from ...utils.oss_utils import OSSImageUploader
                 uploader = OSSImageUploader()
@@ -126,7 +127,7 @@ class VideoGenerator:
             )
             
             # Store relative path for frontend serving
-            rel_path = os.path.relpath(output_path, "output")
+            rel_path = output_media_ref(output_path)
             frame.video_url = rel_path
             frame.status = GenerationStatus.COMPLETED
             

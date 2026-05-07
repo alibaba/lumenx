@@ -2,8 +2,10 @@ import os
 import time
 from typing import Dict, Any, List
 from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant
+from .prompt_recipes import build_storyboard_continuity_hint
 from ...models.image import WanxImageModel
 from ...utils import get_logger
+from ...utils.media_refs import output_media_ref
 from ...utils.oss_utils import is_object_key
 
 logger = get_logger(__name__)
@@ -33,7 +35,7 @@ class StoryboardGenerator:
             
         return script
 
-    def generate_frame(self, frame: StoryboardFrame, characters: List[Character], scene: Scene, ref_image_path: str = None, ref_image_paths: List[str] = None, prompt: str = None, batch_size: int = 1, size: str = None, model_name: str = None) -> StoryboardFrame:
+    def generate_frame(self, frame: StoryboardFrame, characters: List[Character], scene: Scene, ref_image_path: str = None, ref_image_paths: List[str] = None, prompt: str = None, batch_size: int = 1, size: str = None, model_name: str = None, raise_on_error: bool = False, suppress_auto_references: bool = False) -> StoryboardFrame:
         """Generates a storyboard frame image."""
         frame.status = GenerationStatus.PROCESSING
         
@@ -48,7 +50,7 @@ class StoryboardGenerator:
         
         # If frontend provides explicit reference paths, use them directly
         # Otherwise, auto-collect from characters and scene
-        use_frontend_refs = (ref_image_paths and len(ref_image_paths) > 0) or ref_image_path
+        use_frontend_refs = suppress_auto_references or (ref_image_paths and len(ref_image_paths) > 0) or ref_image_path
         
         if use_frontend_refs:
             # Use only what frontend provided (already selected by user)
@@ -131,9 +133,12 @@ class StoryboardGenerator:
                 char_descriptions.append(f"{char.name} ({char.description})")
         
         char_text = ", ".join(char_descriptions)
+        continuity_hint = build_storyboard_continuity_hint(
+            scene_name=scene.name if scene else None,
+        )
 
         # Remove duplicates
-        asset_ref_paths = list(set(asset_ref_paths))
+        asset_ref_paths = list(dict.fromkeys(asset_ref_paths))
         
         if not prompt:
             prompt = f"Storyboard Frame: {frame.action_description}. "
@@ -145,11 +150,13 @@ class StoryboardGenerator:
             prompt += f"Camera: {frame.camera_angle}"
             if frame.camera_movement:
                 prompt += f", {frame.camera_movement}"
-            prompt += "."
+            prompt += f". {continuity_hint}"
         else:
             # If prompt is provided by user/LLM, ensure character descriptions are still present for I2I consistency
             if char_text and char_text not in prompt:
                 prompt = f"{prompt} Characters: {char_text}."
+            if continuity_hint and continuity_hint not in prompt:
+                prompt = f"{prompt} {continuity_hint}".strip()
         
         # Store the optimized prompt
         frame.image_prompt = prompt
@@ -176,7 +183,7 @@ class StoryboardGenerator:
                 self.model.generate(prompt, output_path, ref_image_paths=asset_ref_paths, size=effective_size, model_name=model_name)
                 
                 # Store relative path for frontend serving
-                rel_path = os.path.relpath(output_path, "output")
+                rel_path = output_media_ref(output_path)
                 
                 # Create Variant
                 variant = ImageVariant(
@@ -224,8 +231,10 @@ class StoryboardGenerator:
                 logger.error(f"Failed to upload frame {frame.id} to OSS: {e}")
                 # Continue even if OSS upload fails
                 
-        except Exception as e:
-            logger.error(f"Failed to generate frame {frame.id}: {e}")
+        except Exception:
+            logger.exception("Failed to generate frame %s", frame.id)
             frame.status = GenerationStatus.FAILED
-            
+            if raise_on_error:
+                raise
+             
         return frame

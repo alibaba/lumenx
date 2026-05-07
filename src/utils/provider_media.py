@@ -119,8 +119,8 @@ def _resolve_dashscope_image(
         if signed_url:
             return _resolved(signed_url, source_ref=ref, media_ref_type=ref_type)
         raise ValueError(
-            "DashScope image input received an OSS object key but OSS is not configured. "
-            "Configure OSS or pass a local/remote image reference."
+            "DashScope image input received an object-storage key but object storage is not configured. "
+            "Configure object storage (OSS/TOS) or pass a local/remote image reference."
         )
     if ref_type == MEDIA_REF_LOCAL_PATH:
         if not local_path:
@@ -149,8 +149,8 @@ def _resolve_dashscope_temp_url(
         if signed_url:
             return _resolved(signed_url, source_ref=ref, media_ref_type=ref_type)
         raise ValueError(
-            "DashScope URL-based media input received an OSS object key but OSS is not configured. "
-            "Configure OSS or use a local path that can be resolved via temporary URL."
+            "DashScope URL-based media input received an object-storage key but object storage is not configured. "
+            "Configure object storage (OSS/TOS) or use a local path that can be resolved via temporary URL."
         )
     if ref_type == MEDIA_REF_LOCAL_PATH:
         if not local_path:
@@ -161,8 +161,8 @@ def _resolve_dashscope_temp_url(
 
         if dashscope_temp_url_resolver is None:
             raise ValueError(
-                "DashScope URL-based media input requires OSS or a dashscope_temp_url_resolver "
-                "for local media. Configure OSS or provide a DashScope temp-url resolver."
+                "DashScope URL-based media input requires object storage or a dashscope_temp_url_resolver "
+                "for local media. Configure object storage (OSS/TOS) or provide a DashScope temp-url resolver."
             )
         resolver = dashscope_temp_url_resolver
         temp_url = resolver(local_path)
@@ -218,7 +218,7 @@ def _resolve_vendor_url_mode(
 
     raise ValueError(
         f"{provider_label} vendor {modality} input requires a URL-compatible media source. "
-        "Configure OSS for local/object-key references, or switch provider mode to dashscope."
+        "Configure object storage (OSS/TOS) for local/object-key references, or switch provider mode to dashscope."
     )
 
 
@@ -278,11 +278,14 @@ def resolve_media_input(
         mode.startswith("vidu_vendor_")
         or mode.startswith("kling_vendor_")
         or mode.startswith("pixverse_vendor_")
+        or mode.startswith("seedance_vendor_")
     ):
         if mode.startswith("vidu_vendor_"):
             provider_label = "Vidu"
         elif mode.startswith("kling_vendor_"):
             provider_label = "Kling"
+        elif mode.startswith("seedance_vendor_"):
+            provider_label = "Seedance"
         else:
             provider_label = "Pixverse"
         return _resolve_vendor_url_mode(

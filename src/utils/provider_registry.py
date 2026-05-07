@@ -63,6 +63,23 @@ class ProviderRegistry:
 
 DEFAULT_PROVIDER_FAMILIES: Tuple[ProviderFamilyConfig, ...] = (
     ProviderFamilyConfig(
+        model_family="doubao-seedance-",
+        backend_default="vendor",
+        credential_sources={
+            "vendor": ("ARK_API_KEY",),
+        },
+        supported_modalities=("t2v", "i2v"),
+        image_input_mode={
+            "vendor": "seedance_vendor_image_url",
+        },
+        audio_input_mode={
+            "vendor": "seedance_vendor_audio_url",
+        },
+        reference_video_input_mode={
+            "vendor": "seedance_vendor_video_url",
+        },
+    ),
+    ProviderFamilyConfig(
         model_family="wan2.6-",
         backend_default="dashscope",
         credential_sources={

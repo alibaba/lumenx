@@ -3,6 +3,10 @@ from enum import Enum
 import time
 from pydantic import BaseModel, Field
 
+DEFAULT_I2V_MODEL = "doubao-seedance-2-0-260128"
+DEFAULT_T2I_MODEL = "openai-image"
+DEFAULT_I2I_MODEL = "openai-image-edit"
+
 class AspectRatio(str, Enum):
     SQUARE = "1:1"
     PORTRAIT = "9:16"
@@ -96,7 +100,15 @@ class VideoTask(BaseModel):
     audio_url: Optional[str] = Field(None, description="URL of generated/uploaded audio")
     prompt_extend: bool = Field(True, description="Whether to use prompt extension")
     negative_prompt: Optional[str] = Field(None, description="Negative prompt")
-    model: str = Field("wan2.6-i2v", description="Model used for generation")
+    model: str = Field(DEFAULT_I2V_MODEL, description="Model used for generation")
+    aspect_ratio: Optional[str] = Field(None, description="Seedance aspect ratio: adaptive/16:9/9:16/1:1")
+    watermark: bool = Field(False, description="Whether to keep vendor watermark")
+    camera_fixed: Optional[bool] = Field(None, description="Seedance fixed camera mode")
+    reference_audio_url: Optional[str] = Field(None, description="Seedance reference audio URL")
+    seedance_reference_mode: Optional[str] = Field(None, description="Seedance reference mode: image/video/combo")
+    seedance_workflow: Optional[str] = Field(None, description="Seedance workflow: standard/extend/edit")
+    seedance_extend_mode: Optional[str] = Field(None, description="Seedance extend mode")
+    seedance_edit_mode: Optional[str] = Field(None, description="Seedance edit mode")
     shot_type: str = Field("single", description="Shot type: 'single' or 'multi' (only for wan2.6-i2v)")
     generation_mode: str = Field("i2v", description="Generation mode: 'i2v' (image-to-video) or 'r2v' (reference-to-video)")
     reference_video_urls: List[str] = Field(default_factory=list, description="Reference video URLs for R2V generation (max 3)")
@@ -112,6 +124,7 @@ class VideoTask(BaseModel):
 class Character(BaseModel):
     id: str = Field(..., description="Unique identifier for the character")
     name: str = Field(..., description="Name of the character")
+    aliases: List[str] = Field(default_factory=list, description="Alias or descriptor forms mapped to this character")
     description: str = Field(..., description="Physical appearance and personality description")
     
     # New Attributes
@@ -175,6 +188,7 @@ class Scene(BaseModel):
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
     image_url: Optional[str] = Field(None, description="URL of the generated scene reference image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Scene image asset container")
+    image_prompt: Optional[str] = Field(None, description="Prompt used for scene image generation")
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this scene")
@@ -193,6 +207,7 @@ class Prop(BaseModel):
     bgm_url: Optional[str] = None
     image_url: Optional[str] = Field(None, description="URL of the generated prop image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Prop image asset container")
+    image_prompt: Optional[str] = Field(None, description="Prompt used for prop image generation")
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this prop")
@@ -204,6 +219,11 @@ class Prop(BaseModel):
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
     scene_id: str = Field(..., description="Reference to the Scene ID")
+    story_beat_id: Optional[str] = Field(None, description="Structured story beat ID this frame belongs to")
+    story_beat_title: Optional[str] = Field(None, description="Structured story beat title this frame belongs to")
+    story_beat_order: Optional[int] = Field(None, description="Structured story beat order this frame belongs to")
+    chapter_order: Optional[int] = Field(None, description="Structured chapter/section order this frame belongs to")
+    chapter_title: Optional[str] = Field(None, description="Structured chapter/section title this frame belongs to")
     character_ids: List[str] = Field(default_factory=list, description="List of Character IDs present in the frame")
     prop_ids: List[str] = Field(default_factory=list, description="List of Prop IDs present in the frame")
     
@@ -244,6 +264,7 @@ class StoryboardFrame(BaseModel):
     audio_url: Optional[str] = Field(None, description="URL of the generated dialogue audio")
     audio_error: Optional[str] = Field(None, description="Audio generation error message")
     sfx_url: Optional[str] = Field(None, description="URL of the generated sound effect")
+    bgm_url: Optional[str] = Field(None, description="URL of the generated background music")
     
     selected_video_id: Optional[str] = Field(None, description="ID of the selected VideoTask for this frame")
     locked: bool = Field(False, description="Whether this frame is locked from regeneration")
@@ -252,9 +273,9 @@ class StoryboardFrame(BaseModel):
 
 class ModelSettings(BaseModel):
     """Model selection settings for different generation stages"""
-    t2i_model: str = Field("wan2.6-t2i", description="Text-to-Image model for Assets")
-    i2i_model: str = Field("wan2.6-image", description="Image-to-Image model for Storyboard")
-    i2v_model: str = Field("wan2.6-i2v", description="Image-to-Video model for Motion")
+    t2i_model: str = Field(DEFAULT_T2I_MODEL, description="Text-to-Image model for Assets")
+    i2i_model: str = Field(DEFAULT_I2I_MODEL, description="Image-to-Image model for Storyboard")
+    i2v_model: str = Field(DEFAULT_I2V_MODEL, description="Image-to-Video model for Motion")
     character_aspect_ratio: str = Field("9:16", description="Aspect ratio for Characters (9:16, 16:9, 1:1)")
     scene_aspect_ratio: str = Field("16:9", description="Aspect ratio for Scenes (9:16, 16:9, 1:1)")
     prop_aspect_ratio: str = Field("1:1", description="Aspect ratio for Props (9:16, 16:9, 1:1)")
@@ -274,10 +295,65 @@ class PromptConfig(BaseModel):
     video_polish: str = Field("", description="Custom system prompt for video I2V polish (Prompt D)")
     r2v_polish: str = Field("", description="Custom system prompt for video R2V polish (Prompt E)")
 
+
+class StoryBeat(BaseModel):
+    id: str = Field(..., description="Unique identifier for the structured story beat")
+    order: int = Field(..., description="1-based order in the source narrative")
+    title: str = Field(..., description="Readable title for the beat/scene")
+    chapter_order: Optional[int] = Field(None, description="1-based chapter/section order if available")
+    chapter_title: Optional[str] = Field(None, description="Readable chapter/section anchor for tree grouping")
+    summary: str = Field("", description="Short summary of what happens in this beat")
+    action_summary: str = Field("", description="Editable action summary for this beat")
+    dialogue_excerpt: str = Field("", description="Editable dialogue excerpt for this beat")
+    storyboard_goal: str = Field("", description="Editable storyboard goal for this beat")
+    scene_id: Optional[str] = Field(None, description="Resolved primary scene ID if available")
+    scene_name: Optional[str] = Field(None, description="Resolved primary scene name if available")
+    location_hint: Optional[str] = Field(None, description="Location hint inferred from text")
+    time_hint: Optional[str] = Field(None, description="Time hint inferred from text")
+    character_ids: List[str] = Field(default_factory=list, description="Characters appearing in this beat")
+    character_names: List[str] = Field(default_factory=list, description="Character names appearing in this beat")
+    prop_ids: List[str] = Field(default_factory=list, description="Props appearing in this beat")
+    prop_names: List[str] = Field(default_factory=list, description="Prop names appearing in this beat")
+    source_excerpt: Optional[str] = Field(None, description="Short excerpt from the source text")
+    storyboard_focus: Optional[str] = Field(None, description="Suggested storyboard focus for this beat")
+    quality_flags: List[str] = Field(default_factory=list, description="Heuristic diagnostics for this beat")
+
+
+class CharacterPresenceEntry(BaseModel):
+    character_id: str = Field(..., description="Character ID")
+    character_name: str = Field(..., description="Character name")
+    scene_beat_ids: List[str] = Field(default_factory=list, description="Structured beat IDs where the character appears")
+    scene_titles: List[str] = Field(default_factory=list, description="Structured beat titles where the character appears")
+    mention_count: int = Field(0, description="Rough mention count across the source text")
+    highlights: List[str] = Field(default_factory=list, description="Important summaries involving this character")
+
+
+class CharacterRelationshipEdge(BaseModel):
+    pair_id: str = Field(..., description="Stable identifier for this co-presence pair")
+    source_character_id: str = Field(..., description="Source character ID")
+    source_character_name: str = Field(..., description="Source character name")
+    target_character_id: str = Field(..., description="Target character ID")
+    target_character_name: str = Field(..., description="Target character name")
+    co_scene_count: int = Field(0, description="How many structured beats the pair appears in together")
+    shared_scene_beat_ids: List[str] = Field(default_factory=list, description="Beat IDs where the pair co-appears")
+    shared_scene_titles: List[str] = Field(default_factory=list, description="Beat titles where the pair co-appears")
+    relationship_hint: str = Field("", description="Heuristic description of the relationship/co-presence pattern")
+
+
+class StoryAnalysis(BaseModel):
+    summary: str = Field("", description="Overall plot summary for the source text")
+    plot_points: List[str] = Field(default_factory=list, description="Ordered plot highlights")
+    scene_beats: List[StoryBeat] = Field(default_factory=list, description="Structured beats/scenes extracted from the source text")
+    character_presence: List[CharacterPresenceEntry] = Field(default_factory=list, description="Character appearance table across beats")
+    character_relationships: List[CharacterRelationshipEdge] = Field(default_factory=list, description="Character co-presence and relationship statistics across beats")
+
 class Script(BaseModel):
     id: str = Field(..., description="Unique identifier for the script project")
     title: str = Field(..., description="Title of the comic/video")
     original_text: str = Field(..., description="The original novel text")
+    fixture_slug: Optional[str] = Field(None, description="Slug of the bundled fixture used to create this project")
+    fixture_name: Optional[str] = Field(None, description="Display name of the bundled fixture")
+    fixture_project_type: Optional[str] = Field(None, description="Project type declared by the bundled fixture")
     
     characters: List[Character] = Field(default_factory=list)
     scenes: List[Scene] = Field(default_factory=list)
@@ -297,6 +373,9 @@ class Script(BaseModel):
 
     # Custom prompt configuration for polish stages
     prompt_config: PromptConfig = Field(default_factory=PromptConfig, description="Custom system prompts for polish stages")
+
+    # Structured text analysis
+    story_analysis: StoryAnalysis = Field(default_factory=StoryAnalysis, description="Structured analysis for plot summary, beats, and character presence")
 
     # Merged video URL
     merged_video_url: Optional[str] = Field(None, description="URL of the merged final video")
