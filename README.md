@@ -15,9 +15,11 @@
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org/)
 [![GitHub Stars](https://img.shields.io/github/stars/alibaba/lumenx?style=social)](https://github.com/alibaba/lumenx)
 
-[English](README_EN.md) | [中文](README.md) | [用户手册](USER_MANUAL.md) | [贡献指南](CONTRIBUTING.md)
+[English](README_EN.md) | [中文](README.md) | [用户手册](USER_MANUAL.md) | [贡献指南](CONTRIBUTING.md) | [中文化规范](docs/中文化清单_影视创作者.md) | [Git 工作流](docs/版本管理与Git规范.md)
 
 </div>
+
+建议首次克隆后运行 `npm run git:setup-hooks`，把本仓库的分支与提交规则挂到本地 Git。
 
 ---
 
@@ -37,7 +39,7 @@ LumenX Studio将 **资产提取—>风格定调—>资产生成—>分镜脚本�
 | 🎨 **可控美术指导** | 支持自定义视觉风格，保持全片画风统一 |
 | 🎬 **可视化分镜** | 拖拽式分镜编辑器，所见即所得地组合人物、背景与特效 |
 | 🎥 **多模态生成** | 集成通义万相 (Wanx) 等模型，支持文生图、图生视频 |
-| 🎵 **智能视听合成** | 自动生成角色配音 (TTS)、音效 (SFX) 并合成最终视频 |
+| 🎵 **智能视听合成** | 角色配音 (TTS) 已可用；SFX/BGM 生成已接通，导出会按参数实际转码并混音 |
 
 ---
 
@@ -134,7 +136,7 @@ pip install -r requirements.txt
 # 创建输出目录
 mkdir -p output/uploads
 
-# 启动服务 (http://localhost:8000)
+# 启动服务 (http://127.0.0.1:18177)
 ./start_backend.sh
 ```
 
@@ -152,7 +154,10 @@ npm install && npm run dev
 ## 📖 文档中心
 
 - **[用户手册](USER_MANUAL.md)**: 必读！详细的功能使用说明。
-- **[API 文档](http://localhost:8000/docs)**: 后端接口定义的 Swagger UI。
+- **[中文化与英文保留白名单](docs/中文化清单_影视创作者.md)**: 面向影视创作者的文案规范、英文保留白名单与多人协作执行规则。
+- **[API 文档](http://127.0.0.1:18177/docs)**: 后端接口定义的 Swagger UI。
+
+> 当前状态说明：导出已接入分辨率、格式和字幕参数；总混页里的 SFX/BGM 轨道对应真实生成的音频文件，最终混音会在导出阶段完成。
 
 ---
 
@@ -243,6 +248,12 @@ lumenx/
 ## 🤝 参与贡献
 
 我们非常欢迎社区贡献！请先阅读 [贡献指南](CONTRIBUTING.md) 了解代码规范和提交流程。
+
+如果你的改动涉及前端文案、多语言、提示词配置、术语词库或用户可见字符串，请同时阅读 [中文化与英文保留白名单](docs/中文化清单_影视创作者.md)，统一以下口径：
+
+- 用户界面文案优先中文。
+- 品牌名、模型名、Prompt 语法、URL/环境变量等按白名单保留英文。
+- 内部值保留英文，显示层统一走中文 label 或双语 label。
 
 - **Bug 反馈**: 请提交 [GitHub Issues](https://github.com/alibaba/lumenx/issues)
 - **功能建议**: 欢迎在 [Discussions](https://github.com/alibaba/lumenx/discussions) 中讨论

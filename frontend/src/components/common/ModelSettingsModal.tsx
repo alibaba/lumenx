@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, X, Image, Video, Film, Check, Layout, User, Building, Box } from 'lucide-react';
-import { useProjectStore, T2I_MODELS, I2I_MODELS, I2V_MODELS, ASPECT_RATIOS } from '@/store/projectStore';
+import { useProjectStore, DEFAULT_I2V_MODEL, DEFAULT_I2I_MODEL, DEFAULT_T2I_MODEL, T2I_MODELS, I2I_MODELS, I2V_MODELS, ASPECT_RATIOS } from '@/store/projectStore';
 import { api } from '@/lib/api';
+import { messages } from '@/lib/i18n';
 
 interface ModelSettingsModalProps {
     isOpen: boolean;
@@ -15,9 +16,9 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
 
-    const [t2iModel, setT2iModel] = useState(currentProject?.model_settings?.t2i_model || 'wan2.5-t2i-preview');
-    const [i2iModel, setI2iModel] = useState(currentProject?.model_settings?.i2i_model || 'wan2.5-i2i-preview');
-    const [i2vModel, setI2vModel] = useState(currentProject?.model_settings?.i2v_model || 'wan2.5-i2v-preview');
+    const [t2iModel, setT2iModel] = useState(currentProject?.model_settings?.t2i_model || DEFAULT_T2I_MODEL);
+    const [i2iModel, setI2iModel] = useState(currentProject?.model_settings?.i2i_model || DEFAULT_I2I_MODEL);
+    const [i2vModel, setI2vModel] = useState(currentProject?.model_settings?.i2v_model || DEFAULT_I2V_MODEL);
     const [characterAspectRatio, setCharacterAspectRatio] = useState(currentProject?.model_settings?.character_aspect_ratio || '9:16');
     const [sceneAspectRatio, setSceneAspectRatio] = useState(currentProject?.model_settings?.scene_aspect_ratio || '16:9');
     const [propAspectRatio, setPropAspectRatio] = useState(currentProject?.model_settings?.prop_aspect_ratio || '1:1');
@@ -27,9 +28,9 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
     // Sync state when project changes
     useEffect(() => {
         if (currentProject?.model_settings) {
-            setT2iModel(currentProject.model_settings.t2i_model || 'wan2.5-t2i-preview');
-            setI2iModel(currentProject.model_settings.i2i_model || 'wan2.5-i2i-preview');
-            setI2vModel(currentProject.model_settings.i2v_model || 'wan2.5-i2v-preview');
+            setT2iModel(currentProject.model_settings.t2i_model || DEFAULT_T2I_MODEL);
+            setI2iModel(currentProject.model_settings.i2i_model || DEFAULT_I2I_MODEL);
+            setI2vModel(currentProject.model_settings.i2v_model || DEFAULT_I2V_MODEL);
             setCharacterAspectRatio(currentProject.model_settings.character_aspect_ratio || '9:16');
             setSceneAspectRatio(currentProject.model_settings.scene_aspect_ratio || '16:9');
             setPropAspectRatio(currentProject.model_settings.prop_aspect_ratio || '1:1');
@@ -55,7 +56,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
             onClose();
         } catch (error) {
             console.error("Failed to save model settings:", error);
-            alert("Failed to save settings");
+            alert(messages.common.messages.saveFailed);
         } finally {
             setIsSaving(false);
         }

@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { RefreshCw, Download, Plus } from "lucide-react";
 
-import { api, API_URL } from "@/lib/api";
+import { api } from "@/lib/api";
+import { messages } from "@/lib/i18n";
 import { useProjectStore } from "@/store/projectStore";
 import { getAssetUrl } from "@/lib/utils";
 
@@ -20,6 +21,8 @@ interface AssetGridProps {
 }
 
 export default function AssetGrid({ projectId }: AssetGridProps) {
+    const copy = messages.modules.assetGrid;
+    const commonLabels = messages.common.labels;
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
 
@@ -68,7 +71,7 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
     const handleGenerate = async () => {
         if (!projectId) {
             // Try to find the latest project or alert user
-            alert("请先创建脚本！");
+            alert(copy.scriptRequired);
             return;
         }
         setIsGenerating(true);
@@ -108,10 +111,10 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
     return (
         <div className="h-full p-6 overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-display font-bold text-white">生成的资源</h2>
+                <h2 className="text-xl font-display font-bold text-white">{copy.title}</h2>
                 <div className="flex gap-2">
                     <button className="glass-button text-xs flex items-center gap-2">
-                        <Plus size={14} /> 上传
+                        <Plus size={14} /> {copy.upload}
                     </button>
                     <button
                         onClick={handleGenerate}
@@ -119,7 +122,7 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
                         className="glass-button text-xs flex items-center gap-2 text-primary border-primary/30"
                     >
                         <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
-                        {isGenerating ? "生成中..." : "生成全部"}
+                        {isGenerating ? copy.generatingAll : copy.generateAll}
                     </button>
                 </div>
             </div>
@@ -135,20 +138,26 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
                     >
                         {asset.url ? (
                             <img
-                                src={asset.url}
+                                src={getAssetUrl(asset.url)}
                                 alt={asset.title}
                                 className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105"
                             />
                         ) : (
                             <div className="w-full h-48 bg-white/5 flex items-center justify-center text-xs text-gray-500">
-                                生成中...
+                                {copy.noImage}
                             </div>
                         )}
 
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
                             <h3 className="text-sm font-bold text-white">{asset.title}</h3>
                             <div className="flex items-center justify-between mt-2">
-                                <span className="text-[10px] font-mono bg-white/10 px-2 py-1 rounded">{asset.type.toUpperCase()}</span>
+                                <span className="text-[10px] font-mono bg-white/10 px-2 py-1 rounded">
+                                    {asset.type === "char"
+                                        ? commonLabels.character
+                                        : asset.type === "bg"
+                                            ? commonLabels.scene
+                                            : commonLabels.prop}
+                                </span>
                                 <button className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
                                     <Download size={12} />
                                 </button>

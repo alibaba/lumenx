@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useProjectStore } from "@/store/projectStore";
+import { DEFAULT_I2V_MODEL, VideoParams, useProjectStore } from "@/store/projectStore";
 import VideoCreator from "./VideoCreator";
 import VideoSidebar from "./VideoSidebar";
 import { api, VideoTask } from "@/lib/api";
@@ -15,10 +15,10 @@ export default function VideoGenerator() {
     const [remixData, setRemixData] = useState<Partial<VideoTask> | null>(null);
 
     // Get default model from project settings
-    const defaultI2vModel = currentProject?.model_settings?.i2v_model || "wan2.5-i2v-preview";
+    const defaultI2vModel = currentProject?.model_settings?.i2v_model || DEFAULT_I2V_MODEL;
 
     // Generation Params (Lifted State)
-    const [params, setParams] = useState({
+    const [params, setParams] = useState<VideoParams>({
         resolution: "720p",
         duration: 5,
         seed: undefined as number | undefined,
@@ -33,6 +33,15 @@ export default function VideoGenerator() {
         shotType: "single" as string,  // 'single' or 'multi' (only for wan2.6-i2v)
         generationMode: "i2v" as string,  // 'i2v' or 'r2v'
         referenceVideoUrls: [] as string[],  // Reference videos for R2V (max 3)
+        aspectRatio: "adaptive",
+        watermark: false,
+        cameraFixed: false,
+        referenceAudioUrl: "",
+        seedanceReferenceMode: "image",
+        seedanceWorkflow: "standard",
+        seedanceExtendMode: "continue",
+        seedanceEditMode: "subject_replace",
+        seedancePreviewOnly: false,
         // Kling params
         mode: "std" as string,
         sound: false,
@@ -91,12 +100,24 @@ export default function VideoGenerator() {
             seed: task.seed,
             duration: task.duration,
             audio_url: task.audio_url,
-            prompt_extend: task.prompt_extend
+            prompt_extend: task.prompt_extend,
+            aspect_ratio: task.aspect_ratio,
+            watermark: task.watermark,
+            camera_fixed: task.camera_fixed,
+            reference_audio_url: task.reference_audio_url,
+            seedance_reference_mode: task.seedance_reference_mode,
+            seedance_workflow: task.seedance_workflow,
+            seedance_extend_mode: task.seedance_extend_mode,
+            seedance_edit_mode: task.seedance_edit_mode,
+            model: task.model,
         });
 
         // Update params state
         setParams(p => ({
             ...p,
+            model: task.model || p.model,
+            generationMode: task.generation_mode || p.generationMode,
+            referenceVideoUrls: task.reference_video_urls || [],
             duration: task.duration || 5,
             seed: task.seed,
             resolution: task.resolution || "720p",
@@ -104,6 +125,15 @@ export default function VideoGenerator() {
             audioUrl: task.audio_url || "",
             promptExtend: task.prompt_extend ?? true,
             negativePrompt: task.negative_prompt || "",
+            referenceAudioUrl: task.reference_audio_url || "",
+            seedanceReferenceMode: task.seedance_reference_mode || "image",
+            seedanceWorkflow: task.seedance_workflow || "standard",
+            seedanceExtendMode: task.seedance_extend_mode || "continue",
+            seedanceEditMode: task.seedance_edit_mode || "subject_replace",
+            seedancePreviewOnly: false,
+            aspectRatio: task.aspect_ratio || "adaptive",
+            watermark: task.watermark ?? false,
+            cameraFixed: task.camera_fixed ?? false,
             // Reset motion params as they are not stored directly in task (they are in prompt)
             cameraMovement: "none",
             subjectMotion: "still"

@@ -15,9 +15,11 @@
 [![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org/)
 [![GitHub Stars](https://img.shields.io/github/stars/alibaba/lumenx?style=social)](https://github.com/alibaba/lumenx)
 
-[English](README_EN.md) | [中文](README.md) | [User Manual](USER_MANUAL.md) | [Contributing](CONTRIBUTING.md)
+[English](README_EN.md) | [中文](README.md) | [User Manual](USER_MANUAL.md) | [Contributing](CONTRIBUTING.md) | [Git Workflow](docs/版本管理与Git规范.md)
 
 </div>
+
+After cloning, run `npm run git:setup-hooks` once to enable the repo-local Git rules.
 
 ---
 
@@ -37,7 +39,7 @@ The platform natively integrates Alibaba's Qwen & Wanx series model capabilities
 | 🎨 **Art Direction Control** | Custom visual style support (LoRA/Style Transfer) ensuring consistent art direction |
 | 🎬 **Visual Storyboard** | Drag-and-drop storyboard editor for WYSIWYG composition of characters and backgrounds |
 | 🎥 **Multimodal Generation** | Integration with Wanx and other models for Text-to-Image and Image-to-Video generation |
-| 🎵 **Smart AV Synthesis** | Automated character dubbing (TTS), sound effects (SFX), and final video synthesis |
+| 🎵 **Smart AV Synthesis** | Character dubbing (TTS) is available; SFX/BGM generation is connected and export now transcodes with real mixing |
 
 ---
 
@@ -134,7 +136,7 @@ pip install -r requirements.txt
 # Create output directories
 mkdir -p output/uploads
 
-# Start service (http://localhost:8000)
+# Start service (http://127.0.0.1:18177)
 ./start_backend.sh
 ```
 
@@ -152,7 +154,9 @@ npm install && npm run dev
 ## 📖 Documentation
 
 - **[User Manual](USER_MANUAL.md)**: **Must-read** for first-time users.
-- **[API Documentation](http://localhost:8000/docs)**: Backend Swagger UI.
+- **[API Documentation](http://127.0.0.1:18177/docs)**: Backend Swagger UI.
+
+> Current status: export now applies resolution, format and subtitle settings; the SFX/BGM tracks in the mix view map to real generated audio files, and the final mix is assembled during export.
 
 ---
 

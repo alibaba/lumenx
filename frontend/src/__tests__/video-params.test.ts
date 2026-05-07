@@ -39,6 +39,35 @@ describe('I2V_MODELS 配置', () => {
     });
 });
 
+// ── Seedance 2.0 参数 ──────────────────────────────────────────────────
+
+describe('Seedance 2.0 模型参数', () => {
+    const seedance = I2V_MODELS.find(m => m.id === 'doubao-seedance-2-0-260128')!;
+    const p = seedance.params;
+
+    it('支持 resolution, seed, audio', () => {
+        expect(p.resolution).toBeDefined();
+        expect(p.seed).toBe(true);
+        expect(p.audio).toBe(true);
+    });
+
+    it('resolution 仅包含 480p/720p', () => {
+        expect(p.resolution!.options).toEqual(['480p', '720p']);
+        expect(p.resolution!.default).toBe('720p');
+    });
+
+    it('不支持 Wan/Kling/Vidu 专属参数', () => {
+        expect(p.negativePrompt).toBeUndefined();
+        expect(p.promptExtend).toBeUndefined();
+        expect(p.shotType).toBeUndefined();
+        expect(p.mode).toBeUndefined();
+        expect(p.sound).toBeUndefined();
+        expect(p.cfgScale).toBeUndefined();
+        expect(p.viduAudio).toBeUndefined();
+        expect(p.movementAmplitude).toBeUndefined();
+    });
+});
+
 // ── Wan 2.6 参数 ───────────────────────────────────────────────────────
 
 describe('Wan 2.6 模型参数', () => {
@@ -256,6 +285,12 @@ describe('模型切换参数重置逻辑', () => {
         const result = simulateModelSwitch('wan2.6-i2v');
         expect(result.promptExtend).toBe(true);
         expect(result.resolution).toBe('720p');
+    });
+
+    it('切换到 Seedance 2.0 → 分辨率默认 720p，且无 promptExtend', () => {
+        const result = simulateModelSwitch('doubao-seedance-2-0-260128');
+        expect(result.resolution).toBe('720p');
+        expect(result.promptExtend).toBe(false);
     });
 
     it('切换到 Wan 2.2 → 无 promptExtend', () => {

@@ -19,76 +19,101 @@ import ModelSettingsModal from "@/components/common/ModelSettingsModal";
 import EnvConfigDialog from "@/components/project/EnvConfigDialog";
 import PromptConfigModal from "@/components/project/PromptConfigModal";
 import dynamic from "next/dynamic";
+import { messages } from "@/lib/i18n";
 
 const CreativeCanvas = dynamic(() => import("@/components/canvas/CreativeCanvas"), { ssr: false });
 
 export default function ProjectClient({ id, breadcrumbSegments }: { id: string; breadcrumbSegments?: BreadcrumbSegment[] }) {
+    const copy = messages.pipeline;
+    const projectCopy = messages.homePage.projectClient;
+    const homeCopy = messages.homePage;
     const [activeStep, setActiveStep] = useState("script");
+    const [isResolvingProject, setIsResolvingProject] = useState(true);
     const [modelSettingsOpen, setModelSettingsOpen] = useState(false);
     const [envDialogOpen, setEnvDialogOpen] = useState(false);
     const [promptConfigOpen, setPromptConfigOpen] = useState(false);
 
     const selectProject = useProjectStore((state) => state.selectProject);
     const currentProject = useProjectStore((state) => state.currentProject);
+    const hasMatchedProject = currentProject?.id === id;
 
     const handleBackToHome = () => {
         window.location.hash = '';
     };
 
     const steps = [
-        { id: "script", label: "1. Script", icon: BookOpen },
-        { id: "art_direction", label: "2. Art Direction", icon: Palette },
-        { id: "assets", label: "3. Assets", icon: Users },
-        { id: "storyboard", label: "4. Storyboard", icon: Layout },
-        { id: "motion", label: "5. Motion", icon: Video },
-        { id: "assembly", label: "6. Assembly", icon: Film },
-        { id: "audio", label: "7. Voice", icon: Mic, comingSoon: true },
-        { id: "mix", label: "8. Final Mix", icon: Music, comingSoon: true },
-        { id: "export", label: "9. Export", icon: Share2, comingSoon: true },
+        { id: "script", label: copy.steps.script, icon: BookOpen },
+        { id: "art_direction", label: copy.steps.artDirection, icon: Palette },
+        { id: "assets", label: copy.steps.assets, icon: Users },
+        { id: "storyboard", label: copy.steps.storyboard, icon: Layout },
+        { id: "motion", label: copy.steps.motion, icon: Video },
+        { id: "assembly", label: copy.steps.assembly, icon: Film },
+        { id: "audio", label: copy.steps.voice, icon: Mic, comingSoon: true },
+        { id: "mix", label: copy.steps.finalMix, icon: Music, comingSoon: true },
+        { id: "export", label: copy.steps.export, icon: Share2, comingSoon: true },
     ];
 
     useEffect(() => {
-        selectProject(id);
+        let cancelled = false;
+        setIsResolvingProject(true);
+        Promise.resolve(selectProject(id)).finally(() => {
+            if (!cancelled) {
+                setIsResolvingProject(false);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [id, selectProject]);
 
-    if (!currentProject) {
+    if (isResolvingProject && !hasMatchedProject) {
         return (
             <div className="flex items-center justify-center h-screen bg-background">
                 <div className="text-center">
-                    <p className="text-gray-400 mb-4">项目未找到</p>
+                    <p className="text-gray-400">{projectCopy.loadingProject}</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!hasMatchedProject) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-background">
+                <div className="text-center">
+                    <p className="text-gray-400 mb-4">{projectCopy.projectNotFound}</p>
                     <button
                         onClick={handleBackToHome}
                         className="text-primary hover:underline"
                     >
-                        返回项目列表
+                        {projectCopy.backToProjectList}
                     </button>
                 </div>
             </div>
         );
     }
 
-    const segments = breadcrumbSegments || [{ label: "LumenX", hash: "#/" }, { label: currentProject.title }];
+    const segments = breadcrumbSegments || [{ label: homeCopy.breadcrumb.root, hash: "#/" }, { label: currentProject.title }];
 
     const settingsActions = (
         <>
             <button
                 onClick={() => setEnvDialogOpen(true)}
                 className="p-2 hover:bg-white/10 rounded-lg transition-colors group"
-                title="API Key & OSS 配置"
+                title={copy.actions.apiAndOssConfig}
             >
                 <Key size={16} className="text-gray-400 group-hover:text-green-400 transition-colors" />
             </button>
             <button
                 onClick={() => setPromptConfigOpen(true)}
                 className="p-2 hover:bg-white/10 rounded-lg transition-colors group"
-                title="Prompt Configuration"
+                title={copy.actions.promptConfiguration}
             >
                 <MessageSquareCode size={16} className="text-gray-400 group-hover:text-purple-400 transition-colors" />
             </button>
             <button
                 onClick={() => setModelSettingsOpen(true)}
                 className="p-2 hover:bg-white/10 rounded-lg transition-colors group"
-                title="Model Settings"
+                title={copy.actions.modelSettings}
             >
                 <Settings size={16} className="text-gray-400 group-hover:text-white transition-colors" />
             </button>

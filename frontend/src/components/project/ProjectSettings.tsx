@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Palette, Info } from "lucide-react";
 import { api } from "@/lib/api";
+import { messages } from "@/lib/i18n";
 
 interface ProjectSettingsProps {
     project: any;
@@ -12,16 +13,13 @@ interface ProjectSettingsProps {
     onUpdate: (updatedProject: any) => void;
 }
 
-const STYLE_PRESETS = [
-    { value: "realistic", label: "Realistic (写实)", description: "Photorealistic, detailed imagery" },
-    { value: "cartoon", label: "Cartoon (卡通)", description: "Animated, colorful style" },
-    { value: "anime", label: "Anime (动漫)", description: "Japanese animation style" },
-    { value: "cyberpunk", label: "Cyberpunk (赛博朋克)", description: "Futuristic, neon-lit aesthetic" },
-    { value: "watercolor", label: "Watercolor (水彩)", description: "Soft, painterly look" },
-    { value: "sketch", label: "Sketch (素描)", description: "Hand-drawn pencil style" },
-    { value: "comic", label: "Comic Book (漫画)", description: "Bold outlines, halftone shading" },
-    { value: "cinematic", label: "Cinematic (电影)", description: "Film-like, dramatic lighting" },
-];
+const copy = messages.projectSettings;
+const commonActions = messages.common.actions;
+const STYLE_PRESET_IDS = ["realistic", "cartoon", "anime", "cyberpunk", "watercolor", "sketch", "comic", "cinematic"] as const;
+const STYLE_PRESETS = STYLE_PRESET_IDS.map((value) => ({
+    value,
+    ...messages.projectSettings.stylePresets[value],
+}));
 
 export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: ProjectSettingsProps) {
     const [stylePreset, setStylePreset] = useState(project?.style_preset || "realistic");
@@ -42,7 +40,7 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
         try {
             // Add timeout protection
             const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Request timeout')), 10000)
+                setTimeout(() => reject(new Error(copy.errors.requestTimeout)), 10000)
             );
 
             const updatePromise = api.updateProjectStyle(project.id, stylePreset, stylePrompt || undefined);
@@ -51,9 +49,9 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
             onUpdate(updated);
             onClose();
         } catch (error: any) {
-            console.error("Failed to update style:", error);
-            const errorMessage = error?.response?.data?.detail || error?.message || "更新风格失败";
-            alert(`更新风格失败: ${errorMessage}`);
+            console.error(copy.errors.updateStyleConsole, error);
+            const errorMessage = error?.response?.data?.detail || error?.message || copy.errors.updateStyle;
+            alert(`${copy.errors.updateStyle}: ${errorMessage}`);
         } finally {
             setIsSaving(false);
         }
@@ -85,8 +83,8 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
                                     <Palette className="text-primary" size={20} />
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-white">项目风格设置</h2>
-                                    <p className="text-xs text-gray-500">Project Style Settings</p>
+                                    <h2 className="text-xl font-bold text-white">{copy.title}</h2>
+                                    <p className="text-xs text-gray-500">{copy.subtitle}</p>
                                 </div>
                             </div>
                             <button
@@ -103,9 +101,9 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
                             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex gap-3">
                                 <Info size={18} className="text-blue-400 flex-shrink-0 mt-0.5" />
                                 <div className="text-sm text-gray-300">
-                                    <p className="font-semibold mb-1">全局风格设置</p>
+                                    <p className="font-semibold mb-1">{copy.infoTitle}</p>
                                     <p className="text-xs text-gray-400">
-                                        此风格将自动应用到所有资产生成和故事板渲染。您仍可在生成时单独覆盖特定项目的风格。
+                                        {copy.infoDescription}
                                     </p>
                                 </div>
                             </div>
@@ -113,7 +111,7 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
                             {/* Style Preset Selector */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-300 mb-3">
-                                    风格预设 <span className="text-gray-600">(Style Preset)</span>
+                                    {copy.stylePresetLabel}
                                 </label>
                                 <div className="grid grid-cols-2 gap-3">
                                     {STYLE_PRESETS.map((style) => (
@@ -135,26 +133,26 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
                             {/* Custom Style Prompt */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    自定义风格描述 <span className="text-gray-600">(Optional)</span>
+                                    {copy.customStyleLabel} <span className="text-gray-600">({copy.optional})</span>
                                 </label>
                                 <textarea
                                     value={stylePrompt}
                                     onChange={(e) => setStylePrompt(e.target.value)}
-                                    placeholder="例如: vibrant colors, soft lighting, dreamlike atmosphere"
+                                    placeholder={copy.customStylePlaceholder}
                                     className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-white placeholder-gray-600 focus:border-primary focus:outline-none resize-none"
                                     rows={3}
                                 />
                                 <p className="text-xs text-gray-600 mt-1">
-                                    此描述将与风格预设一起应用（可选）
+                                    {copy.customStyleHelp}
                                 </p>
                             </div>
 
                             {/* Preview */}
                             {selectedStyle && (
                                 <div className="bg-white/5 border border-white/10 rounded-lg p-4">
-                                    <p className="text-xs text-gray-500 mb-2">生成时将应用的风格：</p>
+                                    <p className="text-xs text-gray-500 mb-2">{copy.previewLabel}</p>
                                     <p className="text-sm text-blue-400 italic">
-                                        &quot;{selectedStyle.value} style{stylePrompt ? `, ${stylePrompt}` : ""}&quot;
+                                        &quot;{selectedStyle.label}{stylePrompt ? `，${stylePrompt}` : ""}&quot;
                                     </p>
                                 </div>
                             )}
@@ -166,14 +164,14 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
                                 onClick={onClose}
                                 className="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                             >
-                                取消
+                                {commonActions.cancel}
                             </button>
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving}
                                 className="px-6 py-2 text-sm bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                             >
-                                {isSaving ? "保存中..." : "保存设置"}
+                                {isSaving ? copy.saving : copy.saveSettings}
                             </button>
                         </div>
                     </motion.div>

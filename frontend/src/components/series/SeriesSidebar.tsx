@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import type { Series, Project } from "@/store/projectStore";
+import { assetTypeTerms, messages } from "@/lib/i18n";
 
 // ── Types ──
 
@@ -50,12 +51,6 @@ interface SeriesSidebarProps {
 
 // ── Asset nav config ──
 
-const ASSET_TABS = [
-  { tab: "characters" as const, label: "角色", icon: Users },
-  { tab: "scenes" as const, label: "场景", icon: MapPin },
-  { tab: "props" as const, label: "道具", icon: Package },
-] as const;
-
 // ── Component ──
 
 export default function SeriesSidebar({
@@ -81,6 +76,15 @@ export default function SeriesSidebar({
   onOpenPromptConfig,
   onOpenImportAssets,
 }: SeriesSidebarProps) {
+  const copy = messages.seriesPage.sidebar;
+  const homeCopy = messages.homePage;
+  const commonActions = messages.common.actions;
+  const ASSET_TABS = [
+    { tab: "characters" as const, label: assetTypeTerms.character.label, icon: Users },
+    { tab: "scenes" as const, label: assetTypeTerms.scene.label, icon: MapPin },
+    { tab: "props" as const, label: assetTypeTerms.prop.label, icon: Package },
+  ] as const;
+
   const getAssetCount = (tab: "characters" | "scenes" | "props") => {
     if (tab === "characters") return series.characters?.length || 0;
     if (tab === "scenes") return series.scenes?.length || 0;
@@ -106,11 +110,11 @@ export default function SeriesSidebar({
             <button
               onClick={onBack}
               className="flex-shrink-0 text-gray-400 hover:text-white transition-colors"
-              title="返回首页"
+              title={copy.backHome}
             >
               <ChevronLeft size={16} />
             </button>
-            <span className="text-xs text-gray-500 truncate">LumenX</span>
+            <span className="text-xs text-gray-500 truncate">{homeCopy.breadcrumb.root}</span>
           </div>
 
           {/* Editable title */}
@@ -128,7 +132,7 @@ export default function SeriesSidebar({
             <h1
               className="text-base font-display font-bold text-white cursor-pointer hover:text-primary transition-colors truncate"
               onDoubleClick={onTitleDoubleClick}
-              title="双击编辑标题"
+              title={copy.editTitleHint}
             >
               {series.title}
             </h1>
@@ -144,7 +148,7 @@ export default function SeriesSidebar({
       <div className="p-3 space-y-1">
         <div className="px-3 py-1.5">
           <span className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
-            共享资产
+            {copy.sharedAssets}
           </span>
         </div>
         {ASSET_TABS.map(({ tab, label, icon: Icon }) => {
@@ -200,7 +204,7 @@ export default function SeriesSidebar({
       <div className="flex-1 flex flex-col min-h-0 border-t border-glass-border">
         <div className="px-6 py-2.5 flex items-center justify-between">
           <span className="text-[10px] font-mono text-gray-600 uppercase tracking-wider">
-            集数 ({episodes.length})
+            {copy.episodes(episodes.length)}
           </span>
         </div>
 
@@ -256,7 +260,7 @@ export default function SeriesSidebar({
 
           {episodes.length === 0 && !showAddEpisode && (
             <div className="text-center py-6">
-              <p className="text-xs text-gray-600">暂无集数</p>
+              <p className="text-xs text-gray-600">{copy.emptyEpisodes}</p>
             </div>
           )}
         </div>
@@ -278,7 +282,7 @@ export default function SeriesSidebar({
                     type="text"
                     value={newEpisodeTitle}
                     onChange={(e) => onNewEpisodeTitleChange(e.target.value)}
-                    placeholder="集数标题..."
+                    placeholder={homeCopy.seriesCard.addEpisodeTitlePlaceholder}
                     className="w-full bg-black/30 border border-glass-border rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-primary transition-colors"
                     autoFocus
                     onKeyDown={onAddEpisodeKeyDown}
@@ -289,7 +293,7 @@ export default function SeriesSidebar({
                       disabled={!newEpisodeTitle.trim() || isCreatingEpisode}
                       className="flex-1 bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 active:scale-[0.97]"
                     >
-                      {isCreatingEpisode ? "创建中..." : "确定"}
+                      {isCreatingEpisode ? homeCopy.createSeriesDialog.creating : homeCopy.seriesCard.confirmAddEpisode}
                     </button>
                     <button
                       onClick={() => {
@@ -298,7 +302,7 @@ export default function SeriesSidebar({
                       }}
                       className="px-3 py-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors text-xs active:scale-[0.97]"
                     >
-                      取消
+                      {commonActions.cancel}
                     </button>
                   </div>
                 </div>
@@ -314,7 +318,7 @@ export default function SeriesSidebar({
                 className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 transition-colors text-xs border border-dashed border-gray-700 hover:border-gray-500 active:scale-[0.97]"
               >
                 <Plus size={14} />
-                添加集数
+                {homeCopy.seriesCard.addEpisode}
               </motion.button>
             )}
           </AnimatePresence>
@@ -328,21 +332,21 @@ export default function SeriesSidebar({
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors group"
         >
           <Download size={16} className="group-hover:text-green-400 transition-colors" />
-          <span className="text-sm">导入资产</span>
+          <span className="text-sm">{copy.importAssets}</span>
         </button>
         <button
           onClick={onOpenPromptConfig}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors group"
         >
           <MessageSquareCode size={16} className="group-hover:text-purple-400 transition-colors" />
-          <span className="text-sm">提示词配置</span>
+          <span className="text-sm">{copy.promptConfig}</span>
         </button>
         <button
           onClick={onOpenModelSettings}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/5 transition-colors group"
         >
           <Settings size={16} className="group-hover:text-white transition-colors" />
-          <span className="text-sm">生成设置</span>
+          <span className="text-sm">{copy.modelSettings}</span>
         </button>
       </div>
     </motion.aside>

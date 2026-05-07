@@ -6,12 +6,27 @@ import clsx from "clsx";
 import { useProjectStore } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { messages } from "@/lib/i18n";
+
+const copy = messages.modules.voiceActingStudio;
+
+type VoiceOption = {
+    id: string;
+    name: string;
+    gender?: string;
+    model?: string;
+};
+
+type VoiceDraft = {
+    voiceId: string;
+    voiceName: string;
+};
 
 export default function VoiceActingStudio() {
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
 
-    const [voices, setVoices] = useState<any[]>([]);
+    const [voices, setVoices] = useState<VoiceOption[]>([]);
     const [playingAudio, setPlayingAudio] = useState<string | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -23,6 +38,7 @@ export default function VoiceActingStudio() {
 
     // Per-character voice params (defaults)
     const [charParams, setCharParams] = useState<Record<string, { speed: number; pitch: number; volume: number }>>({});
+    const [customVoiceDrafts, setCustomVoiceDrafts] = useState<Record<string, VoiceDraft>>({});
 
     useEffect(() => {
         api.getVoices().then(setVoices).catch(console.error);
@@ -31,14 +47,20 @@ export default function VoiceActingStudio() {
     useEffect(() => {
         if (currentProject?.characters) {
             const params: Record<string, { speed: number; pitch: number; volume: number }> = {};
+            const drafts: Record<string, VoiceDraft> = {};
             currentProject.characters.forEach((char: any) => {
                 params[char.id] = {
                     speed: char.voice_speed ?? 1.0,
                     pitch: char.voice_pitch ?? 1.0,
                     volume: char.voice_volume ?? 50,
                 };
+                drafts[char.id] = {
+                    voiceId: char.voice_id ?? "",
+                    voiceName: char.voice_name ?? "",
+                };
             });
             setCharParams(params);
+            setCustomVoiceDrafts(drafts);
         }
     }, [currentProject?.characters]);
 
@@ -62,7 +84,30 @@ export default function VoiceActingStudio() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to bind voice:", error);
+            alert(copy.failedToBindVoice);
         }
+    };
+
+    const updateCustomVoiceDraft = (charId: string, key: keyof VoiceDraft, value: string) => {
+        setCustomVoiceDrafts((prev) => ({
+            ...prev,
+            [charId]: {
+                voiceId: prev[charId]?.voiceId ?? "",
+                voiceName: prev[charId]?.voiceName ?? "",
+                [key]: value,
+            },
+        }));
+    };
+
+    const handleBindCustomVoice = async (charId: string) => {
+        const draft = customVoiceDrafts[charId];
+        const voiceId = draft?.voiceId?.trim();
+        const voiceName = draft?.voiceName?.trim() || voiceId;
+        if (!voiceId) {
+            alert(copy.customVoiceRequired);
+            return;
+        }
+        await handleBindVoice(charId, voiceId, voiceName);
     };
 
     const handleCharParamChange = (charId: string, param: string, value: number) => {
@@ -80,6 +125,7 @@ export default function VoiceActingStudio() {
             updateProject(currentProject.id, updated);
         } catch (error) {
             console.error("Failed to save voice params:", error);
+            alert(copy.failedToSaveVoiceParams);
         }
     };
 
@@ -91,6 +137,7 @@ export default function VoiceActingStudio() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to generate audio:", error);
+            alert(copy.failedToGenerateAudio);
         } finally {
             setIsGenerating(false);
         }
@@ -105,6 +152,7 @@ export default function VoiceActingStudio() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to generate line audio:", error);
+            alert(copy.failedToGenerateLineAudio);
         } finally {
             setGeneratingLineId(null);
         }
@@ -118,7 +166,7 @@ export default function VoiceActingStudio() {
             <div className="w-80 border-r border-white/10 flex flex-col bg-black/20">
                 <div className="p-4 border-b border-white/10">
                     <h3 className="font-display font-bold text-sm flex items-center gap-2">
-                        <Users size={16} className="text-primary" /> Casting Room
+                        <Users size={16} className="text-primary" /> {copy.castingRoom}
                     </h3>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -144,27 +192,77 @@ export default function VoiceActingStudio() {
 
                             {/* Voice Selector */}
                             <div className="space-y-1">
-                                <label className="text-[10px] uppercase text-gray-500 font-bold">Assigned Voice</label>
+                                <label className="text-[10px] uppercase text-gray-500 font-bold">{copy.assignedVoice}</label>
+                                {(() => {
+                                    const presetVoice = voices.find((voice) => voice.id === char.voice_id);
+                                    const selectValue = char.voice_id ? (presetVoice ? char.voice_id : "__custom__") : "";
+                                    const draft = customVoiceDrafts[char.id] ?? { voiceId: "", voiceName: "" };
+
+                                    return (
+                                        <>
                                 <select
                                     className="w-full bg-black/20 border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-primary"
-                                    value={char.voice_id || ""}
+                                    value={selectValue}
                                     onChange={(e) => {
+                                        if (e.target.value === "__custom__") {
+                                            return;
+                                        }
                                         const voice = voices.find(v => v.id === e.target.value);
-                                        if (voice) handleBindVoice(char.id, voice.id, voice.name);
+                                        if (voice) {
+                                            updateCustomVoiceDraft(char.id, "voiceId", voice.id);
+                                            updateCustomVoiceDraft(char.id, "voiceName", voice.name);
+                                            handleBindVoice(char.id, voice.id, voice.name);
+                                        }
                                     }}
                                 >
-                                    <option value="">Select a voice...</option>
+                                    <option value="">{copy.selectVoice}</option>
                                     {voices.map(v => (
                                         <option key={v.id} value={v.id}>{v.name}</option>
                                     ))}
+                                    <option value="__custom__">{copy.customVoiceOption}</option>
                                 </select>
+                                            <p className="text-[10px] text-gray-500 mt-2">{copy.customVoiceHint}</p>
+                                            <input
+                                                type="text"
+                                                value={draft.voiceId}
+                                                onChange={(e) => updateCustomVoiceDraft(char.id, "voiceId", e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") {
+                                                        void handleBindCustomVoice(char.id);
+                                                    }
+                                                }}
+                                                placeholder={copy.customVoiceIdPlaceholder}
+                                                className="mt-2 w-full bg-black/20 border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-primary"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={draft.voiceName}
+                                                onChange={(e) => updateCustomVoiceDraft(char.id, "voiceName", e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter") {
+                                                        void handleBindCustomVoice(char.id);
+                                                    }
+                                                }}
+                                                placeholder={copy.customVoiceNamePlaceholder}
+                                                className="mt-2 w-full bg-black/20 border border-white/10 rounded px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-primary"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => void handleBindCustomVoice(char.id)}
+                                                className="mt-2 w-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-primary/40 text-xs text-gray-200 py-2 rounded-lg transition-colors"
+                                            >
+                                                {copy.applyCustomVoice}
+                                            </button>
+                                        </>
+                                    );
+                                })()}
                             </div>
 
                             {/* Per-Character Voice Params */}
                             <div className="mt-3 space-y-2">
                                 <div>
                                     <label className="flex justify-between text-[10px] text-gray-500 mb-0.5">
-                                        Speed <span>{(charParams[char.id]?.speed ?? 1.0).toFixed(1)}x</span>
+                                        {copy.speed} <span>{(charParams[char.id]?.speed ?? 1.0).toFixed(1)}x</span>
                                     </label>
                                     <input type="range" min="0.5" max="2.0" step="0.1"
                                         value={charParams[char.id]?.speed ?? 1.0}
@@ -175,7 +273,7 @@ export default function VoiceActingStudio() {
                                 </div>
                                 <div>
                                     <label className="flex justify-between text-[10px] text-gray-500 mb-0.5">
-                                        Pitch <span>{(charParams[char.id]?.pitch ?? 1.0).toFixed(1)}</span>
+                                        {copy.pitch} <span>{(charParams[char.id]?.pitch ?? 1.0).toFixed(1)}</span>
                                     </label>
                                     <input type="range" min="0.5" max="2.0" step="0.1"
                                         value={charParams[char.id]?.pitch ?? 1.0}
@@ -186,7 +284,7 @@ export default function VoiceActingStudio() {
                                 </div>
                                 <div>
                                     <label className="flex justify-between text-[10px] text-gray-500 mb-0.5">
-                                        Volume <span>{charParams[char.id]?.volume ?? 50}</span>
+                                        {copy.volume} <span>{charParams[char.id]?.volume ?? 50}</span>
                                     </label>
                                     <input type="range" min="0" max="100" step="1"
                                         value={charParams[char.id]?.volume ?? 50}
@@ -205,14 +303,14 @@ export default function VoiceActingStudio() {
             <div className="flex-1 flex flex-col relative">
                 {/* Toolbar */}
                 <div className="h-14 border-b border-white/10 bg-black/20 flex items-center px-6 justify-between">
-                    <h2 className="font-display font-bold text-lg">Script Reader</h2>
+                    <h2 className="font-display font-bold text-lg">{copy.scriptReader}</h2>
                     <button
                         onClick={handleGenerateAll}
                         disabled={isGenerating}
                         className="bg-white/5 hover:bg-white/10 border border-primary/50 hover:border-primary text-primary hover:text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap flex-shrink-0 transition-all disabled:opacity-50"
                     >
                         {isGenerating ? <Wand2 className="animate-spin" size={16} /> : <Mic size={16} />}
-                        {isGenerating ? "Generating..." : "Generate All Audio"}
+                        {isGenerating ? copy.generating : copy.generateAllAudio}
                     </button>
                 </div>
 
@@ -241,7 +339,7 @@ export default function VoiceActingStudio() {
                                         )}
                                     </div>
                                     <span className="text-[10px] text-gray-500 text-center leading-tight w-16 truncate">
-                                        {speaker?.name || "Unknown"}
+                                        {speaker?.name || copy.unknown}
                                     </span>
                                 </div>
 
@@ -258,7 +356,7 @@ export default function VoiceActingStudio() {
                                                 <div className="space-y-4">
                                                     <div>
                                                         <label className="flex justify-between text-xs text-gray-400 mb-1">
-                                                            Speed <span>{settings.speed}x</span>
+                                                            {copy.speed} <span>{settings.speed}x</span>
                                                         </label>
                                                         <input
                                                             type="range" min="0.5" max="2.0" step="0.1"
@@ -272,7 +370,7 @@ export default function VoiceActingStudio() {
                                                     </div>
                                                     <div>
                                                         <label className="flex justify-between text-xs text-gray-400 mb-1">
-                                                            Pitch <span>{settings.pitch}</span>
+                                                            {copy.pitch} <span>{settings.pitch}</span>
                                                         </label>
                                                         <input
                                                             type="range" min="0.5" max="2.0" step="0.1"
@@ -286,7 +384,7 @@ export default function VoiceActingStudio() {
                                                     </div>
                                                     <div>
                                                         <label className="flex justify-between text-xs text-gray-400 mb-1">
-                                                            Volume <span>{settings.volume}</span>
+                                                            {copy.volume} <span>{settings.volume}</span>
                                                         </label>
                                                         <input
                                                             type="range" min="0" max="100" step="1"
@@ -305,7 +403,7 @@ export default function VoiceActingStudio() {
                                                         }}
                                                         className="w-full bg-white/5 hover:bg-white/10 border border-primary/50 hover:border-primary text-primary hover:text-white text-xs py-2 rounded-lg font-bold transition-all"
                                                     >
-                                                        Regenerate with Settings
+                                                        {copy.regenerateWithSettings}
                                                     </button>
                                                 </div>
                                             </div>
@@ -355,14 +453,14 @@ export default function VoiceActingStudio() {
 
                                         {/* Metadata Footer */}
                                         <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between text-xs text-gray-500">
-                                            <span className="font-mono">Frame {index + 1}</span>
+                                            <span className="font-mono">{copy.frameNumber(index + 1)}</span>
                                             {frame.status === "failed" ? (
-                                                <span className="flex items-center gap-1 text-red-400" title={frame.audio_error || "Generation failed"}>
-                                                    <AlertCircle size={12} /> {frame.audio_error || "Audio generation failed"}
+                                                <span className="flex items-center gap-1 text-red-400" title={frame.audio_error || copy.generationFailed}>
+                                                    <AlertCircle size={12} /> {frame.audio_error || copy.audioGenerationFailed}
                                                 </span>
                                             ) : frame.audio_url ? (
                                                 <span className="flex items-center gap-1 text-green-500">
-                                                    <Check size={12} /> Audio Ready
+                                                    <Check size={12} /> {copy.audioReady}
                                                 </span>
                                             ) : null}
                                         </div>
@@ -375,7 +473,7 @@ export default function VoiceActingStudio() {
                     {(!currentProject?.frames?.some((f: any) => f.dialogue)) && (
                         <div className="text-center text-gray-500 py-20">
                             <Volume2 size={48} className="mx-auto mb-4 opacity-20" />
-                            <p>No dialogue found in this script.</p>
+                            <p>{copy.noDialogue}</p>
                         </div>
                     )}
                 </div>

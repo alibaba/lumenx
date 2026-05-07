@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "audit:copy": "node ./scripts/audit-hardcoded-copy.mjs",
+    "audit:copy:strict": "node ./scripts/audit-hardcoded-copy.mjs --strict",
     "test": "node ./scripts/run-vitest.mjs",
     "test:ui": "node ./scripts/run-vitest.mjs --config vitest.ui.config.mts",
     "test:all": "npm run test && npm run test:ui"

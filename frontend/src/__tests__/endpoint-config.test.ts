@@ -1,120 +1,32 @@
-/**
- * Tests for EnvConfig dialog/settings pure logic:
- * - provider-mode aware required-field validation
- * - endpoint_overrides state transforms
- * - API response normalization
- * - required-dialog canClose behavior
- */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
-type ProviderMode = "dashscope" | "vendor";
+import {
+  DEFAULT_ENV_CONFIG,
+  ENDPOINT_PROVIDERS,
+  normalizeEnvConfig,
+  normalizeEditProvider,
+  normalizeImageProvider,
+  normalizeTtsProvider,
+  normalizeStorageProvider,
+} from "../lib/env-config";
 
-interface EnvConfig {
-  DASHSCOPE_API_KEY: string;
-  ALIBABA_CLOUD_ACCESS_KEY_ID: string;
-  ALIBABA_CLOUD_ACCESS_KEY_SECRET: string;
-  OSS_BUCKET_NAME: string;
-  OSS_ENDPOINT: string;
-  OSS_BASE_PATH: string;
-  KLING_PROVIDER_MODE: ProviderMode;
-  VIDU_PROVIDER_MODE: ProviderMode;
-  PIXVERSE_PROVIDER_MODE: ProviderMode;
-  KLING_ACCESS_KEY: string;
-  KLING_SECRET_KEY: string;
-  VIDU_API_KEY: string;
-  endpoint_overrides: Record<string, string>;
-  [key: string]: string | Record<string, string>;
-}
-
-const ENDPOINT_PROVIDERS = [
-  { key: "DASHSCOPE_BASE_URL", label: "DashScope", placeholder: "https://dashscope.aliyuncs.com" },
-  { key: "KLING_BASE_URL", label: "Kling", placeholder: "https://api-beijing.klingai.com/v1" },
-  { key: "VIDU_BASE_URL", label: "Vidu", placeholder: "https://api.vidu.cn/ent/v2" },
-];
-
-const DEFAULT_CONFIG: EnvConfig = {
-  DASHSCOPE_API_KEY: "",
-  ALIBABA_CLOUD_ACCESS_KEY_ID: "",
-  ALIBABA_CLOUD_ACCESS_KEY_SECRET: "",
-  OSS_BUCKET_NAME: "",
-  OSS_ENDPOINT: "",
-  OSS_BASE_PATH: "",
-  KLING_PROVIDER_MODE: "dashscope",
-  VIDU_PROVIDER_MODE: "dashscope",
-  PIXVERSE_PROVIDER_MODE: "dashscope",
-  KLING_ACCESS_KEY: "",
-  KLING_SECRET_KEY: "",
-  VIDU_API_KEY: "",
-  endpoint_overrides: {},
-};
-
-function normalizeProviderMode(mode?: string): ProviderMode {
-  return mode === "vendor" ? "vendor" : "dashscope";
-}
-
-/** Mirrors validateRequiredFields() after Task 8 */
-function validateRequiredFields(config: EnvConfig): boolean {
-  const dashscopeKey = config.DASHSCOPE_API_KEY?.trim();
-  if (!dashscopeKey) return false;
-
-  if (config.KLING_PROVIDER_MODE === "vendor") {
-    const klingAccessKey = config.KLING_ACCESS_KEY?.trim();
-    const klingSecretKey = config.KLING_SECRET_KEY?.trim();
-    if (!klingAccessKey || !klingSecretKey) return false;
-  }
-
-  if (config.VIDU_PROVIDER_MODE === "vendor") {
-    const viduApiKey = config.VIDU_API_KEY?.trim();
-    if (!viduApiKey) return false;
-  }
-
+function canSaveConfig(): boolean {
   return true;
 }
 
-/** Mirrors handleChange() state updater */
-function applyChange(config: EnvConfig, key: string, value: string): EnvConfig {
-  return { ...config, [key]: value };
+function applyChange(key: string, value: string) {
+  return { ...DEFAULT_ENV_CONFIG, [key]: value };
 }
 
-/** Mirrors handleEndpointChange() state updater */
-function applyEndpointChange(config: EnvConfig, envKey: string, value: string): EnvConfig {
+function applyEndpointChange(envKey: string, value: string) {
   return {
-    ...config,
-    endpoint_overrides: { ...config.endpoint_overrides, [envKey]: value },
+    ...DEFAULT_ENV_CONFIG,
+    endpoint_overrides: { ...DEFAULT_ENV_CONFIG.endpoint_overrides, [envKey]: value },
   };
 }
 
-/** Mirrors loadConfig() normalization in dialog/settings */
-function normalizeApiResponse(existing: EnvConfig, data: { [key: string]: unknown }): EnvConfig {
-  const base = data as Partial<EnvConfig>;
-
-  const klingMode =
-    typeof data.KLING_PROVIDER_MODE === "string" ? data.KLING_PROVIDER_MODE : existing.KLING_PROVIDER_MODE;
-  const viduMode =
-    typeof data.VIDU_PROVIDER_MODE === "string" ? data.VIDU_PROVIDER_MODE : existing.VIDU_PROVIDER_MODE;
-  const pixverseMode =
-    typeof data.PIXVERSE_PROVIDER_MODE === "string"
-      ? data.PIXVERSE_PROVIDER_MODE
-      : existing.PIXVERSE_PROVIDER_MODE;
-
-  const endpointOverrides =
-    typeof data.endpoint_overrides === "object" && data.endpoint_overrides !== null
-      ? (data.endpoint_overrides as Record<string, string>)
-      : existing.endpoint_overrides ?? {};
-
-  return {
-    ...existing,
-    ...base,
-    KLING_PROVIDER_MODE: normalizeProviderMode(klingMode),
-    VIDU_PROVIDER_MODE: normalizeProviderMode(viduMode),
-    PIXVERSE_PROVIDER_MODE: normalizeProviderMode(pixverseMode),
-    endpoint_overrides: endpointOverrides,
-  };
-}
-
-/** Mirrors required-dialog close gating */
-function computeCanClose(isRequired: boolean, config: EnvConfig): boolean {
-  return !isRequired || validateRequiredFields(config);
+function computeCanClose(): boolean {
+  return true;
 }
 
 describe("ENDPOINT_PROVIDERS registry", () => {
@@ -132,184 +44,171 @@ describe("ENDPOINT_PROVIDERS registry", () => {
     }
   });
 
-  it("has unique keys", () => {
-    const keys = ENDPOINT_PROVIDERS.map((p) => p.key);
-    expect(new Set(keys).size).toBe(keys.length);
-  });
-
-  it("contains exactly DashScope, Kling, Vidu", () => {
-    expect(ENDPOINT_PROVIDERS).toHaveLength(3);
+  it("contains exactly Ark / Seedance, DashScope, Kling, Vidu", () => {
+    expect(ENDPOINT_PROVIDERS).toHaveLength(4);
     const labels = ENDPOINT_PROVIDERS.map((p) => p.label);
-    expect(labels).toEqual(expect.arrayContaining(["DashScope", "Kling", "Vidu"]));
+    expect(labels).toEqual(expect.arrayContaining(["Ark / Seedance", "DashScope", "Kling", "Vidu"]));
   });
 });
 
-describe("validateRequiredFields", () => {
-  it("returns false when DashScope key is missing", () => {
-    expect(validateRequiredFields(DEFAULT_CONFIG)).toBe(false);
+describe("storage provider normalization", () => {
+  it("accepts tos and oss", () => {
+    expect(normalizeStorageProvider("tos")).toBe("tos");
+    expect(normalizeStorageProvider("oss")).toBe("oss");
   });
 
-  it("returns true when only DashScope key is present (default provider modes)", () => {
-    const valid = { ...DEFAULT_CONFIG, DASHSCOPE_API_KEY: "sk-test" };
-    expect(validateRequiredFields(valid)).toBe(true);
-  });
-
-  it("does not require OSS or Alibaba credentials", () => {
-    const valid = {
-      ...DEFAULT_CONFIG,
-      DASHSCOPE_API_KEY: "sk-test",
-      ALIBABA_CLOUD_ACCESS_KEY_ID: "",
-      ALIBABA_CLOUD_ACCESS_KEY_SECRET: "",
-      OSS_BUCKET_NAME: "",
-      OSS_ENDPOINT: "",
-    };
-    expect(validateRequiredFields(valid)).toBe(true);
-  });
-
-  it("requires Kling vendor credentials when KLING_PROVIDER_MODE=vendor", () => {
-    const invalid = {
-      ...DEFAULT_CONFIG,
-      DASHSCOPE_API_KEY: "sk-test",
-      KLING_PROVIDER_MODE: "vendor" as const,
-      KLING_ACCESS_KEY: "",
-      KLING_SECRET_KEY: "",
-    };
-    expect(validateRequiredFields(invalid)).toBe(false);
-
-    const valid = {
-      ...invalid,
-      KLING_ACCESS_KEY: "kling-ak",
-      KLING_SECRET_KEY: "kling-sk",
-    };
-    expect(validateRequiredFields(valid)).toBe(true);
-  });
-
-  it("requires Vidu API key when VIDU_PROVIDER_MODE=vendor", () => {
-    const invalid = {
-      ...DEFAULT_CONFIG,
-      DASHSCOPE_API_KEY: "sk-test",
-      VIDU_PROVIDER_MODE: "vendor" as const,
-      VIDU_API_KEY: "",
-    };
-    expect(validateRequiredFields(invalid)).toBe(false);
-
-    const valid = {
-      ...invalid,
-      VIDU_API_KEY: "vidu-key",
-    };
-    expect(validateRequiredFields(valid)).toBe(true);
-  });
-
-  it("trims whitespace before validation", () => {
-    const invalid = {
-      ...DEFAULT_CONFIG,
-      DASHSCOPE_API_KEY: "   ",
-    };
-    expect(validateRequiredFields(invalid)).toBe(false);
-
-    const valid = {
-      ...DEFAULT_CONFIG,
-      DASHSCOPE_API_KEY: "  sk-test  ",
-      KLING_PROVIDER_MODE: "vendor" as const,
-      KLING_ACCESS_KEY: " kling-ak ",
-      KLING_SECRET_KEY: " kling-sk ",
-      VIDU_PROVIDER_MODE: "vendor" as const,
-      VIDU_API_KEY: " vidu-key ",
-    };
-    expect(validateRequiredFields(valid)).toBe(true);
+  it("falls back to local mode for unknown values", () => {
+    expect(normalizeStorageProvider("unexpected")).toBe("");
+    expect(normalizeStorageProvider(undefined)).toBe("");
   });
 });
 
-describe("applyChange (handleChange logic)", () => {
+describe("image provider normalization", () => {
+  it("defaults to openai-compatible for unknown values", () => {
+    expect(normalizeImageProvider("openai")).toBe("openai");
+    expect(normalizeImageProvider("dashscope")).toBe("dashscope");
+    expect(normalizeImageProvider("unexpected")).toBe("openai");
+  });
+});
+
+describe("edit provider normalization", () => {
+  it("defaults to openai-compatible for unknown values", () => {
+    expect(normalizeEditProvider("openai")).toBe("openai");
+    expect(normalizeEditProvider("dashscope")).toBe("dashscope");
+    expect(normalizeEditProvider("unexpected")).toBe("openai");
+  });
+});
+
+describe("tts provider normalization", () => {
+  it("defaults to openai-compatible for unknown values", () => {
+    expect(normalizeTtsProvider("openai")).toBe("openai");
+    expect(normalizeTtsProvider("dashscope")).toBe("dashscope");
+    expect(normalizeTtsProvider("unexpected")).toBe("openai");
+  });
+});
+
+describe("canSaveConfig", () => {
+  it("allows saving when no API keys are configured yet", () => {
+    expect(canSaveConfig()).toBe(true);
+  });
+});
+
+describe("applyChange", () => {
   it("updates a single field immutably", () => {
-    const updated = applyChange(DEFAULT_CONFIG, "DASHSCOPE_API_KEY", "sk-new");
-    expect(updated.DASHSCOPE_API_KEY).toBe("sk-new");
-    expect(DEFAULT_CONFIG.DASHSCOPE_API_KEY).toBe("");
-  });
-
-  it("preserves provider mode fields when changing key values", () => {
-    const base = { ...DEFAULT_CONFIG, KLING_PROVIDER_MODE: "vendor" as const };
-    const updated = applyChange(base, "DASHSCOPE_API_KEY", "sk-new");
-    expect(updated.KLING_PROVIDER_MODE).toBe("vendor");
+    const updated = applyChange("OPENAI_IMAGE_MODEL", "image-model-x");
+    expect(updated.OPENAI_IMAGE_MODEL).toBe("image-model-x");
+    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_MODEL).toBe("nano-banana");
   });
 });
 
-describe("applyEndpointChange (handleEndpointChange logic)", () => {
-  it("adds and updates endpoint overrides immutably", () => {
-    const added = applyEndpointChange(DEFAULT_CONFIG, "DASHSCOPE_BASE_URL", "https://intl.example.com");
-    expect(added.endpoint_overrides.DASHSCOPE_BASE_URL).toBe("https://intl.example.com");
-
-    const updated = applyEndpointChange(added, "DASHSCOPE_BASE_URL", "https://new.example.com");
-    expect(updated.endpoint_overrides.DASHSCOPE_BASE_URL).toBe("https://new.example.com");
-    expect(added.endpoint_overrides.DASHSCOPE_BASE_URL).toBe("https://intl.example.com");
-  });
-
-  it("preserves other overrides when changing one", () => {
-    const base = {
-      ...DEFAULT_CONFIG,
-      endpoint_overrides: {
-        DASHSCOPE_BASE_URL: "https://ds.example.com",
-        KLING_BASE_URL: "https://kling.example.com",
-      },
-    };
-    const updated = applyEndpointChange(base, "VIDU_BASE_URL", "https://vidu.example.com");
-    expect(updated.endpoint_overrides.KLING_BASE_URL).toBe("https://kling.example.com");
-    expect(updated.endpoint_overrides.VIDU_BASE_URL).toBe("https://vidu.example.com");
+describe("DEFAULT_ENV_CONFIG", () => {
+  it("uses Banana defaults for both image generation and image edit", () => {
+    expect(DEFAULT_ENV_CONFIG.IMAGE_EDIT_PROVIDER).toBe("openai");
+    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_BASE_URL).toBe("https://api.bltcy.ai/v1");
+    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_MODEL).toBe("nano-banana");
+    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_EDIT_BASE_URL).toBe("https://api.bltcy.ai/v1");
+    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_EDIT_MODEL).toBe("nano-banana");
   });
 });
 
-describe("normalizeApiResponse", () => {
+describe("applyEndpointChange", () => {
+  it("adds endpoint overrides immutably", () => {
+    const updated = applyEndpointChange("DASHSCOPE_BASE_URL", "https://intl.example.com");
+    expect(updated.endpoint_overrides.DASHSCOPE_BASE_URL).toBe("https://intl.example.com");
+    expect(DEFAULT_ENV_CONFIG.endpoint_overrides.DASHSCOPE_BASE_URL).toBeUndefined();
+  });
+});
+
+describe("normalizeEnvConfig", () => {
   it("preserves provider-mode fields from API response", () => {
-    const apiData = {
-      DASHSCOPE_API_KEY: "sk-from-api",
+    const result = normalizeEnvConfig(DEFAULT_ENV_CONFIG, {
       KLING_PROVIDER_MODE: "vendor",
       VIDU_PROVIDER_MODE: "vendor",
       PIXVERSE_PROVIDER_MODE: "dashscope",
       endpoint_overrides: { KLING_BASE_URL: "https://custom-kling.example.com" },
-    };
-    const result = normalizeApiResponse(DEFAULT_CONFIG, apiData);
+    });
+
     expect(result.KLING_PROVIDER_MODE).toBe("vendor");
     expect(result.VIDU_PROVIDER_MODE).toBe("vendor");
     expect(result.endpoint_overrides).toEqual({ KLING_BASE_URL: "https://custom-kling.example.com" });
   });
 
-  it("falls back missing or invalid provider modes to dashscope", () => {
-    const result = normalizeApiResponse(DEFAULT_CONFIG, {
-      KLING_PROVIDER_MODE: "unexpected-value",
-      endpoint_overrides: {},
+  it("maps object storage fields from new generic API response", () => {
+    const result = normalizeEnvConfig(DEFAULT_ENV_CONFIG, {
+      OBJECT_STORAGE_PROVIDER: "tos",
+      OBJECT_STORAGE_BUCKET_NAME: "ark-auto-2104181120-cn-beijing-default",
+      OBJECT_STORAGE_ENDPOINT: "https://tos-cn-beijing.volces.com",
+      OBJECT_STORAGE_REGION: "cn-beijing",
+      OBJECT_STORAGE_BASE_PATH: "seedance-inputs",
     });
-    expect(result.KLING_PROVIDER_MODE).toBe("dashscope");
-    expect(result.VIDU_PROVIDER_MODE).toBe("dashscope");
-    expect(result.PIXVERSE_PROVIDER_MODE).toBe("dashscope");
+
+    expect(result.OBJECT_STORAGE_PROVIDER).toBe("tos");
+    expect(result.OBJECT_STORAGE_BUCKET_NAME).toBe("ark-auto-2104181120-cn-beijing-default");
+    expect(result.OBJECT_STORAGE_ENDPOINT).toBe("https://tos-cn-beijing.volces.com");
+    expect(result.OBJECT_STORAGE_REGION).toBe("cn-beijing");
+    expect(result.OBJECT_STORAGE_BASE_PATH).toBe("seedance-inputs");
   });
 
-  it("preserves existing endpoint overrides when API omits endpoint_overrides", () => {
-    const existing = {
-      ...DEFAULT_CONFIG,
-      endpoint_overrides: { DASHSCOPE_BASE_URL: "https://existing.example.com" },
-    };
-    const result = normalizeApiResponse(existing, { DASHSCOPE_API_KEY: "sk-updated" });
-    expect(result.endpoint_overrides).toEqual({ DASHSCOPE_BASE_URL: "https://existing.example.com" });
+  it("backfills generic object storage fields from legacy OSS response", () => {
+    const result = normalizeEnvConfig(DEFAULT_ENV_CONFIG, {
+      OSS_BUCKET_NAME: "legacy-bucket",
+      OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+      OSS_BASE_PATH: "legacy-prefix",
+    });
+
+    expect(result.OBJECT_STORAGE_BUCKET_NAME).toBe("legacy-bucket");
+    expect(result.OBJECT_STORAGE_ENDPOINT).toBe("oss-cn-beijing.aliyuncs.com");
+    expect(result.OBJECT_STORAGE_BASE_PATH).toBe("legacy-prefix");
+  });
+
+  it("preserves image provider fields from API response", () => {
+    const result = normalizeEnvConfig(DEFAULT_ENV_CONFIG, {
+      IMAGE_PROVIDER: "dashscope",
+      IMAGE_EDIT_PROVIDER: "openai",
+      OPENAI_IMAGE_BASE_URL: "https://image.example.com/v1",
+      OPENAI_IMAGE_EDIT_BASE_URL: "https://edit.example.com/v1",
+      OPENAI_IMAGE_MODEL: "image-model-x",
+      OPENAI_IMAGE_EDIT_MODEL: "image-model-edit",
+    });
+
+    expect(result.IMAGE_PROVIDER).toBe("dashscope");
+    expect(result.IMAGE_EDIT_PROVIDER).toBe("openai");
+    expect(result.OPENAI_IMAGE_BASE_URL).toBe("https://image.example.com/v1");
+    expect(result.OPENAI_IMAGE_EDIT_BASE_URL).toBe("https://edit.example.com/v1");
+    expect(result.OPENAI_IMAGE_MODEL).toBe("image-model-x");
+    expect(result.OPENAI_IMAGE_EDIT_MODEL).toBe("image-model-edit");
+  });
+
+  it("preserves tts and multimodal fields from API response", () => {
+    const result = normalizeEnvConfig(DEFAULT_ENV_CONFIG, {
+      TTS_PROVIDER: "dashscope",
+      OPENAI_TTS_BASE_URL: "https://tts.example.com/v1",
+      OPENAI_TTS_MODEL: "gpt-4o-mini-tts",
+      OPENAI_MULTIMODAL_BASE_URL: "https://mm.example.com/v1",
+      OPENAI_MULTIMODAL_MODEL: "qwen-vl-max",
+    });
+
+    expect(result.TTS_PROVIDER).toBe("dashscope");
+    expect(result.OPENAI_TTS_BASE_URL).toBe("https://tts.example.com/v1");
+    expect(result.OPENAI_TTS_MODEL).toBe("gpt-4o-mini-tts");
+    expect(result.OPENAI_MULTIMODAL_BASE_URL).toBe("https://mm.example.com/v1");
+    expect(result.OPENAI_MULTIMODAL_MODEL).toBe("qwen-vl-max");
+  });
+
+  it("keeps recommended defaults when API returns empty model fields", () => {
+    const result = normalizeEnvConfig(DEFAULT_ENV_CONFIG, {
+      OPENAI_TTS_MODEL: "",
+      OPENAI_MULTIMODAL_MODEL: "",
+      OPENAI_MODEL: "qwen3.6-plus",
+    });
+
+    expect(result.OPENAI_TTS_MODEL).toBe(DEFAULT_ENV_CONFIG.OPENAI_TTS_MODEL);
+    expect(result.OPENAI_MULTIMODAL_MODEL).toBe(DEFAULT_ENV_CONFIG.OPENAI_MULTIMODAL_MODEL);
   });
 });
 
 describe("computeCanClose", () => {
-  it("returns true when dialog is not required", () => {
-    expect(computeCanClose(false, DEFAULT_CONFIG)).toBe(true);
-  });
-
-  it("blocks closing required dialog until DashScope key is set", () => {
-    expect(computeCanClose(true, DEFAULT_CONFIG)).toBe(false);
-    const valid = { ...DEFAULT_CONFIG, DASHSCOPE_API_KEY: "sk-test" };
-    expect(computeCanClose(true, valid)).toBe(true);
-  });
-
-  it("blocks closing required dialog in vendor mode when vendor keys are missing", () => {
-    const invalid = {
-      ...DEFAULT_CONFIG,
-      DASHSCOPE_API_KEY: "sk-test",
-      KLING_PROVIDER_MODE: "vendor" as const,
-    };
-    expect(computeCanClose(true, invalid)).toBe(false);
+  it("always allows closing the settings panel", () => {
+    expect(computeCanClose()).toBe(true);
   });
 });

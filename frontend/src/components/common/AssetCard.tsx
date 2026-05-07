@@ -2,6 +2,7 @@
 
 import { Image as ImageIcon } from "lucide-react";
 import type { Character, Scene, Prop } from "@/store/projectStore";
+import { getAssetUrl } from "@/lib/utils";
 
 type AssetTab = "characters" | "scenes" | "props";
 
@@ -43,12 +44,13 @@ function getImageUrl(asset: Character | Scene | Prop, type: AssetTab): string | 
 
 export default function AssetCard({ asset, type }: AssetCardProps) {
   const imageUrl = getImageUrl(asset, type);
+  const displayUrl = getAssetUrl(imageUrl);
 
   return (
     <div className="glass-panel rounded-xl overflow-hidden">
       <div className="aspect-square bg-gray-800/50 flex items-center justify-center overflow-hidden">
-        {imageUrl ? (
-          <img src={imageUrl} alt={asset.name} className="w-full h-full object-cover" />
+        {displayUrl ? (
+          <img src={displayUrl} alt={asset.name} className="w-full h-full object-cover" />
         ) : (
           <ImageIcon size={32} className="text-gray-600" />
         )}

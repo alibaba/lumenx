@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef, useLayoutEffect } from "react";
-import { X, ChevronDown, Video, User } from "lucide-react";
+import React, { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
+import { getPromptBuilderCameraOption, messages, promptBuilderCameraGroups } from "@/lib/i18n";
 
 export type PromptSegment =
     | { type: "text"; value: string; id: string }
@@ -20,38 +20,10 @@ export interface PromptBuilderRef {
 }
 
 const CAMERA_GROUPS = [
-    {
-        label: "Basic Movement (基础运镜)",
-        options: [
-            { label: "⬅️ 水平左移 (Pan Left)", value: "camera pans left" },
-            { label: "➡️ 水平右移 (Pan Right)", value: "camera pans right" },
-            { label: "⬆️ 向上推移 (Tilt Up)", value: "camera pans up" },
-            { label: "⬇️ 向下推移 (Tilt Down)", value: "camera pans down" },
-            { label: "🔍+ 镜头推进 (Zoom In)", value: "zoom in, close up" },
-            { label: "🔍- 镜头拉远 (Zoom Out)", value: "zoom out, wide angle" },
-        ]
-    },
-    {
-        label: "Cinematic (高级/电影感运镜)",
-        options: [
-            { label: "🔄 环绕拍摄 (Orbit)", value: "camera orbits around, 360 degree view" },
-            { label: "👀 第一人称 (FPV)", value: "FPV view, first person perspective" },
-            { label: "✈️ 无人机航拍 (Drone)", value: "drone shot, aerial view, fly over" },
-            { label: "🎦 手持晃动 (Handheld)", value: "handheld camera, shaky cam, realistic" },
-            { label: "🏃 跟随运镜 (Tracking)", value: "tracking shot, following the subject" },
-            { label: "📍 固定机位 (Static)", value: "static camera, no movement, tripod shot" },
-        ]
-    }
+    ...promptBuilderCameraGroups
 ];
 
-// Helper to find option across groups
-const findCameraOption = (value: string) => {
-    for (const group of CAMERA_GROUPS) {
-        const found = group.options.find(opt => opt.value === value);
-        if (found) return found;
-    }
-    return null;
-};
+const copy = messages.modules.promptBuilder;
 
 const PromptBuilder = forwardRef<PromptBuilderRef, PromptBuilderProps>(({ segments, onChange, onSubmit, placeholder }, ref) => {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -111,7 +83,7 @@ const PromptBuilder = forwardRef<PromptBuilderRef, PromptBuilderProps>(({ segmen
                 newSegments.push({
                     type: "camera",
                     value: match[3].trim(),
-                    label: match[3].trim(), // Use value as label for simplicity in text mode
+                    label: getPromptBuilderCameraOption(match[3].trim())?.label ?? match[3].trim(),
                     id: Math.random().toString(36).substr(2, 9)
                 });
             }
@@ -201,8 +173,8 @@ const PromptBuilder = forwardRef<PromptBuilderRef, PromptBuilderProps>(({ segmen
 
     useImperativeHandle(ref, () => ({
         insertCamera: () => {
-            // Default camera
-            insertTextAtCursor("(camera: camera pans left)");
+            const defaultCamera = CAMERA_GROUPS[0]?.options[0]?.value || "camera pans left";
+            insertTextAtCursor(`(camera: ${defaultCamera})`);
         },
         insertText: (text: string) => {
             insertTextAtCursor(text);
@@ -228,7 +200,7 @@ const PromptBuilder = forwardRef<PromptBuilderRef, PromptBuilderProps>(({ segmen
                         onSubmit?.();
                     }
                 }}
-                placeholder={placeholder || "输入提示词... \n插入角色格式: [character1:名称]\n插入运镜格式: (camera: 运镜指令)"}
+                placeholder={placeholder || copy.placeholder}
             />
         </div>
     );

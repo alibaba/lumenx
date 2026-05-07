@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, FileText, Loader2, ChevronLeft, ChevronRight, Check, BookOpen } from "lucide-react";
 import { api } from "@/lib/api";
+import { messages } from "@/lib/i18n";
 
 interface ImportFileDialogProps {
     isOpen: boolean;
@@ -20,12 +21,15 @@ interface EpisodePreview {
 
 interface PreviewResult {
     episodes: EpisodePreview[];
-    text: string;
+    import_id?: string;
+    text?: string;
 }
 
 type Step = 1 | 2 | 3;
 
 export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportFileDialogProps) {
+    const copy = messages.seriesPage.importFileDialog;
+    const commonActions = messages.common.actions;
     // Step state
     const [step, setStep] = useState<Step>(1);
 
@@ -72,7 +76,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
     const handleFileSelect = useCallback((selectedFile: File) => {
         const ext = selectedFile.name.split('.').pop()?.toLowerCase();
         if (ext !== 'txt' && ext !== 'md') {
-            setError("仅支持 .txt 和 .md 文件");
+            setError(copy.invalidFileType);
             return;
         }
         setFile(selectedFile);
@@ -115,7 +119,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
             setPreviewResult(result);
             setStep(2);
         } catch (err: any) {
-            const msg = err?.response?.data?.detail || err?.message || "分析失败，请重试";
+            const msg = err?.response?.data?.detail || err?.message || copy.analyzeFailed;
             setError(msg);
         } finally {
             setIsAnalyzing(false);
@@ -131,6 +135,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
             const result = await api.importFileConfirm({
                 title: seriesTitle.trim(),
                 description: description.trim() || undefined,
+                import_id: previewResult.import_id,
                 text: previewResult.text,
                 episodes: previewResult.episodes,
             });
@@ -140,7 +145,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
             });
             setStep(3);
         } catch (err: any) {
-            const msg = err?.response?.data?.detail || err?.message || "创建失败，请重试";
+            const msg = err?.response?.data?.detail || err?.message || copy.createFailed;
             setError(msg);
         } finally {
             setIsCreating(false);
@@ -156,7 +161,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
         handleClose();
     };
 
-    const stepLabels = ["上传文件", "预览分集", "完成"];
+    const stepLabels = [copy.steps.uploadFile, copy.steps.previewEpisodes, copy.steps.complete];
 
     return (
         <AnimatePresence>
@@ -177,7 +182,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-display font-bold text-white">导入文件创建系列</h2>
+                            <h2 className="text-2xl font-display font-bold text-white">{copy.title}</h2>
                             <button
                                 onClick={handleClose}
                                 className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
@@ -261,8 +266,8 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                         ) : (
                                             <>
                                                 <Upload size={32} className="mx-auto mb-3 text-gray-400" />
-                                                <p className="text-gray-300 mb-1">拖拽文件到此处，或点击选择</p>
-                                                <p className="text-gray-500 text-sm">支持 .txt / .md 文件</p>
+                                                <p className="text-gray-300 mb-1">{copy.dropOrClick}</p>
+                                                <p className="text-gray-500 text-sm">{copy.supportedFormats}</p>
                                             </>
                                         )}
                                     </div>
@@ -270,13 +275,13 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                     {/* Series Title */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            系列标题 <span className="text-red-400">*</span>
+                                            {copy.titleLabel} <span className="text-red-400">*</span>
                                         </label>
                                         <input
                                             type="text"
                                             value={seriesTitle}
                                             onChange={(e) => setSeriesTitle(e.target.value)}
-                                            placeholder="输入系列标题..."
+                                            placeholder={copy.titlePlaceholder}
                                             className="glass-input w-full"
                                         />
                                     </div>
@@ -284,12 +289,12 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                     {/* Description */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            描述（可选）
+                                            {copy.descriptionLabel}
                                         </label>
                                         <textarea
                                             value={description}
                                             onChange={(e) => setDescription(e.target.value)}
-                                            placeholder="输入系列描述..."
+                                            placeholder={copy.descriptionPlaceholder}
                                             rows={3}
                                             className="glass-input w-full resize-none"
                                         />
@@ -298,7 +303,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                     {/* Suggested Episodes */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-300 mb-2">
-                                            建议集数
+                                            {copy.suggestedEpisodes}
                                         </label>
                                         <input
                                             type="number"
@@ -313,7 +318,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                     {/* Action Button */}
                                     <div className="flex gap-3 pt-4">
                                         <button onClick={handleClose} className="flex-1 glass-button">
-                                            取消
+                                            {commonActions.cancel}
                                         </button>
                                         <button
                                             onClick={handleAnalyze}
@@ -323,10 +328,10 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                             {isAnalyzing ? (
                                                 <>
                                                     <Loader2 size={18} className="animate-spin" />
-                                                    分析中...
+                                                    {copy.analyzing}
                                                 </>
                                             ) : (
-                                                "开始分析"
+                                                copy.analyze
                                             )}
                                         </button>
                                     </div>
@@ -337,7 +342,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                             {step === 2 && previewResult && (
                                 <div className="space-y-4">
                                     <p className="text-gray-400 text-sm">
-                                        AI 已将文件分为 {previewResult.episodes.length} 集，请确认分集结果：
+                                        {copy.previewIntro(previewResult.episodes.length)}
                                     </p>
 
                                     {/* Episodes List */}
@@ -374,7 +379,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                             className="flex-1 glass-button flex items-center justify-center gap-2"
                                         >
                                             <ChevronLeft size={16} />
-                                            返回修改
+                                            {copy.backToEdit}
                                         </button>
                                         <button
                                             onClick={handleConfirm}
@@ -384,11 +389,11 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                             {isCreating ? (
                                                 <>
                                                     <Loader2 size={18} className="animate-spin" />
-                                                    创建中...
+                                                    {copy.creating}
                                                 </>
                                             ) : (
                                                 <>
-                                                    确认创建
+                                                    {copy.confirmCreate}
                                                     <ChevronRight size={16} />
                                                 </>
                                             )}
@@ -404,9 +409,9 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                         <Check size={32} className="text-green-400" />
                                     </div>
                                     <div className="text-center">
-                                        <h3 className="text-xl font-bold text-white mb-2">系列创建成功</h3>
+                                        <h3 className="text-xl font-bold text-white mb-2">{copy.successTitle}</h3>
                                         <p className="text-gray-400">
-                                            系列「{seriesTitle}」已创建，共 {createdResult.episode_count} 集
+                                            {copy.successSummary(seriesTitle, createdResult.episode_count)}
                                         </p>
                                     </div>
                                     <button
@@ -414,7 +419,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                         className="bg-primary hover:bg-primary/90 text-white px-8 py-3 rounded-lg font-medium transition-colors flex items-center gap-2"
                                     >
                                         <BookOpen size={18} />
-                                        查看系列
+                                        {copy.viewSeries}
                                     </button>
                                 </div>
                             )}

@@ -12,6 +12,8 @@ export default defineConfig({
             'src/__tests__/**/*.spec.ts',
             'src/__tests__/**/*.test.tsx',
             'src/__tests__/**/*.spec.tsx',
+            'src/components/modules/**/*.test.tsx',
+            'src/components/modules/**/*.spec.tsx',
         ],
         setupFiles: ['./vitest.setup.ts'],
     },

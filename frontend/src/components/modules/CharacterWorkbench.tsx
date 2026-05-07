@@ -2,15 +2,50 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, RefreshCw, Check, AlertTriangle, Image as ImageIcon, Lock, Unlock, ChevronRight, Maximize2, Video } from "lucide-react";
-import { api, API_URL } from "@/lib/api";
+import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Video } from "lucide-react";
+import { api } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
+import { messages } from "@/lib/i18n";
+import PromptQualityPanel from "../common/PromptQualityPanel";
+import {
+    applyImagePromptBlock,
+    buildDefaultImagePrompt,
+    getImagePromptScaffolds,
+    getImagePromptTemplates,
+    type ImagePromptBlock,
+} from "@/lib/image-prompt-recipes";
+import {
+    formatPromptIssues,
+    hasBlockingPromptIssues,
+    inspectImagePrompt,
+} from "@/lib/prompt-quality";
 
+const copy = messages.modules.characterWorkbench;
+
+type CharacterPromptType = "full_body" | "three_view" | "headshot";
+
+function getCharacterPromptTarget(type: CharacterPromptType) {
+    return type;
+}
+
+function applyPromptTemplate(
+    currentPrompt: string,
+    nextPrompt: string,
+    setPrompt: (value: string) => void,
+    mode: "replace" | "append" = "replace",
+) {
+    setPrompt(applyImagePromptBlock(currentPrompt, nextPrompt, mode));
+}
+
+function hasReferenceLock(prompt: string) {
+    const normalized = prompt.toLowerCase();
+    return normalized.includes("strictly preserve") || normalized.includes("reference image");
+}
 
 interface CharacterWorkbenchProps {
     asset: any;
@@ -54,27 +89,27 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const hasAnyUpload = hasUploadedThreeViews || hasUploadedHeadshot || hasUploadedFullBody;
     const hasNonFullBodyUpload = hasUploadedThreeViews || hasUploadedHeadshot;
     const hasFullBodyImage = !!(asset.full_body_image_url || (asset.full_body_asset?.variants?.length > 0));
+    const hasThreeViewImage = !!(asset.three_view_image_url || (asset.three_view_asset?.variants?.length > 0));
+    const hasHeadshotImage = !!(asset.headshot_image_url || asset.avatar_url || (asset.headshot_asset?.variants?.length > 0));
+    const generatedCoreCount = [hasFullBodyImage, hasThreeViewImage, hasHeadshotImage].filter(Boolean).length;
+    const isGeneratingCoreSet = generatingTypes.some((task) =>
+        ["all", "full_body", "three_view", "headshot"].includes(task?.type)
+    );
 
     // Local state for prompts
-    const getInitialPrompt = (type: string, existingPrompt: string) => {
+    const getInitialPrompt = (type: CharacterPromptType, existingPrompt: string) => {
         if (existingPrompt) return existingPrompt;
 
-        const baseDesc = asset.description || "";
-        const name = asset.name || "Character";
-
-        if (type === "full_body") {
-            const prefix = hasNonFullBodyUpload ? "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. " : "";
-            return `${prefix}Full body character design of ${name}, concept art. ${baseDesc}. Standing pose, neutral expression, no emotion, looking at viewer. Clean white background, isolated, no other objects, no scenery, simple background, high quality, masterpiece.`;
-        }
-        if (type === "three_view") {
-            const prefix = (hasFullBodyImage || hasAnyUpload) ? "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, and clothing as the reference image. " : "";
-            return `${prefix}Character Reference Sheet for ${name}. ${baseDesc}. Three-view character design: Front view, Side view, and Back view. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background, clean lines, studio lighting, high quality.`;
-        }
-        if (type === "headshot") {
-            const prefix = (hasFullBodyImage || hasAnyUpload) ? "STRICTLY MAINTAIN the SAME face, hairstyle, skin tone, and facial features as the reference image. " : "";
-            return `${prefix}Close-up portrait of the SAME character ${name}. ${baseDesc}. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece.`;
-        }
-        return "";
+        return buildDefaultImagePrompt({
+            target: getCharacterPromptTarget(type),
+            name: asset.name || "Character",
+            description: asset.description || "",
+            strictReference:
+                type === "full_body"
+                    ? hasNonFullBodyUpload
+                    : Boolean(hasFullBodyImage || hasAnyUpload),
+            stylePrompt,
+        });
     };
 
     const [fullBodyPrompt, setFullBodyPrompt] = useState(getInitialPrompt("full_body", asset.full_body_prompt));
@@ -88,6 +123,51 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     const [negativePrompt, setNegativePrompt] = useState("low quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, jpeg artifacts, signature, watermark, blurry");
     // Art Direction Style expanded state (collapsed by default to save space)
     const [showStyleExpanded, setShowStyleExpanded] = useState(false);
+    const fullBodyScaffolds = getImagePromptScaffolds({
+        target: "full_body",
+        stylePrompt,
+        description: asset.description,
+    });
+    const threeViewScaffolds = getImagePromptScaffolds({
+        target: "three_view",
+        stylePrompt,
+        description: asset.description,
+    });
+    const headshotScaffolds = getImagePromptScaffolds({
+        target: "headshot",
+        stylePrompt,
+        description: asset.description,
+    });
+    const fullBodyTemplates = getImagePromptTemplates({
+        target: "full_body",
+        stylePrompt,
+        description: asset.description,
+    });
+    const threeViewTemplates = getImagePromptTemplates({
+        target: "three_view",
+        stylePrompt,
+        description: asset.description,
+    });
+    const headshotTemplates = getImagePromptTemplates({
+        target: "headshot",
+        stylePrompt,
+        description: asset.description,
+    });
+    const fullBodyIssues = inspectImagePrompt({
+        prompt: fullBodyPrompt,
+        target: "full_body",
+        stylePrompt,
+    });
+    const threeViewIssues = inspectImagePrompt({
+        prompt: threeViewPrompt,
+        target: "three_view",
+        stylePrompt,
+    });
+    const headshotIssues = inspectImagePrompt({
+        prompt: headshotPrompt,
+        target: "headshot",
+        stylePrompt,
+    });
 
     // Get the uploaded image URL for reverse generation reference
     const getUploadedReferenceUrl = () => {
@@ -112,7 +192,8 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             : (asset.headshot_image_url || asset.headshot_asset?.variants?.length > 0);
 
         if (!hasSourceImage) {
-            alert(`请先生成一张${assetType === 'full_body' ? '全身图' : '头像'}作为参考图，然后再生成动态参考视频。`);
+            const typeLabel = assetType === "full_body" ? copy.sourceImageTypes.fullBody : copy.sourceImageTypes.headshot;
+            alert(copy.missingSourceImage(typeLabel));
             return;
         }
 
@@ -127,13 +208,13 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
         // Validate file type
         if (!file.type.startsWith('audio/')) {
-            alert('请上传有效的音频文件（MP3, WAV, etc.）');
+            alert(copy.audioFileInvalid);
             return;
         }
 
         // Validate file size (max 10MB)
         if (file.size > 10 * 1024 * 1024) {
-            alert('音频文件不能超过 10MB');
+            alert(copy.audioFileTooLarge);
             return;
         }
 
@@ -164,7 +245,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             }
         } catch (error: any) {
             console.error('Failed to upload audio:', error);
-            alert(`音频上传失败：${error.message}`);
+            alert(copy.audioUploadFailed(error.message));
         } finally {
             setIsUploadingAudio(false);
         }
@@ -186,13 +267,13 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // Initialize prompts if empty (first time load)
     useEffect(() => {
         if (!fullBodyPrompt) {
-            setFullBodyPrompt(`Full body character design of ${asset.name}, concept art. ${asset.description}. Standing pose, neutral expression, no emotion, looking at viewer. Clean white background, isolated, no other objects, no scenery, simple background, high quality, masterpiece.`);
+            setFullBodyPrompt(getInitialPrompt("full_body", ""));
         }
         if (!threeViewPrompt) {
-            setThreeViewPrompt(`Character Reference Sheet for ${asset.name}. ${asset.description}. Three-view character design: Front view, Side view, and Back view. Full body, standing pose, neutral expression. Consistent clothing and details across all views. Simple white background.`);
+            setThreeViewPrompt(getInitialPrompt("three_view", ""));
         }
         if (!headshotPrompt) {
-            setHeadshotPrompt(`Close-up portrait of the SAME character ${asset.name}. ${asset.description}. Zoom in on face and shoulders, detailed facial features, neutral expression, looking at viewer, high quality, masterpiece.`);
+            setHeadshotPrompt(getInitialPrompt("headshot", ""));
         }
         if (!videoPrompt) {
             setVideoPrompt(`Cinematic shot of ${asset.name}, ${asset.description}, looking around, breathing, slight movement, high quality, 4k`);
@@ -204,7 +285,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         if (!headshotMotionPrompt) {
             setHeadshotMotionPrompt(getMotionDefault('headshot', !!headshotAudioUrl));
         }
-    }, [asset.name, asset.description]);
+    }, [asset.name, asset.description, stylePrompt, hasAnyUpload, hasFullBodyImage, hasNonFullBodyUpload]);
 
     const handleResetMotionPrompt = (type: 'full_body' | 'headshot') => {
         const hasAudio = type === 'full_body' ? !!fullBodyAudioUrl : !!headshotAudioUrl;
@@ -220,30 +301,49 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // Update local state when asset updates (e.g. after generation)
     useEffect(() => {
         if (asset.full_body_prompt) setFullBodyPrompt(asset.full_body_prompt);
-        else if (hasNonFullBodyUpload && !fullBodyPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasNonFullBodyUpload && !hasReferenceLock(fullBodyPrompt)) {
             setFullBodyPrompt(getInitialPrompt("full_body", ""));
         }
 
         if (asset.three_view_prompt) setThreeViewPrompt(asset.three_view_prompt);
-        else if (hasAnyUpload && !threeViewPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasAnyUpload && !hasReferenceLock(threeViewPrompt)) {
             setThreeViewPrompt(getInitialPrompt("three_view", ""));
         }
 
         if (asset.headshot_prompt) setHeadshotPrompt(asset.headshot_prompt);
-        else if (hasAnyUpload && !headshotPrompt.includes("STRICTLY MAINTAIN")) {
+        else if (hasAnyUpload && !hasReferenceLock(headshotPrompt)) {
             setHeadshotPrompt(getInitialPrompt("headshot", ""));
         }
 
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
     }, [asset, hasAnyUpload, hasNonFullBodyUpload]);
 
-    const handleGenerateClick = (type: "full_body" | "three_view" | "headshot", batchSize: number) => {
+    const handleGenerateClick = (type: CharacterPromptType, batchSize: number) => {
         let prompt = "";
+        let issues = fullBodyIssues;
         if (type === "full_body") prompt = fullBodyPrompt;
-        else if (type === "three_view") prompt = threeViewPrompt;
-        else if (type === "headshot") prompt = headshotPrompt;
+        else if (type === "three_view") {
+            prompt = threeViewPrompt;
+            issues = threeViewIssues;
+        } else if (type === "headshot") {
+            prompt = headshotPrompt;
+            issues = headshotIssues;
+        }
+
+        if (hasBlockingPromptIssues(issues)) {
+            alert(`${copy.promptQualityBlocked}\n\n${formatPromptIssues(issues.filter((issue) => issue.severity === "error"))}`);
+            return;
+        }
 
         onGenerate(type, prompt, applyStyle, negativePrompt, batchSize);
+    };
+
+    const handleGenerateAllClick = () => {
+        if (hasBlockingPromptIssues(fullBodyIssues)) {
+            alert(`${copy.promptQualityBlocked}\n\n${formatPromptIssues(fullBodyIssues.filter((issue) => issue.severity === "error"))}`);
+            return;
+        }
+        onGenerate("all", fullBodyPrompt, applyStyle, negativePrompt, 1);
     };
 
     // Helper to check if a specific type is generating
@@ -298,13 +398,30 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             >
                 <div className="h-16 border-b border-white/10 flex justify-between items-center px-6 bg-black/20">
                     <div className="flex items-center gap-4">
-                        <h2 className="text-xl font-bold text-white">{asset.name} <span className="text-gray-500 font-normal text-sm ml-2">Character Workbench</span></h2>
+                        <h2 className="text-xl font-bold text-white">{asset.name} <span className="text-gray-500 font-normal text-sm ml-2">{copy.title}</span></h2>
                         <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full">
-                            <span className="text-xs text-blue-400 font-medium">💡 Tip: Keep the three images consistent for best results</span>
+                            <span className="text-xs text-blue-400 font-medium">{copy.consistencyTip}</span>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors">
                         <X size={24} />
+                    </button>
+                </div>
+
+                <div className="border-b border-white/5 bg-gradient-to-r from-primary/10 via-blue-500/5 to-transparent px-6 py-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <p className="text-xs text-gray-300 leading-relaxed max-w-3xl">
+                        {copy.generateAllHint(generatedCoreCount)}
+                    </p>
+                    <button
+                        onClick={handleGenerateAllClick}
+                        disabled={isGeneratingCoreSet}
+                        className={`inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-colors ${isGeneratingCoreSet
+                            ? "bg-white/10 text-gray-400 cursor-not-allowed"
+                            : "bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20"
+                            }`}
+                    >
+                        <RefreshCw size={16} className={isGeneratingCoreSet ? "animate-spin" : ""} />
+                        {isGeneratingCoreSet ? copy.generatingAll : copy.generateAll}
                     </button>
                 </div>
 
@@ -313,7 +430,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 1: Full Body (Master) */}
                     <WorkbenchPanel
-                        title="1. Master Asset (Full Body)"
+                        title={copy.panels.fullBody}
                         isActive={activePanel === "full_body"}
                         onClick={() => setActivePanel("full_body")}
 
@@ -326,9 +443,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={fullBodyPrompt}
                         setPrompt={setFullBodyPrompt}
                         onGenerate={(batchSize: number) => handleGenerateClick("full_body", batchSize)}
+                        scaffolds={fullBodyScaffolds}
+                        templates={fullBodyTemplates}
+                        promptIssues={fullBodyIssues}
                         isGenerating={getGeneratingInfo("full_body").isGenerating}
                         generatingBatchSize={getGeneratingInfo("full_body").batchSize}
-                        description="The primary reference for character consistency."
+                        description={copy.descriptions.fullBody}
                         aspectRatio="9:16"
 
                         // Reverse generation: Show hint if upload detected but no full body
@@ -360,7 +480,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 2: Three View (Derived) */}
                     <WorkbenchPanel
-                        title="2. Three-Views"
+                        title={copy.panels.threeView}
                         isActive={activePanel === "three_view"}
                         onClick={() => setActivePanel("three_view")}
 
@@ -373,10 +493,13 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={threeViewPrompt}
                         setPrompt={setThreeViewPrompt}
                         onGenerate={(batchSize: number) => handleGenerateClick("three_view", batchSize)}
+                        scaffolds={threeViewScaffolds}
+                        templates={threeViewTemplates}
+                        promptIssues={threeViewIssues}
                         isGenerating={getGeneratingInfo("three_view").isGenerating}
                         generatingBatchSize={getGeneratingInfo("three_view").batchSize}
                         isLocked={!asset.full_body_image_url && !hasAnyUpload}
-                        description="Front, side, and back views for 3D-like consistency."
+                        description={copy.descriptions.threeView}
                         aspectRatio="16:9"
                     />
 
@@ -387,7 +510,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                     {/* Panel 3: Headshot (Derived) */}
                     <WorkbenchPanel
-                        title="3. Avatar (Headshot)"
+                        title={copy.panels.headshot}
                         isActive={activePanel === "headshot"}
                         onClick={() => setActivePanel("headshot")}
 
@@ -400,10 +523,13 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         prompt={headshotPrompt}
                         setPrompt={setHeadshotPrompt}
                         onGenerate={(batchSize: number) => handleGenerateClick("headshot", batchSize)}
+                        scaffolds={headshotScaffolds}
+                        templates={headshotTemplates}
+                        promptIssues={headshotIssues}
                         isGenerating={getGeneratingInfo("headshot").isGenerating}
                         generatingBatchSize={getGeneratingInfo("headshot").batchSize}
                         isLocked={!asset.full_body_image_url && !hasAnyUpload}
-                        description="Close-up facial details and expressions."
+                        description={copy.descriptions.headshot}
                         aspectRatio="1:1"
 
                         supportsMotion={true}
@@ -432,12 +558,12 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     <div className="px-6 py-3 flex items-start gap-4">
                         {/* User's Negative Prompt (Editable) */}
                         <div className="flex-1">
-                            <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Your Negative Prompt</label>
+                            <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">{copy.yourNegativePrompt}</label>
                             <textarea
                                 value={negativePrompt}
                                 onChange={(e) => setNegativePrompt(e.target.value)}
                                 className="w-full h-16 bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-300 resize-none focus:outline-none focus:border-primary/50 font-mono"
-                                placeholder="Enter your negative prompt (avoid unwanted elements)..."
+                                placeholder={copy.negativePromptPlaceholder}
                             />
                         </div>
 
@@ -452,7 +578,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                     className="rounded border-gray-600 bg-gray-700 text-primary focus:ring-primary w-4 h-4"
                                 />
                                 <label htmlFor="applyStyleFooter" className="text-xs font-bold text-gray-300 cursor-pointer select-none whitespace-nowrap">
-                                    Apply Art Direction Style
+                                    {copy.applyArtDirectionStyle}
                                 </label>
                             </div>
                         </div>
@@ -467,7 +593,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                             >
                                 <div className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-500 to-blue-500" />
-                                    <span className="text-xs font-bold text-gray-400 uppercase">Art Direction Style (Will Be Appended)</span>
+                                    <span className="text-xs font-bold text-gray-400 uppercase">{copy.applyArtDirectionStyle}</span>
                                 </div>
                                 <ChevronRight size={14} className={`text-gray-500 transform transition-transform ${showStyleExpanded ? 'rotate-90' : ''}`} />
                             </button>
@@ -484,7 +610,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                                             <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-white/10 rounded-lg p-4">
                                                 {stylePrompt && (
                                                     <div className="mb-3">
-                                                        <span className="text-xs font-bold text-green-400 block mb-1">+ Style Prompt:</span>
+                                                        <span className="text-xs font-bold text-green-400 block mb-1">{copy.stylePromptLabel}</span>
                                                         <p className="text-xs text-gray-400 font-mono bg-black/20 p-2 rounded border border-white/5 leading-relaxed">
                                                             {stylePrompt}
                                                         </p>
@@ -493,7 +619,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
                                                 {styleNegativePrompt && (
                                                     <div>
-                                                        <span className="text-xs font-bold text-red-400 block mb-1">+ Negative Prompt:</span>
+                                                        <span className="text-xs font-bold text-red-400 block mb-1">{copy.styleNegativePromptLabel}</span>
                                                         <p className="text-xs text-gray-400 font-mono bg-black/20 p-2 rounded border border-white/5 leading-relaxed">
                                                             {styleNegativePrompt}
                                                         </p>
@@ -527,6 +653,9 @@ function WorkbenchPanel({
     prompt,
     setPrompt,
     onGenerate,
+    scaffolds = [],
+    templates = [],
+    promptIssues = [],
     isGenerating,
     generatingBatchSize,
     status,
@@ -583,13 +712,13 @@ function WorkbenchPanel({
                                     }`}
                             >
                                 <PhotoIcon size={12} />
-                                Static
+                                {copy.staticMode}
                             </button>
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     if (!hasStaticImage) {
-                                        alert('Please generate a static image first.');
+                                        alert(copy.staticRequired);
                                         return;
                                     }
                                     onModeChange?.('motion');
@@ -600,7 +729,7 @@ function WorkbenchPanel({
                                     }`}
                             >
                                 <Video size={12} />
-                                Motion
+                                {copy.motionMode}
                             </button>
                         </div>
                     )}
@@ -616,7 +745,7 @@ function WorkbenchPanel({
                     <div className="absolute inset-0 bg-black/80 z-20 flex items-center justify-center text-center p-6">
                         <div className="text-gray-500 flex flex-col items-center gap-2">
                             <Lock size={32} />
-                            <span className="text-sm">Generate Master Asset first</span>
+                            <span className="text-sm">{copy.generateMasterFirst}</span>
                         </div>
                     </div>
                 )}
@@ -627,17 +756,15 @@ function WorkbenchPanel({
                         <div className="flex flex-col items-center gap-3 bg-black/60 backdrop-blur-md rounded-xl p-6 border border-primary/30 pointer-events-auto">
                             <div className="flex items-center gap-2 text-primary">
                                 <RefreshCw size={20} />
-                                <span className="text-sm font-bold">Upload Detected</span>
+                                <span className="text-sm font-bold">{copy.uploadDetected}</span>
                             </div>
                             <p className="text-xs text-gray-300 max-w-[200px]">
-                                Generate Full Body from your uploaded reference image
+                                {copy.uploadDetectedHint}
                             </p>
                             {reverseReferenceUrl && (
                                 <img
-                                    src={typeof reverseReferenceUrl === 'string' && reverseReferenceUrl.startsWith('http')
-                                        ? reverseReferenceUrl
-                                        : `${window.location.origin}/${reverseReferenceUrl}`}
-                                    alt="Reference"
+                                    src={getAssetUrl(reverseReferenceUrl)}
+                                    alt={copy.reverseReferenceAlt}
                                     className="w-16 h-16 rounded-lg object-cover border border-white/20"
                                 />
                             )}
@@ -653,7 +780,7 @@ function WorkbenchPanel({
                             {/* Header with gradient accent */}
                             <div className="flex items-center gap-2 pb-2 border-b border-purple-500/20">
                                 <div className="w-1 h-4 bg-gradient-to-b from-purple-400 to-pink-500 rounded-full"></div>
-                                <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">Motion Reference</span>
+                                <span className="text-xs font-bold text-purple-300 uppercase tracking-wider">{copy.motionReference}</span>
                             </div>
 
                             {/* Video Player with glassmorphism */}
@@ -665,14 +792,14 @@ function WorkbenchPanel({
                                             <div className="absolute inset-0 blur-xl bg-purple-500/30 animate-pulse"></div>
                                         </div>
                                         <div className="flex flex-col items-center">
-                                            <span className="text-sm font-bold text-white uppercase tracking-widest animate-pulse">Generating Video</span>
-                                            <span className="text-[10px] text-purple-300/60 mt-1">AI is processing motion...</span>
+                                            <span className="text-sm font-bold text-white uppercase tracking-widest animate-pulse">{messages.common.messages.generating}</span>
+                                            <span className="text-[10px] text-purple-300/60 mt-1">{copy.aiProcessingMotion}</span>
                                         </div>
                                     </div>
                                 ) : isVideoLoading && motionRefVideos?.length > 0 ? (
                                     <div className="absolute inset-0 z-10 bg-black/40 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
                                         <RefreshCw size={32} className="text-gray-400 animate-spin" />
-                                        <span className="text-xs text-gray-400 font-medium">Loading Video File...</span>
+                                        <span className="text-xs text-gray-400 font-medium">{copy.loadingVideoFile}</span>
                                     </div>
                                 ) : null}
 
@@ -691,15 +818,15 @@ function WorkbenchPanel({
                                 ) : !isGeneratingMotion && (
                                     <div className="w-full h-full flex flex-col items-center justify-center text-gray-500 gap-2">
                                         <Video size={40} className="opacity-50" />
-                                        <span className="text-sm">No motion reference yet</span>
-                                        <span className="text-xs opacity-70">Generate one below</span>
+                                        <span className="text-sm">{copy.noMotionReference}</span>
+                                        <span className="text-xs opacity-70">{copy.generateBelow}</span>
                                     </div>
                                 )}
                             </div>
 
                             <div className="bg-black/20 rounded-lg border border-white/10 p-3">
-                                <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">Audio Input (Optional)</label>
-                                <p className="text-xs text-gray-600 mb-3">Upload audio to drive lip-sync or body rhythm</p>
+                                <label className="text-xs font-bold text-gray-500 uppercase mb-2 block">{copy.audioInputOptional}</label>
+                                <p className="text-xs text-gray-600 mb-3">{copy.audioInputHint}</p>
 
                                 <label className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-dashed cursor-pointer transition-all ${audioUrl
                                     ? 'border-green-500/50 bg-green-500/10 text-green-400'
@@ -718,17 +845,17 @@ function WorkbenchPanel({
                                     {isUploadingAudio ? (
                                         <>
                                             <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary/30 border-t-primary"></div>
-                                            <span className="text-xs">Uploading...</span>
+                                            <span className="text-xs">{copy.uploading}</span>
                                         </>
                                     ) : audioUrl ? (
                                         <>
                                             <Check size={14} />
-                                            <span className="text-xs font-medium">Audio Uploaded</span>
+                                            <span className="text-xs font-medium">{copy.audioUploaded}</span>
                                         </>
                                     ) : (
                                         <>
                                             <ImageIcon size={14} />
-                                            <span className="text-xs">Upload Audio File</span>
+                                            <span className="text-xs">{copy.uploadAudioFile}</span>
                                         </>
                                     )}
                                 </label>
@@ -737,24 +864,24 @@ function WorkbenchPanel({
                             {/* Motion Prompt */}
                             <div className="flex flex-col gap-2">
                                 <div className="flex items-center justify-between">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">Motion Prompt</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase">{copy.motionPrompt}</label>
                                     <button
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onResetPrompt?.();
                                         }}
                                         className="text-[10px] text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
-                                        title="Reset to recommended prompt"
+                                        title={copy.resetRecommendedPrompt}
                                     >
                                         <RefreshCw size={10} />
-                                        Reset
+                                        {copy.resetRecommendedPrompt}
                                     </button>
                                 </div>
                                 <textarea
                                     value={motionPrompt}
                                     onChange={(e) => setMotionPrompt?.(e.target.value)}
                                     className="w-full h-24 bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-300 resize-none focus:outline-none focus:border-primary/50 font-mono leading-relaxed"
-                                    placeholder="Describe the motion you want..."
+                                    placeholder={copy.motionPromptPlaceholder}
                                 />
                             </div>
 
@@ -768,7 +895,7 @@ function WorkbenchPanel({
                                     }`}
                             >
                                 <Video size={16} />
-                                Generate Motion Reference
+                                {copy.generateMotionReference}
                             </button>
                         </div>
                     ) : isVideo ? (
@@ -801,7 +928,7 @@ function WorkbenchPanel({
                     <div className="absolute top-4 right-4 z-10">
                         <div className="bg-yellow-500/20 border border-yellow-500/50 px-3 py-1 rounded-lg flex items-center gap-2 backdrop-blur-sm">
                             <RefreshCw size={12} className="text-yellow-500" />
-                            <span className="text-xs font-bold text-yellow-500">Update Recommended</span>
+                            <span className="text-xs font-bold text-yellow-500">{copy.updateRecommended}</span>
                         </div>
                     </div>
                 )}
@@ -810,15 +937,73 @@ function WorkbenchPanel({
             {/* Prompt Editor (Bottom) */}
             <div className="h-1/3 border-t border-white/10 flex flex-col bg-[#111]">
                 <div className="p-2 border-b border-white/5 flex justify-between items-center bg-black/20">
-                    <span className="text-xs font-bold text-gray-500 uppercase px-2">Prompt</span>
+                    <span className="text-xs font-bold text-gray-500 uppercase px-2">{copy.prompt}</span>
                 </div>
+                {!isVideo && (
+                    <div className="border-b border-white/5 px-4 py-3 space-y-3 bg-black/10">
+                        {scaffolds.length > 0 && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                                    {copy.scaffoldTitle}
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {scaffolds.map((item: ImagePromptBlock) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                applyPromptTemplate(prompt, item.prompt, setPrompt, "replace");
+                                            }}
+                                            className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[11px] text-cyan-100 transition hover:bg-cyan-400/20"
+                                        >
+                                            {item.title}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {templates.length > 0 && (
+                            <div className="space-y-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                                    {copy.templateTitle}
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {templates.map((item: ImagePromptBlock) => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                applyPromptTemplate(prompt, item.prompt, setPrompt, "append");
+                                            }}
+                                            className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-gray-200 transition hover:bg-white/10"
+                                        >
+                                            {copy.appendTemplate(item.title)}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
                 <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={isLocked}
                     className="flex-1 w-full bg-transparent p-4 text-xs text-gray-300 resize-none focus:outline-none focus:bg-white/5 font-mono leading-relaxed"
-                    placeholder="Enter prompt description..."
+                    placeholder={copy.promptPlaceholder}
                 />
+                {!isVideo && (
+                    <div className="border-t border-white/5 px-4 py-3">
+                        <PromptQualityPanel
+                            issues={promptIssues}
+                            title={copy.promptQualityTitle}
+                            compact
+                        />
+                    </div>
+                )}
             </div>
         </div>
     );

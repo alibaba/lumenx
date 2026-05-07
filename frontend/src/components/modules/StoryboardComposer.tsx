@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { Fragment, useMemo, useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Layout, Image as ImageIcon, Box, Type, Move,
@@ -10,9 +10,72 @@ import {
 } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL, crudApi } from "@/lib/api";
-import { getAssetUrl, getAssetUrlWithTimestamp, extractErrorDetail } from "@/lib/utils";
+import { appendAssetQueryParam, getAssetUrl, getAssetUrlWithTimestamp, extractErrorDetail } from "@/lib/utils";
+import { getCameraTerm, messages, shotTerms } from "@/lib/i18n";
+import { buildStoryboardCompositionData, getArtDirectionPromptPrefix } from "@/lib/storyboard-references";
 
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
+
+const copy = messages.modules.storyboardComposer;
+const commonActions = messages.common.actions;
+const commonLabels = messages.common.labels;
+
+type FrameViewMode = "sequence" | "beat";
+
+interface FrameEntry {
+    frame: any;
+    index: number;
+}
+
+interface StoryBeatMeta {
+    order?: number;
+    title?: string;
+    summary?: string;
+    chapterOrder?: number;
+    chapterTitle?: string;
+    sceneName?: string;
+    qualityFlags: string[];
+}
+
+interface StoryBeatGroup {
+    key: string;
+    title: string;
+    summary: string;
+    frameCount: number;
+    order: number;
+    isUnassigned: boolean;
+    chapterOrder?: number;
+    chapterTitle?: string;
+    sceneName?: string;
+    qualityFlags: string[];
+    entries: FrameEntry[];
+}
+
+function formatStoryBeatLabel(order?: number | null, title?: string | null) {
+    if (!title && order == null) return copy.unassignedBeat;
+    if (order == null) return title || copy.unassignedBeat;
+    if (title && /^\s*(第?\s*\d+\s*场|场次\s*\d+)/.test(title)) return title;
+    return copy.storyBeatBadge(order, title || copy.unassignedBeat);
+}
+
+function formatChapterLabel(order?: number | null, title?: string | null) {
+    if (order == null && !title) return copy.unchapteredLabel;
+    if (order == null) return title || copy.unchapteredLabel;
+    if (!title) return `第${order}章`;
+    if (/^\s*第?\s*\d+\s*章/.test(title)) return title;
+    return `第${order}章 · ${title}`;
+}
+
+const STORY_BEAT_QUALITY_LABELS: Record<string, string> = {
+    title_only: copy.titleOnlyFlag,
+    no_characters: copy.noCharactersFlag,
+    no_scene: copy.noSceneFlag,
+    over_segmented: copy.overSegmentedFlag,
+};
+
+function formatStoryBeatQualityFlag(flag: string) {
+    return STORY_BEAT_QUALITY_LABELS[flag] || flag;
+}
 
 export default function StoryboardComposer() {
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -34,6 +97,7 @@ export default function StoryboardComposer() {
     const [insertIndex, setInsertIndex] = useState<number | null>(null);
     const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
     const [showScriptOverlay, setShowScriptOverlay] = useState(false);
+    const [frameViewMode, setFrameViewMode] = useState<FrameViewMode>("sequence");
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploadTargetFrameId, setUploadTargetFrameId] = useState<string | null>(null);
@@ -46,12 +110,12 @@ export default function StoryboardComposer() {
 
         const text = currentProject.originalText;
         if (!text || !text.trim()) {
-            alert("请先输入剧本文本");
+            alert(copy.analyzeScriptRequired);
             return;
         }
 
         if (currentProject.frames?.length > 0) {
-            if (!confirm("这将覆盖当前的所有分镜帧。是否继续？")) return;
+            if (!confirm(copy.overwriteConfirm)) return;
         }
 
         setIsAnalyzing(true);
@@ -60,17 +124,17 @@ export default function StoryboardComposer() {
             const frameCount = updatedProject.frames?.length || 0;
             if (frameCount > 0) {
                 updateProject(currentProject.id, updatedProject);
-                alert(`成功生成 ${frameCount} 个分镜帧！`);
+                alert(copy.analyzeSuccess(frameCount));
             } else {
-                alert("AI 模型未生成有效分镜帧，请重新点击按钮再试一次。");
+                alert(copy.analyzeEmpty);
             }
         } catch (error: any) {
             console.error("Analyze to storyboard failed:", error);
             const detail = extractErrorDetail(error, "");
-            if (detail.includes("JSON") || detail.includes("格式")) {
-                alert(`分镜生成失败：AI 模型输出格式异常。\n\n这是模型偶发的格式问题，通常重试即可解决。请再次点击生成按钮。`);
+            if (detail.includes("JSON") || /格式/.test(detail)) {
+                alert(copy.analyzeFormatFailed);
             } else {
-                alert(`分镜生成失败：${detail || "请查看控制台了解详情。"}`);
+                alert(copy.analyzeFailed(detail || copy.defaultAnalyzeFailureDetail));
             }
         } finally {
             setIsAnalyzing(false);
@@ -85,7 +149,7 @@ export default function StoryboardComposer() {
     const handleDeleteFrame = async (frameId: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!currentProject) return;
-        if (!confirm("Are you sure you want to delete this frame?")) return;
+        if (!confirm(copy.deleteConfirm)) return;
 
         try {
             await crudApi.deleteFrame(currentProject.id, frameId);
@@ -93,7 +157,7 @@ export default function StoryboardComposer() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete frame:", error);
-            alert("Failed to delete frame");
+            alert(copy.failedToDeleteFrame);
         }
     };
 
@@ -107,7 +171,7 @@ export default function StoryboardComposer() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to copy frame:", error);
-            alert("Failed to copy frame");
+            alert(copy.failedToCopyFrame);
         }
     };
 
@@ -125,7 +189,7 @@ export default function StoryboardComposer() {
             setInsertIndex(null);
         } catch (error) {
             console.error("Failed to create frame:", error);
-            alert("Failed to create frame");
+            alert(copy.failedToCreateFrame);
         }
     };
 
@@ -151,7 +215,7 @@ export default function StoryboardComposer() {
             // No need to fetch again if optimistic update was correct, but good for safety
         } catch (error) {
             console.error("Failed to reorder frames:", error);
-            alert("Failed to reorder frames");
+            alert(copy.failedToReorderFrame);
             // Revert on error would be ideal here by fetching project again
             const project = await api.getProject(currentProject.id);
             updateProject(currentProject.id, project);
@@ -168,7 +232,7 @@ export default function StoryboardComposer() {
         // Find the previous frame's selected video
         const prevFrame = currentProject.frames[frameIndex - 1];
         if (!prevFrame.selected_video_id) {
-            alert("Previous frame has no selected video.");
+            alert(copy.previousFrameNoVideo);
             return;
         }
 
@@ -176,7 +240,7 @@ export default function StoryboardComposer() {
             (t: any) => t.id === prevFrame.selected_video_id && t.status === "completed"
         );
         if (!prevVideo) {
-            alert("Previous frame's video is not completed yet.");
+            alert(copy.previousFrameVideoIncomplete);
             return;
         }
 
@@ -186,7 +250,7 @@ export default function StoryboardComposer() {
             updateProject(currentProject.id, updatedProject);
         } catch (error: any) {
             console.error("Failed to extract last frame:", error);
-            alert(error?.response?.data?.detail || "Failed to extract last frame");
+            alert(error?.response?.data?.detail || copy.failedToExtractLastFrame);
         } finally {
             setExtractingFrameId(null);
         }
@@ -207,7 +271,7 @@ export default function StoryboardComposer() {
             updateProject(currentProject.id, updatedProject);
         } catch (error: any) {
             console.error("Failed to upload frame image:", error);
-            alert(error?.message || "Failed to upload frame image");
+            alert(error?.message || copy.failedToUploadFrameImage);
         } finally {
             setUploadTargetFrameId(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
@@ -220,71 +284,14 @@ export default function StoryboardComposer() {
 
         addRenderingFrame(frame.id);
         try {
-            // Construct composition data with references
-            const compositionData: any = {
-                character_ids: frame.character_ids,
-                prop_ids: frame.prop_ids,
-                scene_id: frame.scene_id,
-                reference_image_urls: []
-            };
-
-            // Helper to get selected variant URL from an asset
-            const getSelectedVariantUrl = (asset: any): string | null => {
-                if (!asset || !asset.variants || asset.variants.length === 0) return null;
-
-                // Try to get selected variant first
-                if (asset.selected_id) {
-                    const selectedVariant = asset.variants.find((v: any) => v.id === asset.selected_id);
-                    if (selectedVariant?.url) return selectedVariant.url;
-                }
-
-                // Fallback: auto-select first variant if no selection exists
-                // This handles the case where selected_id is null/undefined
-                return asset.variants[0]?.url || null;
-            };
-
-            // 1. Add Scene Image - prioritize selected variant
-            if (frame.scene_id) {
-                const scene = currentProject.scenes?.find((s: any) => s.id === frame.scene_id);
-                if (scene) {
-                    const sceneUrl = getSelectedVariantUrl(scene.image_asset) || scene.image_url;
-                    if (sceneUrl) compositionData.reference_image_urls.push(sceneUrl);
-                }
-            }
-
-            // 2. Add Character Images - use selected variant from three_view > full_body > headshot
-            if (frame.character_ids && frame.character_ids.length > 0) {
-                frame.character_ids.forEach((charId: string) => {
-                    const char = currentProject.characters?.find((c: any) => c.id === charId);
-                    if (char) {
-                        // Priority: three_view_asset > full_body_asset > headshot_asset > legacy fields
-                        const charUrl = getSelectedVariantUrl(char.three_view_asset)
-                            || getSelectedVariantUrl(char.full_body_asset)
-                            || getSelectedVariantUrl(char.headshot_asset)
-                            || char.three_view_image_url
-                            || char.full_body_image_url
-                            || char.headshot_image_url
-                            || char.avatar_url
-                            || char.image_url;
-                        if (charUrl) compositionData.reference_image_urls.push(charUrl);
-                    }
-                });
-            }
-
-            // 3. Add Prop Images - prioritize selected variant
-            if (frame.prop_ids && frame.prop_ids.length > 0) {
-                frame.prop_ids.forEach((propId: string) => {
-                    const prop = currentProject.props?.find((p: any) => p.id === propId);
-                    if (prop) {
-                        const propUrl = getSelectedVariantUrl(prop.image_asset) || prop.image_url;
-                        if (propUrl) compositionData.reference_image_urls.push(propUrl);
-                    }
-                });
-            }
+            const compositionData = buildStoryboardCompositionData(currentProject, frame, {
+                continuityLock: true,
+                includeStyleReferences: false,
+            });
 
             // Construct enhanced prompt using Art Direction style config.
             const artDirection = currentProject?.art_direction;
-            const globalStylePrompt = artDirection?.style_config?.positive_prompt || "";
+            const globalStylePrompt = getArtDirectionPromptPrefix(artDirection?.style_config);
 
             // Construct final prompt:
             // If image_prompt exists (polished or manually edited), it already contains action/dialogue,
@@ -314,10 +321,322 @@ export default function StoryboardComposer() {
 
         } catch (error) {
             console.error("Render failed:", error);
-            alert("Render failed. See console for details.");
+            alert(copy.renderFailed);
         } finally {
             removeRenderingFrame(frame.id);
         }
+    };
+
+    const frameEntries = useMemo<FrameEntry[]>(
+        () => (currentProject?.frames || []).map((frame: any, index: number) => ({ frame, index })),
+        [currentProject?.frames],
+    );
+
+    const sceneLookup = useMemo(() => {
+        const lookup = new Map<string, string>();
+        currentProject?.scenes?.forEach((scene: any) => {
+            if (scene?.id && scene?.name) {
+                lookup.set(scene.id, scene.name);
+            }
+        });
+        return lookup;
+    }, [currentProject?.scenes]);
+
+    const storyBeatLookup = useMemo(() => {
+        const lookup = new Map<string, StoryBeatMeta>();
+
+        currentProject?.story_analysis?.scene_beats?.forEach((beat: any) => {
+            lookup.set(beat.id, {
+                order: beat.order,
+                title: beat.title,
+                summary: beat.summary,
+                chapterOrder: beat.chapter_order,
+                chapterTitle: beat.chapter_title,
+                sceneName: beat.scene_name,
+                qualityFlags: beat.quality_flags || [],
+            });
+        });
+
+        frameEntries.forEach(({ frame }) => {
+            if (!frame.story_beat_id || lookup.has(frame.story_beat_id)) return;
+            lookup.set(frame.story_beat_id, {
+                order: frame.story_beat_order,
+                title: frame.story_beat_title,
+                summary: "",
+                chapterOrder: frame.chapter_order,
+                chapterTitle: frame.chapter_title,
+                sceneName: sceneLookup.get(frame.scene_id),
+                qualityFlags: [],
+            });
+        });
+
+        return lookup;
+    }, [currentProject?.story_analysis?.scene_beats, frameEntries, sceneLookup]);
+
+    const beatFrameCounts = useMemo(() => {
+        const counts = new Map<string, number>();
+        frameEntries.forEach(({ frame }) => {
+            const key = frame.story_beat_id || "__unassigned__";
+            counts.set(key, (counts.get(key) || 0) + 1);
+        });
+        return counts;
+    }, [frameEntries]);
+
+    const storyBeatGroups = useMemo<StoryBeatGroup[]>(() => {
+        const groups = new Map<string, StoryBeatGroup>();
+
+        frameEntries.forEach((entry) => {
+            const beatId = entry.frame.story_beat_id || "__unassigned__";
+            const beatMeta = entry.frame.story_beat_id ? storyBeatLookup.get(entry.frame.story_beat_id) : null;
+            if (!groups.has(beatId)) {
+                groups.set(beatId, {
+                    key: beatId,
+                    title: formatStoryBeatLabel(entry.frame.story_beat_order ?? beatMeta?.order, entry.frame.story_beat_title || beatMeta?.title),
+                    summary: beatMeta?.summary || "",
+                    frameCount: beatFrameCounts.get(beatId) || 0,
+                    order: entry.frame.story_beat_order ?? beatMeta?.order ?? Number.MAX_SAFE_INTEGER,
+                    isUnassigned: !entry.frame.story_beat_id,
+                    chapterOrder: entry.frame.chapter_order ?? beatMeta?.chapterOrder,
+                    chapterTitle: entry.frame.chapter_title || beatMeta?.chapterTitle,
+                    sceneName: beatMeta?.sceneName || sceneLookup.get(entry.frame.scene_id),
+                    qualityFlags: beatMeta?.qualityFlags || [],
+                    entries: [],
+                });
+            }
+            groups.get(beatId)?.entries.push(entry);
+        });
+
+        return Array.from(groups.values()).sort((left, right) => {
+            if (left.isUnassigned !== right.isUnassigned) return left.isUnassigned ? 1 : -1;
+            if (left.order !== right.order) return left.order - right.order;
+            return left.entries[0].index - right.entries[0].index;
+        });
+    }, [beatFrameCounts, frameEntries, sceneLookup, storyBeatLookup]);
+
+    const renderFrameCard = ({ frame, index }: FrameEntry) => {
+        const beatMeta = frame.story_beat_id ? storyBeatLookup.get(frame.story_beat_id) : null;
+        const beatKey = frame.story_beat_id || "__unassigned__";
+        const beatLabel = formatStoryBeatLabel(frame.story_beat_order ?? beatMeta?.order, frame.story_beat_title || beatMeta?.title);
+        const beatFrameCount = beatFrameCounts.get(beatKey) || 0;
+        const chapterOrder = frame.chapter_order ?? beatMeta?.chapterOrder;
+        const chapterTitle = frame.chapter_title || beatMeta?.chapterTitle;
+        const sceneName = beatMeta?.sceneName || sceneLookup.get(frame.scene_id);
+        const qualityFlags = beatMeta?.qualityFlags || [];
+
+        return (
+            <Fragment key={frame.id}>
+                <motion.div
+                    layoutId={frame.id}
+                    onClick={() => setSelectedFrameId(frame.id)}
+                    className={`group relative flex gap-6 p-4 rounded-xl border transition-all cursor-pointer ${selectedFrameId === frame.id
+                        ? "bg-white/5 border-primary ring-1 ring-primary"
+                        : "bg-[#161616] border-white/5 hover:border-white/20"
+                        }`}
+                >
+                    <div className="absolute -left-3 -top-3 w-8 h-8 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-400 shadow-lg z-10">
+                        {index + 1}
+                    </div>
+
+                    <div className="w-64 aspect-video bg-black/40 rounded-lg border border-white/5 overflow-hidden flex-shrink-0 relative">
+                        {frame.rendered_image_url || frame.image_url ? (
+                            <ImageWithRetry
+                                key={frame.id + (frame.updated_at || 0)}
+                                src={getAssetUrlWithTimestamp(frame.rendered_image_url || frame.image_url, frame.updated_at)}
+                                alt={copy.frameAlt(index + 1)}
+                                className="w-full h-full object-cover cursor-zoom-in"
+                                onClick={(e: React.MouseEvent) => handleImageClick(frame.id, e)}
+                            />
+                        ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-600 gap-2">
+                                <ImageIcon size={24} className="opacity-20" />
+                                <span className="text-[10px]">{copy.noImage}</span>
+                            </div>
+                        )}
+
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
+                            <button
+                                onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (!currentProject) return;
+                                    try {
+                                        await api.toggleFrameLock(currentProject.id, frame.id);
+                                        const updated = await api.getProject(currentProject.id);
+                                        updateProject(currentProject.id, updated);
+                                    } catch (error) {
+                                        console.error("Toggle lock failed:", error);
+                                    }
+                                }}
+                                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1 pointer-events-auto"
+                                title={frame.locked ? copy.unlock : copy.lock}
+                            >
+                                {frame.locked ? <Unlock size={14} /> : <Lock size={14} />}
+                            </button>
+
+                            {!frame.locked && (
+                                <div className="flex items-center gap-1 pointer-events-auto">
+                                    {renderingFrames.has(frame.id) ? (
+                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 rounded-lg">
+                                            <Loader2 size={14} className="animate-spin text-white" />
+                                            <span className="text-xs text-white">{copy.generating}</span>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {[1, 2, 3, 4].map(size => (
+                                                <button
+                                                    key={size}
+                                                    onClick={(e) => { e.stopPropagation(); handleRenderFrame(frame, size); }}
+                                                    className="px-2 py-1.5 bg-primary/80 hover:bg-primary text-white rounded text-xs font-bold transition-colors"
+                                                    title={copy.generateVariants(size)}
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <Wand2 size={12} />
+                                                        <span>×{size}</span>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col gap-3">
+                        <div className="flex items-start justify-between">
+                            <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{copy.action}</span>
+                                    {frame.camera_movement && (
+                                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30">
+                                            {getCameraTerm(frame.camera_movement)?.label || frame.camera_movement}
+                                        </span>
+                                    )}
+                                    <span
+                                        data-testid={`frame-story-beat-${frame.id}`}
+                                        className={`text-[10px] px-2 py-0.5 rounded-full border ${frame.story_beat_id
+                                            ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+                                            : "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                                            }`}
+                                    >
+                                        {beatLabel}
+                                    </span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-200">
+                                        {formatChapterLabel(chapterOrder, chapterTitle)}
+                                    </span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-gray-300">
+                                        {copy.storyBeatFrameCount(beatFrameCount)}
+                                    </span>
+                                </div>
+                                {(chapterOrder != null || chapterTitle || sceneName || qualityFlags.length > 0) && (
+                                    <div
+                                        data-testid={`frame-story-beat-meta-${frame.id}`}
+                                        className="flex flex-wrap items-center gap-2 text-[10px]"
+                                    >
+                                        {(chapterOrder != null || chapterTitle) && (
+                                            <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 text-cyan-200">
+                                                {copy.storyBeatChapter(formatChapterLabel(chapterOrder, chapterTitle))}
+                                            </span>
+                                        )}
+                                        {sceneName && (
+                                            <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-400/10 px-2 py-0.5 text-fuchsia-200">
+                                                {copy.storyBeatScene(sceneName)}
+                                            </span>
+                                        )}
+                                        {qualityFlags.map((flag) => (
+                                            <span
+                                                key={`${frame.id}-${flag}`}
+                                                className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-amber-200"
+                                            >
+                                                {formatStoryBeatQualityFlag(flag)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                                <p className="text-sm text-gray-200 leading-relaxed line-clamp-3">
+                                    {frame.action_description}
+                                </p>
+                            </div>
+                        </div>
+
+                        {frame.dialogue && (
+                            <div className="mt-auto pt-3 border-t border-white/5">
+                                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">{commonLabels.dialogue}</span>
+                                <p className="text-sm text-gray-400 italic">"{frame.dialogue}"</p>
+                            </div>
+                        )}
+
+                        <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-white/5">
+                            <div className="flex items-center gap-1 mr-auto">
+                                <button
+                                    onClick={(e) => handleMoveFrame(index, "up", e)}
+                                    disabled={index === 0}
+                                    className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                    data-tip={copy.moveUp}
+                                >
+                                    <ArrowUp size={14} />
+                                </button>
+                                <button
+                                    onClick={(e) => handleMoveFrame(index, "down", e)}
+                                    disabled={index === (currentProject?.frames?.length || 0) - 1}
+                                    className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                    data-tip={copy.moveDown}
+                                >
+                                    <ArrowDown size={14} />
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={(e) => handleCopyFrame(frame.id, e)}
+                                className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors"
+                                data-tip={copy.duplicate}
+                            >
+                                <Copy size={14} />
+                            </button>
+                            <button
+                                onClick={(e) => handleUploadFrameImage(frame.id, e)}
+                                className="btn-tip p-2 hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 rounded-lg transition-colors"
+                                data-tip={copy.uploadImage}
+                            >
+                                <Upload size={14} />
+                            </button>
+                            {index > 0 && (() => {
+                                const prevFrame = currentProject?.frames?.[index - 1];
+                                const prevVideoCompleted = prevFrame?.selected_video_id && currentProject?.video_tasks?.find(
+                                    (t: any) => t.id === prevFrame.selected_video_id && t.status === "completed"
+                                );
+                                return prevVideoCompleted ? (
+                                    <button
+                                        onClick={(e) => handleExtractLastFrame(frame.id, e)}
+                                        disabled={extractingFrameId === frame.id}
+                                        className="btn-tip p-2 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 rounded-lg transition-colors disabled:opacity-50"
+                                        data-tip={copy.usePrevEndFrame}
+                                    >
+                                        {extractingFrameId === frame.id ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}
+                                    </button>
+                                ) : null;
+                            })()}
+                            <button
+                                onClick={(e) => handleDeleteFrame(frame.id, e)}
+                                className="btn-tip p-2 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-lg transition-colors"
+                                data-tip={copy.delete}
+                            >
+                                <Trash2 size={14} />
+                            </button>
+                        </div>
+                    </div>
+                </motion.div>
+
+                <div className="flex justify-center opacity-0 hover:opacity-100 transition-opacity -my-3 z-10 relative">
+                    <button
+                        onClick={() => { setInsertIndex(index + 1); setIsCreateDialogOpen(true); }}
+                        className="p-1 bg-[#222] border border-white/20 rounded-full text-gray-400 hover:text-white hover:border-primary hover:bg-primary/20 transition-all transform hover:scale-110"
+                        title={copy.insertFrameHere}
+                    >
+                        <Plus size={16} />
+                    </button>
+                </div>
+            </Fragment>
+        );
     };
 
     return (
@@ -325,30 +644,47 @@ export default function StoryboardComposer() {
             {/* Top Toolbar */}
             <div className="flex-shrink-0 p-4 border-b border-white/10 flex items-center justify-between bg-black/20">
                 <h3 className="font-bold text-sm flex items-center gap-2">
-                    <Layout size={16} className="text-primary" /> Storyboard Frames
+                    <Layout size={16} className="text-primary" /> {copy.title}
                 </h3>
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => setShowScriptOverlay(true)}
                         className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
-                        title="查看原始脚本"
+                        title={copy.viewRawScript}
                     >
                         <FileText size={14} />
-                        查看脚本
+                        {copy.viewScript}
                     </button>
                     <div className="w-px h-4 bg-white/10" />
                     <button
                         onClick={handleAnalyzeToStoryboard}
                         disabled={isAnalyzing}
                         className="flex items-center gap-1.5 text-xs bg-primary/80 hover:bg-primary px-3 py-1.5 rounded-lg text-white transition-colors disabled:opacity-50"
-                        title="从剧本生成分镜帧"
+                        title={copy.analyzeFromScript}
                     >
                         {isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Zap size={14} />}
-                        {isAnalyzing ? "生成中..." : "生成分镜"}
+                        {isAnalyzing ? copy.generating : copy.generateStoryboard}
                     </button>
                     <div className="w-px h-4 bg-white/10" />
+                    <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-1">
+                        <button
+                            type="button"
+                            onClick={() => setFrameViewMode("sequence")}
+                            className={`rounded-md px-2.5 py-1 text-xs transition-colors ${frameViewMode === "sequence" ? "bg-white/15 text-white" : "text-gray-400 hover:text-white"}`}
+                        >
+                            {copy.sequenceView}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setFrameViewMode("beat")}
+                            className={`rounded-md px-2.5 py-1 text-xs transition-colors ${frameViewMode === "beat" ? "bg-white/15 text-white" : "text-gray-400 hover:text-white"}`}
+                        >
+                            {copy.beatView}
+                        </button>
+                    </div>
+                    <div className="w-px h-4 bg-white/10" />
                     <span className="text-xs text-gray-500 font-mono">
-                        {currentProject?.frames?.length || 0} Frames
+                        {copy.frameCount(currentProject?.frames?.length || 0)}
                     </span>
                 </div>
             </div>
@@ -356,202 +692,68 @@ export default function StoryboardComposer() {
             {/* Frame List — full width */}
             <div className="flex-1 overflow-y-auto p-8">
                 <div className="max-w-4xl mx-auto space-y-6">
-                        {/* Add Frame Button (Top) */}
-                        <div className="flex justify-center">
-                            <button
-                                onClick={() => { setInsertIndex(0); setIsCreateDialogOpen(true); }}
-                                className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors border border-dashed border-white/10 hover:border-white/30"
-                            >
-                                <Plus size={16} />
-                                <span className="text-sm font-medium">Insert Frame at Start</span>
-                            </button>
-                        </div>
+                    <div className="flex justify-center">
+                        <button
+                            onClick={() => { setInsertIndex(0); setIsCreateDialogOpen(true); }}
+                            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors border border-dashed border-white/10 hover:border-white/30"
+                        >
+                            <Plus size={16} />
+                            <span className="text-sm font-medium">{copy.insertFrameAtStart}</span>
+                        </button>
+                    </div>
 
-                        {currentProject?.frames?.map((frame: any, index: number) => (
-                            <>
-                                <motion.div
-                                    key={frame.id}
-                                    layoutId={frame.id}
-                                    onClick={() => setSelectedFrameId(frame.id)}
-                                    className={`group relative flex gap-6 p-4 rounded-xl border transition-all cursor-pointer ${selectedFrameId === frame.id
-                                        ? "bg-white/5 border-primary ring-1 ring-primary"
-                                        : "bg-[#161616] border-white/5 hover:border-white/20"
-                                        }`}
-                                >
-                                    {/* Frame Number */}
-                                    <div className="absolute -left-3 -top-3 w-8 h-8 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-400 shadow-lg z-10">
-                                        {index + 1}
+                    {frameViewMode === "beat" ? (
+                        storyBeatGroups.map((group) => (
+                            <section key={group.key} data-testid={`story-beat-group-${group.key}`} className="space-y-4">
+                                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <div className="text-xs uppercase tracking-[0.18em] text-gray-500">{copy.beatGroupLabel}</div>
+                                            <h4 className="mt-1 text-sm font-semibold text-white">{group.title}</h4>
+                                        </div>
+                                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-300">
+                                            {copy.storyBeatFrameCount(group.frameCount)}
+                                        </span>
                                     </div>
-
-                                    {/* Image Preview */}
-                                    <div className="w-64 aspect-video bg-black/40 rounded-lg border border-white/5 overflow-hidden flex-shrink-0 relative">
-                                        {frame.rendered_image_url || frame.image_url ? (
-                                            <ImageWithRetry
-                                                key={frame.id + (frame.updated_at || 0)} // Force remount on refresh
-                                                src={getAssetUrlWithTimestamp(frame.rendered_image_url || frame.image_url, frame.updated_at)}
-                                                alt={`Frame ${index + 1}`}
-                                                className="w-full h-full object-cover cursor-zoom-in"
-                                                onClick={(e: React.MouseEvent) => handleImageClick(frame.id, e)}
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full flex flex-col items-center justify-center text-gray-600 gap-2">
-                                                <ImageIcon size={24} className="opacity-20" />
-                                                <span className="text-[10px]">No Image</span>
-                                            </div>
-                                        )
-
-                                        }
-
-                                        {/* Hover Actions - pointer-events-none to allow image click */}
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 pointer-events-none">
-                                            {/* Lock Button */}
-                                            <button
-                                                onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    if (!currentProject) return;
-                                                    try {
-                                                        await api.toggleFrameLock(currentProject.id, frame.id);
-                                                        const updated = await api.getProject(currentProject.id);
-                                                        updateProject(currentProject.id, updated);
-                                                    } catch (error) {
-                                                        console.error("Toggle lock failed:", error);
-                                                    }
-                                                }}
-                                                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1 pointer-events-auto"
-                                                title={frame.locked ? "解锁" : "锁定"}
-                                            >
-                                                {frame.locked ? <Unlock size={14} /> : <Lock size={14} />}
-                                            </button>
-
-                                            {/* Render Buttons with Batch Size - only show if not locked */}
-                                            {!frame.locked && (
-                                                <div className="flex items-center gap-1 pointer-events-auto">
-                                                    {renderingFrames.has(frame.id) ? (
-                                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 rounded-lg">
-                                                            <Loader2 size={14} className="animate-spin text-white" />
-                                                            <span className="text-xs text-white">Generating...</span>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            {[1, 2, 3, 4].map(size => (
-                                                                <button
-                                                                    key={size}
-                                                                    onClick={(e) => { e.stopPropagation(); handleRenderFrame(frame, size); }}
-                                                                    className="px-2 py-1.5 bg-primary/80 hover:bg-primary text-white rounded text-xs font-bold transition-colors"
-                                                                    title={`Generate ${size} variant${size > 1 ? 's' : ''}`}
-                                                                >
-                                                                    <div className="flex items-center gap-1">
-                                                                        <Wand2 size={12} />
-                                                                        <span>×{size}</span>
-                                                                    </div>
-                                                                </button>
-                                                            ))}
-                                                        </>
-                                                    )}
-                                                </div>
+                                    {(group.chapterOrder != null || group.chapterTitle || group.sceneName || group.qualityFlags.length > 0) && (
+                                        <div
+                                            data-testid={`story-beat-group-meta-${group.key}`}
+                                            className="mt-3 flex flex-wrap items-center gap-2 text-[11px]"
+                                        >
+                                            {(group.chapterOrder != null || group.chapterTitle) && (
+                                                <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-cyan-200">
+                                                    {copy.storyBeatChapter(formatChapterLabel(group.chapterOrder, group.chapterTitle))}
+                                                </span>
                                             )}
-                                        </div>
-                                    </div>
-
-                                    {/* Content */}
-                                    <div className="flex-1 flex flex-col gap-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="space-y-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Action</span>
-                                                    {frame.camera_movement && (
-                                                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded border border-blue-500/30">
-                                                            {frame.camera_movement}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p className="text-sm text-gray-200 leading-relaxed line-clamp-3">
-                                                    {frame.action_description}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        {frame.dialogue && (
-                                            <div className="mt-auto pt-3 border-t border-white/5">
-                                                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">Dialogue</span>
-                                                <p className="text-sm text-gray-400 italic">"{frame.dialogue}"</p>
-                                            </div>
-                                        )}
-
-                                        {/* Frame Actions */}
-                                        <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-white/5">
-                                            <div className="flex items-center gap-1 mr-auto">
-                                                <button
-                                                    onClick={(e) => handleMoveFrame(index, 'up', e)}
-                                                    disabled={index === 0}
-                                                    className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    data-tip="Move Up"
+                                            {group.sceneName && (
+                                                <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-400/10 px-2.5 py-1 text-fuchsia-200">
+                                                    {copy.storyBeatScene(group.sceneName)}
+                                                </span>
+                                            )}
+                                            {group.qualityFlags.map((flag) => (
+                                                <span
+                                                    key={`${group.key}-${flag}`}
+                                                    className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2.5 py-1 text-amber-200"
                                                 >
-                                                    <ArrowUp size={14} />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => handleMoveFrame(index, 'down', e)}
-                                                    disabled={index === (currentProject.frames?.length || 0) - 1}
-                                                    className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                                    data-tip="Move Down"
-                                                >
-                                                    <ArrowDown size={14} />
-                                                </button>
-                                            </div>
-
-                                            <button
-                                                onClick={(e) => handleCopyFrame(frame.id, e)}
-                                                className="btn-tip p-2 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg transition-colors"
-                                                data-tip="Duplicate"
-                                            >
-                                                <Copy size={14} />
-                                            </button>
-                                            <button
-                                                onClick={(e) => handleUploadFrameImage(frame.id, e)}
-                                                className="btn-tip p-2 hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 rounded-lg transition-colors"
-                                                data-tip="Upload Image"
-                                            >
-                                                <Upload size={14} />
-                                            </button>
-                                            {index > 0 && (() => {
-                                                const prevFrame = currentProject.frames?.[index - 1];
-                                                const prevVideoCompleted = prevFrame?.selected_video_id && currentProject.video_tasks?.find(
-                                                    (t: any) => t.id === prevFrame.selected_video_id && t.status === "completed"
-                                                );
-                                                return prevVideoCompleted ? (
-                                                    <button
-                                                        onClick={(e) => handleExtractLastFrame(frame.id, e)}
-                                                        disabled={extractingFrameId === frame.id}
-                                                        className="btn-tip p-2 hover:bg-purple-500/20 text-gray-400 hover:text-purple-400 rounded-lg transition-colors disabled:opacity-50"
-                                                        data-tip="Use Prev End Frame"
-                                                    >
-                                                        {extractingFrameId === frame.id ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}
-                                                    </button>
-                                                ) : null;
-                                            })()}
-                                            <button
-                                                onClick={(e) => handleDeleteFrame(frame.id, e)}
-                                                className="btn-tip p-2 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded-lg transition-colors"
-                                                data-tip="Delete"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
+                                                    {formatStoryBeatQualityFlag(flag)}
+                                                </span>
+                                            ))}
                                         </div>
-                                    </div>
-                                </motion.div>
-
-                                {/* Add Button Between Frames */}
-                                < div className="flex justify-center opacity-0 hover:opacity-100 transition-opacity -my-3 z-10 relative" >
-                                    <button
-                                        onClick={() => { setInsertIndex(index + 1); setIsCreateDialogOpen(true); }}
-                                        className="p-1 bg-[#222] border border-white/20 rounded-full text-gray-400 hover:text-white hover:border-primary hover:bg-primary/20 transition-all transform hover:scale-110"
-                                        title="Insert Frame Here"
-                                    >
-                                        <Plus size={16} />
-                                    </button>
+                                    )}
+                                    {group.summary ? (
+                                        <p className="mt-3 text-sm leading-6 text-gray-400">{group.summary}</p>
+                                    ) : (
+                                        <p className="mt-3 text-sm leading-6 text-gray-500">{copy.unassignedBeatHint}</p>
+                                    )}
                                 </div>
-                            </>
-                        ))}
+                                <div className="space-y-6">
+                                    {group.entries.map(renderFrameCard)}
+                                </div>
+                            </section>
+                        ))
+                    ) : (
+                        frameEntries.map(renderFrameCard)
+                    )}
                 </div>
             </div>
 
@@ -577,7 +779,7 @@ export default function StoryboardComposer() {
                             <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-black/20">
                                 <div className="flex items-center gap-3">
                                     <FileText size={18} className="text-primary" />
-                                    <h3 className="text-sm font-bold text-white">原始脚本</h3>
+                                    <h3 className="text-sm font-bold text-white">{copy.rawScriptTitle}</h3>
                                 </div>
                                 <button
                                     onClick={() => setShowScriptOverlay(false)}
@@ -588,7 +790,7 @@ export default function StoryboardComposer() {
                             </div>
                             <div className="flex-1 overflow-y-auto p-6">
                                 <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
-                                    {currentProject?.originalText || "暂无脚本内容"}
+                                    {currentProject?.originalText || copy.noScriptContent}
                                 </pre>
                             </div>
                         </motion.div>
@@ -635,13 +837,13 @@ function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void;
     const [sceneId, setSceneId] = useState(scenes[0]?.id || "");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleSubmit = async () => {
+        const handleSubmit = async () => {
         if (!action.trim()) {
-            alert("Action description is required");
+            alert(copy.actionRequired);
             return;
         }
         if (!sceneId && scenes.length > 0) {
-            alert("Please select a scene");
+            alert(copy.sceneRequired);
             return;
         }
 
@@ -651,7 +853,7 @@ function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void;
                 action_description: action.trim(),
                 dialogue: dialogue.trim(),
                 scene_id: sceneId,
-                camera_angle: "Medium Shot"
+                camera_angle: shotTerms.mediumShot.value
             });
         } finally {
             setIsSubmitting(false);
@@ -669,7 +871,7 @@ function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void;
                 <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/20">
                     <div className="flex items-center gap-3">
                         <Plus className="text-primary" size={20} />
-                        <h2 className="text-lg font-bold text-white">Add New Frame</h2>
+                        <h2 className="text-lg font-bold text-white">{copy.createDialog.title}</h2>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                         <X size={20} className="text-gray-400" />
@@ -678,34 +880,34 @@ function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void;
 
                 <div className="p-6 space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-2">Scene</label>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">{copy.createDialog.scene}</label>
                         <select
                             value={sceneId}
                             onChange={(e) => setSceneId(e.target.value)}
                             className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-lg text-white focus:border-primary/50 focus:outline-none appearance-none"
                         >
-                            <option value="" disabled>Select a scene</option>
+                            <option value="" disabled>{copy.createDialog.selectScene}</option>
                             {scenes.map((s: any) => (
                                 <option key={s.id} value={s.id}>{s.name}</option>
                             ))}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-2">Action Description *</label>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">{copy.createDialog.actionDescription}</label>
                         <textarea
                             value={action}
                             onChange={(e) => setAction(e.target.value)}
-                            placeholder="What is happening in this frame?"
+                            placeholder={copy.createDialog.actionPlaceholder}
                             rows={3}
                             className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-primary/50 focus:outline-none resize-none"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-2">Dialogue (Optional)</label>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">{copy.createDialog.dialogueOptional}</label>
                         <textarea
                             value={dialogue}
                             onChange={(e) => setDialogue(e.target.value)}
-                            placeholder="Character dialogue..."
+                            placeholder={copy.createDialog.dialoguePlaceholder}
                             rows={2}
                             className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-primary/50 focus:outline-none resize-none"
                         />
@@ -717,7 +919,7 @@ function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void;
                         onClick={onClose}
                         className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors"
                     >
-                        Cancel
+                        {commonActions.cancel}
                     </button>
                     <button
                         onClick={handleSubmit}
@@ -725,7 +927,7 @@ function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void;
                         className="px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                         {isSubmitting && <RefreshCw size={16} className="animate-spin" />}
-                        Create Frame
+                        {copy.createDialog.create}
                     </button>
                 </div>
             </motion.div>
@@ -764,8 +966,7 @@ function ImageWithRetry({ src, alt, className, onClick }: { src: string, alt: st
         }
     }, [error, retryCount]);
 
-    // Construct src with retry param to bypass cache if retrying
-    const displaySrc = retryCount > 0 ? `${src}${src.includes('?') ? '&' : '?'}retry=${retryCount}` : src;
+    const displaySrc = retryCount > 0 ? appendAssetQueryParam(src, "retry", retryCount) : src;
 
     return (
         <div className={`relative ${className}`}>
@@ -775,11 +976,15 @@ function ImageWithRetry({ src, alt, className, onClick }: { src: string, alt: st
                 </div>
             )}
             <img
+                key={`${displaySrc}-${retryCount}`}
                 ref={imgRef}
                 src={displaySrc}
                 alt={alt}
                 className={`${className} ${isLoading ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300`}
-                onLoad={() => setIsLoading(false)}
+                onLoad={() => {
+                    setError(false);
+                    setIsLoading(false);
+                }}
                 onError={() => {
                     setError(true);
                     setIsLoading(true); // Keep showing loader while retrying
@@ -788,8 +993,7 @@ function ImageWithRetry({ src, alt, className, onClick }: { src: string, alt: st
             />
             {error && retryCount >= 10 && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-red-500/10 backdrop-blur-sm z-20 p-2 text-center">
-                    <span className="text-xs text-red-400 font-bold">Failed to load</span>
-                    <span className="text-[10px] text-red-400/70 break-all">{src}</span>
+                    <span className="text-xs text-red-400 font-bold">{copy.imageLoadFailed}</span>
                 </div>
             )}
         </div>

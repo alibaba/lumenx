@@ -1,21 +1,29 @@
 import { useState } from "react";
-import { Download, Film, CheckCircle, FileVideo, Monitor, Captions } from "lucide-react";
+import { Download, Film, CheckCircle, FileVideo, Monitor, Captions, FileText } from "lucide-react";
 import clsx from "clsx";
+import { messages } from "@/lib/i18n";
 import { useProjectStore } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 
 export default function ExportStudio() {
+    const copy = messages.modules.exportStudio;
     const currentProject = useProjectStore((state) => state.currentProject);
 
     const [isExporting, setIsExporting] = useState(false);
     const [exportUrl, setExportUrl] = useState<string | null>(null);
+    const [subtitleUrl, setSubtitleUrl] = useState<string | null>(null);
     const [exportError, setExportError] = useState<string | null>(null);
 
     // Config State
     const [resolution, setResolution] = useState("1080p");
     const [format, setFormat] = useState("mp4");
     const [subtitles, setSubtitles] = useState("burn-in");
+    const subtitleOptions = [
+        { id: "burn-in", label: copy.subtitleOptions.burnIn },
+        { id: "srt", label: copy.subtitleOptions.srt },
+        { id: "none", label: copy.subtitleOptions.none },
+    ];
 
     // If project already has a merged video, show it immediately
     const effectiveUrl = exportUrl || currentProject?.merged_video_url || null;
@@ -24,14 +32,16 @@ export default function ExportStudio() {
         if (!currentProject) return;
         setIsExporting(true);
         setExportUrl(null);
+        setSubtitleUrl(null);
         setExportError(null);
 
         try {
             const result = await api.exportProject(currentProject.id, { resolution, format, subtitles });
             setExportUrl(result.url);
+            setSubtitleUrl(result.subtitle_url || null);
         } catch (error: any) {
             console.error("Export failed:", error);
-            setExportError(error?.message || "Export failed. Please check that videos have been generated.");
+            setExportError(error?.message || copy.exportFailedHint);
         } finally {
             setIsExporting(false);
         }
@@ -42,14 +52,25 @@ export default function ExportStudio() {
             {/* Left: Configuration */}
             <div className="w-96 border-r border-white/10 bg-black/20 p-8 flex flex-col">
                 <h2 className="text-2xl font-display font-bold mb-8 flex items-center gap-3">
-                    <Film className="text-primary" /> Export Studio
+                    <Film className="text-primary" /> {copy.title}
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                        {copy.exportBadge}
+                    </span>
                 </h2>
+
+                <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+                    <div className="flex items-center gap-2 font-semibold">
+                        <CheckCircle size={14} className="text-emerald-300" />
+                        {copy.exportNoticeTitle}
+                    </div>
+                    <p className="mt-2 text-emerald-100/80">{copy.exportNotice}</p>
+                </div>
 
                 <div className="space-y-8 flex-1">
                     {/* Resolution */}
                     <div className="space-y-3">
                         <label className="text-sm font-bold text-gray-400 flex items-center gap-2">
-                            <Monitor size={16} /> Resolution
+                            <Monitor size={16} /> {copy.resolution}
                         </label>
                         <div className="grid grid-cols-2 gap-3">
                             {["1080p", "4K"].map(res => (
@@ -72,7 +93,7 @@ export default function ExportStudio() {
                     {/* Format */}
                     <div className="space-y-3">
                         <label className="text-sm font-bold text-gray-400 flex items-center gap-2">
-                            <FileVideo size={16} /> Format
+                            <FileVideo size={16} /> {copy.format}
                         </label>
                         <div className="grid grid-cols-3 gap-3">
                             {["mp4", "mov", "gif"].map(fmt => (
@@ -95,14 +116,10 @@ export default function ExportStudio() {
                     {/* Subtitles */}
                     <div className="space-y-3">
                         <label className="text-sm font-bold text-gray-400 flex items-center gap-2">
-                            <Captions size={16} /> Subtitles
+                            <Captions size={16} /> {copy.subtitles}
                         </label>
                         <div className="space-y-2">
-                            {[
-                                { id: "burn-in", label: "Burn-in (Hardcoded)" },
-                                { id: "srt", label: "Export .SRT File" },
-                                { id: "none", label: "None" }
-                            ].map(opt => (
+                            {subtitleOptions.map(opt => (
                                 <button
                                     key={opt.id}
                                     onClick={() => setSubtitles(opt.id)}
@@ -118,6 +135,10 @@ export default function ExportStudio() {
                             ))}
                         </div>
                     </div>
+
+                    <p className="text-xs leading-relaxed text-gray-500">
+                        {copy.optionsHint}
+                    </p>
                 </div>
 
                 <button
@@ -125,7 +146,7 @@ export default function ExportStudio() {
                     disabled={isExporting}
                     className="w-full bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white py-4 rounded-xl font-bold text-lg shadow-xl shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-8"
                 >
-                    {isExporting ? "Rendering..." : "Start Render"}
+                    {isExporting ? copy.rendering : copy.startRender}
                 </button>
             </div>
 
@@ -138,21 +159,21 @@ export default function ExportStudio() {
                     {isExporting ? (
                         <div className="bg-black/30 backdrop-blur-xl border border-white/10 rounded-2xl p-12 shadow-2xl">
                             <div className="w-24 h-24 border-4 border-white/10 border-t-primary rounded-full animate-spin mx-auto mb-8" />
-                            <h3 className="text-2xl font-bold mb-2">Rendering Your Masterpiece</h3>
-                            <p className="text-gray-400">Stitching video, mixing audio, and burning subtitles...</p>
+                            <h3 className="text-2xl font-bold mb-2">{copy.renderingTitle}</h3>
+                            <p className="text-gray-400">{copy.renderingHint}</p>
                         </div>
                     ) : exportError ? (
                         <div className="bg-black/30 backdrop-blur-xl border border-red-500/30 rounded-2xl p-12 shadow-2xl shadow-red-900/20">
                             <div className="w-20 h-20 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <Film size={40} />
                             </div>
-                            <h3 className="text-2xl font-bold mb-2 text-white">Export Failed</h3>
+                            <h3 className="text-2xl font-bold mb-2 text-white">{copy.exportFailed}</h3>
                             <p className="text-gray-400 mb-4">{exportError}</p>
                             <button
                                 onClick={handleExport}
                                 className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl font-bold transition-colors"
                             >
-                                Retry
+                                {copy.retry}
                             </button>
                         </div>
                     ) : effectiveUrl ? (
@@ -160,21 +181,31 @@ export default function ExportStudio() {
                             <div className="w-20 h-20 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <CheckCircle size={40} />
                             </div>
-                            <h3 className="text-2xl font-bold mb-2 text-white">Export Complete!</h3>
-                            <p className="text-gray-400 mb-8">Your video is ready to be shared with the world.</p>
+                            <h3 className="text-2xl font-bold mb-2 text-white">{copy.exportComplete}</h3>
+                            <p className="text-gray-400 mb-8">{copy.successHint}</p>
+                            <p className="text-xs text-emerald-300/90 mb-6">{copy.successNote}</p>
 
                             <a
                                 href={getAssetUrl(effectiveUrl)}
                                 target="_blank"
                                 className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-8 py-4 rounded-xl font-bold text-lg transition-colors shadow-lg shadow-green-600/20"
                             >
-                                <Download size={20} /> Download Video
+                                <Download size={20} /> {copy.downloadVideo}
                             </a>
+                            {subtitleUrl && (
+                                <a
+                                    href={getAssetUrl(subtitleUrl)}
+                                    target="_blank"
+                                    className="ml-3 inline-flex items-center gap-2 bg-white/10 hover:bg-white/15 text-white px-6 py-4 rounded-xl font-bold text-lg transition-colors"
+                                >
+                                    <FileText size={18} /> {copy.downloadSubtitles}
+                                </a>
+                            )}
                         </div>
                     ) : (
                         <div className="opacity-50">
                             <Film size={64} className="mx-auto mb-4 text-gray-600" />
-                            <p className="text-gray-500">Configure your export settings and click "Start Render"</p>
+                            <p className="text-gray-500">{copy.emptyHint}</p>
                         </div>
                     )}
                 </div>

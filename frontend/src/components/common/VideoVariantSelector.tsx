@@ -3,6 +3,7 @@ import { VideoTask } from '@/store/projectStore';
 import { Trash2, Check, Layers, X, Maximize2, Play, Pause, RefreshCw } from 'lucide-react';
 import { API_URL } from '@/lib/api';
 import { getAssetUrl } from '@/lib/utils';
+import { zhCN } from '@/lib/i18n';
 
 interface VideoVariantSelectorProps {
     videos: VideoTask[];
@@ -25,6 +26,7 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
     className = "",
     aspectRatio = "16:9"
 }) => {
+    const copy = zhCN.videoVariantSelector;
     const [duration, setDuration] = useState(5);
     const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -84,10 +86,10 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
                         {isGenerating ? (
                             <>
                                 <RefreshCw className="animate-spin" size={24} />
-                                <span>Generating Video...</span>
+                                <span>{copy.generatingVideo}</span>
                             </>
                         ) : (
-                            <span>No video generated</span>
+                            <span>{copy.noVideoGenerated}</span>
                         )}
                     </div>
                 )}
@@ -98,7 +100,7 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
                         <button
                             onClick={(e) => { e.stopPropagation(); onDelete(selectedVideo.id); }}
                             className="p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-full backdrop-blur-sm"
-                            title="Delete this video"
+                            title={copy.deleteVideo}
                         >
                             <Trash2 size={16} />
                         </button>
@@ -111,7 +113,7 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
                 {/* Generation Controls */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 bg-gray-800 rounded-lg p-1 border border-gray-700">
-                        <span className="text-xs text-gray-400 px-2">Duration:</span>
+                        <span className="text-xs text-gray-400 px-2">{copy.duration}</span>
                         {[5].map(d => (
                             <button
                                 key={d}
@@ -135,7 +137,7 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
                             }`}
                     >
                         <Layers size={16} />
-                        {isGenerating ? "Generating..." : "Generate Video"}
+                        {isGenerating ? copy.generating : copy.generateVideo}
                     </button>
                 </div>
 
@@ -160,7 +162,7 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
                                         {/* Thumbnail */}
                                         <img
                                             src={thumbUrl}
-                                            alt="Video Thumbnail"
+                                            alt={copy.thumbnailAlt}
                                             className="w-full h-full object-cover opacity-70 group-hover/variant:opacity-100 transition-opacity"
                                         />
 

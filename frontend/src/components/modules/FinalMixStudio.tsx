@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Play, Pause, Volume2, Music, Mic, Video, Sliders } from "lucide-react";
+import { Play, Pause, Volume2, Music, Mic, Video, Sliders, CheckCircle } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { getAssetUrl } from "@/lib/utils";
 
@@ -77,17 +77,33 @@ export default function FinalMixStudio() {
                             <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-medium ml-2">Beta</span>
                         </h3>
                     </div>
+                    <div className="mx-4 mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-100">
+                        <div className="flex items-center gap-2 font-semibold text-amber-200">
+                            <CheckCircle size={12} />
+                            Generated tracks
+                        </div>
+                        <p className="mt-1 text-amber-100/80">
+                            SFX and BGM now come from generated audio files. This panel previews the layout; final mixing happens during export.
+                        </p>
+                    </div>
                     <div className="p-6 space-y-8">
                         {/* Track Controls */}
                         {[
-                            { id: 'video', label: 'Video Audio', icon: <Video size={16} /> },
-                            { id: 'voice', label: 'Dialogue', icon: <Mic size={16} /> },
-                            { id: 'sfx', label: 'SFX', icon: <Volume2 size={16} /> },
-                            { id: 'bgm', label: 'Music', icon: <Music size={16} /> },
+                            { id: 'video', label: 'Video Audio', icon: <Video size={16} />, badge: null },
+                            { id: 'voice', label: 'Dialogue', icon: <Mic size={16} />, badge: null },
+                            { id: 'sfx', label: 'SFX', icon: <Volume2 size={16} />, badge: 'Ready' },
+                            { id: 'bgm', label: 'Music', icon: <Music size={16} />, badge: 'Ready' },
                         ].map(track => (
                             <div key={track.id} className="space-y-2">
                                 <div className="flex justify-between text-xs text-gray-400">
-                                    <span className="flex items-center gap-2">{track.icon} {track.label}</span>
+                                    <span className="flex items-center gap-2">
+                                        {track.icon} {track.label}
+                                        {track.badge && (
+                                            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300">
+                                                {track.badge}
+                                            </span>
+                                        )}
+                                    </span>
                                     <span>{Math.round(volumes[track.id as keyof typeof volumes] * 100)}%</span>
                                 </div>
                                 <input
@@ -110,7 +126,7 @@ export default function FinalMixStudio() {
 
                     <div className="mt-auto p-4 border-t border-white/10">
                         <p className="text-[11px] text-gray-500 text-center leading-relaxed">
-                            Audio mixing will be available in a future update.
+                            The mixer UI stays visual, but the underlying SFX/BGM tracks are real generated audio files.
                         </p>
                     </div>
                 </div>

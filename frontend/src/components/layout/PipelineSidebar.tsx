@@ -6,6 +6,7 @@ import {
     ChevronLeft
 } from "lucide-react";
 import clsx from "clsx";
+import { messages } from "@/lib/i18n";
 import LumenXBranding from "./LumenXBranding";
 import type { BreadcrumbSegment } from "./BreadcrumbBar";
 
@@ -51,7 +52,7 @@ export default function PipelineSidebar({ activeStep, onStepChange, steps, bread
                             <button
                                 onClick={handleBack}
                                 className="flex-shrink-0 text-gray-400 hover:text-white transition-colors"
-                                title="返回"
+                                title={messages.navigation.back}
                             >
                                 <ChevronLeft size={16} />
                             </button>
@@ -148,7 +149,7 @@ export default function PipelineSidebar({ activeStep, onStepChange, steps, bread
                 <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 border border-white/5">
                     <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-accent" />
                     <div className="flex flex-col">
-                        <span className="text-sm font-medium text-white">Project Alpha</span>
+                        <span className="text-sm font-medium text-white">{messages.navigation.pipeline}</span>
                         <span className="text-xs text-gray-500">v0.1.0</span>
                     </div>
                 </div>

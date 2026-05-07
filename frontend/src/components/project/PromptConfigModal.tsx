@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, FileText, RotateCcw, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
+import { zhCN } from '@/lib/i18n';
+import { getPromptConfigPresets, type PromptConfigSectionKey } from '@/lib/prompt-config-presets';
 
 interface PromptConfigModalProps {
     isOpen: boolean;
@@ -17,21 +19,23 @@ interface PromptDefaults {
     r2v_polish: string;
 }
 
+const copy = zhCN.promptConfig;
+
 const SECTIONS = [
     {
-        key: 'storyboard_polish' as const,
-        label: 'Storyboard Polish (Prompt C)',
-        description: 'System prompt for storyboard/image prompt polishing. Placeholders: {ASSETS} (asset context), {DRAFT} (user draft prompt).',
+        key: 'storyboard_polish' as PromptConfigSectionKey,
+        label: copy.sections.storyboardPolish.labelWithCode,
+        description: copy.sections.storyboardPolish.description,
     },
     {
-        key: 'video_polish' as const,
-        label: 'Video I2V Polish (Prompt D)',
-        description: 'System prompt for Image-to-Video prompt polishing. No dynamic placeholders needed.',
+        key: 'video_polish' as PromptConfigSectionKey,
+        label: copy.sections.videoI2vPolish.labelWithCode,
+        description: copy.sections.videoI2vPolish.description,
     },
     {
-        key: 'r2v_polish' as const,
-        label: 'Video R2V Polish (Prompt E)',
-        description: 'System prompt for Reference-to-Video prompt polishing. Placeholder: {SLOTS} (character slot context).',
+        key: 'r2v_polish' as PromptConfigSectionKey,
+        label: copy.sections.videoR2vPolish.labelWithCode,
+        description: copy.sections.videoR2vPolish.description,
     },
 ];
 
@@ -57,8 +61,8 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                     setDefaults(data.defaults);
                 })
                 .catch((err) => {
-                    console.error("Failed to load prompt config:", err);
-                    setLoadError("Failed to load prompt configuration. Please try again.");
+                    console.error(copy.console.loadFailed, err);
+                    setLoadError(copy.loadError);
                 })
                 .finally(() => setIsLoading(false));
         }
@@ -72,8 +76,8 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
             updateProject(currentProject.id, { prompt_config: result.prompt_config });
             onClose();
         } catch (error) {
-            console.error("Failed to save prompt config:", error);
-            alert("Failed to save prompt configuration");
+            console.error(copy.console.saveFailed, error);
+            alert(copy.saveError);
         } finally {
             setIsSaving(false);
         }
@@ -81,6 +85,10 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
 
     const handleReset = (key: keyof PromptDefaults) => {
         setConfig(prev => ({ ...prev, [key]: '' }));
+    };
+
+    const handleApplyPreset = (key: PromptConfigSectionKey, prompt: string) => {
+        setConfig((prev) => ({ ...prev, [key]: prompt }));
     };
 
     if (!isOpen) return null;
@@ -108,8 +116,8 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                                 <FileText size={20} className="text-purple-400" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-white">Prompt Configuration</h2>
-                                <p className="text-xs text-gray-400">Customize system prompts for AI polish stages</p>
+                                <h2 className="text-lg font-bold text-white">{copy.modalTitle}</h2>
+                                <p className="text-xs text-gray-400">{copy.modalSubtitle}</p>
                             </div>
                         </div>
                         <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
@@ -122,7 +130,7 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                         {isLoading ? (
                             <div className="flex items-center justify-center py-12">
                                 <Loader2 size={24} className="animate-spin text-purple-400" />
-                                <span className="ml-2 text-gray-400">Loading configuration...</span>
+                                <span className="ml-2 text-gray-400">{zhCN.common.messages.loadingConfiguration}</span>
                             </div>
                         ) : loadError ? (
                             <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-sm text-red-300">
@@ -131,7 +139,7 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                         ) : (
                             <>
                                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
-                                    Leave a field empty to use the system default prompt. Custom prompts completely replace the default for that stage.
+                                    {copy.emptyHint}
                                 </div>
 
                                 {SECTIONS.map((section) => (
@@ -146,16 +154,35 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                                                 disabled={!config[section.key]}
                                                 className="text-[10px] text-gray-400 hover:text-white flex items-center gap-1 px-2 py-1 rounded hover:bg-white/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                             >
-                                                <RotateCcw size={10} /> Reset to default
+                                                <RotateCcw size={10} /> {copy.resetToDefault}
                                             </button>
                                         </div>
 
                                         <textarea
                                             value={config[section.key]}
                                             onChange={(e) => setConfig(prev => ({ ...prev, [section.key]: e.target.value }))}
-                                            placeholder={defaults ? defaults[section.key].slice(0, 150) + '...' : 'Loading default...'}
+                                            placeholder={defaults ? defaults[section.key].slice(0, 150) + '...' : copy.loadingDefault}
                                             className="w-full h-32 bg-black/30 border border-white/10 rounded-lg p-3 text-xs text-gray-300 resize-y focus:outline-none focus:border-purple-500/50 font-mono placeholder-gray-600"
                                         />
+
+                                        <div className="space-y-2">
+                                            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                                                {copy.generateFromTemplate}
+                                            </p>
+                                            <div className="flex flex-wrap gap-2">
+                                                {getPromptConfigPresets(section.key).map((preset) => (
+                                                    <button
+                                                        key={preset.id}
+                                                        type="button"
+                                                        onClick={() => handleApplyPreset(section.key, preset.prompt)}
+                                                        className="rounded-full border border-purple-400/20 bg-purple-500/10 px-3 py-1 text-[11px] text-purple-100 transition hover:bg-purple-500/20"
+                                                        title={preset.summary}
+                                                    >
+                                                        {preset.title}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
 
                                         {/* Expandable default prompt viewer */}
                                         {defaults && (
@@ -165,7 +192,7 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                                                     className="text-[10px] text-gray-500 hover:text-gray-300 flex items-center gap-1 transition-colors"
                                                 >
                                                     {expandedDefault === section.key ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                                                    View full default prompt
+                                                    {copy.viewFullDefaultPrompt}
                                                 </button>
                                                 {expandedDefault === section.key && (
                                                     <pre className="mt-2 bg-black/40 border border-white/5 rounded-lg p-3 text-[10px] text-gray-500 overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">{defaults[section.key]}</pre>
@@ -188,7 +215,7 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                             onClick={onClose}
                             className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                         >
-                            Cancel
+                            {zhCN.common.actions.cancel}
                         </button>
                         <button
                             onClick={handleSave}
@@ -196,7 +223,7 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                             className="px-6 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                             {isSaving && <Loader2 size={14} className="animate-spin" />}
-                            Save
+                            {zhCN.common.actions.save}
                         </button>
                     </div>
                 </motion.div>

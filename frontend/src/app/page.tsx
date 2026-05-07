@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, FolderOpen, RefreshCw, Library, Calendar, Play, Trash2, FileUp, X, ChevronDown, FileText } from "lucide-react";
+import { Plus, FolderOpen, RefreshCw, Library, Calendar, Play, Trash2, FileUp, X, ChevronDown, FileText, Settings, Sparkles } from "lucide-react";
 import { useProjectStore, Series, Project } from "@/store/projectStore";
 import ProjectCard from "@/components/project/ProjectCard";
 import CreateProjectDialog from "@/components/project/CreateProjectDialog";
@@ -11,13 +11,16 @@ import CreativeCanvas from "@/components/canvas/CreativeCanvas";
 import AppShell from "@/components/layout/AppShell";
 import type { GlobalTab } from "@/components/layout/GlobalSidebar";
 import dynamic from "next/dynamic";
-import { api } from "@/lib/api";
+import { api, type FixtureProjectSummary } from "@/lib/api";
+import { defaultLocale, messages } from "@/lib/i18n";
 
 const ProjectClient = dynamic(() => import("@/components/project/ProjectClient"), { ssr: false });
 const SeriesDetailPage = dynamic(() => import("@/components/series/SeriesDetailPage"), { ssr: false });
 const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDialog"), { ssr: false });
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
+const homeCopy = messages.homePage;
+const commonActions = messages.common.actions;
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -52,7 +55,7 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
         className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md shadow-2xl"
       >
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-display font-bold text-white">新建系列</h2>
+          <h2 className="text-xl font-display font-bold text-white">{homeCopy.createSeriesDialog.title}</h2>
           <button onClick={onClose} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
             <X size={20} className="text-gray-400" />
           </button>
@@ -60,22 +63,22 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">系列标题 *</label>
+            <label className="block text-sm text-gray-400 mb-1">{homeCopy.createSeriesDialog.titleLabel}</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="例如：我的漫剧系列"
+              placeholder={homeCopy.createSeriesDialog.titlePlaceholder}
               className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-primary transition-colors"
               autoFocus
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">描述（可选）</label>
+            <label className="block text-sm text-gray-400 mb-1">{homeCopy.createSeriesDialog.descriptionLabel}</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="简要描述这个系列..."
+              placeholder={homeCopy.createSeriesDialog.descriptionPlaceholder}
               rows={3}
               className="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-primary transition-colors resize-none"
             />
@@ -87,14 +90,14 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
             onClick={onClose}
             className="px-4 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
           >
-            取消
+            {commonActions.cancel}
           </button>
           <button
             onClick={handleCreate}
             disabled={!title.trim() || isCreating}
             className="px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isCreating ? "创建中..." : "创建系列"}
+            {isCreating ? homeCopy.createSeriesDialog.creating : homeCopy.createSeriesDialog.create}
           </button>
         </div>
       </motion.div>
@@ -126,7 +129,7 @@ function SeriesCard({
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm(`确定要删除系列"${series.title}"吗？这不会删除其中的项目。`)) {
+    if (confirm(homeCopy.seriesCard.deleteConfirm(series.title))) {
       onDelete(series.id);
     }
   };
@@ -164,7 +167,7 @@ function SeriesCard({
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-medium">
-              系列
+              {homeCopy.seriesCard.badge}
             </span>
             <h3 className="text-lg font-display font-bold text-white">
               {series.title}
@@ -174,11 +177,11 @@ function SeriesCard({
             <p className="text-sm text-gray-400 mb-2 line-clamp-1">{series.description}</p>
           )}
           <div className="flex items-center gap-3 text-xs text-gray-400">
-            <span>集数 <span className="text-white font-medium">{series.episode_ids?.length || 0}</span></span>
+            <span>{homeCopy.seriesCard.episodes} <span className="text-white font-medium">{series.episode_ids?.length || 0}</span></span>
             <span className="text-gray-600">·</span>
-            <span>角色 <span className="text-white font-medium">{series.characters?.length || 0}</span></span>
+            <span>{homeCopy.seriesCard.characters} <span className="text-white font-medium">{series.characters?.length || 0}</span></span>
             <span className="text-gray-600">·</span>
-            <span>场景 <span className="text-white font-medium">{series.scenes?.length || 0}</span></span>
+            <span>{homeCopy.seriesCard.scenes} <span className="text-white font-medium">{series.scenes?.length || 0}</span></span>
           </div>
         </div>
 
@@ -211,7 +214,7 @@ function SeriesCard({
                 >
                   <span className="text-[10px] text-primary font-mono font-bold block">EP{ep.episode_number || "?"}</span>
                   <span className="text-xs text-white truncate block mt-0.5">{ep.title}</span>
-                  <span className="text-[10px] text-gray-500 block mt-0.5">{ep.frames?.length || 0} 分镜</span>
+                  <span className="text-[10px] text-gray-500 block mt-0.5">{homeCopy.seriesCard.storyboardCount(ep.frames?.length || 0)}</span>
                 </button>
               ))}
 
@@ -222,7 +225,7 @@ function SeriesCard({
                     type="text"
                     value={inlineTitle}
                     onChange={(e) => setInlineTitle(e.target.value)}
-                    placeholder="集数标题..."
+                    placeholder={homeCopy.seriesCard.addEpisodeTitlePlaceholder}
                     className="w-full bg-transparent border-none text-xs text-white placeholder-gray-500 focus:outline-none"
                     autoFocus
                     onClick={(e) => e.stopPropagation()}
@@ -237,13 +240,13 @@ function SeriesCard({
                       disabled={!inlineTitle.trim() || isAdding}
                       className="flex-1 text-[10px] text-primary hover:text-white transition-colors disabled:opacity-50"
                     >
-                      {isAdding ? "..." : "确定"}
+                      {isAdding ? "..." : homeCopy.seriesCard.confirmAddEpisode}
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowInlineInput(false); setInlineTitle(""); }}
                       className="text-[10px] text-gray-500 hover:text-white transition-colors"
                     >
-                      取消
+                      {commonActions.cancel}
                     </button>
                   </div>
                 </div>
@@ -253,7 +256,7 @@ function SeriesCard({
                   className="flex-shrink-0 w-28 p-2 rounded-lg border border-dashed border-gray-600 hover:border-gray-400 bg-white/[0.02] hover:bg-white/5 transition-colors flex flex-col items-center justify-center gap-1"
                 >
                   <Plus size={14} className="text-gray-500" />
-                  <span className="text-[10px] text-gray-500">添加集数</span>
+                  <span className="text-[10px] text-gray-500">{homeCopy.seriesCard.addEpisode}</span>
                 </button>
               )}
             </>
@@ -265,11 +268,11 @@ function SeriesCard({
       <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-700/30">
         <div className="flex items-center gap-2 text-xs text-gray-400">
           <Calendar size={12} />
-          <span>{new Date(series.created_at * 1000).toLocaleDateString('zh-CN')}</span>
+          <span>{new Date(series.created_at * 1000).toLocaleDateString(defaultLocale)}</span>
         </div>
         <div className="flex items-center gap-1 text-primary text-xs font-medium">
           <Play size={14} />
-          <span>打开系列</span>
+          <span>{homeCopy.seriesCard.openSeries}</span>
         </div>
       </div>
     </motion.div>
@@ -299,13 +302,104 @@ function EpisodeBreadcrumbWrapper({ seriesId, episodeId }: { seriesId: string; e
   }, [seriesId, episodeId]);
 
   const segments = [
-    { label: "LumenX", hash: "#/" },
-    { label: seriesTitle || "系列", hash: `#/series/${seriesId}` },
-    { label: episodeNumber != null ? `第${episodeNumber}集` : "集数" },
+    { label: homeCopy.breadcrumb.root, hash: "#/" },
+    { label: seriesTitle || homeCopy.breadcrumb.seriesFallback, hash: `#/series/${seriesId}` },
+    { label: episodeNumber != null ? homeCopy.breadcrumb.episodeNumber(episodeNumber) : homeCopy.breadcrumb.episodeFallback },
   ];
 
   return (
     <ProjectClient id={episodeId} breadcrumbSegments={segments} />
+  );
+}
+
+function FixtureProjectLibrary({
+  fixtures,
+  isLoading,
+  importingSlug,
+  onImport,
+}: {
+  fixtures: FixtureProjectSummary[];
+  isLoading: boolean;
+  importingSlug: string | null;
+  onImport: (slug: string) => void;
+}) {
+  const copy = homeCopy.fixtureLibrary;
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {[1, 2, 3].map((item) => (
+          <div key={item} className="h-44 rounded-xl border border-white/10 bg-white/[0.03] animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (fixtures.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-gray-700 bg-white/[0.02] p-5 text-sm text-gray-500">
+        {copy.empty}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {fixtures.map((fixture) => {
+        const isImporting = importingSlug === fixture.slug;
+        const modelLabel =
+          fixture.model_settings?.openai_image_model ||
+          fixture.model_settings?.t2i_model ||
+          copy.modelFallback;
+
+        return (
+          <motion.button
+            key={fixture.slug}
+            type="button"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ scale: 1.01 }}
+            onClick={() => onImport(fixture.slug)}
+            disabled={Boolean(importingSlug)}
+            className="group rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-5 text-left transition-all hover:border-amber-400/60 hover:bg-amber-500/[0.08] disabled:cursor-wait disabled:opacity-60"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-amber-400/15 px-2 py-0.5 text-[11px] font-medium text-amber-200">
+                    {copy.badge}
+                  </span>
+                  {fixture.is_imported && (
+                    <span className="rounded-full bg-green-400/10 px-2 py-0.5 text-[11px] font-medium text-green-300">
+                      {copy.imported}
+                    </span>
+                  )}
+                </div>
+                <h4 className="text-lg font-display font-bold text-white transition-colors group-hover:text-amber-100">
+                  {fixture.name}
+                </h4>
+              </div>
+              <Sparkles size={22} className={isImporting ? "animate-pulse text-amber-200" : "text-amber-300"} />
+            </div>
+
+            <p className="mt-3 line-clamp-3 text-sm leading-6 text-gray-400">
+              {fixture.description}
+            </p>
+
+            <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-gray-300">
+              <span className="rounded bg-white/5 px-2 py-1">{copy.frames(fixture.frame_count)}</span>
+              <span className="rounded bg-white/5 px-2 py-1">{copy.references(fixture.reference_count)}</span>
+              <span className="rounded bg-white/5 px-2 py-1">{modelLabel}</span>
+            </div>
+
+            <div className="mt-4 flex items-center gap-1 text-sm font-medium text-amber-100">
+              <Play size={14} />
+              <span>{isImporting ? copy.importing : fixture.is_imported ? copy.openImported : copy.importAndOpen}</span>
+            </div>
+          </motion.button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -314,7 +408,11 @@ export default function Home() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSeriesDialogOpen, setIsSeriesDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isEnvDialogOpen, setIsEnvDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [fixtures, setFixtures] = useState<FixtureProjectSummary[]>([]);
+  const [isLoadingFixtures, setIsLoadingFixtures] = useState(false);
+  const [importingFixtureSlug, setImportingFixtureSlug] = useState<string | null>(null);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
@@ -333,6 +431,7 @@ export default function Home() {
   // Sync projects and series from backend on mount
   useEffect(() => {
     syncProjects();
+    loadFixtureLibrary();
     fetchSeriesList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -388,8 +487,35 @@ export default function Home() {
     }
   };
 
+  const loadFixtureLibrary = async () => {
+    setIsLoadingFixtures(true);
+    try {
+      const items = await api.listFixtureProjects();
+      setFixtures(items);
+    } catch (error) {
+      console.error("Failed to load fixture project library:", error);
+      setFixtures([]);
+    } finally {
+      setIsLoadingFixtures(false);
+    }
+  };
+
   const syncAll = async () => {
-    await Promise.all([syncProjects(), fetchSeriesList()]);
+    await Promise.all([syncProjects(), fetchSeriesList(), loadFixtureLibrary()]);
+  };
+
+  const openFixtureProject = async (fixtureSlug: string) => {
+    setImportingFixtureSlug(fixtureSlug);
+    try {
+      const project = await api.importFixtureProject(fixtureSlug);
+      await Promise.all([syncProjects(), loadFixtureLibrary()]);
+      window.location.hash = `#/project/${project.id}`;
+    } catch (error) {
+      console.error("Failed to import fixture project:", error);
+      alert(homeCopy.fixtureLibrary.importFailed);
+    } finally {
+      setImportingFixtureSlug(null);
+    }
   };
 
   // Close dropdown when clicking outside
@@ -510,56 +636,93 @@ export default function Home() {
             className="flex flex-col items-center justify-center py-20"
           >
             <FolderOpen size={64} className="text-gray-600 mb-4" />
-            <h3 className="text-xl font-medium text-gray-400 mb-2">还没有项目</h3>
-            <p className="text-gray-500 mb-8">选择一种方式开始创作</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-xl w-full">
+            <h3 className="text-xl font-medium text-gray-400 mb-2">{homeCopy.workspace.emptyTitle}</h3>
+            <p className="text-gray-500 mb-8">{homeCopy.workspace.emptySubtitle}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl w-full">
               <button
                 onClick={() => setIsSeriesDialogOpen(true)}
                 className="glass-panel p-6 rounded-xl border border-blue-500/30 hover:border-blue-500/60 transition-all group text-left"
               >
                 <Library size={32} className="text-blue-400 mb-3" />
-                <h4 className="text-lg font-display font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">创建系列</h4>
-                <p className="text-sm text-gray-400">适合多集连续故事</p>
+                <h4 className="text-lg font-display font-bold text-white mb-1 group-hover:text-blue-400 transition-colors">{homeCopy.workspace.createSeriesTitle}</h4>
+                <p className="text-sm text-gray-400">{homeCopy.workspace.createSeriesDescription}</p>
               </button>
               <button
                 onClick={() => setIsDialogOpen(true)}
                 className="glass-panel p-6 rounded-xl border border-gray-600/30 hover:border-gray-500/60 transition-all group text-left"
               >
                 <FileText size={32} className="text-gray-400 mb-3" />
-                <h4 className="text-lg font-display font-bold text-white mb-1 group-hover:text-primary transition-colors">创建独立项目</h4>
-                <p className="text-sm text-gray-400">适合单个短视频</p>
+                <h4 className="text-lg font-display font-bold text-white mb-1 group-hover:text-primary transition-colors">{homeCopy.workspace.createProjectTitle}</h4>
+                <p className="text-sm text-gray-400">{homeCopy.workspace.createProjectDescription}</p>
               </button>
             </div>
-            <button
-              onClick={syncAll}
-              disabled={isSyncing}
-              className="mt-6 bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
-            >
-              <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
-              从后端同步
-            </button>
+            <div className="mt-10 w-full max-w-5xl text-left">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-display font-bold text-white">{homeCopy.fixtureLibrary.title}</h3>
+                  <p className="mt-1 text-sm text-gray-500">{homeCopy.fixtureLibrary.subtitle}</p>
+                </div>
+                <button
+                  onClick={loadFixtureLibrary}
+                  disabled={isLoadingFixtures}
+                  className="rounded-lg bg-white/10 px-3 py-2 text-xs font-medium text-gray-200 transition-colors hover:bg-white/20 disabled:opacity-50"
+                >
+                  {homeCopy.fixtureLibrary.refresh}
+                </button>
+              </div>
+              <FixtureProjectLibrary
+                fixtures={fixtures}
+                isLoading={isLoadingFixtures}
+                importingSlug={importingFixtureSlug}
+                onImport={openFixtureProject}
+              />
+            </div>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              <button
+                onClick={setIsEnvDialogOpen.bind(null, true)}
+                className="bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
+              >
+                <Settings size={16} />
+                {homeCopy.workspace.homeSettings}
+              </button>
+              <button
+                onClick={syncAll}
+                disabled={isSyncing}
+                className="bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
+              >
+                <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
+                {homeCopy.workspace.syncFromBackend}
+              </button>
+            </div>
           </motion.div>
         ) : (
           <>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-display font-bold text-white">
-                我的工作区 ({totalCount})
+                {homeCopy.workspace.title(totalCount)}
               </h2>
               <div className="flex gap-3">
+                <button
+                  onClick={() => setIsEnvDialogOpen(true)}
+                  className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
+                >
+                  <Settings size={16} />
+                  {homeCopy.workspace.settings}
+                </button>
                 <button
                   onClick={syncAll}
                   disabled={isSyncing}
                   className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm disabled:opacity-50"
                 >
                   <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
-                  同步
+                  {homeCopy.workspace.sync}
                 </button>
                 <button
                   onClick={() => setIsImportDialogOpen(true)}
                   className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
                 >
                   <FileUp size={16} />
-                  导入文件
+                  {homeCopy.workspace.importFile}
                 </button>
                 {/* Unified create dropdown */}
                 <div className="relative">
@@ -568,7 +731,7 @@ export default function Home() {
                     className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
                   >
                     <Plus size={16} />
-                    新建
+                    {homeCopy.workspace.create}
                     <ChevronDown size={14} />
                   </button>
                   {showCreateDropdown && (
@@ -582,19 +745,41 @@ export default function Home() {
                         className="w-full px-4 py-2.5 text-sm text-left text-white hover:bg-white/10 transition-colors flex items-center gap-2"
                       >
                         <Library size={16} className="text-blue-400" />
-                        新建系列
+                        {homeCopy.workspace.createSeries}
                       </button>
                       <button
                         onClick={() => { setIsDialogOpen(true); setShowCreateDropdown(false); }}
                         className="w-full px-4 py-2.5 text-sm text-left text-white hover:bg-white/10 transition-colors flex items-center gap-2"
                       >
                         <FileText size={16} className="text-gray-400" />
-                        新建独立项目
+                        {homeCopy.workspace.createProject}
                       </button>
                     </motion.div>
                   )}
                 </div>
               </div>
+            </div>
+
+            <div className="mb-8">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-display font-bold text-white">{homeCopy.fixtureLibrary.title}</h3>
+                  <p className="mt-1 text-sm text-gray-500">{homeCopy.fixtureLibrary.subtitle}</p>
+                </div>
+                <button
+                  onClick={loadFixtureLibrary}
+                  disabled={isLoadingFixtures}
+                  className="rounded-lg bg-white/10 px-3 py-2 text-xs font-medium text-gray-200 transition-colors hover:bg-white/20 disabled:opacity-50"
+                >
+                  {homeCopy.fixtureLibrary.refresh}
+                </button>
+              </div>
+              <FixtureProjectLibrary
+                fixtures={fixtures}
+                isLoading={isLoadingFixtures}
+                importingSlug={importingFixtureSlug}
+                onImport={openFixtureProject}
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-12">
@@ -652,11 +837,9 @@ export default function Home() {
         onClose={() => setIsSeriesDialogOpen(false)}
       />
 
-      {/* Environment Configuration Dialog (kept for EnvConfigChecker) */}
       <EnvConfigDialog
-        isOpen={false}
-        onClose={() => {}}
-        isRequired={false}
+        isOpen={isEnvDialogOpen}
+        onClose={() => setIsEnvDialogOpen(false)}
       />
 
       {/* Import File Dialog */}

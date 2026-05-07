@@ -4,7 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Users, MapPin, Package, Check, Loader2, ArrowRight, ArrowLeft, Image as ImageIcon } from 'lucide-react';
 import { api } from '@/lib/api';
+import { assetTypeTerms, messages } from '@/lib/i18n';
 import type { Series, Character, Scene, Prop } from '@/store/projectStore';
+import { getAssetUrl } from '@/lib/utils';
 
 interface ImportAssetsDialogProps {
     isOpen: boolean;
@@ -28,27 +30,29 @@ function getAssetImageUrl(asset: Character | Scene | Prop, type: AssetTab): stri
         const char = asset as Character;
         if (char.full_body_asset?.variants?.length) {
             const selected = char.full_body_asset.variants.find(v => v.id === char.full_body_asset?.selected_id);
-            return selected?.url || char.full_body_asset.variants[0]?.url;
+            return getAssetUrl(selected?.url || char.full_body_asset.variants[0]?.url);
         }
-        return char.image_url || char.full_body_image_url;
+        return getAssetUrl(char.image_url || char.full_body_image_url);
     }
     if (type === "scenes") {
         const scene = asset as Scene;
         if (scene.image_asset?.variants?.length) {
             const selected = scene.image_asset.variants.find(v => v.id === scene.image_asset?.selected_id);
-            return selected?.url || scene.image_asset.variants[0]?.url;
+            return getAssetUrl(selected?.url || scene.image_asset.variants[0]?.url);
         }
-        return scene.image_url;
+        return getAssetUrl(scene.image_url);
     }
     const prop = asset as Prop;
     if (prop.image_asset?.variants?.length) {
         const selected = prop.image_asset.variants.find(v => v.id === prop.image_asset?.selected_id);
-        return selected?.url || prop.image_asset.variants[0]?.url;
+        return getAssetUrl(selected?.url || prop.image_asset.variants[0]?.url);
     }
-    return prop.image_url;
+    return getAssetUrl(prop.image_url);
 }
 
 export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImported }: ImportAssetsDialogProps) {
+    const copy = messages.seriesPage.importAssetsDialog;
+    const commonActions = messages.common.actions;
     const [step, setStep] = useState(1);
     const [allSeries, setAllSeries] = useState<Series[]>([]);
     const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
@@ -151,7 +155,7 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
             onClose();
         } catch (err) {
             console.error("Failed to import assets:", err);
-            alert("Failed to import assets");
+            alert(copy.importFailed);
         } finally {
             setIsImporting(false);
         }
@@ -165,9 +169,9 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
     const selectedProps = selectedAllAssets.filter(a => a.type === "props");
 
     const tabs: { id: AssetTab; label: string; icon: typeof Users; count: number }[] = sourceSeries ? [
-        { id: "characters", label: "Characters", icon: Users, count: sourceSeries.characters?.length || 0 },
-        { id: "scenes", label: "Scenes", icon: MapPin, count: sourceSeries.scenes?.length || 0 },
-        { id: "props", label: "Props", icon: Package, count: sourceSeries.props?.length || 0 },
+        { id: "characters", label: assetTypeTerms.character.pluralLabel, icon: Users, count: sourceSeries.characters?.length || 0 },
+        { id: "scenes", label: assetTypeTerms.scene.pluralLabel, icon: MapPin, count: sourceSeries.scenes?.length || 0 },
+        { id: "props", label: assetTypeTerms.prop.pluralLabel, icon: Package, count: sourceSeries.props?.length || 0 },
     ] : [];
 
     return (
@@ -193,8 +197,8 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                 <Download size={20} className="text-green-400" />
                             </div>
                             <div>
-                                <h2 className="text-lg font-bold text-white">Import Assets</h2>
-                                <p className="text-xs text-gray-500">Import shared assets from another series</p>
+                                <h2 className="text-lg font-bold text-white">{copy.title}</h2>
+                                <p className="text-xs text-gray-500">{copy.subtitle}</p>
                             </div>
                         </div>
                         <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
@@ -217,20 +221,19 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                         {/* Step 1: Select source series */}
                         {step === 1 && (
                             <div className="p-5 space-y-3">
-                                <p className="text-sm text-gray-400 mb-4">Select a source series to import assets from</p>
+                                <p className="text-sm text-gray-400 mb-4">{copy.selectSourceSeries}</p>
                                 {isLoadingSeries ? (
                                     <div className="flex items-center justify-center py-12">
                                         <Loader2 size={24} className="animate-spin text-blue-400" />
-                                        <span className="ml-2 text-gray-400">Loading series...</span>
+                                        <span className="ml-2 text-gray-400">{copy.loadingSeries}</span>
                                     </div>
                                 ) : allSeries.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                                         <Package size={40} className="mb-3 text-gray-600" />
-                                        <p className="text-sm">No other series available for import</p>
+                                        <p className="text-sm">{copy.noSeriesAvailable}</p>
                                     </div>
                                 ) : (
                                     allSeries.map((s) => {
-                                        const assetCount = (s.characters?.length || 0) + (s.scenes?.length || 0) + (s.props?.length || 0);
                                         return (
                                             <button
                                                 key={s.id}
@@ -247,7 +250,11 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                                             <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{s.description}</p>
                                                         )}
                                                         <p className="text-xs text-gray-600 mt-1">
-                                                            {s.characters?.length || 0} characters · {s.scenes?.length || 0} scenes · {s.props?.length || 0} props
+                                                            {copy.assetStats(
+                                                                s.characters?.length || 0,
+                                                                s.scenes?.length || 0,
+                                                                s.props?.length || 0,
+                                                            )}
                                                         </p>
                                                     </div>
                                                     {selectedSourceId === s.id && (
@@ -265,9 +272,7 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                         {step === 2 && sourceSeries && (
                             <div className="flex flex-col">
                                 <div className="px-5 pt-4 pb-2">
-                                    <p className="text-xs text-gray-400">
-                                        Select assets to import from <span className="text-white font-medium">{sourceSeries.title}</span>
-                                    </p>
+                                    <p className="text-xs text-gray-400">{copy.selectAssetsFrom(sourceSeries.title)}</p>
                                 </div>
 
                                 {/* Tabs */}
@@ -295,7 +300,9 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                             onClick={toggleAllInTab}
                                             className="text-xs text-gray-400 hover:text-white transition-colors"
                                         >
-                                            {getSourceAssets().every(a => selectedAssetIds.has(a.id)) ? 'Deselect All' : 'Select All'}
+                                            {getSourceAssets().every(a => selectedAssetIds.has(a.id))
+                                                ? commonActions.deselectAll
+                                                : commonActions.selectAll}
                                         </button>
                                     </div>
                                 )}
@@ -305,7 +312,7 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                     {getSourceAssets().length === 0 ? (
                                         <div className="col-span-full flex flex-col items-center justify-center py-8 text-gray-500">
                                             <ImageIcon size={32} className="mb-2 text-gray-600" />
-                                            <p className="text-xs">No assets of this type</p>
+                                            <p className="text-xs">{copy.noAssetsInType}</p>
                                         </div>
                                     ) : (
                                         getSourceAssets().map((asset) => (
@@ -352,14 +359,14 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                         {step === 3 && sourceSeries && (
                             <div className="p-5 space-y-4">
                                 <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-sm text-blue-300">
-                                    Import <span className="font-medium text-white">{selectedAssetIds.size}</span> asset(s) from <span className="font-medium text-white">{sourceSeries.title}</span> to current series
+                                    {copy.confirmSummary(selectedAssetIds.size, sourceSeries.title)}
                                 </div>
 
                                 <div className="space-y-3">
                                     {selectedCharacters.length > 0 && (
                                         <div>
                                             <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
-                                                <Users size={12} /> Characters ({selectedCharacters.length})
+                                                <Users size={12} /> {copy.sectionCount(assetTypeTerms.character.pluralLabel, selectedCharacters.length)}
                                             </h4>
                                             <div className="space-y-1">
                                                 {selectedCharacters.map(a => (
@@ -382,7 +389,7 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                     {selectedScenes.length > 0 && (
                                         <div>
                                             <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
-                                                <MapPin size={12} /> Scenes ({selectedScenes.length})
+                                                <MapPin size={12} /> {copy.sectionCount(assetTypeTerms.scene.pluralLabel, selectedScenes.length)}
                                             </h4>
                                             <div className="space-y-1">
                                                 {selectedScenes.map(a => (
@@ -405,7 +412,7 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                     {selectedProps.length > 0 && (
                                         <div>
                                             <h4 className="text-xs font-medium text-gray-400 mb-2 flex items-center gap-1">
-                                                <Package size={12} /> Props ({selectedProps.length})
+                                                <Package size={12} /> {copy.sectionCount(assetTypeTerms.prop.pluralLabel, selectedProps.length)}
                                             </h4>
                                             <div className="space-y-1">
                                                 {selectedProps.map(a => (
@@ -428,7 +435,7 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                 </div>
 
                                 <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs text-yellow-300">
-                                    Assets will be deep-copied and independent from the source series.
+                                    {copy.deepCopyHint}
                                 </div>
                             </div>
                         )}
@@ -437,13 +444,13 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                     {/* Footer */}
                     <div className="p-5 border-t border-white/10 flex items-center justify-between bg-black/20">
                         <div className="text-xs text-gray-500">
-                            {step === 2 && `${selectedAssetIds.size} asset(s) selected`}
+                            {step === 2 && copy.selectionSummary(selectedAssetIds.size)}
                         </div>
                         <div className="flex items-center gap-3">
                             {step === 1 && (
                                 <>
                                     <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">
-                                        Cancel
+                                        {commonActions.cancel}
                                     </button>
                                     <button
                                         onClick={handleGoToStep2}
@@ -451,7 +458,7 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                         className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
                                     >
                                         {isLoadingSource ? <Loader2 size={14} className="animate-spin" /> : null}
-                                        Next
+                                        {isLoadingSource ? copy.loadingSourceSeries : commonActions.next}
                                         <ArrowRight size={14} />
                                     </button>
                                 </>
@@ -463,14 +470,14 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                         className="flex items-center gap-1 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
                                     >
                                         <ArrowLeft size={14} />
-                                        Back
+                                        {commonActions.back}
                                     </button>
                                     <button
                                         onClick={() => setStep(3)}
                                         disabled={selectedAssetIds.size === 0}
                                         className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
                                     >
-                                        Next
+                                        {commonActions.next}
                                         <ArrowRight size={14} />
                                     </button>
                                 </>
@@ -483,7 +490,7 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                         className="flex items-center gap-1 px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-50"
                                     >
                                         <ArrowLeft size={14} />
-                                        Back
+                                        {commonActions.back}
                                     </button>
                                     <button
                                         onClick={handleImport}
@@ -493,12 +500,12 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                         {isImporting ? (
                                             <>
                                                 <Loader2 size={14} className="animate-spin" />
-                                                Importing...
+                                                {copy.importing}
                                             </>
                                         ) : (
                                             <>
                                                 <Download size={14} />
-                                                Confirm Import
+                                                {copy.confirmImport}
                                             </>
                                         )}
                                     </button>

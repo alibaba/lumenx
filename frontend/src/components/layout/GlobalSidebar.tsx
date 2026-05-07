@@ -2,6 +2,7 @@
 
 import { FolderOpen, Library, Settings } from "lucide-react";
 import clsx from "clsx";
+import { messages } from "@/lib/i18n";
 import LumenXBranding from "./LumenXBranding";
 
 export type GlobalTab = "workspace" | "library" | "settings";
@@ -12,9 +13,9 @@ interface GlobalSidebarProps {
 }
 
 const NAV_ITEMS: { id: GlobalTab; label: string; icon: typeof FolderOpen; hash: string }[] = [
-  { id: "workspace", label: "工作区", icon: FolderOpen, hash: "#/" },
-  { id: "library", label: "主体库", icon: Library, hash: "#/library" },
-  { id: "settings", label: "设置", icon: Settings, hash: "#/settings" },
+  { id: "workspace", label: messages.navigation.workspace, icon: FolderOpen, hash: "#/" },
+  { id: "library", label: messages.navigation.library, icon: Library, hash: "#/library" },
+  { id: "settings", label: messages.navigation.settings, icon: Settings, hash: "#/settings" },
 ];
 
 export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarProps) {

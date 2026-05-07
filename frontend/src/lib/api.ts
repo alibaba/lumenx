@@ -1,17 +1,20 @@
 import axios from "axios";
+import { zhCN } from "@/lib/i18n";
 
 // Dynamic API URL detection:
 // 1. In packaged app (Electron): Frontend is served by backend, use same origin
-// 2. In development (port 3000/3001): Use backend port 17177
+// 2. In local development: Use backend port 18177 even if Next.js moves to 3001/3002
+const DEFAULT_BACKEND_PORT = '18177';
+
 const getApiUrl = (): string => {
     // If running in browser
     if (typeof window !== 'undefined') {
         const { protocol, hostname, port } = window.location;
 
-        // In development mode (port 3000/3001 = Next.js dev server)
-        // Backend is on a different port
-        if (port === '3000' || port === '3001') {
-            return `${protocol}//${hostname}:17177`;
+        // In local development, Next.js can auto-increment its port.
+        // Keep API calls pinned to the FastAPI backend port.
+        if ((hostname === 'localhost' || hostname === '127.0.0.1') && port !== DEFAULT_BACKEND_PORT) {
+            return `${protocol}//127.0.0.1:${DEFAULT_BACKEND_PORT}`;
         }
 
         // In production/packaged mode: Frontend is served by backend
@@ -20,15 +23,44 @@ const getApiUrl = (): string => {
     }
 
     // SSR fallback
-    return 'http://localhost:17177';
+    return `http://127.0.0.1:${DEFAULT_BACKEND_PORT}`;
 };
 
 export const API_URL = getApiUrl();
+const apiErrors = zhCN.apiErrors;
 
 export type ProviderMode = "dashscope" | "vendor";
+export type StorageProvider = "" | "tos" | "oss";
 
 export interface EnvConfigPayload {
+    IMAGE_PROVIDER?: "openai" | "dashscope";
+    IMAGE_EDIT_PROVIDER?: "openai" | "dashscope";
+    TTS_PROVIDER?: "openai" | "dashscope";
+    LLM_PROVIDER?: string;
+    OPENAI_API_KEY?: string;
+    OPENAI_BASE_URL?: string;
+    OPENAI_MODEL?: string;
+    OPENAI_IMAGE_API_KEY?: string;
+    OPENAI_IMAGE_EDIT_API_KEY?: string;
+    OPENAI_IMAGE_BASE_URL?: string;
+    OPENAI_IMAGE_EDIT_BASE_URL?: string;
+    OPENAI_IMAGE_MODEL?: string;
+    OPENAI_IMAGE_EDIT_MODEL?: string;
+    OPENAI_TTS_API_KEY?: string;
+    OPENAI_TTS_BASE_URL?: string;
+    OPENAI_TTS_MODEL?: string;
+    OPENAI_MULTIMODAL_API_KEY?: string;
+    OPENAI_MULTIMODAL_BASE_URL?: string;
+    OPENAI_MULTIMODAL_MODEL?: string;
+    ARK_API_KEY?: string;
     DASHSCOPE_API_KEY?: string;
+    OBJECT_STORAGE_PROVIDER?: StorageProvider;
+    OBJECT_STORAGE_BUCKET_NAME?: string;
+    OBJECT_STORAGE_ENDPOINT?: string;
+    OBJECT_STORAGE_REGION?: string;
+    OBJECT_STORAGE_BASE_PATH?: string;
+    TOS_ACCESS_KEY_ID?: string;
+    TOS_SECRET_ACCESS_KEY?: string;
     ALIBABA_CLOUD_ACCESS_KEY_ID?: string;
     ALIBABA_CLOUD_ACCESS_KEY_SECRET?: string;
     OSS_BUCKET_NAME?: string;
@@ -60,27 +92,61 @@ export interface VideoTask {
     negative_prompt?: string;
     created_at: number;
     model?: string;
+    aspect_ratio?: string;
+    watermark?: boolean;
+    camera_fixed?: boolean;
+    reference_audio_url?: string;
+    seedance_reference_mode?: string;
+    seedance_workflow?: string;
+    seedance_extend_mode?: string;
+    seedance_edit_mode?: string;
     frame_id?: string;
     generation_mode?: string;
     reference_video_urls?: string[];
 }
+
+export interface FixtureProjectSummary {
+    slug: string;
+    name: string;
+    project_type: string;
+    description: string;
+    parser: string;
+    source_count: number;
+    reference_count: number;
+    frame_count: number;
+    model_settings?: Record<string, string>;
+    is_imported: boolean;
+    project_id?: string | null;
+}
+
+const normalizeProjectPayload = (data: any) => ({ ...data, originalText: data.original_text });
 
 export const api = {
     createProject: async (title: string, text: string, skipAnalysis: boolean = false) => {
         const res = await axios.post(`${API_URL}/projects`, { title, text }, {
             params: { skip_analysis: skipAnalysis }
         });
-        return { ...res.data, originalText: res.data.original_text };
+        return normalizeProjectPayload(res.data);
+    },
+
+    listFixtureProjects: async (): Promise<FixtureProjectSummary[]> => {
+        const res = await axios.get(`${API_URL}/projects/fixtures`);
+        return res.data;
+    },
+
+    importFixtureProject: async (fixtureSlug: string) => {
+        const res = await axios.post(`${API_URL}/projects/fixtures/${fixtureSlug}/import`);
+        return normalizeProjectPayload(res.data);
     },
 
     getProjects: async () => {
         const res = await axios.get(`${API_URL}/projects/`);
-        return res.data.map((p: any) => ({ ...p, originalText: p.original_text }));
+        return res.data.map((p: any) => normalizeProjectPayload(p));
     },
 
     getProject: async (scriptId: string) => {
         const res = await axios.get(`${API_URL}/projects/${scriptId}`);
-        return { ...res.data, originalText: res.data.original_text };
+        return normalizeProjectPayload(res.data);
     },
 
     deleteProject: async (scriptId: string) => {
@@ -90,7 +156,7 @@ export const api = {
 
     reparseProject: async (scriptId: string, text: string) => {
         const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text });
-        return { ...res.data, originalText: res.data.original_text };
+        return normalizeProjectPayload(res.data);
     },
 
     syncDescriptions: async (scriptId: string) => {
@@ -115,11 +181,14 @@ export const api = {
         promptExtend: boolean = true,
         negativePrompt?: string,
         batchSize: number = 1,
-        model: string = "wan2.6-i2v",
+        model: string = "doubao-seedance-2-0-260128",
         frameId?: string,
         shotType: string = "single",  // 'single' or 'multi' (only for wan2.6-i2v)
         generationMode: string = "i2v",  // 'i2v' or 'r2v'
         referenceVideoUrls: string[] = [],  // Reference videos for R2V (max 3)
+        aspectRatio: string = "adaptive",
+        watermark: boolean = false,
+        cameraFixed?: boolean,
         // Kling params
         mode?: string,
         sound?: boolean,
@@ -127,6 +196,12 @@ export const api = {
         // Vidu params
         viduAudio?: boolean,
         movementAmplitude?: string
+        ,
+        referenceAudioUrl?: string,
+        seedanceReferenceMode?: string,
+        seedanceWorkflow?: string,
+        seedanceExtendMode?: string,
+        seedanceEditMode?: string
     ) => {
         const res = await axios.post(`${API_URL}/projects/${id}/video_tasks`, {
             image_url,
@@ -144,6 +219,14 @@ export const api = {
             shot_type: shotType,
             generation_mode: generationMode,
             reference_video_urls: referenceVideoUrls,
+            aspect_ratio: aspectRatio,
+            watermark,
+            camera_fixed: cameraFixed,
+            reference_audio_url: referenceAudioUrl,
+            seedance_reference_mode: seedanceReferenceMode,
+            seedance_workflow: seedanceWorkflow,
+            seedance_extend_mode: seedanceExtendMode,
+            seedance_edit_mode: seedanceEditMode,
             // Kling
             mode,
             sound: sound != null ? (sound ? "on" : "off") : undefined,
@@ -163,7 +246,7 @@ export const api = {
             method: "POST",
             body: formData,
         });
-        if (!response.ok) throw new Error("Failed to upload file");
+        if (!response.ok) throw new Error(apiErrors.uploadFile);
         return response.json();
     },
 
@@ -199,7 +282,7 @@ export const api = {
 
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.detail || "Failed to upload asset");
+            throw new Error(errorData.detail || apiErrors.uploadAsset);
         }
 
         return response.json();
@@ -461,7 +544,27 @@ export const api = {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/analyze`, {
             text: text
         });
-        return res.data;
+        return normalizeProjectPayload(res.data);
+    },
+
+    updateStoryBeat: async (
+        scriptId: string,
+        beatId: string,
+        data: {
+            action_summary?: string;
+            dialogue_excerpt?: string;
+            storyboard_goal?: string;
+        }
+    ) => {
+        const res = await axios.put(`${API_URL}/projects/${scriptId}/story_analysis/beats/${beatId}`, data);
+        return normalizeProjectPayload(res.data);
+    },
+
+    analyzeStoryboardBeat: async (scriptId: string, beatId: string) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/analyze_beat`, {
+            beat_id: beatId,
+        });
+        return normalizeProjectPayload(res.data);
     },
 
     /**
@@ -485,7 +588,7 @@ export const api = {
 
     getVoices: async () => {
         const response = await fetch(`${API_URL}/voices`);
-        if (!response.ok) throw new Error("Failed to fetch voices");
+        if (!response.ok) throw new Error(apiErrors.fetchVoices);
         return response.json();
     },
 
@@ -495,7 +598,7 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ voice_id: voiceId, voice_name: voiceName }),
         });
-        if (!response.ok) throw new Error("Failed to bind voice");
+        if (!response.ok) throw new Error(apiErrors.bindVoice);
         return response.json();
     },
 
@@ -503,7 +606,7 @@ export const api = {
         const response = await fetch(`${API_URL}/projects/${scriptId}/generate_audio`, {
             method: "POST",
         });
-        if (!response.ok) throw new Error("Failed to generate audio");
+        if (!response.ok) throw new Error(apiErrors.generateAudio);
         return response.json();
     },
 
@@ -513,7 +616,7 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ speed, pitch, volume }),
         });
-        if (!response.ok) throw new Error("Failed to generate line audio");
+        if (!response.ok) throw new Error(apiErrors.generateLineAudio);
         return response.json();
     },
 
@@ -523,7 +626,7 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ speed, pitch, volume }),
         });
-        if (!response.ok) throw new Error("Failed to update voice params");
+        if (!response.ok) throw new Error(apiErrors.updateVoiceParams);
         return response.json();
     },
 
@@ -533,7 +636,7 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(options),
         });
-        if (!response.ok) throw new Error("Failed to export project");
+        if (!response.ok) throw new Error(apiErrors.exportProject);
         return response.json();
     },
 
@@ -570,7 +673,7 @@ export const api = {
         );
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.detail || "Failed to upload frame image");
+            throw new Error(errorData.detail || apiErrors.uploadFrameImage);
         }
         return response.json();
     },
@@ -667,7 +770,7 @@ export const api = {
         });
         return response.data;
     },
-    importFileConfirm: async (data: { title: string; description?: string; text: string; episodes: any[] }) => {
+    importFileConfirm: async (data: { title: string; description?: string; import_id?: string; text?: string; episodes: any[] }) => {
         const response = await axios.post(`${API_URL}/series/import/confirm`, data);
         return response.data;
     },

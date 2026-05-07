@@ -4,46 +4,55 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, RefreshCw, Copy, Download, Trash2, AlertCircle } from "lucide-react";
 
-import { VideoTask, API_URL } from "@/lib/api";
+import { VideoTask } from "@/lib/api";
+import { messages } from "@/lib/i18n";
+import {
+    getSeedanceEditModeLabel,
+    getSeedanceExtendModeLabel,
+    getSeedanceReferenceModeLabel,
+    getSeedanceWorkflowLabel,
+} from "@/lib/seedance";
 import { getAssetUrl } from "@/lib/utils";
+import { isSeedanceI2VModel } from "@/store/projectStore";
 
 interface VideoQueueProps {
     tasks: VideoTask[];
     onRemix: (task: VideoTask) => void;
 }
 
+const copy = messages.modules.videoQueue;
+
 export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
     const [filter, setFilter] = useState<"all" | "processing" | "completed" | "failed">("all");
 
-    const filteredTasks = tasks.filter(t => {
+    const filteredTasks = tasks.filter((task) => {
         if (filter === "all") return true;
-        if (filter === "processing") return t.status === "pending" || t.status === "processing";
-        return t.status === filter;
-    }).reverse(); // Newest first
+        if (filter === "processing") return task.status === "pending" || task.status === "processing";
+        return task.status === filter;
+    }).reverse();
 
-    const processingCount = tasks.filter(t => t.status === "pending" || t.status === "processing").length;
+    const processingCount = tasks.filter((task) => task.status === "pending" || task.status === "processing").length;
 
     return (
         <div className="h-full flex flex-col bg-black/40 backdrop-blur-sm border-l border-white/5">
-            {/* Header & Tabs */}
             <div className="p-4 border-b border-white/5">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-display font-bold text-white">任务队列</h3>
+                    <h3 className="font-display font-bold text-white">{copy.title}</h3>
                     <div className="text-xs font-mono text-gray-500 flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${processingCount > 0 ? "bg-green-500 animate-pulse" : "bg-gray-600"}`} />
-                        GPU: {processingCount > 0 ? "Running" : "Idle"}
+                        GPU: {processingCount > 0 ? copy.gpuRunning : copy.gpuIdle}
                     </div>
                 </div>
 
                 <div className="flex bg-white/5 rounded-lg p-1 gap-1">
                     {[
-                        { id: "all", label: "全部" },
-                        { id: "processing", label: "进行中" },
-                        { id: "completed", label: "已完成" },
+                        { id: "all", label: copy.filters.all },
+                        { id: "processing", label: copy.filters.processing },
+                        { id: "completed", label: copy.filters.completed },
                     ].map((tab) => (
                         <button
                             key={tab.id}
-                            onClick={() => setFilter(tab.id as any)}
+                            onClick={() => setFilter(tab.id as typeof filter)}
                             className={`flex-1 py-1.5 text-xs rounded-md transition-colors ${filter === tab.id
                                 ? "bg-white/10 text-white font-medium shadow-sm"
                                 : "text-gray-500 hover:text-gray-300"
@@ -55,7 +64,6 @@ export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
                 </div>
             </div>
 
-            {/* Task List */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <AnimatePresence mode="popLayout">
                     {filteredTasks.map((task) => (
@@ -64,7 +72,7 @@ export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
 
                     {filteredTasks.length === 0 && (
                         <div className="text-center py-10 text-gray-600 text-sm">
-                            暂无任务
+                            {copy.empty}
                         </div>
                     )}
                 </AnimatePresence>
@@ -73,14 +81,68 @@ export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
     );
 }
 
+function getSeedanceTaskTags(task: VideoTask) {
+    if (!isSeedanceI2VModel(task.model)) {
+        return [];
+    }
+
+    const tags: string[] = [];
+    const workflow = task.seedance_workflow || "standard";
+    let workflowLabel = getSeedanceWorkflowLabel(workflow);
+
+    if (workflow === "extend" && task.seedance_extend_mode) {
+        workflowLabel = `${workflowLabel} · ${getSeedanceExtendModeLabel(task.seedance_extend_mode)}`;
+    }
+
+    if (workflow === "edit" && task.seedance_edit_mode) {
+        workflowLabel = `${workflowLabel} · ${getSeedanceEditModeLabel(task.seedance_edit_mode)}`;
+    }
+
+    tags.push(workflowLabel);
+    tags.push(getSeedanceReferenceModeLabel(task.seedance_reference_mode));
+
+    if (task.aspect_ratio) {
+        tags.push(copy.seedance.aspectRatio(task.aspect_ratio));
+    }
+
+    if (typeof task.watermark === "boolean") {
+        tags.push(task.watermark ? copy.seedance.withWatermark : copy.seedance.withoutWatermark);
+    }
+
+    if (typeof task.camera_fixed === "boolean") {
+        tags.push(task.camera_fixed ? copy.seedance.cameraFixed : copy.seedance.cameraFlexible);
+    }
+
+    if (task.reference_video_urls?.length) {
+        tags.push(copy.seedance.referenceVideos(task.reference_video_urls.length));
+    }
+
+    if (task.reference_audio_url) {
+        tags.push(copy.seedance.referenceAudio);
+    }
+
+    return tags;
+}
+
 function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) => void }) {
     const isCompleted = task.status === "completed";
     const isProcessing = task.status === "processing" || task.status === "pending";
     const isFailed = task.status === "failed";
+    const seedanceTags = getSeedanceTaskTags(task);
 
+    const getDisplayUrl = (url: string) => getAssetUrl(url);
 
-    const getDisplayUrl = (url: string) => {
-        return getAssetUrl(url);
+    const handleCopyPrompt = async () => {
+        try {
+            await navigator.clipboard.writeText(task.prompt || "");
+        } catch (error) {
+            console.error("Copy prompt failed", error);
+        }
+    };
+
+    const handleDownloadVideo = () => {
+        if (!task.video_url) return;
+        window.open(getDisplayUrl(task.video_url), "_blank", "noopener,noreferrer");
     };
 
     return (
@@ -94,19 +156,18 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                     "bg-black/40 border-white/10 hover:border-white/20"
                 }`}
         >
-            {/* Processing State (Compact) */}
             {isProcessing && (
                 <div className="p-3 flex gap-3 items-center">
                     <div className="w-12 h-12 rounded bg-black/50 relative overflow-hidden flex-shrink-0">
                         {task.image_url ? (
                             <img
                                 src={getDisplayUrl(task.image_url)}
-                                alt="Input"
+                                alt={copy.inputAlt}
                                 className="w-full h-full object-cover opacity-60"
                             />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center bg-purple-900/30 text-purple-400 text-[10px] font-bold">
-                                R2V
+                                {copy.r2vInput}
                             </div>
                         )}
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -117,39 +178,35 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs font-mono text-gray-400">#{task.id.slice(0, 6)}</span>
                             <span className="text-xs text-primary animate-pulse">
-                                {task.status === "pending" ? "排队中" : "生成中..."}
+                                {task.status === "pending" ? copy.pending : copy.processing}
                             </span>
                         </div>
                         <p className="text-xs text-gray-300 truncate">{task.prompt}</p>
+                        <TagRow tags={seedanceTags} />
                     </div>
                 </div>
             )}
 
-            {/* Completed State (Detailed) */}
             {isCompleted && (
                 <div>
-                    {/* Header */}
                     <div className="px-3 py-2 border-b border-white/5 flex justify-between items-center bg-white/5">
                         <span className="text-xs font-mono text-gray-500">#{task.id.slice(0, 6)}</span>
                         <div className="flex gap-2">
                             <button
                                 onClick={() => onRemix(task)}
                                 className="text-xs flex items-center gap-1 text-gray-400 hover:text-white transition-colors"
-                                title="使用此参数重做"
+                                title={copy.remixTitle}
                             >
-                                <RefreshCw size={12} /> Remix
+                                <RefreshCw size={12} /> {copy.remix}
                             </button>
                         </div>
                     </div>
 
-                    {/* Visual Comparison */}
                     <div className="flex h-32 relative group">
-                        {/* Input Image/Videos (Left) */}
                         <div className="w-1/2 relative border-r border-white/10">
                             {task.image_url ? (
-                                <img src={getDisplayUrl(task.image_url)} alt="Input" className="w-full h-full object-cover" />
+                                <img src={getDisplayUrl(task.image_url)} alt={copy.inputAlt} className="w-full h-full object-cover" />
                             ) : task.reference_video_urls && task.reference_video_urls.length > 0 ? (
-                                /* R2V: Show reference video thumbnails */
                                 <div className="w-full h-full grid grid-cols-2 gap-0.5 bg-purple-900/20">
                                     {task.reference_video_urls.slice(0, 4).map((url, idx) => (
                                         <div key={idx} className="relative bg-black/50 overflow-hidden">
@@ -167,13 +224,12 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                                 </div>
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-purple-900/10 text-purple-400/50 text-xs font-bold">
-                                    R2V Input
+                                    {copy.r2vInput}
                                 </div>
                             )}
-                            <div className="absolute top-2 left-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-gray-300">Input</div>
+                            <div className="absolute top-2 left-2 bg-black/60 px-1.5 py-0.5 rounded text-[10px] text-gray-300">{copy.input}</div>
                         </div>
 
-                        {/* Output Video (Right) */}
                         <div className="w-1/2 relative bg-black">
                             {task.video_url ? (
                                 <video
@@ -183,29 +239,37 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                                 />
                             ) : (
                                 <div className="w-full h-full flex items-center justify-center text-red-500 text-xs">
-                                    Error
+                                    {copy.error}
                                 </div>
                             )}
-                            <div className="absolute top-2 right-2 bg-primary/80 px-1.5 py-0.5 rounded text-[10px] text-white">Result</div>
+                            <div className="absolute top-2 right-2 bg-primary/80 px-1.5 py-0.5 rounded text-[10px] text-white">{copy.result}</div>
                         </div>
                     </div>
 
-                    {/* Prompt & Actions */}
                     <div className="p-3">
+                        <TagRow tags={seedanceTags} className="mb-3" />
                         <p className="text-xs text-gray-400 line-clamp-2 mb-3 hover:line-clamp-none transition-all cursor-help">
                             {task.prompt}
                         </p>
 
                         <div className="flex justify-between items-center">
                             <div className="flex gap-2">
-                                <button className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white">
+                                <button
+                                    onClick={handleCopyPrompt}
+                                    className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"
+                                    title={copy.copyPrompt}
+                                >
                                     <Copy size={14} />
                                 </button>
-                                <button className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white">
+                                <button
+                                    onClick={handleDownloadVideo}
+                                    className="p-1.5 hover:bg-white/10 rounded text-gray-400 hover:text-white"
+                                    title={copy.downloadVideo}
+                                >
                                     <Download size={14} />
                                 </button>
                             </div>
-                            <button className="p-1.5 hover:bg-red-500/20 rounded text-gray-500 hover:text-red-400">
+                            <button className="p-1.5 hover:bg-red-500/20 rounded text-gray-500 hover:text-red-400" title={copy.deleteTask}>
                                 <Trash2 size={14} />
                             </button>
                         </div>
@@ -213,22 +277,41 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                 </div>
             )}
 
-            {/* Failed State */}
             {isFailed && (
                 <div className="p-3">
                     <div className="flex items-center gap-2 text-red-400 mb-2">
                         <AlertCircle size={16} />
-                        <span className="text-sm font-medium">生成失败</span>
+                        <span className="text-sm font-medium">{copy.failed}</span>
                     </div>
-                    <p className="text-xs text-gray-500 mb-3">未知错误，请重试</p>
+                    <TagRow tags={seedanceTags} className="mb-2" />
+                    <p className="text-xs text-gray-500 mb-3">{copy.unknownError}</p>
                     <button
                         onClick={() => onRemix(task)}
                         className="w-full py-1.5 bg-white/5 hover:bg-white/10 rounded text-xs text-gray-300 transition-colors"
                     >
-                        重试任务
+                        {copy.retry}
                     </button>
                 </div>
             )}
         </motion.div>
+    );
+}
+
+function TagRow({ tags, className = "" }: { tags: string[]; className?: string }) {
+    if (tags.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className={`flex flex-wrap gap-1.5 ${className}`.trim()}>
+            {tags.map((tag) => (
+                <span
+                    key={tag}
+                    className="px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-[10px] text-gray-300"
+                >
+                    {tag}
+                </span>
+            ))}
+        </div>
     );
 }

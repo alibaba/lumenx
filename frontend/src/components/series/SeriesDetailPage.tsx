@@ -8,6 +8,8 @@ import { api } from "@/lib/api";
 import type { Series, Character, Scene, Prop, Project } from "@/store/projectStore";
 import AssetCard from "@/components/common/AssetCard";
 import SeriesSidebar, { type SidebarItem } from "./SeriesSidebar";
+import { assetTypeTerms, messages } from "@/lib/i18n";
+import { getAssetUrl } from "@/lib/utils";
 
 const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModal"), { ssr: false });
 const SeriesPromptConfigModal = dynamic(() => import("./SeriesPromptConfigModal"), { ssr: false });
@@ -20,12 +22,13 @@ interface SeriesDetailPageProps {
 type AssetTab = "characters" | "scenes" | "props";
 
 const ASSET_LABELS: Record<AssetTab, string> = {
-  characters: "角色",
-  scenes: "场景",
-  props: "道具",
+  characters: assetTypeTerms.character.label,
+  scenes: assetTypeTerms.scene.label,
+  props: assetTypeTerms.prop.label,
 };
 
 export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
+  const copy = messages.seriesPage.detail;
   const [series, setSeries] = useState<Series | null>(null);
   const [episodes, setEpisodes] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,7 +129,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
-        <div className="text-gray-400">加载中...</div>
+        <div className="text-gray-400">{copy.loading}</div>
       </div>
     );
   }
@@ -136,8 +139,8 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
-          <p className="text-gray-400 mb-4">系列未找到</p>
-          <a href="#/" className="text-primary hover:underline">返回首页</a>
+          <p className="text-gray-400 mb-4">{copy.seriesNotFound}</p>
+          <a href="#/" className="text-primary hover:underline">{copy.backHome}</a>
         </div>
       </div>
     );
@@ -244,6 +247,8 @@ function AssetContentPanel({
   assets: (Character | Scene | Prop)[];
   label: string;
 }) {
+  const copy = messages.seriesPage.detail;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 24 }}
@@ -257,11 +262,11 @@ function AssetContentPanel({
         <h2 className="text-xl font-display font-bold text-white">
           {label}
           <span className="text-sm font-normal text-gray-500 ml-2">
-            {assets.length} 项
+            {copy.assetCount(assets.length)}
           </span>
         </h2>
         <p className="text-xs text-gray-600 mt-1">
-          在集数编辑器中生成的资产将自动共享到这里
+          {copy.sharedAssetHint}
         </p>
       </div>
 
@@ -276,8 +281,8 @@ function AssetContentPanel({
             >
               <ImageIcon size={28} className="text-gray-600" />
             </motion.div>
-            <p className="text-sm font-medium">暂无{label}资产</p>
-            <p className="text-xs text-gray-600 mt-1">资产将在集数中生成后共享到这里</p>
+            <p className="text-sm font-medium">{copy.emptyAsset(label)}</p>
+            <p className="text-xs text-gray-600 mt-1">{copy.emptyAssetHint}</p>
           </div>
         ) : (
           <motion.div
@@ -322,6 +327,7 @@ function EpisodeContentPanel({
   seriesId: string;
   onOpenEditor: () => void;
 }) {
+  const copy = messages.seriesPage.detail;
   const frames = episode.frames || [];
 
   return (
@@ -344,7 +350,7 @@ function EpisodeContentPanel({
             </h2>
           </div>
           <p className="text-xs text-gray-500">
-            {frames.length} 分镜
+            {copy.framesCount(frames.length)}
           </p>
         </div>
         <motion.button
@@ -354,7 +360,7 @@ function EpisodeContentPanel({
           className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-lg shadow-primary/20 hover:shadow-primary/30"
         >
           <Play size={14} />
-          进入编辑器
+          {copy.openEditor}
           <ChevronRight size={14} />
         </motion.button>
       </div>
@@ -370,8 +376,8 @@ function EpisodeContentPanel({
             >
               <Play size={28} className="text-gray-600" />
             </motion.div>
-            <p className="text-sm font-medium">暂无分镜</p>
-            <p className="text-xs text-gray-600 mt-1">进入编辑器开始创作</p>
+            <p className="text-sm font-medium">{copy.emptyFrames}</p>
+            <p className="text-xs text-gray-600 mt-1">{copy.emptyFramesHint}</p>
           </div>
         ) : (
           <motion.div
@@ -401,8 +407,8 @@ function EpisodeContentPanel({
                 <div className="aspect-video bg-gray-800/50 flex items-center justify-center overflow-hidden relative">
                   {frame.rendered_image_url ? (
                     <img
-                      src={frame.rendered_image_url}
-                      alt={`分镜 ${i + 1}`}
+                      src={getAssetUrl(frame.rendered_image_url)}
+                      alt={copy.frameAlt(i + 1)}
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                   ) : (
@@ -419,7 +425,7 @@ function EpisodeContentPanel({
                 </div>
                 <div className="p-2.5">
                   <p className="text-xs text-gray-400 truncate">
-                    {frame.scene_description || `分镜 ${i + 1}`}
+                    {frame.scene_description || copy.frameFallback(i + 1)}
                   </p>
                 </div>
               </motion.div>

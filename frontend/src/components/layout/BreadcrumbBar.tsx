@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronLeft } from "lucide-react";
+import { messages } from "@/lib/i18n";
 
 export interface BreadcrumbSegment {
   label: string;
@@ -29,7 +30,7 @@ export default function BreadcrumbBar({ segments, actions }: BreadcrumbBarProps)
       <button
         onClick={handleBack}
         className="flex items-center text-gray-400 hover:text-white transition-colors"
-        title="返回"
+        title={messages.navigation.back}
       >
         <ChevronLeft size={18} />
       </button>

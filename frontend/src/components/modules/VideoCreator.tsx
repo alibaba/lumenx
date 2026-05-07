@@ -18,9 +18,32 @@ import {
 
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL, VideoTask } from "@/lib/api";
-import { getAssetUrl, getAssetUrlWithTimestamp } from "@/lib/utils";
+import { getAssetUrl, getAssetUrlWithTimestamp, stripAssetApiPrefix } from "@/lib/utils";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
-import type { VideoParams } from "@/store/projectStore";
+import { isSeedanceI2VModel, type VideoParams } from "@/store/projectStore";
+import { cameraTerms, getReferenceVideoTypeLabel, messages, seedanceTerms, subjectMotionTerms } from "@/lib/i18n";
+import {
+    buildSeedancePayloadPreviews,
+    getSeedanceEffectiveMedia,
+    getSeedanceEditModeLabel,
+    getSeedanceExtendModeLabel,
+    getSeedancePayloadWarnings,
+    getSeedanceWorkflowLabel,
+    getSeedanceSubmissionState,
+} from "@/lib/seedance";
+import {
+    applySeedancePromptBlock,
+    getSeedancePromptScaffolds,
+    getSeedancePromptTemplates,
+    SEEDANCE_PROMPT_TEMPLATE_CATEGORIES,
+    type SeedancePromptTemplateCategory,
+} from "@/lib/seedance-prompts";
+import PromptQualityPanel from "@/components/common/PromptQualityPanel";
+import {
+    formatPromptIssues,
+    hasBlockingPromptIssues,
+    inspectVideoPrompt,
+} from "@/lib/prompt-quality";
 
 interface VideoCreatorProps {
     onTaskCreated: (project: any) => void;
@@ -30,51 +53,33 @@ interface VideoCreatorProps {
     onParamsChange: (params: Partial<VideoParams>) => void;
 }
 
+const copy = messages.modules.videoCreator;
+const commonActions = messages.common.actions;
+const commonMessages = messages.common.messages;
+const seedanceSummaryCopy = seedanceTerms.summary;
+
 export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, params, onParamsChange }: VideoCreatorProps) {
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
+    const isSeedanceModel = isSeedanceI2VModel(params.model);
 
     // Helper function to generate motion description text
     const getMotionDescription = () => {
         const parts: string[] = [];
 
         if (params.cameraMovement && params.cameraMovement !== 'none') {
-            const cameraDescriptions: Record<string, string> = {
-                'pan_left_slow': 'camera slowly pans to the left',
-                'pan_right_slow': 'camera slowly pans to the right',
-                'pan_left_fast': 'camera quickly pans to the left',
-                'pan_right_fast': 'camera quickly pans to the right',
-                'tilt_up': 'camera tilts up',
-                'tilt_down': 'camera tilts down',
-                'zoom_in_slow': 'camera slowly zooms in',
-                'zoom_out_slow': 'camera slowly zooms out',
-                'zoom_in_fast': 'camera dramatically zooms in',
-                'zoom_out_fast': 'camera dramatically zooms out',
-                'dolly_in': 'camera dolly in',
-                'dolly_out': 'camera dolly out',
-                'orbit_left': 'camera orbits to the left',
-                'orbit_right': 'camera orbits to the right',
-                'crane_up': 'camera cranes up',
-                'crane_down': 'camera cranes down'
-            };
-            parts.push(cameraDescriptions[params.cameraMovement] || '');
+            parts.push(cameraTerms[params.cameraMovement as keyof typeof cameraTerms]?.prompt || '');
         }
 
         if (params.subjectMotion && params.subjectMotion !== 'still') {
-            const subjectDescriptions: Record<string, string> = {
-                'subtle': 'subtle movement',
-                'natural': 'natural movement',
-                'dynamic': 'dynamic action',
-                'fast': 'fast-paced action'
-            };
-            parts.push(subjectDescriptions[params.subjectMotion] || '');
+            parts.push(subjectMotionTerms[params.subjectMotion as keyof typeof subjectMotionTerms]?.prompt || '');
         }
 
         return parts.filter(p => p).join(', ');
     };
 
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
-    const [selectedReferenceVideos, setSelectedReferenceVideos] = useState<string[]>([]); // New state for R2V
+    const [selectedReferenceVideos, setSelectedReferenceVideos] = useState<string[]>(params.referenceVideoUrls || []);
     const [uploadingPaths, setUploadingPaths] = useState<Record<string, string>>({}); // Map blobUrl -> serverUrl
     const [activeTab, setActiveTab] = useState<"storyboard" | "upload">("storyboard");
 
@@ -90,6 +95,16 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             setGenerationMode(params.generationMode as "i2v" | "r2v");
         }
     }, [params.generationMode]);
+
+    useEffect(() => {
+        setSelectedReferenceVideos(params.referenceVideoUrls || []);
+    }, [params.referenceVideoUrls]);
+
+    useEffect(() => {
+        if (!isSeedanceModel || generationMode !== "i2v") {
+            setShowSeedancePayloadPreview(false);
+        }
+    }, [generationMode, isSeedanceModel]);
 
     const handleExtractLastFrame = async (frameId: string, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -112,7 +127,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             updateProject(currentProject.id, updatedProject);
         } catch (error: any) {
             console.error("Failed to extract last frame:", error);
-            alert(error?.response?.data?.detail || "Failed to extract last frame");
+            alert(error?.response?.data?.detail || copy.extractLastFrameFailed);
         } finally {
             setExtractingFrameId(null);
         }
@@ -152,6 +167,77 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [polishedPrompt, setPolishedPrompt] = useState<{ cn: string; en: string } | null>(null);
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
+    const [showSeedancePayloadPreview, setShowSeedancePayloadPreview] = useState(false);
+    const [isUploadingReferenceAudio, setIsUploadingReferenceAudio] = useState(false);
+    const [activePromptTemplateCategory, setActivePromptTemplateCategory] =
+        useState<SeedancePromptTemplateCategory>("all");
+    const referenceAudioInputRef = useRef<HTMLInputElement>(null);
+    const isR2VMode = generationMode === "r2v";
+    const shouldShowPromptLibrary = isSeedanceModel || isR2VMode;
+    const promptLibraryGenerationMode = isR2VMode ? "r2v" : "i2v";
+    const promptLibraryWorkflow = isR2VMode
+        ? "standard"
+        : (params.seedanceWorkflow as "standard" | "extend" | "edit");
+    const promptLibraryWorkflowMode = isR2VMode
+        ? undefined
+        : promptLibraryWorkflow === "extend"
+            ? params.seedanceExtendMode
+            : promptLibraryWorkflow === "edit"
+                ? params.seedanceEditMode
+                : undefined;
+    const availablePromptScaffolds = shouldShowPromptLibrary
+        ? getSeedancePromptScaffolds({
+            generationMode: promptLibraryGenerationMode,
+            workflow: promptLibraryWorkflow,
+            workflowMode: promptLibraryWorkflowMode,
+        })
+        : [];
+    const availablePromptTemplates = shouldShowPromptLibrary
+        ? getSeedancePromptTemplates({
+            generationMode: promptLibraryGenerationMode,
+            workflow: promptLibraryWorkflow,
+            workflowMode: promptLibraryWorkflowMode,
+        }).filter((item) =>
+            activePromptTemplateCategory === "all" || item.category === activePromptTemplateCategory,
+        )
+        : [];
+    const promptLibraryContextLabel = isR2VMode
+        ? copy.promptLibraryR2VContext
+        : promptLibraryWorkflow === "extend" && promptLibraryWorkflowMode
+            ? copy.promptLibraryWorkflowContext(`${getSeedanceWorkflowLabel(promptLibraryWorkflow)} · ${getSeedanceExtendModeLabel(promptLibraryWorkflowMode)}`)
+            : promptLibraryWorkflow === "edit" && promptLibraryWorkflowMode
+                ? copy.promptLibraryWorkflowContext(`${getSeedanceWorkflowLabel(promptLibraryWorkflow)} · ${getSeedanceEditModeLabel(promptLibraryWorkflowMode)}`)
+                : copy.promptLibraryWorkflowContext(getSeedanceWorkflowLabel(promptLibraryWorkflow));
+
+    const handleApplyPromptBlock = (blockPrompt: string, mode: "replace" | "append") => {
+        const hasStructuredContent = segments.some((segment) => segment.value.trim().length > 0);
+
+        if (mode === "append" && hasStructuredContent) {
+            const nextSegments = [...segments];
+            const lastSegment = nextSegments[nextSegments.length - 1];
+
+            if (lastSegment?.type === "text") {
+                nextSegments[nextSegments.length - 1] = {
+                    ...lastSegment,
+                    value: `${lastSegment.value}\n\n${blockPrompt}`,
+                };
+            } else {
+                nextSegments.push({
+                    type: "text",
+                    value: `\n\n${blockPrompt}`,
+                    id: `prompt-block-${Date.now()}`,
+                });
+            }
+
+            setSegments(nextSegments);
+            setPolishedPrompt(null);
+            return;
+        }
+
+        const nextPrompt = applySeedancePromptBlock("", blockPrompt, "replace");
+        setSegments([{ type: "text", value: nextPrompt, id: `prompt-block-${Date.now()}` }]);
+        setPolishedPrompt(null);
+    };
 
     const handlePolish = async (feedback: string = "") => {
         const draftPrompt = feedback ? (polishedPrompt?.en || prompt) : prompt;
@@ -164,8 +250,8 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                 // R2V mode: use R2V-specific polish with slot info
                 const slotInfo = castSlots
                     .filter(slot => slot.url)
-                    .map((slot) => ({
-                        description: slot.name || 'Unknown character'
+                    .map((slot, index) => ({
+                        description: slot.name || `@Ref_${String.fromCharCode(65 + index)}`
                     }));
                 res = await api.polishR2VPrompt(draftPrompt, slotInfo, feedback, scriptId);
             } else {
@@ -178,7 +264,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             }
         } catch (error) {
             console.error("Polish failed", error);
-            alert("AI 润色失败");
+            alert(copy.polishFailed);
         } finally {
             setIsPolishing(false);
         }
@@ -232,13 +318,17 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     // R2V: Handle Reference Video Selection
     const handleReferenceVideoSelect = (videoUrl: string) => {
         if (selectedReferenceVideos.includes(videoUrl)) {
-            setSelectedReferenceVideos(prev => prev.filter(v => v !== videoUrl));
+            const next = selectedReferenceVideos.filter((v) => v !== videoUrl);
+            setSelectedReferenceVideos(next);
+            onParamsChange({ referenceVideoUrls: next });
         } else {
             if (selectedReferenceVideos.length >= 3) {
-                alert("最多选择 3 个参考视频");
+                alert(copy.referenceVideoLimit);
                 return;
             }
-            setSelectedReferenceVideos(prev => [...prev, videoUrl]);
+            const next = [...selectedReferenceVideos, videoUrl];
+            setSelectedReferenceVideos(next);
+            onParamsChange({ referenceVideoUrls: next });
         }
     };
 
@@ -289,57 +379,226 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         promptBuilderRef.current?.insertCharacter(slotIndex, slot.name, thumbnail);
     };
 
+    const handleSeedanceReferenceAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploadingReferenceAudio(true);
+        try {
+            const res = await api.uploadFile(file);
+            onParamsChange({ referenceAudioUrl: res.url });
+        } catch (error) {
+            console.error("Seedance reference audio upload failed", error);
+            alert(copy.submitFailed);
+        } finally {
+            setIsUploadingReferenceAudio(false);
+            if (referenceAudioInputRef.current) {
+                referenceAudioInputRef.current.value = "";
+            }
+        }
+    };
+
+    const resolveMediaUrl = (mediaUrl?: string) => {
+        if (!mediaUrl) return "";
+        if (mediaUrl.startsWith("blob:")) {
+            return uploadingPaths[mediaUrl] || "";
+        }
+        return stripAssetApiPrefix(mediaUrl);
+    };
+
+    const finalPrompt = (() => {
+        const motionDesc = getMotionDescription();
+        return motionDesc ? `${prompt}, ${motionDesc}` : prompt;
+    })();
+    const promptQualityIssues = inspectVideoPrompt({
+        prompt: finalPrompt,
+        workflow: params.seedanceWorkflow,
+        workflowMode: promptLibraryWorkflowMode,
+        generationMode,
+    });
+
+    const allResolvedSeedanceImages = selectedImages.map(resolveMediaUrl).filter(Boolean);
+    const allResolvedReferenceVideoUrls = selectedReferenceVideos.map(resolveMediaUrl).filter(Boolean);
+    const allResolvedReferenceAudioUrl = resolveMediaUrl(params.referenceAudioUrl);
+    const seedanceEffectiveMedia = getSeedanceEffectiveMedia({
+        referenceMode: params.seedanceReferenceMode as "image" | "video" | "combo",
+        imageUrls: allResolvedSeedanceImages,
+        referenceVideoUrls: allResolvedReferenceVideoUrls,
+        referenceAudioUrl: allResolvedReferenceAudioUrl,
+    });
+    const resolvedSeedanceImages = seedanceEffectiveMedia.imageUrls;
+    const resolvedReferenceVideoUrls = seedanceEffectiveMedia.referenceVideoUrls;
+    const resolvedReferenceAudioUrl = seedanceEffectiveMedia.referenceAudioUrl || "";
+    const usesSeedanceImageInput = params.seedanceReferenceMode === "image" || params.seedanceReferenceMode === "combo";
+    const seedanceImageInputs = usesSeedanceImageInput ? selectedImages : [];
+    const selectedCastCount = castSlots.filter((slot) => slot.url).length;
+    const seedanceSubmissionState = getSeedanceSubmissionState({
+        previewOnly: params.seedancePreviewOnly,
+        workflow: params.seedanceWorkflow as "standard" | "extend" | "edit",
+        referenceMode: params.seedanceReferenceMode as "image" | "video" | "combo",
+        imageUrls: allResolvedSeedanceImages,
+        referenceVideoUrls: allResolvedReferenceVideoUrls,
+        referenceAudioUrl: allResolvedReferenceAudioUrl,
+    });
+    const isSeedancePreviewSubmit = generationMode === "i2v"
+        && isSeedanceModel
+        && seedanceSubmissionState.mode === "preview";
+    const canOpenSeedancePreview = generationMode === "i2v"
+        && isSeedanceModel
+        && (
+            finalPrompt.trim().length > 0
+            || resolvedSeedanceImages.length > 0
+            || resolvedReferenceVideoUrls.length > 0
+            || !!resolvedReferenceAudioUrl
+        );
+    const seedancePreviewPayloads = buildSeedancePayloadPreviews({
+        prompt: finalPrompt,
+        model: params.model,
+        duration: params.duration,
+        resolution: params.resolution,
+        aspectRatio: params.aspectRatio,
+        watermark: params.watermark,
+        cameraFixed: params.cameraFixed,
+        generateAudio: params.generateAudio,
+        seed: params.seed,
+        referenceMode: params.seedanceReferenceMode as "image" | "video" | "combo",
+        workflow: params.seedanceWorkflow as "standard" | "extend" | "edit",
+        extendMode: params.seedanceExtendMode as "continue" | "prepend" | "trajectory",
+        editMode: params.seedanceEditMode as "subject_replace" | "object_edit" | "inpaint",
+        imageUrls: allResolvedSeedanceImages,
+        referenceVideoUrls: allResolvedReferenceVideoUrls,
+        referenceAudioUrl: allResolvedReferenceAudioUrl,
+    });
+    const seedancePayloadWarnings = [
+        ...getSeedancePayloadWarnings({
+            prompt: finalPrompt,
+            model: params.model,
+            duration: params.duration,
+            resolution: params.resolution,
+            aspectRatio: params.aspectRatio,
+            watermark: params.watermark,
+            cameraFixed: params.cameraFixed,
+            generateAudio: params.generateAudio,
+            seed: params.seed,
+            referenceMode: params.seedanceReferenceMode as "image" | "video" | "combo",
+            workflow: params.seedanceWorkflow as "standard" | "extend" | "edit",
+            extendMode: params.seedanceExtendMode as "continue" | "prepend" | "trajectory",
+            editMode: params.seedanceEditMode as "subject_replace" | "object_edit" | "inpaint",
+            imageUrls: allResolvedSeedanceImages,
+            referenceVideoUrls: allResolvedReferenceVideoUrls,
+            referenceAudioUrl: allResolvedReferenceAudioUrl,
+        }),
+    ];
+
+    const handleOpenSeedancePreview = () => {
+        setShowSeedancePayloadPreview(true);
+    };
+
+    const copySeedancePayloadJson = async (payload: unknown, successMessage: string) => {
+        try {
+            await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+            alert(successMessage);
+        } catch (error) {
+            console.error("Failed to copy Seedance payload preview", error);
+        }
+    };
+
+    const handleCopySeedancePayloads = async () => {
+        const payloadToCopy = seedancePreviewPayloads.length > 1
+            ? seedancePreviewPayloads.map((item) => item.payload)
+            : seedancePreviewPayloads[0]?.payload;
+        await copySeedancePayloadJson(
+            payloadToCopy,
+            seedancePreviewPayloads.length > 1 ? copy.payloadsCopied : copy.payloadCopied,
+        );
+    };
+
+    const handleCopySingleSeedancePayload = async (payload: Record<string, unknown>) => {
+        await copySeedancePayloadJson(payload, copy.payloadCopied);
+    };
+
+    const canRunPrimaryAction = (() => {
+        if (isSubmitting || !currentProject || !finalPrompt.trim()) {
+            return false;
+        }
+
+        if (generationMode === "r2v") {
+            return selectedCastCount > 0;
+        }
+
+        if (isSeedanceModel) {
+            if (isSeedancePreviewSubmit) {
+                return true;
+            }
+            return resolvedSeedanceImages.length > 0 || resolvedReferenceVideoUrls.length > 0;
+        }
+
+        return selectedImages.length > 0;
+    })();
+
     const handleSubmit = async () => {
-        // Validation based on mode
-        if (generationMode === 'i2v') {
-            if (selectedImages.length === 0 || !prompt || !currentProject) return;
-        } else {
-            // R2V mode: need at least one cast slot filled
-            const filledSlots = castSlots.filter(s => s.url);
-            if (filledSlots.length === 0) {
-                alert("R2V 模式请至少填充一个角色槽位 (@Ref_A)");
+        if (!currentProject) return;
+
+        if (generationMode === "r2v") {
+            if (selectedCastCount === 0) {
+                alert(copy.r2vCastSlotRequired);
                 return;
             }
-            if (!prompt || !currentProject) return;
+            if (!finalPrompt.trim()) return;
+        } else if (isSeedanceModel) {
+            if (isSeedancePreviewSubmit) {
+                setShowSeedancePayloadPreview(true);
+                if (seedanceSubmissionState.reason === "workflow_missing_video") {
+                    alert(copy.workflowNeedsReferenceVideo);
+                }
+                return;
+            }
+
+            if (!finalPrompt.trim()) return;
+
+            if (resolvedSeedanceImages.length === 0 && resolvedReferenceVideoUrls.length === 0) {
+                setShowSeedancePayloadPreview(true);
+                alert(copy.seedanceMissingInput);
+                return;
+            }
+        } else {
+            if (selectedImages.length === 0 || !finalPrompt.trim()) return;
+        }
+
+        if (hasBlockingPromptIssues(promptQualityIssues)) {
+            alert(`${copy.promptQualityBlocked}\n\n${formatPromptIssues(promptQualityIssues.filter((issue) => issue.severity === "error"))}`);
+            return;
         }
 
         setIsSubmitting(true);
         try {
-            // Add motion description to prompt
-            const motionDesc = getMotionDescription();
-            const finalPrompt = motionDesc ? `${prompt}, ${motionDesc}` : prompt;
-
-            // Optimistic update - add pending tasks to queue immediately
             const optimisticTasks: VideoTask[] = [];
+            let itemsToProcess = generationMode === "i2v" && isSeedanceModel ? seedanceImageInputs : selectedImages;
 
-            // Determine items to process
-            // In I2V: process selected images
-            // In R2V: process selected images OR a single task if no image selected
-            let itemsToProcess = selectedImages;
-            if (generationMode === 'r2v' && selectedImages.length === 0) {
-                itemsToProcess = [""]; // Dummy item to trigger one iteration
+            if (generationMode === "r2v" && selectedImages.length === 0) {
+                itemsToProcess = [""];
+            }
+
+            if (generationMode === "i2v" && isSeedanceModel && resolvedSeedanceImages.length === 0) {
+                itemsToProcess = [""];
             }
 
             itemsToProcess.forEach((img, idx) => {
                 let displayUrl = img;
                 if (img && img.startsWith("blob:")) {
                     displayUrl = uploadingPaths[img] || img;
-                } else if (img && !img.startsWith("http")) {
-                    displayUrl = img;
                 }
 
-                // Determine model based on generation mode
-                const actualModel = generationMode === 'r2v' ? 'wan2.6-r2v' : params.model;
-                const referenceVideos = generationMode === 'r2v'
-                    ? castSlots.filter(s => s.url).map(s => s.url)
-                    : undefined;
+                const actualModel = generationMode === "r2v" ? "wan2.6-r2v" : params.model;
+                const referenceVideos = generationMode === "r2v"
+                    ? castSlots.filter((slot) => slot.url).map((slot) => slot.url)
+                    : resolvedReferenceVideoUrls;
 
-                // Create batch_size tasks for each image
                 for (let i = 0; i < params.batchSize; i++) {
                     optimisticTasks.push({
                         id: `temp-${Date.now()}-${idx}-${i}`,
                         project_id: currentProject.id,
-                        image_url: displayUrl, // Might be empty string for R2V
+                        image_url: displayUrl,
                         prompt: finalPrompt,
                         status: "pending",
                         video_url: undefined,
@@ -350,22 +609,28 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                         audio_url: params.audioUrl,
                         prompt_extend: params.promptExtend,
                         negative_prompt: params.negativePrompt,
+                        aspect_ratio: params.aspectRatio,
+                        watermark: params.watermark,
+                        camera_fixed: params.cameraFixed,
+                        reference_audio_url: resolvedReferenceAudioUrl || undefined,
+                        seedance_reference_mode: params.seedanceReferenceMode,
+                        seedance_workflow: params.seedanceWorkflow,
+                        seedance_extend_mode: params.seedanceExtendMode,
+                        seedance_edit_mode: params.seedanceEditMode,
                         model: actualModel,
                         created_at: Date.now() / 1000,
                         generation_mode: generationMode,
-                        reference_video_urls: referenceVideos
+                        reference_video_urls: referenceVideos,
                     });
                 }
             });
 
-            // Immediately update UI with optimistic tasks
             const optimisticProject = {
                 ...currentProject,
-                video_tasks: [...(currentProject.video_tasks || []), ...optimisticTasks]
+                video_tasks: [...(currentProject.video_tasks || []), ...optimisticTasks],
             };
             onTaskCreated(optimisticProject);
 
-            // Batch submit for all images
             for (const img of itemsToProcess) {
                 let finalImageUrl = img;
                 if (img && img.startsWith("blob:")) {
@@ -375,37 +640,29 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                         console.warn("Image upload pending for", img);
                         continue;
                     }
-                } else if (img && img.startsWith(`${API_URL}/files/`)) {
-                    finalImageUrl = img.replace(`${API_URL}/files/`, "");
+                } else if (img) {
+                    finalImageUrl = stripAssetApiPrefix(img);
                 }
 
-                // Find frame ID - use selectedFrameId directly for R2V mode
                 let frameId: string | undefined;
-                if (generationMode === 'r2v') {
-                    // R2V mode: use the explicitly selected frame
+                if (generationMode === "r2v") {
                     frameId = selectedFrameId || undefined;
                 } else {
-                    // I2V mode: find frame by matching image URL (check rendered_image_url first, then image_url)
                     const frame = currentProject?.frames?.find((f: any) =>
                         (f.rendered_image_url || f.image_url) === img ||
-                        f.image_url === img ||
-                        `${API_URL}/files/${f.image_url}` === img
+                        getAssetUrl(f.rendered_image_url || f.image_url) === img
                     );
                     frameId = frame ? frame.id : undefined;
                 }
 
-                // Determine model based on generation mode
-                // R2V mode uses wan2.6-r2v, I2V uses selected model
-                const actualModel = generationMode === 'r2v' ? 'wan2.6-r2v' : params.model;
-
-                // Get reference video URLs from cast slots for R2V
-                const referenceVideos = generationMode === 'r2v'
-                    ? castSlots.filter(s => s.url).map(s => s.url)
-                    : [];
+                const actualModel = generationMode === "r2v" ? "wan2.6-r2v" : params.model;
+                const referenceVideos = generationMode === "r2v"
+                    ? castSlots.filter((slot) => slot.url).map((slot) => slot.url)
+                    : resolvedReferenceVideoUrls;
 
                 await api.createVideoTask(
                     currentProject.id,
-                    finalImageUrl, // Can be empty string
+                    finalImageUrl,
                     finalPrompt,
                     params.duration,
                     params.seed,
@@ -415,35 +672,35 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     params.promptExtend,
                     params.negativePrompt,
                     params.batchSize,
-                    actualModel,  // Use computed model
+                    actualModel,
                     frameId,
                     params.shotType,
-                    generationMode,  // Use local state
-                    referenceVideos,  // Use cast slots
-                    // Kling params
+                    generationMode,
+                    referenceVideos,
+                    params.aspectRatio,
+                    params.watermark,
+                    params.cameraFixed,
                     params.mode,
                     params.sound,
                     params.cfgScale,
-                    // Vidu params
                     params.viduAudio,
-                    params.movementAmplitude
+                    params.movementAmplitude,
+                    resolvedReferenceAudioUrl || undefined,
+                    params.seedanceReferenceMode,
+                    params.seedanceWorkflow,
+                    params.seedanceExtendMode,
+                    params.seedanceEditMode,
                 );
             }
 
-            // Refresh with actual data from server
             const updatedProject = await api.getProject(currentProject.id);
             onTaskCreated(updatedProject);
 
-            // Success feedback
             setSubmitSuccess(true);
             setTimeout(() => setSubmitSuccess(false), 1500);
-
-            // Clear selection after successful submit
-            // setSelectedImages([]); // Keep selection for iterative generation
         } catch (error) {
             console.error("Failed to submit task:", error);
-            alert("提交失败");
-            // Refresh to remove optimistic updates
+            alert(copy.submitFailed);
             const updatedProject = await api.getProject(currentProject.id);
             onTaskCreated(updatedProject);
         } finally {
@@ -543,8 +800,8 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar min-h-0">
                 <h2 className="text-2xl font-display font-bold text-white mb-6 flex items-center gap-3">
                     <div className="w-2 h-8 bg-primary rounded-full" />
-                    动态演译
-                    <span className="text-xs font-mono text-gray-500 bg-white/5 px-2 py-1 rounded">Motion</span>
+                    {copy.title}
+                    <span className="text-xs font-mono text-gray-500 bg-white/5 px-2 py-1 rounded">{copy.titleBadge}</span>
                 </h2>
 
                 <div className="flex flex-col gap-6 max-w-4xl mx-auto w-full pb-8">
@@ -562,7 +819,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     }`}
                             >
                                 <ImageIcon size={16} />
-                                🖼️ 首帧驱动 (I2V)
+                                {copy.generationModes.i2v}
                             </button>
                             <button
                                 onClick={() => {
@@ -578,7 +835,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     }`}
                             >
                                 <Film size={16} />
-                                🎬 角色驱动 (R2V)
+                                {copy.generationModes.r2v}
                             </button>
                         </div>
                     </div>
@@ -586,7 +843,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     {generationMode === 'i2v' && (
                         <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-gray-300">首帧图片 (First Frame)</label>
+                                <label className="text-sm font-medium text-gray-300">{copy.firstFrame}</label>
                                 <div className="flex bg-white/5 rounded-lg p-1 gap-1">
                                     <button
                                         onClick={() => setActiveTab("storyboard")}
@@ -595,7 +852,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                             : "text-gray-400 hover:text-white hover:bg-white/5"
                                             }`}
                                     >
-                                        <Layout size={14} /> Storyboard
+                                        <Layout size={14} /> {copy.tabs.storyboard}
                                     </button>
                                     <button
                                         onClick={() => setActiveTab("upload")}
@@ -604,7 +861,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                             : "text-gray-400 hover:text-white hover:bg-white/5"
                                             }`}
                                     >
-                                        <Upload size={14} /> Upload
+                                        <Upload size={14} /> {copy.tabs.upload}
                                     </button>
                                 </div>
                             </div>
@@ -637,18 +894,18 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                             }`}
                                                     >
                                                         {(frame.rendered_image_url || frame.image_url) ? (
-                                                            <img
-                                                                src={getAssetUrlWithTimestamp(frame.rendered_image_url || frame.image_url, frame.updated_at)}
-                                                                alt={`Frame ${frame.id}`}
-                                                                className="w-full h-full object-cover"
-                                                            />
+                                                                <img
+                                                                    src={getAssetUrlWithTimestamp(frame.rendered_image_url || frame.image_url, frame.updated_at)}
+                                                                    alt={copy.frameAlt(frame.id)}
+                                                                    className="w-full h-full object-cover"
+                                                                />
                                                         ) : (
                                                             <div className="w-full h-full bg-white/5 flex items-center justify-center text-xs text-gray-500">
-                                                                No Image
+                                                                {copy.noImage}
                                                             </div>
                                                         )}
                                                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                            <span className="text-xs text-white font-bold">Select</span>
+                                                            <span className="text-xs text-white font-bold">{copy.select}</span>
                                                         </div>
                                                         {/* Frame Number Badge */}
                                                         <div className="absolute top-1 left-1 bg-black/60 px-1.5 rounded text-[10px] text-gray-300 backdrop-blur-sm">
@@ -664,14 +921,14 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                                         ? "bg-green-500/20 text-green-400 border border-green-500/30 hover:bg-purple-500/20 hover:text-purple-300 hover:border-purple-500/30"
                                                                         : "bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/40"
                                                                 } disabled:opacity-50`}
-                                                                title={hasExtracted ? "Re-extract previous video's last frame" : "Use previous video's last frame as input"}
+                                                                title={hasExtracted ? copy.reExtractPrevEndFrame : copy.usePrevEndFrame}
                                                             >
                                                                 {isExtracting ? (
                                                                     <Loader2 size={10} className="animate-spin" />
                                                                 ) : hasExtracted ? (
-                                                                    <><Check size={10} /> Applied</>
+                                                                    <><Check size={10} /> {copy.applied}</>
                                                                 ) : (
-                                                                    <><Film size={10} /> Prev End Frame</>
+                                                                    <><Film size={10} /> {copy.prevEndFrame}</>
                                                                 )}
                                                             </button>
                                                         )}
@@ -683,14 +940,14 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                         })() : (
                                             <div className="flex flex-col items-center justify-center h-[200px] text-gray-500 gap-2">
                                                 <Layout size={32} className="opacity-20" />
-                                                <p className="text-xs">No storyboard frames found.</p>
+                                                <p className="text-xs">{copy.noStoryboardFrames}</p>
                                             </div>
                                         )}
 
                                         {/* Selected Preview (Storyboard Mode) */}
                                         {selectedImages.length > 0 && (
                                             <div className="pt-4 border-t border-white/10">
-                                                <p className="text-xs text-gray-500 mb-2">Selected for Generation:</p>
+                                                <p className="text-xs text-gray-500 mb-2">{copy.selectedForGeneration}</p>
                                                 <div className="flex gap-2 flex-wrap">
                                                     {selectedImages.map((img, idx) => {
                                                         // Find frame to get updated_at for cache busting
@@ -700,7 +957,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                             <div key={idx} className="relative w-24 aspect-video rounded-lg overflow-hidden border border-white/20">
                                                                 <img
                                                                     src={timestamp ? getAssetUrlWithTimestamp(img, timestamp) : getAssetUrl(img)}
-                                                                    alt="Selected"
+                                                                    alt={copy.selectedImageAlt}
                                                                     className="w-full h-full object-cover"
                                                                 />
                                                                 <button
@@ -724,7 +981,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                 <div key={idx} className="relative aspect-video bg-black/40 rounded-xl overflow-hidden border border-white/10 group">
                                                     <img
                                                         src={getAssetUrl(img)}
-                                                        alt={`Input ${idx}`}
+                                                        alt={copy.inputImageAlt(idx)}
                                                         className="w-full h-full object-contain"
                                                     />
                                                     <button
@@ -755,14 +1012,14 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                     onChange={(e) => handleImageSelect(e.target.files)}
                                                 />
                                                 <Plus className="text-gray-400 mb-2" size={24} />
-                                                <p className="text-gray-400 text-xs font-medium">Add Image</p>
+                                                <p className="text-gray-400 text-xs font-medium">{copy.addImage}</p>
                                             </div>
                                         </div>
 
                                         {/* Quick Select from Assets (Only in Upload Mode) */}
                                         {availableAssets.length > 0 && (
                                             <div className="mt-4 pt-4 border-t border-white/10">
-                                                <p className="text-xs text-gray-500 mb-2">Quick Select from Assets:</p>
+                                                <p className="text-xs text-gray-500 mb-2">{copy.quickSelectFromAssets}</p>
                                                 <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                                                     {availableAssets.slice(0, 10).map((asset, i) => (
                                                         <div
@@ -770,7 +1027,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                             onClick={() => handleAssetSelect(asset.url)}
                                                             className="w-16 h-16 relative rounded-lg overflow-hidden flex-shrink-0 border border-white/10 hover:border-primary cursor-pointer"
                                                         >
-                                                            <img src={asset.url} alt={asset.title} className="w-full h-full object-cover" />
+                                                            <img src={getAssetUrl(asset.url)} alt={asset.title} className="w-full h-full object-cover" />
                                                         </div>
                                                     ))}
                                                 </div>
@@ -787,7 +1044,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                         <div className="space-y-6">
                             {/* Frame Description Cards */}
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-gray-300">选择分镜 (Select Frame)</label>
+                                <label className="text-sm font-medium text-gray-300">{copy.selectFrame}</label>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
                                     {currentProject?.frames && currentProject.frames.length > 0 ? (
                                         currentProject.frames.map((frame: any) => (
@@ -818,7 +1075,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-xs text-gray-400 mb-1">#{frame.id.slice(0, 6)}</p>
                                                         <p className="text-xs text-gray-300 line-clamp-2">
-                                                            {frame.action_description || frame.image_prompt || '暂无描述'}
+                                                            {frame.action_description || frame.image_prompt || commonMessages.noDescription}
                                                         </p>
                                                         {frame.dialogue && (
                                                             <p className="text-[10px] text-purple-400 mt-1 italic line-clamp-1">
@@ -838,7 +1095,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     ) : (
                                         <div className="col-span-2 flex flex-col items-center justify-center h-[100px] text-gray-500 gap-2">
                                             <Layout size={24} className="opacity-20" />
-                                            <p className="text-xs">无分镜数据，请先在 Storyboard 阶段生成分镜</p>
+                                            <p className="text-xs">{copy.noStoryboardData}</p>
                                         </div>
                                     )}
                                 </div>
@@ -846,12 +1103,12 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
 
                             {/* Cast Slots (卡司槽位) */}
                             <div className="space-y-3">
-                                <label className="text-sm font-medium text-gray-300">卡司槽位 (Cast Slots)</label>
+                                <label className="text-sm font-medium text-gray-300">{copy.castSlots}</label>
                                 <div className="grid grid-cols-3 gap-4">
                                     {[0, 1, 2].map((slotIndex) => {
                                         const slot = castSlots[slotIndex];
                                         const slotLabel = `@Ref_${String.fromCharCode(65 + slotIndex)}`; // @Ref_A, @Ref_B, @Ref_C
-                                        const slotTitle = slotIndex === 0 ? '主角' : '配角';
+                                        const slotTitle = slotIndex === 0 ? copy.leadRole : copy.supportingRole;
                                         const video = slot?.url ? availableReferenceVideos.find(v => v.url === slot.url) : null;
 
                                         return (
@@ -865,7 +1122,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                 {/* Slot Header */}
                                                 <div className="absolute top-2 left-2 z-10">
                                                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-600 text-white font-bold">
-                                                        角色{slotIndex + 1}
+                                                        {copy.castSlotLabel(slotIndex)}
                                                     </span>
                                                 </div>
 
@@ -901,13 +1158,13 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                                 }
                                                             }}
                                                         >
-                                                            <option value="">选择参考视频...</option>
+                                                            <option value="">{copy.selectReferenceVideo}</option>
                                                             {availableReferenceVideos.map((v, i) => (
-                                                                <option key={i} value={v.url}>{v.assetName} - {v.type}</option>
+                                                                <option key={i} value={v.url}>{v.assetName} - {getReferenceVideoTypeLabel(v.type)}</option>
                                                             ))}
                                                         </select>
                                                         {slotIndex === 0 && (
-                                                            <p className="text-[10px] text-amber-400 mt-2">必填</p>
+                                                            <p className="text-[10px] text-amber-400 mt-2">{copy.required}</p>
                                                         )}
                                                     </div>
                                                 )}
@@ -917,7 +1174,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 </div>
                                 {availableReferenceVideos.length === 0 && (
                                     <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-                                        ⚠️ 无可用的参考视频。请先在 Assets 阶段为角色/场景生成 Motion Reference 视频。
+                                        {copy.noReferenceVideos}
                                     </p>
                                 )}
                             </div>
@@ -925,10 +1182,262 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     )}
 
 
+                    {generationMode === "i2v" && isSeedanceModel && (
+                        <div className="space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
+                            <div className="space-y-1">
+                                <h3 className="text-sm font-semibold text-white">{copy.seedanceReferencePanel}</h3>
+                                <p className="text-xs text-gray-400 leading-relaxed">{copy.seedanceReferenceHint}</p>
+                            </div>
+
+                            {isSeedancePreviewSubmit && (
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    {seedanceSubmissionState.reason === "manual_preview" && (
+                                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                            {copy.payloadWillNotSubmit}
+                                        </div>
+                                    )}
+                                    {seedanceSubmissionState.reason === "workflow_missing_video" && (
+                                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                                            {copy.workflowNeedsReferenceVideo}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {seedanceSubmissionState.reason === "ready" && params.seedanceWorkflow !== "standard" && (
+                                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                                    {copy.workflowReadyToSubmit}
+                                </div>
+                            )}
+
+                            {seedancePreviewPayloads.length > 1 && (
+                                <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+                                    {copy.payloadPreviewExpanded(seedancePreviewPayloads.length)}
+                                </div>
+                            )}
+
+                            <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(260px,1fr)]">
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <label className="text-xs font-medium uppercase tracking-[0.18em] text-gray-400">
+                                            {copy.seedanceReferenceVideos}
+                                        </label>
+                                        <span className="text-[11px] text-gray-500">
+                                            {copy.seedanceReferenceVideosHint}
+                                        </span>
+                                    </div>
+
+                                    {availableReferenceVideos.length > 0 ? (
+                                        <div className="grid gap-3 sm:grid-cols-2 max-h-[320px] overflow-y-auto custom-scrollbar pr-1">
+                                            {availableReferenceVideos.map((video, index) => {
+                                                const isSelected = selectedReferenceVideos.includes(video.url);
+                                                return (
+                                                    <button
+                                                        key={`${video.url}-${index}`}
+                                                        type="button"
+                                                        onClick={() => handleReferenceVideoSelect(video.url)}
+                                                        className={`overflow-hidden rounded-xl border text-left transition-all ${isSelected
+                                                            ? "border-emerald-400/60 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(16,185,129,0.18)]"
+                                                            : "border-white/10 bg-black/20 hover:border-white/25 hover:bg-white/[0.04]"
+                                                            }`}
+                                                    >
+                                                        <div className="relative aspect-video overflow-hidden bg-black/40">
+                                                            {video.thumbnail ? (
+                                                                <img
+                                                                    src={getAssetUrl(video.thumbnail)}
+                                                                    alt={video.assetName}
+                                                                    className="w-full h-full object-cover"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">
+                                                                    {copy.seedanceReferenceVideos}
+                                                                </div>
+                                                            )}
+                                                            <div className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-0.5 text-[10px] text-gray-200">
+                                                                {getReferenceVideoTypeLabel(video.type)}
+                                                            </div>
+                                                            {isSelected && (
+                                                                <div className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-400 text-black">
+                                                                    <Check size={14} />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="space-y-1 p-3">
+                                                            <p className="truncate text-sm font-medium text-white">{video.assetName}</p>
+                                                            <p className="truncate text-[11px] text-gray-500">{video.title}</p>
+                                                        </div>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+                                            {copy.noSeedanceReferenceVideos}
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div className="rounded-xl border border-white/10 bg-black/25 p-4 space-y-3">
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-medium uppercase tracking-[0.18em] text-gray-400">
+                                                {copy.seedanceReferenceAudio}
+                                            </label>
+                                            <p className="text-[11px] text-gray-500 leading-relaxed">
+                                                {copy.seedanceReferenceAudioHint}
+                                            </p>
+                                        </div>
+
+                                        <input
+                                            ref={referenceAudioInputRef}
+                                            type="file"
+                                            accept="audio/*"
+                                            className="hidden"
+                                            onChange={handleSeedanceReferenceAudioUpload}
+                                        />
+
+                                        {params.referenceAudioUrl ? (
+                                            <div className="space-y-3">
+                                                <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-3">
+                                                    <p className="text-xs font-medium text-emerald-200">{copy.referenceAudioReady}</p>
+                                                    <p className="mt-1 break-all text-[11px] text-gray-400">
+                                                        {allResolvedReferenceAudioUrl}
+                                                    </p>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => referenceAudioInputRef.current?.click()}
+                                                        disabled={isUploadingReferenceAudio}
+                                                        className="flex-1 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-gray-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                                    >
+                                                        {isUploadingReferenceAudio ? copy.uploadReferenceAudio : copy.uploadReferenceAudio}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onParamsChange({ referenceAudioUrl: "" })}
+                                                        className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200 transition-colors hover:bg-red-500/20"
+                                                    >
+                                                        {copy.removeReferenceAudio}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => referenceAudioInputRef.current?.click()}
+                                                disabled={isUploadingReferenceAudio}
+                                                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-white/15 bg-white/5 px-3 py-3 text-xs text-gray-200 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                                            >
+                                                {isUploadingReferenceAudio ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                                                {isUploadingReferenceAudio ? copy.uploadReferenceAudio : copy.uploadReferenceAudio}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                                        <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-400">{copy.currentCombo}</p>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-gray-300">
+                                                {seedanceSummaryCopy.image} {resolvedSeedanceImages.length}
+                                            </span>
+                                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-gray-300">
+                                                {seedanceSummaryCopy.video} {resolvedReferenceVideoUrls.length}
+                                            </span>
+                                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-gray-300">
+                                                {seedanceSummaryCopy.audio} {resolvedReferenceAudioUrl ? 1 : 0}
+                                            </span>
+                                            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-gray-300">
+                                                {seedanceSummaryCopy.payload} {seedancePreviewPayloads.length}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <AnimatePresence>
+                                {showSeedancePayloadPreview && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        exit={{ opacity: 0, y: -8 }}
+                                        className="space-y-4 rounded-2xl border border-white/10 bg-black/35 p-4"
+                                    >
+                                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                            <div className="space-y-1">
+                                                <h4 className="text-sm font-semibold text-white">{copy.payloadPreviewTitle}</h4>
+                                                <p className="text-xs text-gray-400">{copy.payloadPreviewHint}</p>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCopySeedancePayloads}
+                                                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-gray-200 transition-colors hover:bg-white/10"
+                                                >
+                                                    {seedancePreviewPayloads.length > 1 ? copy.copyAllPayloads : commonActions.copy}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowSeedancePayloadPreview(false)}
+                                                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-gray-200 transition-colors hover:bg-white/10"
+                                                >
+                                                    {commonActions.close}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {seedancePayloadWarnings.length > 0 && (
+                                            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                                                <p className="mb-2 text-xs font-medium text-amber-200">{copy.payloadWarnings}</p>
+                                                <ul className="space-y-1 pl-4 text-xs text-amber-100/90 list-disc">
+                                                    {seedancePayloadWarnings.map((warning) => (
+                                                        <li key={warning}>{warning}</li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-4">
+                                            {seedancePreviewPayloads.map((preview) => (
+                                                <div
+                                                    key={preview.key}
+                                                    className="overflow-hidden rounded-xl border border-white/10 bg-black/30"
+                                                >
+                                                    <div className="flex flex-col gap-2 border-b border-white/10 px-4 py-3 md:flex-row md:items-center md:justify-between">
+                                                        <div className="space-y-1">
+                                                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-300">
+                                                                {preview.label}
+                                                            </p>
+                                                            {preview.imageUrl && (
+                                                                <p className="text-[11px] text-gray-500">
+                                                                    {copy.payloadPreviewImage(preview.imageUrl)}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCopySingleSeedancePayload(preview.payload)}
+                                                            className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-gray-200 transition-colors hover:bg-white/10"
+                                                        >
+                                                            {commonActions.copy}
+                                                        </button>
+                                                    </div>
+                                                    <pre className="max-h-[320px] overflow-auto p-4 text-xs leading-6 text-emerald-100 custom-scrollbar">
+                                                        {JSON.stringify(preview.payload, null, 2)}
+                                                    </pre>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+                    )}
+
                     {/* 2. Prompt Input */}
                     <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                            <label className="text-sm font-medium text-gray-300">提示词 (Prompt)</label>
+                            <label className="text-sm font-medium text-gray-300">{copy.prompt}</label>
                             <div className="flex items-center gap-2">
                                 {generationMode === 'i2v' && (
                                     <div className="relative">
@@ -936,7 +1445,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                             onClick={() => promptBuilderRef.current?.insertCamera()}
                                             className="text-xs flex items-center gap-1 px-2 py-1 rounded transition-colors text-gray-400 hover:text-white hover:bg-white/5"
                                         >
-                                            <Video size={12} /> 运镜
+                                            <Video size={12} /> {copy.camera}
                                         </button>
                                     </div>
                                 )}
@@ -946,14 +1455,14 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 disabled:opacity-50"
                                 >
                                     {isPolishing ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
-                                    AI 润色
+                                    {copy.aiPolish}
                                 </button>
                                 <button
                                     onClick={() => setSegments([{ type: "text", value: "", id: "init" }])}
                                     className="text-xs text-gray-400 hover:text-white flex items-center gap-1 px-2 py-1 rounded hover:bg-white/5 transition-colors"
-                                    title="Clear Prompt"
+                                    title={copy.clearPrompt}
                                 >
-                                    <Eraser size={12} /> 清空
+                                    <Eraser size={12} /> {commonActions.clear}
                                 </button>
                             </div>
                         </div>
@@ -980,10 +1489,160 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                             ) : (
                                                 <span className="w-4 h-4 rounded-full bg-purple-500/30 flex items-center justify-center text-[10px]">+</span>
                                             )}
-                                            <span>插入 {slot?.name || `角色${idx + 1}`}</span>
+                                            <span>{copy.insertCharacter(slot?.name || copy.castSlotLabel(idx))}</span>
                                         </button>
                                     );
                                 })}
+                            </div>
+                        )}
+
+                        {shouldShowPromptLibrary && (
+                            <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4 space-y-4">
+                                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                    <div>
+                                        <p className="text-sm font-semibold text-white">{copy.promptLibraryTitle}</p>
+                                        <p className="mt-1 text-xs leading-relaxed text-cyan-100/80">
+                                            {copy.promptLibraryHint}
+                                        </p>
+                                    </div>
+                                    <span className="rounded-full border border-cyan-400/20 bg-black/20 px-3 py-1 text-[10px] text-cyan-100">
+                                        {promptLibraryContextLabel}
+                                    </span>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/80">
+                                            {copy.promptScaffolds}
+                                        </p>
+                                    </div>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        {availablePromptScaffolds.map((item) => (
+                                            <div
+                                                key={item.id}
+                                                className="rounded-xl border border-white/10 bg-black/20 p-3"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <p className="text-sm font-medium text-white">{item.title}</p>
+                                                        <p className="mt-1 text-xs leading-relaxed text-gray-300">
+                                                            {item.summary}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                    {item.tags.map((tag) => (
+                                                        <span
+                                                            key={`${item.id}-${tag}`}
+                                                            className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-gray-300"
+                                                        >
+                                                            {tag}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                <pre className="mt-3 max-h-28 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-[11px] leading-5 text-cyan-50/90 custom-scrollbar">
+                                                    {item.prompt}
+                                                </pre>
+                                                <div className="mt-3 flex gap-2">
+                                                    <button
+                                                        type="button"
+                                                        data-testid={`prompt-block-replace-${item.id}`}
+                                                        onClick={() => handleApplyPromptBlock(item.prompt, "replace")}
+                                                        className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-medium text-black transition hover:bg-cyan-400"
+                                                    >
+                                                        {copy.replaceTemplate}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        data-testid={`prompt-block-append-${item.id}`}
+                                                        onClick={() => handleApplyPromptBlock(item.prompt, "append")}
+                                                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
+                                                    >
+                                                        {copy.appendTemplate}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-cyan-200/80">
+                                            {copy.promptTemplates}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {SEEDANCE_PROMPT_TEMPLATE_CATEGORIES.map((item) => (
+                                                <button
+                                                    key={item.value}
+                                                    type="button"
+                                                    onClick={() => setActivePromptTemplateCategory(item.value)}
+                                                    className={`rounded-full border px-3 py-1 text-[11px] transition ${activePromptTemplateCategory === item.value
+                                                        ? "border-cyan-400/60 bg-cyan-400/15 text-cyan-50"
+                                                        : "border-white/10 bg-white/5 text-gray-300 hover:bg-white/10"
+                                                        }`}
+                                                >
+                                                    {item.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {availablePromptTemplates.length > 0 ? (
+                                        <div className="grid gap-3 md:grid-cols-2">
+                                            {availablePromptTemplates.map((item) => (
+                                                <div
+                                                    key={item.id}
+                                                    className="rounded-xl border border-white/10 bg-black/20 p-3"
+                                                >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <p className="text-sm font-medium text-white">{item.title}</p>
+                                                            <p className="mt-1 text-xs leading-relaxed text-gray-300">
+                                                                {item.summary}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-2 flex flex-wrap gap-2">
+                                                        {item.tags.map((tag) => (
+                                                            <span
+                                                                key={`${item.id}-${tag}`}
+                                                                className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-gray-300"
+                                                            >
+                                                                {tag}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                    <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-[11px] leading-5 text-gray-100 custom-scrollbar">
+                                                        {item.prompt}
+                                                    </pre>
+                                                    <div className="mt-3 flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            data-testid={`prompt-template-replace-${item.id}`}
+                                                            onClick={() => handleApplyPromptBlock(item.prompt, "replace")}
+                                                            className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-medium text-black transition hover:bg-cyan-400"
+                                                        >
+                                                            {copy.replaceTemplate}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            data-testid={`prompt-template-append-${item.id}`}
+                                                            onClick={() => handleApplyPromptBlock(item.prompt, "append")}
+                                                            className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white transition hover:bg-white/10"
+                                                        >
+                                                            {copy.appendTemplate}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-4 py-5 text-sm text-gray-400">
+                                            {copy.noPromptTemplates}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
 
@@ -992,12 +1651,17 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 ref={promptBuilderRef}
                                 segments={segments}
                                 onChange={setSegments}
-                                placeholder={generationMode === 'r2v'
-                                    ? "输入提示词... \n插入角色格式: [character1:名称]\n插入运镜格式: (camera: 运镜指令)"
-                                    : "输入提示词，描述画面内容...\n插入运镜格式: (camera: 运镜指令)"
+                                placeholder={isR2VMode
+                                    ? copy.r2vPromptPlaceholder
+                                    : copy.i2vPromptPlaceholder
                                 }
                             />
                         </div>
+
+                        <PromptQualityPanel
+                            issues={promptQualityIssues}
+                            title={copy.promptQualityTitle}
+                        />
 
                         {/* Polished Result Display - Bilingual */}
                         <AnimatePresence>
@@ -1010,7 +1674,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 >
                                     <div className="flex justify-between items-start">
                                         <span className="text-xs font-bold text-purple-400 flex items-center gap-1">
-                                            <Wand2 size={12} /> AI 双语润色
+                                            <Wand2 size={12} /> {copy.bilingualPolish}
                                         </span>
                                         <button
                                             onClick={() => { setPolishedPrompt(null); setFeedbackText(""); }}
@@ -1023,15 +1687,15 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     {/* Chinese Prompt */}
                                     <div className="space-y-1">
                                         <div className="flex justify-between items-center">
-                                            <span className="text-[10px] font-bold text-gray-500 uppercase">中文 (预览)</span>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase">{copy.chinesePreview}</span>
                                             <button
                                                 onClick={() => {
                                                     navigator.clipboard.writeText(polishedPrompt.cn);
-                                                    alert("中文提示词已复制");
+                                                    alert(copy.copyChineseSuccess);
                                                 }}
                                                 className="text-[10px] text-gray-400 hover:text-white bg-black/20 px-2 py-0.5 rounded"
                                             >
-                                                复制
+                                                {commonActions.copy}
                                             </button>
                                         </div>
                                         <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap bg-black/20 p-2 rounded">
@@ -1042,16 +1706,16 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                     {/* English Prompt */}
                                     <div className="space-y-1">
                                         <div className="flex justify-between items-center">
-                                            <span className="text-[10px] font-bold text-gray-500 uppercase">English (生成用)</span>
+                                            <span className="text-[10px] font-bold text-gray-500 uppercase">{copy.englishForGeneration}</span>
                                             <div className="flex gap-1">
                                                 <button
                                                     onClick={() => {
                                                         navigator.clipboard.writeText(polishedPrompt.en);
-                                                        alert("English prompt copied");
+                                                        alert(copy.copyEnglishSuccess);
                                                     }}
                                                     className="text-[10px] text-gray-400 hover:text-white bg-black/20 px-2 py-0.5 rounded"
                                                 >
-                                                    Copy
+                                                    {commonActions.copy}
                                                 </button>
                                                 <button
                                                     onClick={() => {
@@ -1060,7 +1724,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                     }}
                                                     className="text-[10px] text-white bg-purple-600 hover:bg-purple-500 px-2 py-0.5 rounded font-bold"
                                                 >
-                                                    应用
+                                                    {commonActions.apply}
                                                 </button>
                                             </div>
                                         </div>
@@ -1081,7 +1745,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                         handlePolish(feedbackText.trim());
                                                     }
                                                 }}
-                                                placeholder="哪里不满意？描述你的修改意见..."
+                                                placeholder={copy.feedbackPlaceholder}
                                                 className="flex-1 text-xs bg-black/30 border border-purple-500/20 rounded px-2 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
                                             />
                                             <button
@@ -1090,7 +1754,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                 className="text-xs text-white bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded font-medium flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                                             >
                                                 {isPolishing ? <Loader2 size={10} className="animate-spin" /> : <Wand2 size={10} />}
-                                                再润色
+                                                {copy.repolish}
                                             </button>
                                         </div>
                                     </div>
@@ -1099,41 +1763,61 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                         </AnimatePresence>
                     </div>
                 </div>
-            </div >
+            </div>
 
             {/* 4. Fixed Action Bar */}
-            < div className="p-6 border-t border-white/10 bg-black/40 backdrop-blur-md z-10" >
+            <div className="p-6 border-t border-white/10 bg-black/40 backdrop-blur-md z-10">
                 <div className="max-w-4xl mx-auto w-full">
-                    <button
-                        onClick={handleSubmit}
-                        disabled={(!prompt || isSubmitting) || (generationMode === 'i2v' && selectedImages.length === 0)}
-                        className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all transform active:scale-[0.99] ${submitSuccess
-                            ? "bg-green-500 text-white"
-                            : "bg-primary hover:bg-primary/90 text-white"
-                            } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                        {isSubmitting ? (
-                            <>
-                                <Loader2 className="animate-spin" /> 提交中...
-                            </>
-                        ) : submitSuccess ? (
-                            <>
-                                <Plus /> 已加入队列
-                            </>
-                        ) : (
-                            <>
-                                <Plus /> 加入生成队列 (Ctrl+Enter)
-                            </>
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                        {generationMode === "i2v" && isSeedanceModel && (
+                            <button
+                                type="button"
+                                onClick={handleOpenSeedancePreview}
+                                disabled={!canOpenSeedancePreview}
+                                className="sm:w-auto rounded-xl border border-white/15 bg-white/5 px-4 py-4 text-sm font-medium text-gray-200 transition-all hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {copy.previewPayload}
+                            </button>
                         )}
-                    </button>
+
+                        <button
+                            onClick={handleSubmit}
+                            disabled={!canRunPrimaryAction}
+                            className={`flex-1 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all transform active:scale-[0.99] ${submitSuccess
+                                ? "bg-green-500 text-white"
+                                : isSeedancePreviewSubmit
+                                    ? "bg-amber-400 hover:bg-amber-300 text-black"
+                                    : "bg-primary hover:bg-primary/90 text-white"
+                                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <Loader2 className="animate-spin" /> {copy.submitting}
+                                </>
+                            ) : submitSuccess ? (
+                                <>
+                                    <Plus /> {copy.queued}
+                                </>
+                            ) : isSeedancePreviewSubmit ? (
+                                <>
+                                    <Wand2 /> {copy.previewPayload}
+                                </>
+                            ) : (
+                                <>
+                                    <Plus /> {copy.submit}
+                                </>
+                            )}
+                        </button>
+                    </div>
+
                     <div className="flex justify-center mt-3">
                         <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer hover:text-gray-400">
                             <input type="checkbox" className="rounded bg-white/10 border-white/20" />
-                            提交后清空内容
+                            {copy.clearAfterSubmit}
                         </label>
                     </div>
                 </div>
-            </div >
-        </div >
+            </div>
+        </div>
     );
 }

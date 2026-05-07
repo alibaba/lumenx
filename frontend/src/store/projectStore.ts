@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '@/lib/api';
+import { zhCN } from '@/lib/i18n';
 
 export interface ImageVariant {
     id: string;
@@ -26,6 +27,14 @@ export interface VideoTask {
     duration?: number;
     created_at: number;
     model?: string;
+    aspect_ratio?: string;
+    watermark?: boolean;
+    camera_fixed?: boolean;
+    reference_audio_url?: string;
+    seedance_reference_mode?: string;
+    seedance_workflow?: string;
+    seedance_extend_mode?: string;
+    seedance_edit_mode?: string;
     generation_mode?: string;  // 'i2v' or 'r2v'
     reference_video_urls?: string[];  // Reference videos for R2V
 }
@@ -33,6 +42,7 @@ export interface VideoTask {
 export interface Character {
     id: string;
     name: string;
+    aliases?: string[];
     description?: string;
     age?: string;
     gender?: string;
@@ -69,6 +79,7 @@ export interface Scene {
     id: string;
     name: string;
     description: string;
+    visual_weight?: number;
     image_url?: string;
     image_asset?: ImageAsset;
     video_assets?: VideoTask[];
@@ -91,9 +102,66 @@ export interface Prop {
     locked?: boolean;
 }
 
+export interface StoryBeat {
+    id: string;
+    order: number;
+    title: string;
+    chapter_order?: number;
+    chapter_title?: string;
+    summary: string;
+    action_summary?: string;
+    dialogue_excerpt?: string;
+    storyboard_goal?: string;
+    scene_id?: string;
+    scene_name?: string;
+    location_hint?: string;
+    time_hint?: string;
+    character_ids: string[];
+    character_names: string[];
+    prop_ids: string[];
+    prop_names: string[];
+    source_excerpt?: string;
+    storyboard_focus?: string;
+    quality_flags?: string[];
+}
+
+export interface CharacterPresenceEntry {
+    character_id: string;
+    character_name: string;
+    scene_beat_ids: string[];
+    scene_titles: string[];
+    mention_count: number;
+    highlights: string[];
+}
+
+export interface CharacterRelationshipEdge {
+    pair_id: string;
+    source_character_id: string;
+    source_character_name: string;
+    target_character_id: string;
+    target_character_name: string;
+    co_scene_count: number;
+    shared_scene_beat_ids: string[];
+    shared_scene_titles: string[];
+    relationship_hint: string;
+}
+
+export interface StoryAnalysis {
+    summary: string;
+    plot_points: string[];
+    scene_beats: StoryBeat[];
+    character_presence: CharacterPresenceEntry[];
+    character_relationships: CharacterRelationshipEdge[];
+}
+
 export interface StoryboardFrame {
     id: string;
     scene_id: string;
+    story_beat_id?: string;
+    story_beat_title?: string;
+    story_beat_order?: number;
+    chapter_order?: number;
+    chapter_title?: string;
     image_url?: string;
     image_asset?: ImageAsset;
     rendered_image_url?: string;
@@ -118,6 +186,8 @@ export interface StyleConfig {
     positive_prompt: string;
     negative_prompt: string;
     thumbnail_url?: string;
+    reference_images?: string[];
+    moodboard_notes?: string;
     is_custom: boolean;
     reason?: string; // For AI recommendations
 }
@@ -140,17 +210,28 @@ export interface ModelSettings {
 }
 
 // Model options for dropdowns
+const modelCopy = zhCN.modelCopy;
+const storeCopy = zhCN.projectStore;
+
+export const DEFAULT_T2I_MODEL = "openai-image";
+export const DEFAULT_I2I_MODEL = "openai-image-edit";
+
 export const T2I_MODELS = [
-    { id: 'wan2.6-t2i', name: 'Wan 2.6 T2I', description: 'Latest T2I model' },
-    { id: 'wan2.5-t2i-preview', name: 'Wan 2.5 T2I Preview', description: 'Default T2I' },
-    { id: 'wan2.2-t2i-plus', name: 'Wan 2.2 T2I Plus', description: 'Higher quality' },
-    { id: 'wan2.2-t2i-flash', name: 'Wan 2.2 T2I Flash', description: 'Faster generation' },
+    { id: DEFAULT_T2I_MODEL, name: 'OpenAI-Compatible T2I', description: '使用中转 / OpenAI-compatible 图像接口，实际模型在设置页中配置' },
+    { id: 'wan2.6-t2i', name: 'Wan 2.6 T2I', description: modelCopy.latestT2i },
+    { id: 'wan2.5-t2i-preview', name: 'Wan 2.5 T2I Preview', description: modelCopy.defaultT2i },
+    { id: 'wan2.2-t2i-plus', name: 'Wan 2.2 T2I Plus', description: modelCopy.higherQuality },
+    { id: 'wan2.2-t2i-flash', name: 'Wan 2.2 T2I Flash', description: modelCopy.fasterGeneration },
 ];
 
 export const I2I_MODELS = [
-    { id: 'wan2.6-image', name: 'Wan 2.6 Image', description: 'Latest I2I model (HTTP)' },
-    { id: 'wan2.5-i2i-preview', name: 'Wan 2.5 I2I Preview', description: 'Default I2I' },
+    { id: DEFAULT_I2I_MODEL, name: 'OpenAI-Compatible I2I', description: '使用中转 / OpenAI-compatible 图像编辑接口，默认沿用图像主模型' },
+    { id: 'wan2.6-image', name: 'Wan 2.6 Image', description: modelCopy.latestI2i },
+    { id: 'wan2.5-i2i-preview', name: 'Wan 2.5 I2I Preview', description: modelCopy.defaultI2i },
 ];
+
+export const DEFAULT_I2V_MODEL = 'doubao-seedance-2-0-260128';
+export const isSeedanceI2VModel = (modelId?: string) => (modelId || '').startsWith('doubao-seedance-');
 
 export type DurationConfig =
     | { type: 'slider'; min: number; max: number; step: number; default: number }
@@ -164,6 +245,12 @@ export interface ModelParamSupport {
     promptExtend?: boolean;
     shotType?: boolean;
     audio?: boolean;
+    aspectRatio?: { options: string[]; default: string };
+    watermark?: boolean;
+    cameraFixed?: boolean;
+    referenceAudio?: boolean;
+    seedanceReferenceMode?: { options: string[]; default: string };
+    seedanceWorkflow?: { options: string[]; default: string };
     // Kling
     mode?: { options: string[]; default: string };
     sound?: boolean;
@@ -184,6 +271,18 @@ export interface I2VModelConfig {
 const WAN26_PARAMS: ModelParamSupport = {
     resolution: { options: ['480p', '720p', '1080p'], default: '720p' },
     seed: true, negativePrompt: true, promptExtend: true, shotType: true, audio: true,
+};
+
+const SEEDANCE_PARAMS: ModelParamSupport = {
+    resolution: { options: ['480p', '720p'], default: '720p' },
+    seed: true,
+    audio: true,
+    aspectRatio: { options: ['adaptive', '16:9', '9:16', '1:1'], default: 'adaptive' },
+    watermark: true,
+    cameraFixed: true,
+    referenceAudio: true,
+    seedanceReferenceMode: { options: ['image', 'video', 'combo'], default: 'image' },
+    seedanceWorkflow: { options: ['standard', 'extend', 'edit'], default: 'standard' },
 };
 
 const WAN25_PARAMS: ModelParamSupport = {
@@ -210,28 +309,30 @@ const VIDU_PARAMS: ModelParamSupport = {
 };
 
 export const I2V_MODELS: I2VModelConfig[] = [
-    { id: 'wan2.6-i2v', name: 'Wan 2.6 I2V / R2V', description: 'Latest model, supports R2V',
+    { id: DEFAULT_I2V_MODEL, name: 'Seedance 2.0', description: modelCopy.preferredAudioModel,
+      duration: { type: 'buttons', options: [5, 10], default: 5 }, params: SEEDANCE_PARAMS },
+    { id: 'wan2.6-i2v', name: 'Wan 2.6 I2V / R2V', description: modelCopy.latestR2v,
       duration: { type: 'slider', min: 2, max: 15, step: 1, default: 5 }, params: WAN26_PARAMS },
-    { id: 'wan2.6-i2v-flash', name: 'Wan 2.6 I2V Flash', description: 'Fast generation',
+    { id: 'wan2.6-i2v-flash', name: 'Wan 2.6 I2V Flash', description: modelCopy.fasterGeneration,
       duration: { type: 'slider', min: 2, max: 15, step: 1, default: 5 }, params: WAN26_PARAMS },
-    { id: 'wan2.5-i2v-preview', name: 'Wan 2.5 I2V Preview', description: 'Default I2V',
+    { id: 'wan2.5-i2v-preview', name: 'Wan 2.5 I2V Preview', description: modelCopy.defaultI2v,
       duration: { type: 'buttons', options: [5, 10], default: 5 }, params: WAN25_PARAMS },
-    { id: 'wan2.2-i2v-plus', name: 'Wan 2.2 I2V Plus', description: 'Higher quality',
+    { id: 'wan2.2-i2v-plus', name: 'Wan 2.2 I2V Plus', description: modelCopy.higherQuality,
       duration: { type: 'fixed', value: 5 }, params: WAN22_PARAMS },
-    { id: 'wan2.2-i2v-flash', name: 'Wan 2.2 I2V Flash', description: 'Faster generation',
+    { id: 'wan2.2-i2v-flash', name: 'Wan 2.2 I2V Flash', description: modelCopy.fasterGeneration,
       duration: { type: 'fixed', value: 5 }, params: WAN22_PARAMS },
-    { id: 'kling-v3', name: 'Kling v3', description: 'Kling AI latest model',
+    { id: 'kling-v3', name: 'Kling v3', description: modelCopy.klingLatest,
       duration: { type: 'slider', min: 3, max: 15, step: 1, default: 5 }, params: KLING_PARAMS },
-    { id: 'viduq3-pro', name: 'Vidu Q3 Pro', description: 'Vidu latest model',
+    { id: 'viduq3-pro', name: 'Vidu Q3 Pro', description: modelCopy.viduLatest,
       duration: { type: 'slider', min: 1, max: 16, step: 1, default: 5 }, params: VIDU_PARAMS },
-    { id: 'viduq3-turbo', name: 'Vidu Q3 Turbo', description: 'Vidu fast generation',
+    { id: 'viduq3-turbo', name: 'Vidu Q3 Turbo', description: modelCopy.viduFast,
       duration: { type: 'slider', min: 1, max: 16, step: 1, default: 5 }, params: VIDU_PARAMS },
 ];
 
 export const ASPECT_RATIOS = [
-    { id: '9:16', name: '9:16', description: 'Portrait (576*1024)' },
-    { id: '16:9', name: '16:9', description: 'Landscape (1024*576)' },
-    { id: '1:1', name: '1:1', description: 'Square (1024*1024)' },
+    { id: '9:16', name: '9:16', description: modelCopy.portrait },
+    { id: '16:9', name: '16:9', description: modelCopy.landscape },
+    { id: '1:1', name: '1:1', description: modelCopy.square },
 ];
 
 export interface VideoParams {
@@ -249,6 +350,15 @@ export interface VideoParams {
     shotType: string;
     generationMode: string;
     referenceVideoUrls: string[];
+    aspectRatio: string;
+    watermark: boolean;
+    cameraFixed: boolean;
+    referenceAudioUrl: string;
+    seedanceReferenceMode: string;
+    seedanceWorkflow: string;
+    seedanceExtendMode: string;
+    seedanceEditMode: string;
+    seedancePreviewOnly: boolean;
     // Kling
     mode: string;
     sound: boolean;
@@ -307,6 +417,7 @@ export interface Project {
     merged_video_url?: string;
     series_id?: string;
     episode_number?: number;
+    story_analysis?: StoryAnalysis;
 }
 
 interface ProjectStore {
@@ -384,7 +495,7 @@ export const useProjectStore = create<ProjectStore>()(
                         isLoading: false,
                     }));
                 } catch (error) {
-                    console.error('Failed to create project:', error);
+                    console.error(storeCopy.console.failedToCreateProject, error);
                     set({ isLoading: false });
                     throw error;
                 }
@@ -408,10 +519,10 @@ export const useProjectStore = create<ProjectStore>()(
                     } else {
                         // If no current project, create one (assuming title is available or default)
                         // This case might be rare if we always create project first, but handling it just in case
-                        await createProject(currentProject?.title || "New Project", script);
+                        await createProject(currentProject?.title || storeCopy.newProjectTitle, script);
                     }
                 } catch (error) {
-                    console.error("Failed to analyze script:", error);
+                    console.error(storeCopy.console.failedToAnalyzeScript, error);
                     throw error;
                 } finally {
                     set({ isAnalyzing: false });
@@ -428,33 +539,29 @@ export const useProjectStore = create<ProjectStore>()(
                 const cachedProject = get().projects.find((p) => p.id === id);
                 if (cachedProject) {
                     set({ currentProject: cachedProject });
+                } else {
+                    set({ currentProject: null });
                 }
 
                 // Then fetch latest data from backend
                 try {
-                    const API_URL = typeof window !== 'undefined'
-                        ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
-                        : 'http://localhost:8000';
-                    const response = await fetch(`${API_URL}/projects/${id}`);
-                    if (response.ok) {
-                        const rawData = await response.json();
-                        // Transform data to match frontend model (snake_case -> camelCase for specific fields)
-                        const latestProject = {
-                            ...rawData,
-                            originalText: rawData.original_text
-                        };
+                    const latestProject = await api.getProject(id);
 
-                        // Update both currentProject and projects array with latest data
-                        set((state) => ({
+                    // Update both currentProject and projects array with latest data.
+                    // If this episode/project was not yet cached locally (for example created via series import),
+                    // append it so subsequent route changes can resolve immediately from store.
+                    set((state) => {
+                        const alreadyExists = state.projects.some((p) => p.id === id);
+                        return {
                             currentProject: latestProject,
-                            projects: state.projects.map((p) =>
-                                p.id === id ? latestProject : p
-                            ),
-                        }));
-                    }
+                            projects: alreadyExists
+                                ? state.projects.map((p) => (p.id === id ? latestProject : p))
+                                : [...state.projects, latestProject],
+                        };
+                    });
                 } catch (error) {
-                    console.error('Failed to fetch latest project data:', error);
-                    // Keep using cached version if fetch fails
+                    console.error(storeCopy.console.failedToFetchLatestProject, error);
+                    // Keep using cached version if fetch fails; otherwise leave currentProject null.
                 }
             },
 
@@ -480,7 +587,7 @@ export const useProjectStore = create<ProjectStore>()(
                         currentProject: state.currentProject?.id === id ? null : state.currentProject
                     }));
                 } catch (error) {
-                    console.error('Failed to delete project from backend:', error);
+                    console.error(storeCopy.console.failedToDeleteProject, error);
                     // Still remove from local state for UX, but warn user
                     set((state) => ({
                         projects: state.projects.filter((p) => p.id !== id),
@@ -528,7 +635,7 @@ export const useProjectStore = create<ProjectStore>()(
                     }
 
                 } catch (error) {
-                    console.error("Failed to analyze art style:", error);
+                    console.error(storeCopy.console.failedToAnalyzeArtStyle, error);
                     // We could add an error state here if needed
                 } finally {
                     set({ isAnalyzingArtStyle: false });
@@ -578,7 +685,7 @@ export const useProjectStore = create<ProjectStore>()(
                     const seriesList = await api.listSeries();
                     set({ seriesList });
                 } catch (error) {
-                    console.error('Failed to fetch series list:', error);
+                    console.error(storeCopy.console.failedToFetchSeriesList, error);
                 }
             },
 
@@ -587,7 +694,7 @@ export const useProjectStore = create<ProjectStore>()(
                     const series = await api.getSeries(id);
                     set({ currentSeries: series });
                 } catch (error) {
-                    console.error('Failed to fetch series:', error);
+                    console.error(storeCopy.console.failedToFetchSeries, error);
                 }
             },
 
@@ -599,7 +706,7 @@ export const useProjectStore = create<ProjectStore>()(
                     }));
                     return series;
                 } catch (error) {
-                    console.error('Failed to create series:', error);
+                    console.error(storeCopy.console.failedToCreateSeries, error);
                     throw error;
                 }
             },
@@ -612,7 +719,7 @@ export const useProjectStore = create<ProjectStore>()(
                         currentSeries: state.currentSeries?.id === id ? null : state.currentSeries,
                     }));
                 } catch (error) {
-                    console.error('Failed to delete series:', error);
+                    console.error(storeCopy.console.failedToDeleteSeries, error);
                     throw error;
                 }
             },

@@ -5,7 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Play, Check, ChevronRight, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL } from "@/lib/api";
-import { getAssetUrl, extractErrorDetail } from "@/lib/utils";
+import { getAssetFetchUrl, getAssetUrl, isDirectAssetPath, extractErrorDetail } from "@/lib/utils";
+import { messages } from "@/lib/i18n";
+
+const copy = messages.modules.videoAssembly;
 
 export default function VideoAssembly() {
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -39,6 +42,7 @@ export default function VideoAssembly() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to select video:", error);
+            alert(copy.failedToSelectVideo);
         }
     };
 
@@ -55,12 +59,12 @@ export default function VideoAssembly() {
             console.error("Failed to merge videos:", error);
 
             // Extract detailed error message from backend
-            const errorDetail = extractErrorDetail(error, "Unknown error occurred during video merge");
+            const errorDetail = extractErrorDetail(error, copy.unknownMergeError);
 
             setMergeError(errorDetail);
 
             // Also show alert for immediate feedback
-            alert(`Failed to merge videos:\n\n${errorDetail}`);
+            alert(`${copy.failedToMergeVideos}:\n\n${errorDetail}`);
         } finally {
             setIsMerging(false);
         }
@@ -71,13 +75,18 @@ export default function VideoAssembly() {
         if (!currentProject?.merged_video_url) return;
         setIsDownloading(true);
         try {
-            // Build download URL - use proxy in dev to avoid CORS, direct in production
             const rawPath = currentProject.merged_video_url;
-            const cleanPath = rawPath.startsWith("/") ? rawPath.slice(1) : rawPath;
-            const isDev = process.env.NODE_ENV === "development";
-            const url = isDev
-                ? `/api-proxy/files/${cleanPath}`
-                : getAssetUrl(rawPath);
+            const url = getAssetFetchUrl(rawPath);
+
+            if (isDirectAssetPath(rawPath)) {
+                const a = document.createElement("a");
+                a.href = url;
+                a.target = "_blank";
+                a.rel = "noopener noreferrer";
+                a.download = `${currentProject.title || "merged"}_${currentProject.id}.mp4`;
+                a.click();
+                return;
+            }
 
             const response = await fetch(url);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -90,7 +99,7 @@ export default function VideoAssembly() {
             setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
         } catch (error) {
             console.error("Failed to download video:", error);
-            alert("Failed to download video. Please try again.");
+            alert(copy.failedToDownload);
         } finally {
             setIsDownloading(false);
         }
@@ -112,11 +121,13 @@ export default function VideoAssembly() {
                     <div className="h-14 border-b border-white/10 flex items-center justify-between px-6 bg-black/20">
                         <h2 className="font-bold text-lg flex items-center gap-2">
                             <Film className="text-primary" size={20} />
-                            Assembly Timeline
+                            {copy.title}
                         </h2>
                         <div className="text-sm text-gray-400">
-                            <span className="text-white font-bold">{currentProject?.frames?.filter((f: any) => f.selected_video_id).length}</span>
-                            /{currentProject?.frames?.length} frames ready
+                            {copy.framesReady(
+                                currentProject?.frames?.filter((f: any) => f.selected_video_id).length || 0,
+                                currentProject?.frames?.length || 0
+                            )}
                         </div>
                     </div>
 
@@ -163,11 +174,11 @@ export default function VideoAssembly() {
                                                 <div className="absolute inset-0 flex items-center justify-center">
                                                     {hasVideos ? (
                                                         <div className="bg-yellow-500/20 text-yellow-500 px-2 py-1 rounded text-xs font-bold border border-yellow-500/50">
-                                                            Select Video
+                                                            {copy.selectVideo}
                                                         </div>
                                                     ) : (
                                                         <div className="bg-red-500/20 text-red-500 px-2 py-1 rounded text-xs font-bold border border-red-500/50">
-                                                            No Videos
+                                                            {copy.noVideos}
                                                         </div>
                                                     )}
                                                 </div>
@@ -184,7 +195,7 @@ export default function VideoAssembly() {
                                             <div className="flex items-start gap-2">
                                                 <FileText size={14} className="text-gray-500 mt-0.5 flex-shrink-0" />
                                                 <p className="text-sm text-gray-300 line-clamp-2 leading-relaxed">
-                                                    {frame.image_prompt || frame.action_description || "No prompt available"}
+                                                    {frame.image_prompt || frame.action_description || copy.noPrompt}
                                                 </p>
                                             </div>
                                             {frame.dialogue && (
@@ -200,13 +211,13 @@ export default function VideoAssembly() {
                                                     <Clock size={12} /> {selectedVideo ? `${selectedVideo.duration}s` : "--"}
                                                 </span>
                                                 <span className="flex items-center gap-1">
-                                                    <Film size={12} /> {videosByFrame[frame.id]?.length || 0} variants
+                                                    <Film size={12} /> {videosByFrame[frame.id]?.length || 0} {copy.variants}
                                                 </span>
                                             </div>
 
                                             {selectedVideoId && (
                                                 <div className="flex items-center gap-1 text-green-500 text-xs font-bold">
-                                                    <Check size={12} /> Ready
+                                                    <Check size={12} /> {copy.ready}
                                                 </div>
                                             )}
                                         </div>
@@ -224,7 +235,7 @@ export default function VideoAssembly() {
                             className="bg-white/5 hover:bg-white/10 border border-primary/50 hover:border-primary text-primary hover:text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
                             {isMerging ? <Loader2 className="animate-spin" /> : <Film />}
-                            Merge & Proceed
+                            {copy.mergeAndProceed}
                         </button>
                     </div>
 
@@ -239,7 +250,7 @@ export default function VideoAssembly() {
                                 <div className="flex items-start gap-3">
                                     <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
                                     <div className="flex-1">
-                                        <h4 className="text-sm font-bold text-red-400 mb-1">Merge Failed</h4>
+                                        <h4 className="text-sm font-bold text-red-400 mb-1">{copy.mergeFailed}</h4>
                                         <p className="text-xs text-red-300/90 whitespace-pre-wrap leading-relaxed font-mono">
                                             {mergeError}
                                         </p>
@@ -250,14 +261,14 @@ export default function VideoAssembly() {
                                                 rel="noopener noreferrer"
                                                 className="text-xs text-blue-400 hover:text-blue-300 underline mt-2 inline-block"
                                             >
-                                                Download FFmpeg →
+                                                {copy.downloadFfmpeg} →
                                             </a>
                                         )}
                                         <button
                                             onClick={() => setMergeError(null)}
                                             className="mt-3 text-xs text-gray-400 hover:text-white underline"
                                         >
-                                            Dismiss
+                                            {copy.dismiss}
                                         </button>
                                     </div>
                                 </div>
@@ -269,9 +280,9 @@ export default function VideoAssembly() {
                 {/* Right Sidebar - Variants */}
                 <div className="w-96 bg-[#0f0f0f] flex flex-col shadow-2xl z-10 border-l border-white/10">
                     <div className="h-14 border-b border-white/10 flex items-center justify-between px-4 bg-black/20">
-                        <h3 className="font-bold text-sm">Variants</h3>
+                        <h3 className="font-bold text-sm">{copy.variantList}</h3>
                         {selectedFrameId && (
-                            <span className="text-xs text-gray-500">Frame #{(currentProject?.frames?.findIndex((f: any) => f.id === selectedFrameId) ?? -1) + 1}</span>
+                            <span className="text-xs text-gray-500">{copy.frameNumber((currentProject?.frames?.findIndex((f: any) => f.id === selectedFrameId) ?? -1) + 1)}</span>
                         )}
                     </div>
 
@@ -301,7 +312,7 @@ export default function VideoAssembly() {
                                                 <div className="p-3">
                                                     <div className="flex items-center justify-between mb-2">
                                                         <div className="text-xs text-gray-400">
-                                                            Variant #{idx + 1}
+                                                            {copy.variantNumber(idx + 1)}
                                                         </div>
                                                         <div className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400">
                                                             {video.model}
@@ -310,14 +321,14 @@ export default function VideoAssembly() {
 
                                                     {isSelected ? (
                                                         <div className="w-full py-2 bg-green-500/10 text-green-500 rounded-lg text-xs font-bold flex items-center justify-center gap-2 border border-green-500/20">
-                                                            <Check size={14} /> Selected
+                                                            <Check size={14} /> {copy.selected}
                                                         </div>
                                                     ) : (
                                                         <button
                                                             onClick={() => handleSelectVideo(selectedFrameId, video.id)}
                                                             className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium transition-colors text-white"
                                                         >
-                                                            Select This Variant
+                                                            {copy.selectThisVariant}
                                                         </button>
                                                     )}
                                                 </div>
@@ -327,15 +338,15 @@ export default function VideoAssembly() {
                                 ) : (
                                     <div className="text-center py-12 text-gray-500 flex flex-col items-center">
                                         <AlertTriangle className="mb-3 opacity-50" size={32} />
-                                        <p className="text-sm font-medium">No videos generated</p>
-                                        <p className="text-xs mt-1 max-w-[200px]">Go back to the Motion step to generate videos for this frame.</p>
+                                        <p className="text-sm font-medium">{copy.noVideosGenerated}</p>
+                                        <p className="text-xs mt-1 max-w-[200px]">{copy.goBackToMotion}</p>
                                     </div>
                                 )}
                             </div>
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-3">
                                 <Layout size={48} className="opacity-10" />
-                                <p className="text-sm">Select a frame from the timeline<br />to view video variants</p>
+                                <p className="text-sm">{copy.selectFrameHint}</p>
                             </div>
                         )}
                     </div>
@@ -366,10 +377,10 @@ export default function VideoAssembly() {
                             <div className="flex-1 flex flex-col justify-center space-y-4">
                                 <div>
                                     <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                        <Check className="text-green-500" /> Merged Video Ready
+                                        <Check className="text-green-500" /> {copy.mergedVideoReady}
                                     </h3>
                                     <p className="text-gray-400 mt-1">
-                                        All selected clips have been stitched together. You can now proceed to add voiceovers and sound effects.
+                                        {copy.mergedVideoHint}
                                     </p>
                                 </div>
 
@@ -380,7 +391,7 @@ export default function VideoAssembly() {
                                         className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         <Download size={18} />
-                                        {isDownloading ? "Downloading..." : "Download MP4"}
+                                        {isDownloading ? copy.downloading : copy.downloadMp4}
                                     </button>
                                     {/* Optional: Proceed Button if needed, or user uses sidebar */}
                                 </div>

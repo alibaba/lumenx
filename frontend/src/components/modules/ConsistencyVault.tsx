@@ -5,11 +5,32 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL, crudApi } from "@/lib/api";
-import { getAssetUrl } from "@/lib/utils";
+import { appendAssetQueryParam, getAssetUrl } from "@/lib/utils";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import UploadAssetModal from "../modals/UploadAssetModal";
+import PromptQualityPanel from "../common/PromptQualityPanel";
+import { assetTypeTerms, getAssetTypeTerm, messages } from "@/lib/i18n";
+import {
+    applyImagePromptBlock,
+    buildDefaultImagePrompt,
+    getImagePromptScaffolds,
+    getImagePromptTemplates,
+    type ImagePromptTarget,
+} from "@/lib/image-prompt-recipes";
+import {
+    formatPromptIssues,
+    hasBlockingPromptIssues,
+    inspectImagePrompt,
+} from "@/lib/prompt-quality";
+
+const copy = messages.modules.consistencyVault;
+const commonActions = messages.common.actions;
+
+function getDetailPromptTarget(type: string): ImagePromptTarget {
+    return type === "scene" ? "scene" : "prop";
+}
 
 export default function ConsistencyVault() {
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -62,7 +83,7 @@ export default function ConsistencyVault() {
             const updatedProject = await api.updateAssetDescription(currentProject.id, assetId, type, description);
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
-            console.error("Failed to update description:", error);
+            console.error(copy.failedToUpdateDescription, error);
         }
     };
 
@@ -117,7 +138,7 @@ export default function ConsistencyVault() {
                         } else if (status.status === "failed") {
                             clearInterval(pollInterval);
                             console.error("Asset generation failed:", status.error);
-                            alert(status.error || '生成失败，请稍后重试');
+                            alert(copy.generationFailed(status.error));
 
                             // Also refresh project to show updated status
                             try {
@@ -135,7 +156,7 @@ export default function ConsistencyVault() {
                     } catch (pollError: any) {
                         console.error("Polling error:", pollError);
                         clearInterval(pollInterval);
-                        alert(`轮询任务状态失败: ${pollError.message || '网络错误'}`);
+                        alert(copy.taskPollingFailed(pollError.message));
                         if (removeGeneratingTask) {
                             removeGeneratingTask(assetId, generationType);
                         }
@@ -152,7 +173,7 @@ export default function ConsistencyVault() {
             }
         } catch (error: any) {
             console.error("Failed to generate asset:", error);
-            alert(`启动生成任务失败: ${error.response?.data?.detail || error.message}`);
+            alert(copy.startGenerationFailed(error.response?.data?.detail || error.message));
             if (removeGeneratingTask) {
                 removeGeneratingTask(assetId, generationType);
             }
@@ -162,7 +183,7 @@ export default function ConsistencyVault() {
     // Delete asset handler
     const handleDeleteAsset = async (assetId: string, type: string) => {
         if (!currentProject) return;
-        if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
+        if (!confirm(copy.deleteAssetConfirm(getAssetTypeTerm(type)?.label || type))) return;
 
         try {
             if (type === "character") {
@@ -177,7 +198,7 @@ export default function ConsistencyVault() {
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete asset:", error);
-            alert("Failed to delete asset");
+            alert(copy.failedToDeleteAsset);
         }
     };
 
@@ -199,7 +220,7 @@ export default function ConsistencyVault() {
             setIsCreateDialogOpen(false);
         } catch (error) {
             console.error("Failed to create asset:", error);
-            alert("Failed to create asset");
+            alert(copy.failedToCreateAsset);
         }
     };
 
@@ -263,7 +284,7 @@ export default function ConsistencyVault() {
                             console.log(`[Video Polling] ${generationType} generated successfully`);
                         } else if (status.status === "failed") {
                             clearInterval(pollInterval);
-                            alert(`视频生成失败: ${status.error || '生成失败，请稍后重试'}`);
+                            alert(copy.videoGenerationFailed(status.error));
                             if (removeGeneratingTask) {
                                 removeGeneratingTask(assetId, generationType);
                             }
@@ -274,7 +295,7 @@ export default function ConsistencyVault() {
                     } catch (pollError: any) {
                         console.error("Video polling error:", pollError);
                         clearInterval(pollInterval);
-                        alert(`视频轮询失败: ${pollError.message || '网络错误'}`);
+                        alert(copy.videoPollingFailed(pollError.message));
                         if (removeGeneratingTask) {
                             removeGeneratingTask(assetId, generationType);
                         }
@@ -289,7 +310,7 @@ export default function ConsistencyVault() {
             }
         } catch (error: any) {
             console.error("Failed to generate video:", error);
-            alert(`启动视频生成失败: ${error.response?.data?.detail || error.message}`);
+            alert(copy.startVideoGenerationFailed(error.response?.data?.detail || error.message));
             if (removeGeneratingTask) {
                 removeGeneratingTask(assetId, generationType);
             }
@@ -298,7 +319,7 @@ export default function ConsistencyVault() {
 
     const handleDeleteVideo = async (assetId: string, type: string, videoId: string) => {
         if (!currentProject) return;
-        if (!confirm("Are you sure you want to delete this video? This action cannot be undone.")) return;
+        if (!confirm(copy.deleteVideoConfirm)) return;
 
         try {
             await api.deleteAssetVideo(currentProject.id, type, assetId, videoId);
@@ -306,7 +327,7 @@ export default function ConsistencyVault() {
             updateProject(currentProject.id, updatedProject);
         } catch (error: any) {
             console.error("Failed to delete video:", error);
-            alert(`Failed to delete video: ${error.message}`);
+            alert(copy.failedToDeleteVideo(error.message));
         }
     };
 
@@ -315,10 +336,7 @@ export default function ConsistencyVault() {
         if (!currentProject) return;
 
         const confirmed = confirm(
-            "同步描述说明：\n\n" +
-            "此操作会将 Script 页面中的最新描述同步到所有素材。\n" +
-            "已生成的图片不会被删除，但后续重新生成时将使用新描述。\n\n" +
-            "是否继续？"
+            copy.syncDescriptionsConfirm
         );
 
         if (!confirmed) return;
@@ -326,10 +344,10 @@ export default function ConsistencyVault() {
         try {
             const updatedProject = await api.syncDescriptions(currentProject.id);
             updateProject(currentProject.id, updatedProject);
-            alert("描述同步成功！");
+            alert(copy.syncDescriptionsSuccess);
         } catch (error: any) {
-            console.error("Failed to sync descriptions:", error);
-            alert(`同步失败: ${error.message}`);
+            console.error(copy.failedToSyncDescriptions, error);
+            alert(`${copy.failedToSyncDescriptions}${error.message}`);
         }
     };
 
@@ -365,21 +383,21 @@ export default function ConsistencyVault() {
                         active={activeTab === "character"}
                         onClick={() => setActiveTab("character")}
                         icon={<User size={18} />}
-                        label="Characters"
+                        label={assetTypeTerms.character.pluralLabel}
                         count={currentProject?.characters?.length || 0}
                     />
                     <TabButton
                         active={activeTab === "scene"}
                         onClick={() => setActiveTab("scene")}
                         icon={<MapPin size={18} />}
-                        label="Scenes"
+                        label={assetTypeTerms.scene.pluralLabel}
                         count={currentProject?.scenes?.length || 0}
                     />
                     <TabButton
                         active={activeTab === "prop"}
                         onClick={() => setActiveTab("prop")}
                         icon={<Box size={18} />}
-                        label="Props"
+                        label={assetTypeTerms.prop.pluralLabel}
                         count={currentProject?.props?.length || 0}
                     />
                 </div>
@@ -388,10 +406,10 @@ export default function ConsistencyVault() {
                     <button
                         onClick={handleSyncDescriptions}
                         className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
-                        title="同步 Script 页面中的描述到所有素材"
+                        title={copy.syncDescriptionsTitle}
                     >
                         <RefreshCw size={16} className="text-blue-400" />
-                        <span className="text-sm font-bold">同步描述</span>
+                        <span className="text-sm font-bold">{copy.syncDescriptions}</span>
                     </button>
 
                 </div>
@@ -401,14 +419,14 @@ export default function ConsistencyVault() {
             <div className="flex-1 overflow-y-auto p-6">
                 {!currentProject ? (
                     <div className="flex items-center justify-center h-full text-gray-500">
-                        Loading project...
+                        {copy.loadingProject}
                     </div>
                 ) : assets?.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4">
                         <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center">
                             {activeTab === "character" ? <User size={32} /> : activeTab === "scene" ? <MapPin size={32} /> : <Box size={32} />}
                         </div>
-                        <p>No {activeTab}s found</p>
+                        <p>{copy.noAssetsFound(getAssetTypeTerm(activeTab)?.pluralLabel || activeTab)}</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
@@ -438,7 +456,7 @@ export default function ConsistencyVault() {
                         >
                             <div className="flex flex-col items-center gap-3 text-gray-400 group-hover:text-primary transition-colors">
                                 <Plus size={40} />
-                                <span className="text-sm font-medium">Add {activeTab}</span>
+                                <span className="text-sm font-medium">{copy.addAsset(getAssetTypeTerm(activeTab)?.label || activeTab)}</span>
                             </div>
                         </motion.div>
                     </div>
@@ -472,7 +490,9 @@ export default function ConsistencyVault() {
                                 setSelectedAssetType(null);
                             }}
                             onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
-                            onGenerate={(applyStyle: boolean, negativePrompt: string, batchSize: number) => handleGenerate(selectedAssetId, selectedAssetType, "all", "", applyStyle, negativePrompt, batchSize)}
+                            onGenerate={(prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number) =>
+                                handleGenerate(selectedAssetId, selectedAssetType, "all", prompt, applyStyle, negativePrompt, batchSize)
+                            }
                             isGenerating={isAssetGenerating(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
@@ -530,16 +550,49 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
 
     // Video Controls
     const [activeTab, setActiveTab] = useState<"image" | "video">("image");
+    const [imagePrompt, setImagePrompt] = useState(
+        asset.image_prompt || buildDefaultImagePrompt({
+            target: getDetailPromptTarget(type),
+            name: asset.name,
+            description: asset.description,
+            stylePrompt,
+        }),
+    );
     const [videoPrompt, setVideoPrompt] = useState(asset.video_prompt || "");
+    const imageScaffolds = getImagePromptScaffolds({
+        target: getDetailPromptTarget(type),
+        stylePrompt,
+        description: asset.description,
+    });
+    const imageTemplates = getImagePromptTemplates({
+        target: getDetailPromptTarget(type),
+        stylePrompt,
+        description: asset.description,
+    });
+    const imagePromptIssues = inspectImagePrompt({
+        prompt: imagePrompt,
+        target: getDetailPromptTarget(type),
+        stylePrompt,
+    });
 
     // Sync local state if asset changes
     useEffect(() => {
         setDescription(asset.description);
+        if (asset.image_prompt) {
+            setImagePrompt(asset.image_prompt);
+        } else {
+            setImagePrompt(buildDefaultImagePrompt({
+                target: getDetailPromptTarget(type),
+                name: asset.name,
+                description: asset.description,
+                stylePrompt,
+            }));
+        }
         if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
         else if (!videoPrompt) {
             setVideoPrompt(`Cinematic shot of ${asset.name}, ${asset.description}, looking around, breathing, slight movement, high quality, 4k`);
         }
-    }, [asset]);
+    }, [asset, type, stylePrompt]);
 
     // Sync negative prompt if style changes
     useEffect(() => {
@@ -574,7 +627,12 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
     };
 
     const handleGenerateClick = (batchSize: number) => {
-        onGenerate(applyStyle, negativePrompt, batchSize);
+        if (hasBlockingPromptIssues(imagePromptIssues)) {
+            alert(`${copy.detailModal.promptQualityBlocked}\n\n${formatPromptIssues(imagePromptIssues.filter((issue) => issue.severity === "error"))}`);
+            return;
+        }
+
+        onGenerate(imagePrompt, applyStyle, negativePrompt, batchSize);
     };
 
     return (
@@ -593,13 +651,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                             onClick={() => setActiveTab("image")}
                             className={`flex-1 p-3 text-sm font-bold transition-colors ${activeTab === "image" ? "text-white border-b-2 border-primary bg-white/5" : "text-gray-500 hover:text-gray-300"}`}
                         >
-                            Image Reference
+                            {copy.detailModal.imageReference}
                         </button>
                         <button
                             onClick={() => setActiveTab("video")}
                             className={`flex-1 p-3 text-sm font-bold transition-colors ${activeTab === "video" ? "text-white border-b-2 border-primary bg-white/5" : "text-gray-500 hover:text-gray-300"}`}
                         >
-                            Video Reference
+                            {copy.detailModal.videoReference}
                         </button>
                     </div>
 
@@ -643,10 +701,10 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                         {/* Description */}
                         <div className="space-y-2">
                             <div className="flex justify-between items-center">
-                                <label className="text-sm font-bold text-gray-400 uppercase">Description</label>
+                                <label className="text-sm font-bold text-gray-400 uppercase">{copy.detailModal.description}</label>
                                 {!isEditing && (
                                     <button onClick={() => setIsEditing(true)} className="text-xs text-primary hover:underline">
-                                        Edit
+                                        {commonActions.edit}
                                     </button>
                                 )}
                             </div>
@@ -658,8 +716,8 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                         className="w-full h-32 bg-black/20 border border-white/10 rounded-lg p-3 text-sm text-gray-300 resize-none focus:border-primary focus:outline-none"
                                     />
                                     <div className="flex justify-end gap-2">
-                                        <button onClick={() => { setIsEditing(false); setDescription(asset.description); }} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white">Cancel</button>
-                                        <button onClick={handleSave} className="px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary/90">Save Description</button>
+                                        <button onClick={() => { setIsEditing(false); setDescription(asset.description); }} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white">{commonActions.cancel}</button>
+                                        <button onClick={handleSave} className="px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary/90">{copy.detailModal.saveDescription}</button>
                                     </div>
                                 </div>
                             ) : (
@@ -672,12 +730,72 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                         {/* Video Prompt (Only visible in Video Tab) */}
                         {activeTab === "video" && (
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-gray-400 uppercase">Video Prompt</label>
+                                <label className="text-sm font-bold text-gray-400 uppercase">{copy.detailModal.videoPrompt}</label>
                                 <textarea
                                     value={videoPrompt}
                                     onChange={(e) => setVideoPrompt(e.target.value)}
                                     className="w-full h-24 bg-black/20 border border-white/10 rounded-lg p-3 text-sm text-gray-300 resize-none focus:border-primary focus:outline-none"
-                                    placeholder="Describe the motion..."
+                                    placeholder={copy.detailModal.videoPromptPlaceholder}
+                                />
+                            </div>
+                        )}
+
+                        {activeTab === "image" && (
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-bold text-gray-400 uppercase">{copy.detailModal.imagePrompt}</label>
+                                    <textarea
+                                        value={imagePrompt}
+                                        onChange={(e) => setImagePrompt(e.target.value)}
+                                        className="w-full h-32 bg-black/20 border border-white/10 rounded-lg p-3 text-sm text-gray-300 resize-none focus:border-primary focus:outline-none font-mono"
+                                        placeholder={copy.detailModal.imagePromptPlaceholder}
+                                    />
+                                </div>
+
+                                {imageScaffolds.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                                            {copy.detailModal.promptScaffold}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {imageScaffolds.map((item) => (
+                                                <button
+                                                    key={item.id}
+                                                    type="button"
+                                                    onClick={() => setImagePrompt(applyImagePromptBlock(imagePrompt, item.prompt, "replace"))}
+                                                    className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-[11px] text-cyan-100 transition hover:bg-cyan-400/20"
+                                                >
+                                                    {item.title}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {imageTemplates.length > 0 && (
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                                            {copy.detailModal.promptTemplates}
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                            {imageTemplates.map((item) => (
+                                                <button
+                                                    key={item.id}
+                                                    type="button"
+                                                    onClick={() => setImagePrompt(applyImagePromptBlock(imagePrompt, item.prompt, "append"))}
+                                                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] text-gray-200 transition hover:bg-white/10"
+                                                >
+                                                    {copy.detailModal.appendTemplate(item.title)}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <PromptQualityPanel
+                                    issues={imagePromptIssues}
+                                    title={copy.detailModal.promptQualityTitle}
+                                    compact
                                 />
                             </div>
                         )}
@@ -685,7 +803,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                         {/* Style Control (Only visible in Image Tab) */}
                         {activeTab === "image" && (
                             <div className="space-y-2">
-                                <label className="text-sm font-bold text-gray-400 uppercase">Style Settings</label>
+                                <label className="text-sm font-bold text-gray-400 uppercase">{copy.detailModal.styleSettings}</label>
                                 <div className="bg-white/5 rounded-lg p-3 border border-white/5">
                                     <div className="flex items-center gap-2 mb-2">
                                         <input
@@ -696,13 +814,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                             className="rounded border-gray-600 bg-gray-700 text-primary focus:ring-primary"
                                         />
                                         <label htmlFor="applyStyleModal" className="text-sm font-bold text-gray-300 cursor-pointer select-none">
-                                            Apply Art Direction Style
+                                            {copy.detailModal.applyArtDirectionStyle}
                                         </label>
                                     </div>
 
                                     {stylePrompt && (
                                         <div className="text-xs text-gray-500 font-mono bg-black/20 p-2 rounded border border-white/5">
-                                            <span className="text-primary font-bold">Style:</span> {stylePrompt}
+                                            <span className="text-primary font-bold">{copy.detailModal.styleLabel}</span> {stylePrompt}
                                         </div>
                                     )}
                                 </div>
@@ -716,7 +834,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                     onClick={() => setShowAdvanced(!showAdvanced)}
                                     className="flex items-center gap-2 text-xs font-bold text-gray-500 hover:text-white transition-colors uppercase"
                                 >
-                                    <span>Advanced Settings (Negative Prompt)</span>
+                                    <span>{copy.detailModal.advancedNegativePrompt}</span>
                                     <ChevronRight size={12} className={`transform transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
                                 </button>
 
@@ -732,7 +850,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                                 value={negativePrompt}
                                                 onChange={(e) => setNegativePrompt(e.target.value)}
                                                 className="w-full h-24 bg-black/20 border border-white/10 rounded-lg p-3 text-xs text-gray-400 resize-none focus:outline-none focus:border-primary/50 font-mono"
-                                                placeholder="Enter negative prompt..."
+                                                placeholder={copy.detailModal.negativePromptPlaceholder}
                                             />
                                         </motion.div>
                                     )}
@@ -748,7 +866,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                             className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-900/20"
                         >
                             <Check size={18} />
-                            Done
+                            {commonActions.done}
                         </button>
                     </div>
                 </div>
@@ -797,8 +915,7 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
         }
     }, [error, retryCount]);
 
-    // Construct src with retry param to bypass cache if retrying
-    const displaySrc = retryCount > 0 ? `${src}${src.includes('?') ? '&' : '?'}retry=${retryCount}` : src;
+    const displaySrc = retryCount > 0 ? appendAssetQueryParam(src, "retry", retryCount) : src;
 
     return (
         <div className={`relative ${className}`}>
@@ -808,10 +925,14 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
                 </div>
             )}
             <img
+                key={`${displaySrc}-${retryCount}`}
                 src={displaySrc}
                 alt={alt}
                 className={`${className} ${isLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
-                onLoad={() => setIsLoading(false)}
+                onLoad={() => {
+                    setError(false);
+                    setIsLoading(false);
+                }}
                 onError={() => {
                     setError(true);
                     setIsLoading(true); // Keep showing loader while retrying
@@ -819,7 +940,7 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
             />
             {error && retryCount >= 10 && (
                 <div className="absolute inset-0 flex items-center justify-center bg-red-500/10 backdrop-blur-sm z-20">
-                    <span className="text-xs text-red-400 font-bold">Failed to load</span>
+                    <span className="text-xs text-red-400 font-bold">{copy.detailModal.imageLoadFailed}</span>
                 </div>
             )}
         </div>
@@ -846,12 +967,33 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
             updateProject(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to upload asset image:", error);
-            alert("Failed to upload image");
+            alert(copy.assetCard.uploadFailed);
         }
     };
 
     const imageUrl = (type === 'character' ? (asset.avatar_url || asset.image_url) : asset.image_url);
     const fullImageUrl = getAssetUrl(imageUrl);
+    const primaryActionLabel = type === "character" ? copy.assetCard.generateSet : copy.assetCard.generate;
+    const uploadActionTitle = type === "character" ? copy.assetCard.uploadReferenceTitle : copy.assetCard.uploadTitle;
+    const characterVariantStatus = type === "character"
+        ? [
+            {
+                key: "full_body",
+                label: copy.assetCard.variantLabels.fullBody,
+                ready: !!(asset.full_body_image_url || asset.full_body_asset?.variants?.length > 0),
+            },
+            {
+                key: "three_view",
+                label: copy.assetCard.variantLabels.threeView,
+                ready: !!(asset.three_view_image_url || asset.three_view_asset?.variants?.length > 0),
+            },
+            {
+                key: "headshot",
+                label: copy.assetCard.variantLabels.headshot,
+                ready: !!(asset.headshot_image_url || asset.avatar_url || asset.headshot_asset?.variants?.length > 0),
+            },
+        ]
+        : [];
 
     return (
         <motion.div
@@ -881,7 +1023,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
             {isGenerating && (
                 <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex items-center justify-center flex-col gap-2">
                     <RefreshCw className="animate-spin text-primary" size={32} />
-                    <span className="text-xs font-mono text-primary">Generating...</span>
+                    <span className="text-xs font-mono text-primary">{copy.assetCard.generating}</span>
                 </div>
             )}
 
@@ -893,7 +1035,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                         onDelete();
                     }}
                     className="p-2 rounded-full backdrop-blur-md bg-red-500/20 text-red-400 hover:bg-red-500/40 transition-colors"
-                    title="Delete"
+                    title={commonActions.delete}
                 >
                     <Trash2 size={14} />
                 </button>
@@ -915,10 +1057,26 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
             <div className="absolute bottom-0 left-0 right-0 p-4 z-30">
                 <h3 className="text-lg font-bold text-white mb-1 truncate">{asset.name}</h3>
                 <p className="text-xs text-gray-400 line-clamp-2 mb-3 h-8">
-                    {asset.description || "No description"}
+                    {asset.description || copy.assetCard.noDescription}
                 </p>
 
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">
+                {characterVariantStatus.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                        {characterVariantStatus.map((item) => (
+                            <span
+                                key={item.key}
+                                className={`rounded-full border px-2 py-1 text-[10px] font-bold tracking-wide ${item.ready
+                                    ? "border-emerald-400/40 bg-emerald-500/15 text-emerald-300"
+                                    : "border-white/10 bg-black/30 text-gray-400"
+                                    }`}
+                            >
+                                {item.label}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                <div className="flex gap-2">
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -931,7 +1089,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                             }`}
                     >
                         <RefreshCw size={14} className={isGenerating ? "animate-spin" : ""} />
-                        {isGenerating ? "Generating..." : "Generate"}
+                        {isGenerating ? copy.assetCard.generating : primaryActionLabel}
                     </button>
                     <button
                         onClick={(e) => {
@@ -939,7 +1097,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                             onUpload?.();
                         }}
                         className="p-2 bg-white/10 hover:bg-white/20 rounded-lg text-white cursor-pointer transition-colors"
-                        title="上传图片"
+                        title={uploadActionTitle}
                     >
                         <Upload size={14} />
                     </button>
@@ -958,7 +1116,7 @@ function CreateAssetDialog({ type, onClose, onCreate }: { type: string; onClose:
 
     const handleSubmit = async () => {
         if (!name.trim()) {
-            alert("Name is required");
+            alert(messages.common.messages.nameRequired);
             return;
         }
         setIsSubmitting(true);
@@ -969,7 +1127,7 @@ function CreateAssetDialog({ type, onClose, onCreate }: { type: string; onClose:
         }
     };
 
-    const typeLabel = type === "character" ? "Character" : type === "scene" ? "Scene" : "Prop";
+    const typeLabel = getAssetTypeTerm(type)?.label || type;
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-8">
@@ -982,7 +1140,7 @@ function CreateAssetDialog({ type, onClose, onCreate }: { type: string; onClose:
                 <div className="p-6 border-b border-white/10 flex justify-between items-center bg-black/20">
                     <div className="flex items-center gap-3">
                         <Plus className="text-primary" size={20} />
-                        <h2 className="text-lg font-bold text-white">Create New {typeLabel}</h2>
+                        <h2 className="text-lg font-bold text-white">{copy.createDialog.createNew(typeLabel)}</h2>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                         <X size={20} className="text-gray-400" />
@@ -991,21 +1149,21 @@ function CreateAssetDialog({ type, onClose, onCreate }: { type: string; onClose:
 
                 <div className="p-6 space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-2">Name *</label>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">{copy.createDialog.name}</label>
                         <input
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder={`Enter ${type} name`}
+                            placeholder={getAssetTypeTerm(type)?.namePlaceholder || typeLabel}
                             className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-primary/50 focus:outline-none"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-400 mb-2">Description</label>
+                        <label className="block text-sm font-medium text-gray-400 mb-2">{copy.createDialog.description}</label>
                         <textarea
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
-                            placeholder={`Describe the ${type}...`}
+                            placeholder={getAssetTypeTerm(type)?.descriptionPlaceholder || typeLabel}
                             rows={4}
                             className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-primary/50 focus:outline-none resize-none"
                         />
@@ -1017,7 +1175,7 @@ function CreateAssetDialog({ type, onClose, onCreate }: { type: string; onClose:
                         onClick={onClose}
                         className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors"
                     >
-                        Cancel
+                        {commonActions.cancel}
                     </button>
                     <button
                         onClick={handleSubmit}
@@ -1025,7 +1183,7 @@ function CreateAssetDialog({ type, onClose, onCreate }: { type: string; onClose:
                         className="px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                         {isSubmitting && <RefreshCw size={16} className="animate-spin" />}
-                        Create {typeLabel}
+                        {copy.createDialog.create(typeLabel)}
                     </button>
                 </div>
             </motion.div>
