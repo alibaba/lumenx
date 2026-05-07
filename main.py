@@ -85,7 +85,7 @@ def run_server():
     # 注意: Windows 不支持 uvloop, 使用默认的 asyncio 事件循环
     uvicorn.run(app,
                 host="127.0.0.1",
-                port=17177,
+                port=18177,
                 reload=False,
                 log_level="info",
                 )
@@ -111,7 +111,7 @@ def open_webview():
     # 创建 pywebview 窗口
     window = webview.create_window(
         title="LumenX Studio",
-        url=f"http://127.0.0.1:17177/static/index.html?timestamp={datetime.now().timestamp()}",
+        url=f"http://127.0.0.1:18177/static/index.html?timestamp={datetime.now().timestamp()}",
         width=1280,
         height=800,
         resizable=True,

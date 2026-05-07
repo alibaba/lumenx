@@ -22,9 +22,10 @@ alibabacloud-videoenhan20200320>=1.0.0
 alibabacloud-tea-openapi>=0.3.0
 alibabacloud-tea-util>=0.3.0
 oss2>=2.18.0
+tos>=2.9.0
 
 # Optional Dependencies
 # Uncomment if needed:
 # numpy>=1.24.0
-# pillow>=10.0.0
-# openai>=1.0.0  # Required when LLM_PROVIDER=openai
+pillow>=10.0.0
+openai>=1.0.0

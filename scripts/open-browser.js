@@ -1,6 +1,7 @@
 const { exec } = require('child_process');
 
 const URL = 'http://localhost:3000';
+const backendPort = process.env.BACKEND_PORT || '18177';
 
 setTimeout(() => {
   console.log('\n  ╔══════════════════════════════════════════╗');
@@ -8,7 +9,7 @@ setTimeout(() => {
   console.log('  ║   LumenX AI Comic Platform Ready!        ║');
   console.log('  ║                                          ║');
   console.log('  ║   Frontend:  http://localhost:3000       ║');
-  console.log('  ║   Backend:   http://localhost:17177      ║');
+  console.log(`  ║   Backend:   http://127.0.0.1:${backendPort}     ║`);
   console.log('  ║                                          ║');
   console.log('  ║   Press Ctrl+C to stop all services.     ║');
   console.log('  ║                                          ║');

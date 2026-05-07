@@ -13,9 +13,12 @@ const env = {
   no_proxy: '*.aliyuncs.com,localhost,127.0.0.1'
 };
 
+const backendHost = process.env.BACKEND_HOST || '127.0.0.1';
+const backendPort = process.env.BACKEND_PORT || '18177';
+
 const backend = spawn(pythonPath, [
   '-m', 'uvicorn', 'src.apps.comic_gen.api:app',
-  '--reload', '--port', '17177', '--host', '0.0.0.0'
+  '--reload', '--port', backendPort, '--host', backendHost
 ], {
   stdio: 'inherit',
   env

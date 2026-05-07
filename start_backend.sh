@@ -8,7 +8,8 @@ export no_proxy="*.aliyuncs.com,localhost,127.0.0.1"
 
 echo "========================================"
 echo "Starting Backend (FastAPI)..."
-echo "Port: 17177"
+echo "Port: 18177"
+echo "Host: ${BACKEND_HOST:-127.0.0.1}"
 echo "Proxy Bypass: *.aliyuncs.com"
 echo "========================================"
 
@@ -16,5 +17,5 @@ echo "========================================"
 cd "$(dirname "$0")"
 
 # 启动 uvicorn
-python -m uvicorn src.apps.comic_gen.api:app --reload --port 17177 --host 0.0.0.0
+python -m uvicorn src.apps.comic_gen.api:app --reload --port "${BACKEND_PORT:-18177}" --host "${BACKEND_HOST:-127.0.0.1}"
 

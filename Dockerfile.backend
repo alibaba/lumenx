@@ -9,7 +9,7 @@ WORKDIR /app
 
 # Copy and install Python dependencies (excluding pywebview)
 COPY requirements-docker.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 
 # Copy application code
 COPY src/ src/
@@ -23,6 +23,6 @@ ENV NO_PROXY="*.aliyuncs.com,localhost,127.0.0.1"
 ENV no_proxy="*.aliyuncs.com,localhost,127.0.0.1"
 ENV PYTHONUNBUFFERED=1
 
-EXPOSE 17177
+EXPOSE 18177
 
-CMD ["python", "-m", "uvicorn", "src.apps.comic_gen.api:app", "--host", "0.0.0.0", "--port", "17177"]
+CMD ["python", "-m", "uvicorn", "src.apps.comic_gen.api:app", "--host", "0.0.0.0", "--port", "18177"]

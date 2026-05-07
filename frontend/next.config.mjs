@@ -2,7 +2,7 @@
 const isProd = process.env.NODE_ENV === 'production';
 const isDocker = process.env.DOCKER_BUILD === 'true';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:17177';
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:18177';
 
 const nextConfig = {
     output: isProd ? 'export' : undefined,
@@ -10,14 +10,16 @@ const nextConfig = {
     basePath: isProd && !isDocker ? '/static' : undefined,
     assetPrefix: isProd && !isDocker ? '/static' : undefined,
     // Dev-only: proxy /api-proxy/* to backend to avoid CORS issues (e.g. file downloads)
-    async rewrites() {
-        return isProd ? [] : [
+    ...(!isProd ? {
+        async rewrites() {
+            return [
             {
                 source: '/api-proxy/:path*',
                 destination: `${BACKEND_URL}/:path*`,
             },
-        ];
-    },
+            ];
+        },
+    } : {}),
     eslint: {
         ignoreDuringBuilds: true,
     },
@@ -34,7 +36,12 @@ const nextConfig = {
             {
                 protocol: "http",
                 hostname: "localhost",
-                port: "17177",
+                port: "18177",
+            },
+            {
+                protocol: "http",
+                hostname: "127.0.0.1",
+                port: "18177",
             },
         ],
     },

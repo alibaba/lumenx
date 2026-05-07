@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   backend:
     build:
@@ -10,10 +8,11 @@ services:
       - .env
     environment:
       - NO_PROXY=*.aliyuncs.com,localhost,127.0.0.1
+      - LUMENX_DEV_CONFIG_PATH=/app/output/config/runtime.env
     volumes:
       - ./output:/app/output
     ports:
-      - "17177:17177"
+      - "18177:18177"
     restart: unless-stopped
 
   frontend:

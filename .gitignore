@@ -80,6 +80,9 @@ frontend/.vercel
 *.log
 logs/
 .lumen-x/
+tmp/
+test-results/
+frontend/test-results/
 
 # Secrets (extra safety)
 *secret*
