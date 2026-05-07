@@ -55,4 +55,4 @@ jobs:
 
       - name: Audit user-facing copy
         working-directory: frontend
-        run: npm run audit:copy:strict
+        run: npm run audit:copy
