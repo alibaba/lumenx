@@ -1,0 +1,16 @@
+Use case: identity-preserve
+Asset type: frame 15 crop edit, father consistency
+Execution mode: image edit with exactly two input images.
+
+Input images:
+Image 1: a cropped region from the latest approved frame, containing only the adult man resting on the bed and nearby room details; this is the edit target.
+Image 2: adult father full-body reference.
+
+Primary request:
+Refine only the adult man in Image 1 so he matches Image 2 more closely. Keep the edit localized to his face, hair, blue-white striped room loungewear, upper-body pose, and calm gentle expression.
+
+Invariants:
+Keep the crop size, bed position, blue-white bedding, nearby wall and equipment rail, lighting, and body placement unchanged. Keep him calm and clear-eyed. Do not add new people or objects.
+
+Avoid:
+acute distress, medical procedure details, blood, injury, tubes, surgery, changing the bed layout, adding readable text, logos, watermarks, extra people, cartoon styling, anime styling, changing the lighting direction.

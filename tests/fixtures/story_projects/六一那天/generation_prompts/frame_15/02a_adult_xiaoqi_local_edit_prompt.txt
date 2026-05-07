@@ -1,0 +1,19 @@
+Use case: identity-preserve
+Asset type: frame 15 stage 2A local edit, adult Xiaoqi consistency
+Execution mode: image edit with exactly two input images.
+
+Input images:
+Image 1: latest approved frame 15 base image; this is the edit target.
+Image 2: adult Xiaoqi full-body reference.
+
+Primary request:
+Refine only the adult woman doctor in Image 1 so she matches Image 2 more closely. Keep the edit localized to her face, hair, white coat, posture, and professional temperament.
+
+Localized target:
+The adult woman near the foot of the bed or doorway. Make her read as the same adult Xiaoqi reference: Chinese woman in her late 20s, black low ponytail, white doctor coat, calm professional expression, natural proportions, realistic face, understated and kind presence.
+
+Invariants:
+Keep the room layout, bed, resting adult man, young performer, balloons, lighting, camera angle, and overall composition unchanged. Do not move the characters. Do not change the balloon colors. Do not introduce new objects or people.
+
+Avoid:
+changing the young performer, changing the resting adult man, changing the room, changing the balloons, making the scene collage-like, adding readable text, adding logos, adding emergency treatment details, over-beautifying the face, cartoon or anime styling.

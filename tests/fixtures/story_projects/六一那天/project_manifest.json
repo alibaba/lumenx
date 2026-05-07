@@ -1,0 +1,142 @@
+{
+  "slug": "liuyi-that-day",
+  "project_name": "六一那天",
+  "project_type": "seedance_storyboard_test",
+  "description": "18 镜头写实情绪短片样板：已整理 Seedance 2.0 分镜提示词、参考图、角色/场景/道具，并默认走 gpt-image2 图像链路。",
+  "parser": "seedance_storyboard_markdown",
+  "source_files": [
+    {
+      "role": "storyboard_prompt_doc",
+      "path": "source/08_seedance2_storyboard_prompts.md"
+    }
+  ],
+  "reference_images": [
+    {
+      "role": "storyboard_reference_collage",
+      "path": "references/storyboard_reference_collage.png"
+    }
+  ],
+  "reference_assets": [
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_xiaoqi_child",
+      "upload_type": "full_body",
+      "path": "references/liuyi_char_xiaoqi_child_full_body.png",
+      "label": "小琪主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_mother",
+      "upload_type": "full_body",
+      "path": "references/liuyi_char_mother_full_body.png",
+      "label": "母亲主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_father",
+      "upload_type": "full_body",
+      "path": "references/liuyi_char_father_full_body.png",
+      "label": "父亲主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_school_playground",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_school_playground.png",
+      "label": "小学操场主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_hospital_room",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_hospital_room.png",
+      "label": "医院病房主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_white_bear",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_white_bear.png",
+      "label": "白色小熊主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_2026_ward",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_2026_ward.png",
+      "label": "2026 肝病科病房主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_xiaoqi_adult",
+      "upload_type": "full_body",
+      "path": "references/liuyi_char_xiaoqi_adult_full_body.png",
+      "label": "成年小琪主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_boy",
+      "upload_type": "full_body",
+      "path": "references/liuyi_char_boy_full_body.png",
+      "label": "2026 小男孩主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_boy_father",
+      "upload_type": "full_body",
+      "path": "references/liuyi_char_boy_father_full_body.png",
+      "label": "2026 小男孩父亲主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_childrens_day_balloons",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_childrens_day_balloons.png",
+      "label": "儿童节气球主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_hospital_corridor",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_hospital_corridor.png",
+      "label": "2026 医院走廊主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_medical_textbooks",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_medical_textbooks.png",
+      "label": "医学教材和病历夹主参考图",
+      "locked": true
+    }
+  ],
+  "model_settings": {
+    "image_provider": "openai",
+    "image_edit_provider": "openai",
+    "t2i_model": "openai-image",
+    "i2i_model": "openai-image-edit",
+    "openai_image_model": "gpt-image2",
+    "openai_image_edit_model": "gpt-image2",
+    "character_aspect_ratio": "9:16",
+    "scene_aspect_ratio": "16:9",
+    "prop_aspect_ratio": "1:1",
+    "storyboard_aspect_ratio": "16:9"
+  },
+  "notes": [
+    "独立测试项目，供六一那天分镜脚本、参考图与后续素材一致性测试使用。",
+    "本项目生图和图编测试统一使用 OpenAI-compatible 别名，运行模型固定为 gpt-image2。",
+    "所有文字类内容以后期叠加为准，避免模型生成可读错误文字。"
+  ]
+}

@@ -1,0 +1,34 @@
+Use case: compositing
+Asset type: experimental frame 15 one-shot multi-reference edit fallback
+Execution mode: image edit with multiple input images; use only when the two-stage flow is unavailable.
+
+Safety goal:
+Keep the language visually accurate but semantically gentler. Do not emphasize disease, diagnosis, vulnerable condition, emergency care, procedure, or institutional ward terms. It is not the default production path.
+
+Input image roles:
+Image 1: calm clinical interior reference; use as the room and lighting reference.
+Image 2: adult Xiaoqi reference; use for the adult woman doctor.
+Image 3: young student performer reference; use for the student performer near the bed.
+Image 4: adult father reference; use for the resting adult man.
+Image 5: colored balloon reference; use for the red, yellow, and blue balloons.
+
+Primary request:
+Create one natural 16:9 cinematic still of a quiet family visit moment in a bright clinical room on a June morning. Use the references for room layout, identities, clothing, and balloons, while keeping the scene calm and ordinary.
+
+Scene/backdrop:
+A clean contemporary Chinese clinical family room with blue-white bedding, window light, bedside cabinet, soft curtains, and a calm recovery-room atmosphere. No procedure is happening.
+
+Subjects:
+An adult Chinese woman doctor in a white coat stands near the foot of the bed or doorway. A young student performer in a light school celebration outfit stands beside the bed holding red, yellow, and blue balloons. An adult Chinese man in blue-white striped room loungewear rests calmly on the bed with a gentle expression.
+
+Composition/framing:
+16:9 horizontal cinematic medium-wide shot. The bed and resting adult man are on one side, the student performer is beside the bed with the balloons, and the doctor is near the foot of the bed. Make it a single natural movie still, not a collage, not a reference sheet, not a poster.
+
+Lighting/mood:
+Soft early morning daylight mixed with clean indoor light. Restrained contemporary Chinese drama tone, quiet hope, realistic faces, realistic fabric and room materials.
+
+Constraints:
+Use only the supplied visual references. Keep three people distinct. Keep the red, yellow, and blue balloons visible. Keep the room clean and ordinary. If the request is blocked or unstable, stop using this prompt and return to the two-stage flow.
+
+Avoid:
+diagnosis text, readable charts, surgical equipment, blood, injury, tubes, emergency treatment, extra people, duplicated people, distorted hands, extra fingers, distorted balloons, cartoon, anime, logo, watermark, glossy advertising look.

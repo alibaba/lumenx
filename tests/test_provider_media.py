@@ -65,7 +65,7 @@ def test_dashscope_non_image_local_without_oss_uses_temp_url_and_header(tmp_path
     uploader = FakeUploader(configured=False)
 
     def fake_temp_url_resolver(local_path: str) -> str:
-        assert local_path.endswith("output/video/ref.mp4")
+        assert local_path.replace("\\", "/").endswith("output/video/ref.mp4")
         return "oss://dashscope-temp/session-file-001"
 
     resolved = resolve_media_input(
@@ -88,7 +88,7 @@ def test_dashscope_non_image_local_without_oss_and_without_temp_resolver_fails_f
 
     with pytest.raises(
         ValueError,
-        match="requires OSS or a dashscope_temp_url_resolver",
+        match="requires object storage or a dashscope_temp_url_resolver",
     ):
         resolve_media_input(
             "video/ref.mp4",

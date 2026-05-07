@@ -1,0 +1,19 @@
+Use case: identity-preserve
+Asset type: frame 15 stage 2C local edit, father consistency
+Execution mode: image edit with exactly two input images.
+
+Input images:
+Image 1: latest approved frame 15 image after the adult Xiaoqi and young performer passes; this is the edit target.
+Image 2: adult father full-body reference.
+
+Primary request:
+Refine only the adult man resting on the bed so he matches Image 2 more closely. Keep the edit localized to his face, hair, blue-white striped room loungewear, upper-body pose, and calm expression.
+
+Localized target:
+The adult man on the bed. Make him read as the same Chinese father reference: 30s, tired but clear-eyed, gentle expression, blue-white striped loungewear, natural proportions, realistic face. Keep him calmly resting, not in acute distress.
+
+Invariants:
+Keep adult Xiaoqi, the young performer, the balloons, room layout, bed position, lighting, camera angle, and overall composition unchanged. Do not move the young performer or the doctor. Do not change balloon colors.
+
+Avoid:
+changing adult Xiaoqi, changing the young performer, changing the balloons, changing the room, adding medical procedures, adding blood or injuries, adding readable text, adding logos, extra people, distorted hands, cartoon or anime styling.

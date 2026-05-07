@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "project_slug": "liuyi-that-day",
+  "frame_id": "liuyi_frame_15",
+  "description": "Frame 15 crop composition manifest for replaying adult Xiaoqi and father identity edits without another image API call.",
+  "base_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_15_stage1_base_v3.png",
+  "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_15_stage3_full_formal_v1.png",
+  "composition_method": "paste edited crops onto the exact base-image bounding boxes after verifying original crop coordinates",
+  "crops": [
+    {
+      "id": "adult_xiaoqi",
+      "role": "adult Xiaoqi identity edit",
+      "prompt": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_15/02a_adult_xiaoqi_crop_edit_prompt.txt",
+      "reference_images": [
+        "output/uploads/fixtures/liuyi_char_xiaoqi_adult_full_body.png"
+      ],
+      "base_crop": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_15_stage1_base_v3_crop_xiaoqi.png",
+      "edited_crop": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_15_stage2a_xiaoqi_crop_formal_v1.png",
+      "bbox": {
+        "x": 1360,
+        "y": 32,
+        "width": 640,
+        "height": 1088
+      }
+    },
+    {
+      "id": "boy_father",
+      "role": "boy father identity edit",
+      "prompt": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_15/02c_father_crop_edit_prompt.txt",
+      "reference_images": [
+        "output/uploads/fixtures/liuyi_char_boy_father_full_body.png"
+      ],
+      "base_crop": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_15_stage1_base_v3_crop_father.png",
+      "edited_crop": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_15_stage2c_father_crop_formal_v1.png",
+      "bbox": {
+        "x": 0,
+        "y": 256,
+        "width": 1024,
+        "height": 768
+      }
+    }
+  ],
+  "notes": [
+    "The boy crop remains diagnostic only; the stable formal replay currently composites adult Xiaoqi and the father.",
+    "Run scripts/compose_fixture_frame_crops.ps1 with ProjectSlug=liuyi-that-day and FrameId=liuyi_frame_15 to reproduce the full formal frame locally.",
+    "Use -DetectOnly to re-check crop coordinates when the base or crop assets change."
+  ]
+}

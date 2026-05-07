@@ -1,0 +1,19 @@
+Use case: identity-preserve
+Asset type: frame 15 stage 2B local edit, balloon performer consistency
+Execution mode: image edit with exactly two input images.
+
+Input images:
+Image 1: latest approved frame 15 image after the adult Xiaoqi pass; this is the edit target.
+Image 2: balloon performer full-body reference.
+
+Primary request:
+Refine only the balloon performer in Image 1 so the person matches Image 2 more closely. Keep the edit localized to face shape, short black hair, light celebration outfit, body proportions, and hand placement around the balloon strings.
+
+Localized target:
+The balloon performer standing in the center area of the frame. Preserve the short black hair, light celebration outfit, gentle expression, natural Chinese facial features, and red/yellow/blue balloons from the reference. Keep the person holding the balloon strings clearly.
+
+Invariants:
+Keep adult Xiaoqi, the resting adult, the room layout, lighting, camera angle, and overall composition unchanged. Keep the balloons visible and correctly colored. Do not move the resting adult or the doctor.
+
+Avoid:
+changing adult Xiaoqi, changing the resting adult, changing the room, losing the balloons, changing balloon colors, distorted hands, extra fingers, extra people, readable text, logos, clinical procedure details, cartoon or anime styling.

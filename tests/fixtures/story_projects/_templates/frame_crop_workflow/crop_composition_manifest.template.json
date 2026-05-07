@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "project_slug": "PROJECT_SLUG",
+  "frame_id": "FRAME_ID",
+  "description": "Crop composition manifest for replaying staged identity edits without another image API call.",
+  "base_image": "output/codex_image_audit/PROJECT_SLUG/generated/FRAME_ID_stage1_base.png",
+  "output_image": "output/codex_image_audit/PROJECT_SLUG/generated/FRAME_ID_stage3_full_formal_v1.png",
+  "composition_method": "paste edited crops onto the exact base-image bounding boxes after verifying original crop coordinates",
+  "crops": [
+    {
+      "id": "CROP_ID",
+      "role": "ROLE_DESCRIPTION",
+      "prompt": "tests/fixtures/story_projects/FIXTURE_DIR/generation_prompts/frame_NN/PROMPT_FILE.txt",
+      "reference_images": [
+        "output/uploads/fixtures/REFERENCE_IMAGE.png"
+      ],
+      "base_crop": "output/codex_image_audit/PROJECT_SLUG/generated/FRAME_ID_stage1_base_crop_CROP_ID.png",
+      "edited_crop": "output/codex_image_audit/PROJECT_SLUG/generated/FRAME_ID_stage2_CROP_ID_formal_v1.png",
+      "bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 1024,
+        "height": 768
+      }
+    }
+  ],
+  "notes": [
+    "Run scripts/compose_fixture_frame_crops.ps1 with ProjectSlug and FrameId to reproduce the full formal frame locally.",
+    "Use -DetectOnly to re-check crop coordinates when the base or crop assets change."
+  ]
+}
