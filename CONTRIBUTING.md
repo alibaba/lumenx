@@ -39,11 +39,23 @@ git checkout -b feature/your-feature-name
 ```
 
 **Branch Naming Convention**:
+- `main` - release-ready history only
 - `feature/description` - New features
 - `fix/description` - Bug fixes
 - `docs/description` - Documentation updates
 - `refactor/description` - Code refactoring
 - `test/description` - Test additions or updates
+- `chore/description` - Tooling, dependency, or maintenance work
+- `release/description` - Release preparation and version cut
+- `codex/description` - Short-lived AI-assisted work branches
+
+### 4. Enable Local Git Rules
+
+```bash
+npm run git:setup-hooks
+```
+
+This enables the repo-local hooks under `.githooks/` so branch names and commit messages are checked before they land.
 
 ## 🧭 Media Storage & Provider Routing Rules
 
@@ -154,6 +166,8 @@ fix(video): resolve FFmpeg concurrent processing issue
 
 docs(readme): update installation instructions for Windows
 ```
+
+The local hook also allows `Merge`, `Revert`, `fixup!`, and `squash!` messages when Git creates special commits.
 
 ## 🔄 Pull Request Process
 
