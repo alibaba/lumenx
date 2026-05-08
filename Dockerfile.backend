@@ -22,7 +22,9 @@ RUN mkdir -p output/uploads output/video output/assets output/storyboard \
 ENV NO_PROXY="*.aliyuncs.com,localhost,127.0.0.1"
 ENV no_proxy="*.aliyuncs.com,localhost,127.0.0.1"
 ENV PYTHONUNBUFFERED=1
+ENV LUMENX_API_HOST=0.0.0.0
+ENV LUMENX_API_PORT=18177
 
 EXPOSE 18177
 
-CMD ["python", "-m", "uvicorn", "src.apps.comic_gen.api:app", "--host", "0.0.0.0", "--port", "18177"]
+CMD ["sh", "-c", "python -m uvicorn src.apps.comic_gen.api:app --host \"$LUMENX_API_HOST\" --port \"$LUMENX_API_PORT\""]

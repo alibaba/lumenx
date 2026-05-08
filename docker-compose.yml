@@ -9,10 +9,12 @@ services:
     environment:
       - NO_PROXY=*.aliyuncs.com,localhost,127.0.0.1
       - LUMENX_DEV_CONFIG_PATH=/app/output/config/runtime.env
+      - LUMENX_API_HOST=0.0.0.0
+      - LUMENX_API_PORT=${LUMENX_API_PORT:-18177}
     volumes:
       - ./output:/app/output
     ports:
-      - "18177:18177"
+      - "${LUMENX_API_PORT:-18177}:${LUMENX_API_PORT:-18177}"
     restart: unless-stopped
 
   frontend:

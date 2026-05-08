@@ -140,6 +140,8 @@ mkdir -p output/uploads
 ./start_backend.sh
 ```
 
+> Override the port or bind address with `LUMENX_API_PORT` / `LUMENX_API_HOST`.
+
 ### 5. Start Frontend
 
 ```bash
@@ -154,6 +156,8 @@ npm install && npm run dev
 ## 📖 Documentation
 
 - **[User Manual](USER_MANUAL.md)**: **Must-read** for first-time users.
+- **[Quality Gates](docs/quality-gates.md)**: Frontend lint/type/test/build gates, backend tests, and PR verification checklist.
+- **[9.5 Target Review](docs/audit/2026-05-08/score-review-9.5-target.md)**: scoring evidence and remaining watch items outside the security-boundary scope.
 - **[API Documentation](http://127.0.0.1:18177/docs)**: Backend Swagger UI.
 
 > Current status: export now applies resolution, format and subtitle settings; the SFX/BGM tracks in the mix view map to real generated audio files, and the final mix is assembled during export.

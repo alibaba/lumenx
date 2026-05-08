@@ -127,6 +127,8 @@ cp .env.example .env
 # 编辑 .env 文件，填入 DASHSCOPE_API_KEY
 ```
 
+图像链路默认首选 Image2（`gpt-image2`）；设置页里的生图和图编默认值已经预置为它，备用测试别名不要覆盖主配置。
+
 ### 4. 启动后端
 
 ```bash
@@ -139,6 +141,9 @@ mkdir -p output/uploads
 # 启动服务 (http://127.0.0.1:18177)
 ./start_backend.sh
 ```
+
+> 如需改端口或监听地址，使用 `LUMENX_API_PORT` / `LUMENX_API_HOST`。
+> 如需把运行时产物放到别的目录，设置 `LUMENX_OUTPUT_DIR`。烟雾测试默认会把临时产物写到 `tmp/e2e-output-*`，便于失败后直接查看。
 
 ### 5. 启动前端
 
@@ -155,6 +160,10 @@ npm install && npm run dev
 
 - **[用户手册](USER_MANUAL.md)**: 必读！详细的功能使用说明。
 - **[中文化与英文保留白名单](docs/中文化清单_影视创作者.md)**: 面向影视创作者的文案规范、英文保留白名单与多人协作执行规则。
+- **[质量门禁](docs/quality-gates.md)**: 前端 lint/type/test/build、后端测试与 PR 验证清单。
+- **[分镜-素材-分镜图最终设计](docs/storyboard-consistency-final-design.md)**: 产品级一致性设计口径，明确主参考图驱动的图生图链路，不把 fixture 回放当成最终方案。
+- **[运行时文件约定](docs/runtime-files.md)**: `tmp/lumenx-*.json` 启动清单、`LUMENX_OUTPUT_DIR` 和 `tmp/e2e-output-*` 的用途、生命周期和误删/误读边界。
+- **[9.5 分目标复核表](docs/audit/2026-05-08/score-review-9.5-target.md)**: 安全边界之外的达标证据、评分复核与剩余观察项。
 - **[API 文档](http://127.0.0.1:18177/docs)**: 后端接口定义的 Swagger UI。
 
 > 当前状态说明：导出已接入分辨率、格式和字幕参数；总混页里的 SFX/BGM 轨道对应真实生成的音频文件，最终混音会在导出阶段完成。

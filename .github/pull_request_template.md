@@ -6,6 +6,8 @@
 
 ## Verification
 
+- [ ] 前端相关改动已执行 `npm run quality:frontend`
+- [ ] 后端相关改动已执行 `pytest -q`
 - [ ] 已执行与本次改动相关的最小验证
 - [ ] 已说明未执行的验证项及原因（如有）
 - [ ] 已确认分支命名与 commit message 符合仓库 Git 规范

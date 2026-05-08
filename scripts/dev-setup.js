@@ -8,6 +8,11 @@ const venv = path.join(root, '.venv');
 
 console.log('[setup] Checking environment...');
 
+if (process.env.CI || process.env.LUMENX_SKIP_DEV_SETUP === '1') {
+  console.log('[setup] CI/skip flag detected; skipping interactive dev setup.');
+  process.exit(0);
+}
+
 // 1. Setup Python venv if missing
 if (!fs.existsSync(venv)) {
   console.log('[setup] Creating Python virtual environment...');

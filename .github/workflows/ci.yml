@@ -9,8 +9,8 @@ on:
       - main
 
 jobs:
-  backend-tests:
-    name: backend-tests
+  backend-quality-gate:
+    name: backend-quality-gate
     runs-on: ubuntu-latest
 
     steps:
@@ -27,11 +27,11 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run backend tests
-        run: python -m pytest tests
+      - name: Run backend quality gate
+        run: python -m pytest -q -m "not e2e"
 
-  frontend-tests:
-    name: frontend-tests
+  frontend-quality-gate:
+    name: frontend-quality-gate
     runs-on: ubuntu-latest
 
     steps:
@@ -49,10 +49,62 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Run frontend tests
-        working-directory: frontend
-        run: npm run test
+      - name: Run frontend quality gate
+        run: npm run quality:frontend
 
-      - name: Audit user-facing copy
+  browser-e2e-smoke:
+    name: browser-e2e-smoke
+    runs-on: ubuntu-latest
+    needs:
+      - backend-quality-gate
+      - frontend-quality-gate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Install root dev dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install frontend dependencies
         working-directory: frontend
-        run: npm run audit:copy
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser E2E smoke pytest scenarios
+        env:
+          LUMENX_RUN_BROWSER_E2E: '1'
+          LUMENX_E2E_HEADLESS: '1'
+          LUMENX_KEEP_E2E_OUTPUT_ON_FAILURE: '1'
+        run: python -m pytest tests/test_e2e_smoke.py tests/test_prompt_quality_e2e.py -q
+
+      - name: Upload smoke summary JSON, failure screenshot, and preserved output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-e2e-smoke-summary-screenshots
+          path: |
+            tmp/e2e-output-*/browser-smoke-*.json
+            tmp/e2e-output-*/browser-e2e-smoke-failure.png
+            tmp/e2e-output-*/**/*
+          if-no-files-found: ignore
