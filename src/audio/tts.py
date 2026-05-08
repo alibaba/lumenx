@@ -13,6 +13,8 @@ from typing import Dict, Optional, Tuple
 
 import requests
 
+from ..utils.http_downloads import stream_response_to_file
+
 logger = logging.getLogger(__name__)
 
 TTS_PROVIDER_OPENAI = "openai"
@@ -327,6 +329,7 @@ class OpenAICompatibleTTSProvider(BaseTTSProvider):
             },
             json=payload,
             timeout=300,
+            stream=True,
         )
 
         if response.status_code != 200:
@@ -336,9 +339,7 @@ class OpenAICompatibleTTSProvider(BaseTTSProvider):
                 error_data = response.text
             raise RuntimeError(f"OpenAI-compatible TTS failed: {error_data}")
 
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, "wb") as output_file:
-            output_file.write(response.content)
+        stream_response_to_file(response, output_path)
 
         duration_ms = (time.time() - start_time) * 1000
         request_id = self._extract_request_id(response.headers)

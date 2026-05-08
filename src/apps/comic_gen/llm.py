@@ -279,6 +279,43 @@ class ScriptProcessor:
     def is_configured(self):
         return self.llm.is_configured
 
+    def _build_generation_meta(
+        self,
+        source: str,
+        *,
+        degraded: bool = False,
+        reason: str = "",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {
+            "source": source,
+            "degraded": degraded,
+        }
+        if reason:
+            meta["reason"] = reason
+        if details:
+            meta.update(details)
+        return meta
+
+    def _build_prompt_result(
+        self,
+        prompt_cn: str,
+        prompt_en: str,
+        *,
+        source: str,
+        degraded: bool,
+        reason: str = "",
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "prompt_cn": prompt_cn,
+            "prompt_en": prompt_en,
+            "generation_source": source,
+            "generation_degraded": degraded,
+        }
+        if reason:
+            result["generation_reason"] = reason
+        return result
+
     def parse_novel(self, title: str, text: str) -> Script:
         """
         Parses the raw novel text into a structured Script object using an LLM.
@@ -312,7 +349,19 @@ class ScriptProcessor:
                     "LLM entity extraction returned incomplete result. Heuristic fallback filled: %s",
                     ", ".join(filled_categories),
                 )
-            return self._create_script_from_data(title, text, data)
+            return self._create_script_from_data(
+                title,
+                text,
+                data,
+                generation_metadata={
+                    "novel_parse": self._build_generation_meta(
+                        "llm",
+                        degraded=bool(filled_categories),
+                        reason="Heuristic fallback filled missing categories" if filled_categories else "",
+                        details={"filled_categories": filled_categories},
+                    )
+                },
+            )
                 
         except json.JSONDecodeError as e:
             logger.warning("LLM entity extraction returned invalid JSON, switching to heuristic fallback: %s", e)
@@ -338,7 +387,18 @@ class ScriptProcessor:
         data = self._fallback_extract_entities(text)
         if self._has_meaningful_entity_payload(data):
             logger.warning("Using heuristic entity fallback for %s because %s", title, reason)
-            return self._create_script_from_data(title, text, data)
+            return self._create_script_from_data(
+                title,
+                text,
+                data,
+                generation_metadata={
+                    "novel_parse": self._build_generation_meta(
+                        "heuristic_fallback",
+                        degraded=True,
+                        reason=reason,
+                    )
+                },
+            )
         return None
 
     def _normalize_entity_payload(self, data: Any) -> Dict[str, Any]:
@@ -1823,8 +1883,19 @@ class ScriptProcessor:
         relationships.sort(key=lambda item: (-item.co_scene_count, item.source_character_name, item.target_character_name))
         return relationships
 
-    def _create_script_from_data(self, title: str, original_text: str, data: Dict[str, Any]) -> Script:
+    def _create_script_from_data(
+        self,
+        title: str,
+        original_text: str,
+        data: Dict[str, Any],
+        generation_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Script:
         script_id = str(uuid.uuid4())
+        generation_metadata = dict(generation_metadata or {})
+        novel_meta = generation_metadata.get("novel_parse", {}) if isinstance(generation_metadata, dict) else {}
+        frame_generation_source = str(novel_meta.get("source") or "llm")
+        frame_generation_degraded = bool(novel_meta.get("degraded", False))
+        frame_generation_reason = str(novel_meta.get("reason", "") or "").strip() or None
         
         characters = []
         name_to_char = {} # For variant linking
@@ -1935,6 +2006,9 @@ class ScriptProcessor:
                 composition=frame_data.get("composition"),
                 atmosphere=frame_data.get("atmosphere"),
                 image_prompt=f"{frame_data.get('action_description')} {frame_data.get('facial_expression', '')} {frame_data.get('camera_angle')} {frame_data.get('lighting_mood', '')} {frame_data.get('atmosphere', '')}", 
+                generation_source=frame_generation_source,
+                generation_degraded=frame_generation_degraded,
+                generation_reason=frame_generation_reason,
                 status=GenerationStatus.PENDING
             ))
             
@@ -1949,6 +2023,7 @@ class ScriptProcessor:
             props=props,
             frames=frames,
             story_analysis=story_analysis,
+            generation_metadata=generation_metadata,
             created_at=time.time(),
             updated_at=time.time()
         )
@@ -1959,7 +2034,18 @@ class ScriptProcessor:
         """
         fallback_data = self._fallback_extract_entities(text)
         if self._has_meaningful_entity_payload(fallback_data):
-            return self._create_script_from_data(title, text, fallback_data)
+            return self._create_script_from_data(
+                title,
+                text,
+                fallback_data,
+                generation_metadata={
+                    "novel_parse": self._build_generation_meta(
+                        "heuristic_draft",
+                        degraded=True,
+                        reason="Draft script created without LLM analysis",
+                    )
+                },
+            )
 
         return Script(
             id=str(uuid.uuid4()),
@@ -1970,6 +2056,13 @@ class ScriptProcessor:
             props=[],
             frames=[],
             story_analysis=self.build_story_analysis(text, [], [], []),
+            generation_metadata={
+                "novel_parse": self._build_generation_meta(
+                    "draft",
+                    degraded=True,
+                    reason="Draft script created without LLM analysis",
+                )
+            },
             created_at=time.time(),
             updated_at=time.time()
         )
@@ -2374,6 +2467,8 @@ CRITICAL STYLE GUIDELINES:
             for i, rec in enumerate(recommendations):
                 rec["id"] = f"ai-rec-{i+1}-{str(uuid.uuid4())[:8]}"
                 rec["is_custom"] = False
+                rec["generation_source"] = "llm"
+                rec["generation_degraded"] = False
 
             return recommendations
 
@@ -2391,7 +2486,10 @@ CRITICAL STYLE GUIDELINES:
                 "reason": "适合大多数叙事性内容，提供专业的视觉质感",
                 "positive_prompt": "cinematic, photorealistic, 8k, volumetric lighting, film grain, dramatic lighting",
                 "negative_prompt": "cartoon, anime, low quality, blurry",
-                "is_custom": False
+                "is_custom": False,
+                "generation_source": "mock",
+                "generation_degraded": True,
+                "generation_reason": "DASHSCOPE_API_KEY 未配置",
             },
             {
                 "id": f"mock-anime-{str(uuid.uuid4())[:8]}",
@@ -2400,7 +2498,10 @@ CRITICAL STYLE GUIDELINES:
                 "reason": "适合充满情感表现的故事",
                 "positive_prompt": "anime style, cel shading, vibrant colors, expressive, detailed character design",
                 "negative_prompt": "photorealistic, 3d, blurry, washed out",
-                "is_custom": False
+                "is_custom": False,
+                "generation_source": "mock",
+                "generation_degraded": True,
+                "generation_reason": "DASHSCOPE_API_KEY 未配置",
             },
             {
                 "id": f"mock-noir-{str(uuid.uuid4())[:8]}",
@@ -2409,7 +2510,10 @@ CRITICAL STYLE GUIDELINES:
                 "reason": "适合悬疑、神秘题材的叙事",
                 "positive_prompt": "black and white, film noir, high contrast, dramatic shadows, moody lighting",
                 "negative_prompt": "colorful, bright, happy, modern",
-                "is_custom": False
+                "is_custom": False,
+                "generation_source": "mock",
+                "generation_degraded": True,
+                "generation_reason": "DASHSCOPE_API_KEY 未配置",
             }
         ]
     
@@ -2672,6 +2776,10 @@ Props:
 
             frames = self._parse_storyboard_json(content)
             if frames is not None:
+                for frame in frames:
+                    if isinstance(frame, dict):
+                        frame.setdefault("generation_source", "llm")
+                        frame.setdefault("generation_degraded", False)
                 return frames
 
             # First parse failed — retry once with response_format constraint
@@ -2686,6 +2794,10 @@ Props:
             logger.debug(f"Storyboard Analysis Retry Response: {retry_content[:500]}...")
             frames = self._parse_storyboard_json(retry_content)
             if frames is not None:
+                for frame in frames:
+                    if isinstance(frame, dict):
+                        frame.setdefault("generation_source", "llm")
+                        frame.setdefault("generation_degraded", False)
                 return frames
 
             raise RuntimeError(
@@ -2748,7 +2860,10 @@ Props:
                 "camera_angle": "平视",
                 "camera_movement": "Static",
                 "dialogue": None,
-                "speaker": None
+                "speaker": None,
+                "generation_source": "mock",
+                "generation_degraded": True,
+                "generation_reason": "DASHSCOPE_API_KEY 未配置",
             }
         ]
 
@@ -2759,7 +2874,13 @@ Props:
         """
         logger.debug(f"Polishing prompt: {draft_prompt}")
 
-        fallback_result = {"prompt_cn": draft_prompt, "prompt_en": draft_prompt}
+        fallback_result = self._build_prompt_result(
+            draft_prompt,
+            draft_prompt,
+            source="fallback",
+            degraded=True,
+            reason="LLM 未配置",
+        )
 
         if not self.is_configured:
              return fallback_result
@@ -2804,23 +2925,46 @@ Props:
                 if "prompt_cn" in result and "prompt_en" in result:
                     logger.debug(f"Polished Prompt CN: {result['prompt_cn'][:100]}...")
                     logger.debug(f"Polished Prompt EN: {result['prompt_en'][:100]}...")
-                    return result
+                    return self._build_prompt_result(
+                        result["prompt_cn"],
+                        result["prompt_en"],
+                        source="llm",
+                        degraded=False,
+                    )
                 else:
                     logger.warning("LLM response missing prompt_cn or prompt_en")
                     return fallback_result
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse polish response JSON: {e}")
-                return fallback_result
+                return self._build_prompt_result(
+                    draft_prompt,
+                    draft_prompt,
+                    source="fallback",
+                    degraded=True,
+                    reason=f"LLM 输出不可解析: {e}",
+                )
                 
         except Exception as e:
             logger.error(f"Error polishing prompt: {e}", exc_info=True)
-            return fallback_result
+            return self._build_prompt_result(
+                draft_prompt,
+                draft_prompt,
+                source="fallback",
+                degraded=True,
+                reason=str(e),
+            )
     def polish_video_prompt(self, draft_prompt: str, feedback: str = "", custom_system_prompt: str = "") -> Dict[str, str]:
         """
         Polishes a video generation prompt using Qwen-Plus.
         Returns bilingual prompts {prompt_cn, prompt_en}.
         """
-        fallback = {"prompt_cn": draft_prompt, "prompt_en": draft_prompt}
+        fallback = self._build_prompt_result(
+            draft_prompt,
+            draft_prompt,
+            source="fallback",
+            degraded=True,
+            reason="LLM 未配置",
+        )
 
         if not self.is_configured:
             return fallback
@@ -2854,17 +2998,34 @@ Props:
             try:
                 result = json.loads(content.strip())
                 if "prompt_cn" in result and "prompt_en" in result:
-                    return result
+                    return self._build_prompt_result(
+                        result["prompt_cn"],
+                        result["prompt_en"],
+                        source="llm",
+                        degraded=False,
+                    )
                 else:
                     logger.warning("Video polish missing bilingual keys")
                     return fallback
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse video polish JSON: {e}")
-                return fallback
+                return self._build_prompt_result(
+                    draft_prompt,
+                    draft_prompt,
+                    source="fallback",
+                    degraded=True,
+                    reason=f"LLM 输出不可解析: {e}",
+                )
 
         except Exception:
             logger.exception("Failed to polish video prompt")
-            return fallback
+            return self._build_prompt_result(
+                draft_prompt,
+                draft_prompt,
+                source="fallback",
+                degraded=True,
+                reason="视频提示词润色失败",
+            )
 
     def polish_r2v_prompt(self, draft_prompt: str, slots: List[Dict[str, str]], feedback: str = "", custom_system_prompt: str = "") -> Dict[str, str]:
         """
@@ -2872,7 +3033,13 @@ Props:
         R2V requires explicit character references using character1, character2, character3 tags.
         Returns bilingual prompts {prompt_cn, prompt_en}.
         """
-        fallback = {"prompt_cn": draft_prompt, "prompt_en": draft_prompt}
+        fallback = self._build_prompt_result(
+            draft_prompt,
+            draft_prompt,
+            source="fallback",
+            degraded=True,
+            reason="LLM 未配置",
+        )
 
         if not self.is_configured:
             return fallback
@@ -2915,14 +3082,31 @@ Props:
             try:
                 result = json.loads(content.strip())
                 if "prompt_cn" in result and "prompt_en" in result:
-                    return result
+                    return self._build_prompt_result(
+                        result["prompt_cn"],
+                        result["prompt_en"],
+                        source="llm",
+                        degraded=False,
+                    )
                 else:
                     logger.warning("R2V polish missing bilingual keys")
                     return fallback
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse R2V polish JSON: {e}")
-                return fallback
+                return self._build_prompt_result(
+                    draft_prompt,
+                    draft_prompt,
+                    source="fallback",
+                    degraded=True,
+                    reason=f"LLM 输出不可解析: {e}",
+                )
 
         except Exception:
             logger.exception("Failed to polish R2V prompt")
-            return fallback
+            return self._build_prompt_result(
+                draft_prompt,
+                draft_prompt,
+                source="fallback",
+                degraded=True,
+                reason="R2V 提示词润色失败",
+            )

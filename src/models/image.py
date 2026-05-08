@@ -26,6 +26,7 @@ except ImportError:  # pragma: no cover - optional in some dev setups
 
 from ..utils import get_logger
 from ..utils.endpoints import get_provider_base_url
+from ..utils.http_downloads import download_url_to_bytes, download_url_to_file
 from ..utils.media_refs import MEDIA_REF_UNKNOWN, classify_media_ref
 from ..utils.oss_utils import OSSImageUploader, is_object_key
 from ..utils.provider_media import resolve_media_input
@@ -35,14 +36,14 @@ logger = get_logger(__name__)
 
 IMAGE_PROVIDER_OPENAI = "openai"
 IMAGE_PROVIDER_DASHSCOPE = "dashscope"
-BANANA_OPENAI_HOST = "api.bltcy.ai"
+IMAGE2_OPENAI_HOST = "api.bltcy.ai"
 
 OPENAI_T2I_MODEL_ALIAS = "openai-image"
 OPENAI_I2I_MODEL_ALIAS = "openai-image-edit"
 DEFAULT_OPENAI_IMAGE_BASE_URL = "https://api.bltcy.ai/v1"
-DEFAULT_OPENAI_IMAGE_MODEL = "nano-banana"
+DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image2"
 DEFAULT_OPENAI_IMAGE_EDIT_BASE_URL = "https://api.bltcy.ai/v1"
-DEFAULT_OPENAI_IMAGE_EDIT_MODEL = "nano-banana"
+DEFAULT_OPENAI_IMAGE_EDIT_MODEL = "gpt-image2"
 OPENAI_EDIT_REFERENCE_MAX_SIDE = 3840
 # Match the CLI fallback single-image cap so both paths accept up to 50MB per reference image.
 OPENAI_EDIT_REFERENCE_MAX_BYTES = 50 * 1024 * 1024
@@ -312,8 +313,8 @@ class WanxImageModel(ImageGenModel):
     def _normalize_openai_size(self, size: str) -> str:
         return (size or "1024*1024").strip().lower().replace("*", "x")
 
-    def _is_banana_base_url(self, base_url: str) -> bool:
-        return BANANA_OPENAI_HOST in (base_url or "").lower()
+    def _is_image2_base_url(self, base_url: str) -> bool:
+        return IMAGE2_OPENAI_HOST in (base_url or "").lower()
 
     def _is_using_fallback_openai_image_api_key(self) -> bool:
         return not _first_non_empty(os.getenv("OPENAI_IMAGE_API_KEY")) and bool(
@@ -437,23 +438,23 @@ class WanxImageModel(ImageGenModel):
     def _format_openai_error(self, action: str, error_payload: Any, request_url: str) -> str:
         if (
             action == "generation"
-            and self._is_banana_base_url(request_url)
+            and self._is_image2_base_url(request_url)
             and self._is_invalid_token_error(error_payload)
             and self._is_using_fallback_openai_image_api_key()
         ):
             return (
-                "Banana 生图当前未命中主用图像 API Key，已回退到备用图编 Key / 通用 OPENAI_API_KEY，"
+                "Image2 生图当前未命中主用图像 API Key，已回退到备用图编 Key / 通用 OPENAI_API_KEY，"
                 "但这把 key 对 api.bltcy.ai 无效。请在设置页同时保留“图像 API Key”和“图像编辑 API Key”，"
                 "优先图像 Key，备用图编 Key。"
             )
         if (
             action == "edit"
-            and self._is_banana_base_url(request_url)
+            and self._is_image2_base_url(request_url)
             and self._is_invalid_token_error(error_payload)
             and self._is_using_fallback_openai_image_edit_api_key()
         ):
             return (
-                "Banana 图编当前未命中主用图像编辑 API Key，已回退到备用图像 Key / 通用 OPENAI_API_KEY，"
+                "Image2 图编当前未命中主用图像编辑 API Key，已回退到备用图像 Key / 通用 OPENAI_API_KEY，"
                 "但这把 key 对 api.bltcy.ai 无效。请在设置页同时保留“图像 API Key”和“图像编辑 API Key”，"
                 "优先图编 Key，备用图像 Key。"
             )
@@ -631,13 +632,13 @@ class WanxImageModel(ImageGenModel):
         if (
             response.status_code != 200
             and payload["model"] != DEFAULT_OPENAI_IMAGE_MODEL
-            and self._is_banana_base_url(self.openai_image_base_url)
+            and self._is_image2_base_url(self.openai_image_base_url)
         ):
             error_payload = self._parse_openai_error_payload(response)
             if self._is_distributor_unavailable_error(error_payload):
                 fallback_payload = {**payload, "model": DEFAULT_OPENAI_IMAGE_MODEL}
                 logger.warning(
-                    "Model %s is unavailable on Banana provider. Retrying with fallback model %s.",
+                    "Model %s is unavailable on Image2 provider. Retrying with fallback model %s.",
                     payload["model"],
                     DEFAULT_OPENAI_IMAGE_MODEL,
                 )
@@ -751,11 +752,14 @@ class WanxImageModel(ImageGenModel):
                 raise RuntimeError(f"Failed to sign object-key reference: {ref}")
 
         if isinstance(resolved_ref, str) and resolved_ref.startswith(("http://", "https://")):
-            response = requests.get(resolved_ref, timeout=60)
-            response.raise_for_status()
+            content, headers = download_url_to_bytes(
+                resolved_ref,
+                timeout=(30, 60),
+                max_bytes=OPENAI_EDIT_REFERENCE_MAX_BYTES * 4,
+            )
             filename = os.path.basename(urlparse(resolved_ref).path) or "reference.png"
-            content_type = response.headers.get("Content-Type") or self._guess_content_type(filename)
-            return self._prepare_openai_edit_reference_image(filename, response.content, content_type)
+            content_type = headers.get("Content-Type") or self._guess_content_type(filename)
+            return self._prepare_openai_edit_reference_image(filename, content, content_type)
 
         candidate_paths = [resolved_ref]
         if isinstance(resolved_ref, str) and not os.path.isabs(resolved_ref):
@@ -1319,60 +1323,5 @@ class WanxImageModel(ImageGenModel):
 
     def _download_image(self, url: str, output_path: str):
         logger.info("Downloading image to %s...", output_path)
-
-        from requests.adapters import HTTPAdapter
-        from requests.packages.urllib3.util.retry import Retry
-
-        retry_strategy = Retry(
-            total=5,
-            backoff_factor=1,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["HEAD", "GET", "OPTIONS"],
-        )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        http = requests.Session()
-        http.mount("https://", adapter)
-        http.mount("http://", adapter)
-
-        retryable_errors = (
-            requests.exceptions.ChunkedEncodingError,
-            requests.exceptions.ConnectionError,
-            requests.exceptions.SSLError,
-            requests.exceptions.Timeout,
-        )
-        max_attempts = 3
-        temp_path = output_path + ".tmp"
-        for attempt in range(1, max_attempts + 1):
-            try:
-                response = http.get(url, stream=True, timeout=(30, 180), verify=False)
-                response.raise_for_status()
-
-                os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                with open(temp_path, "wb") as output_file:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            output_file.write(chunk)
-
-                os.replace(temp_path, output_path)
-                logger.info("Download complete.")
-                return
-            except retryable_errors as exc:
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                if attempt >= max_attempts:
-                    logger.error("Failed to download image after %s attempts: %s", max_attempts, exc)
-                    raise
-                wait_seconds = min(2 ** (attempt - 1), 4)
-                logger.warning(
-                    "Image download failed on attempt %s/%s: %s. Retrying in %ss.",
-                    attempt,
-                    max_attempts,
-                    exc,
-                    wait_seconds,
-                )
-                time.sleep(wait_seconds)
-            except Exception as exc:
-                logger.error("Failed to download image: %s", exc)
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                raise
+        download_url_to_file(url, output_path, timeout=(30, 180), max_attempts=3)
+        logger.info("Download complete.")

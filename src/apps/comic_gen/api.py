@@ -1,24 +1,29 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Iterable
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+from contextlib import asynccontextmanager
 import os
 import shutil
 import sys
 import uuid
 import logging
 import traceback
+from pathlib import Path
 from .pipeline import ComicGenPipeline
 from .models import (
+    Character,
     DEFAULT_I2V_MODEL,
+    ModelSettings,
     PromptConfig,
+    Prop,
     ProviderBackend,
     ProviderRoutingConfig,
+    Scene,
     Script,
     Series,
     VideoTask,
@@ -39,17 +44,48 @@ from ...utils.oss_utils import (
     get_oss_base_path,
     sign_oss_urls_in_data,
 )
+from ...utils.runtime_config import get_output_root
 from ...utils import setup_logging
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv, set_key
 
-app = FastAPI(title="AI Comic Gen API")
 logger = logging.getLogger(__name__)
+
+
+def _output_root_path() -> Path:
+    return get_output_root()
+
+
+def _output_path(*parts: str) -> Path:
+    return _output_root_path().joinpath(*parts)
+
+
+@asynccontextmanager
+async def _app_lifespan(app: FastAPI):
+    _check_startup_image_model_defaults()
+    yield
+
+
+app = FastAPI(title="AI Comic Gen API", lifespan=_app_lifespan)
 
 # Setup logging to user directory
 setup_logging()
 
 DEV_CONFIG_PATH_ENV_VAR = "LUMENX_DEV_CONFIG_PATH"
+DEFAULT_DEV_CONFIG_RELATIVE_PATH = os.path.join("config", "runtime.env")
+DEFAULT_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+UPLOAD_MAX_MB_ENV_VAR = "LUMENX_UPLOAD_MAX_MB"
+UPLOAD_MAX_MB_DEFAULT = 50
+UPLOAD_CHUNK_SIZE = 1024 * 1024
+IMAGE_UPLOAD_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".avif"}
+VIDEO_UPLOAD_EXTENSIONS = {".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"}
+AUDIO_UPLOAD_EXTENSIONS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
+SUBTITLE_UPLOAD_EXTENSIONS = {".srt", ".vtt"}
+GENERAL_UPLOAD_EXTENSIONS = IMAGE_UPLOAD_EXTENSIONS | VIDEO_UPLOAD_EXTENSIONS | AUDIO_UPLOAD_EXTENSIONS | SUBTITLE_UPLOAD_EXTENSIONS
+IMAGE_MIME_PREFIXES = ("image/",)
+VIDEO_MIME_PREFIXES = ("video/",)
+AUDIO_MIME_PREFIXES = ("audio/",)
+TEXT_MIME_PREFIXES = ("text/",)
 
 
 def _model_dump_compat(value: Any) -> Any:
@@ -58,6 +94,104 @@ def _model_dump_compat(value: Any) -> Any:
     if hasattr(value, "dict"):
         return value.dict()
     return value
+
+
+async def _run_blocking(func, *args, **kwargs):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, partial(func, *args, **kwargs))
+
+
+def _delete_project_blocking(script_id: str) -> Dict[str, str]:
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise ValueError("Project not found")
+
+    if script.series_id:
+        series = pipeline.get_series(script.series_id)
+        if series and script_id in series.episode_ids:
+            series.episode_ids.remove(script_id)
+            pipeline._save_series_data()
+
+    del pipeline.scripts[script_id]
+    pipeline._save_data()
+    return {"status": "deleted", "id": script_id, "title": script.title}
+
+
+def _update_prompt_config_blocking(script_id: str, request: "UpdatePromptConfigRequest") -> PromptConfig:
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise ValueError("Project not found")
+    script.prompt_config = PromptConfig(
+        storyboard_polish=request.storyboard_polish,
+        video_polish=request.video_polish,
+        r2v_polish=request.r2v_polish,
+    )
+    pipeline._save_data()
+    return script.prompt_config
+
+
+def _update_voice_params_blocking(
+    script_id: str,
+    char_id: str,
+    request: "UpdateVoiceParamsRequest",
+) -> Script:
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise ValueError("Script not found")
+    char = next((c for c in script.characters if c.id == char_id), None)
+    if not char:
+        raise ValueError("Character not found")
+    char.voice_speed = request.speed
+    char.voice_pitch = request.pitch
+    char.voice_volume = request.volume
+    pipeline._save_data()
+    return script
+
+
+def _create_prop_blocking(script_id: str, name: str, description: str) -> Script:
+    from .models import GenerationStatus, Prop
+
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise ValueError("Project not found")
+
+    new_prop = Prop(
+        id=f"prop_{uuid.uuid4().hex[:8]}",
+        name=name,
+        description=description,
+        status=GenerationStatus.PENDING,
+    )
+
+    script.props.append(new_prop)
+    script.updated_at = time.time()
+    pipeline._save_data()
+    return script
+
+
+def _delete_prop_blocking(script_id: str, prop_id: str) -> Script:
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise ValueError("Project not found")
+
+    original_count = len(script.props)
+    script.props = [p for p in script.props if p.id != prop_id]
+    if len(script.props) == original_count:
+        raise ValueError("Prop not found")
+
+    for frame in script.frames:
+        if prop_id in frame.prop_ids:
+            frame.prop_ids.remove(prop_id)
+
+    script.updated_at = time.time()
+    pipeline._save_data()
+    return script
+
+
+def _read_json_file(path: str) -> Any:
+    import json
+
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _get_project_root() -> str:
@@ -70,7 +204,9 @@ def _resolve_dev_config_path() -> str:
         if not os.path.isabs(configured_path):
             configured_path = os.path.abspath(os.path.join(_get_project_root(), configured_path))
         return configured_path
-    return os.path.join(_get_project_root(), ".env")
+    from ...utils import get_user_data_dir
+
+    return os.path.join(get_user_data_dir(), DEFAULT_DEV_CONFIG_RELATIVE_PATH)
 
 
 def _ensure_config_parent_dir(config_path: str) -> None:
@@ -78,6 +214,161 @@ def _ensure_config_parent_dir(config_path: str) -> None:
     if parent_dir:
         os.makedirs(parent_dir, exist_ok=True)
 
+
+def _build_env_config_payload() -> Dict[str, Any]:
+    from ...utils.endpoints import PROVIDER_DEFAULTS
+
+    endpoint_overrides = {}
+    for provider in PROVIDER_DEFAULTS:
+        env_key = f"{provider}_BASE_URL"
+        value = os.getenv(env_key)
+        if value:
+            endpoint_overrides[env_key] = value
+
+    openai_image_model = _first_non_empty_value(
+        os.getenv("OPENAI_IMAGE_MODEL"),
+        DEFAULT_OPENAI_IMAGE_MODEL,
+    )
+    openai_image_edit_model = _first_non_empty_value(
+        os.getenv("OPENAI_IMAGE_EDIT_MODEL"),
+        DEFAULT_OPENAI_IMAGE_EDIT_MODEL,
+    )
+
+    return {
+        "IMAGE_PROVIDER": _current_image_provider(),
+        "IMAGE_EDIT_PROVIDER": _current_image_edit_provider(),
+        "TTS_PROVIDER": _current_tts_provider(),
+        "LLM_PROVIDER": os.getenv("LLM_PROVIDER", "dashscope"),
+        "OPENAI_API_KEY": _mask_secret_value(os.getenv("OPENAI_API_KEY", "")),
+        "OPENAI_BASE_URL": os.getenv("OPENAI_BASE_URL", ""),
+        "OPENAI_MODEL": os.getenv("OPENAI_MODEL", ""),
+        "OPENAI_IMAGE_API_KEY": _mask_secret_value(os.getenv("OPENAI_IMAGE_API_KEY", "")),
+        "OPENAI_IMAGE_EDIT_API_KEY": _mask_secret_value(os.getenv("OPENAI_IMAGE_EDIT_API_KEY", "")),
+        "OPENAI_IMAGE_BASE_URL": _first_non_empty_value(
+            os.getenv("OPENAI_IMAGE_BASE_URL"),
+            DEFAULT_OPENAI_IMAGE_BASE_URL,
+        ),
+        "OPENAI_IMAGE_EDIT_BASE_URL": _first_non_empty_value(
+            os.getenv("OPENAI_IMAGE_EDIT_BASE_URL"),
+            DEFAULT_OPENAI_IMAGE_EDIT_BASE_URL,
+        ),
+        "OPENAI_IMAGE_MODEL": openai_image_model,
+        "OPENAI_IMAGE_EDIT_MODEL": openai_image_edit_model,
+        "OPENAI_TTS_API_KEY": _mask_secret_value(
+            _first_non_empty_env("OPENAI_TTS_API_KEY", "OPENAI_API_KEY")
+        ),
+        "OPENAI_TTS_BASE_URL": _first_non_empty_env("OPENAI_TTS_BASE_URL", "OPENAI_BASE_URL"),
+        "OPENAI_TTS_MODEL": _first_non_empty_value(
+            os.getenv("OPENAI_TTS_MODEL"),
+            DEFAULT_OPENAI_TTS_MODEL,
+        ),
+        "OPENAI_MULTIMODAL_API_KEY": _mask_secret_value(
+            _first_non_empty_env(
+                "OPENAI_MULTIMODAL_API_KEY",
+                "OPENAI_API_KEY",
+                "DASHSCOPE_API_KEY",
+            )
+        ),
+        "OPENAI_MULTIMODAL_BASE_URL": _current_multimodal_base_url(),
+        "OPENAI_MULTIMODAL_MODEL": _first_non_empty_value(
+            os.getenv("OPENAI_MULTIMODAL_MODEL"),
+            _looks_like_multimodal_model(os.getenv("OPENAI_MODEL")),
+            DEFAULT_OPENAI_MULTIMODAL_MODEL,
+        ),
+        "ARK_API_KEY": _mask_secret_value(os.getenv("ARK_API_KEY", "")),
+        "DASHSCOPE_API_KEY": _mask_secret_value(os.getenv("DASHSCOPE_API_KEY", "")),
+        "TOS_ACCESS_KEY_ID": _mask_secret_value(os.getenv("TOS_ACCESS_KEY_ID", "")),
+        "TOS_SECRET_ACCESS_KEY": _mask_secret_value(os.getenv("TOS_SECRET_ACCESS_KEY", "")),
+        "ALIBABA_CLOUD_ACCESS_KEY_ID": _mask_secret_value(
+            os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "")
+        ),
+        "ALIBABA_CLOUD_ACCESS_KEY_SECRET": _mask_secret_value(
+            os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")
+        ),
+        "OBJECT_STORAGE_PROVIDER": get_object_storage_provider(),
+        "OBJECT_STORAGE_BUCKET_NAME": get_object_storage_bucket_name(),
+        "OBJECT_STORAGE_ENDPOINT": get_object_storage_endpoint(),
+        "OBJECT_STORAGE_REGION": get_object_storage_region(),
+        "OBJECT_STORAGE_BASE_PATH": get_oss_base_path(),
+        "OSS_BUCKET_NAME": get_object_storage_bucket_name(),
+        "OSS_ENDPOINT": get_object_storage_endpoint(),
+        "OSS_BASE_PATH": get_oss_base_path(),
+        "KLING_ACCESS_KEY": _mask_secret_value(os.getenv("KLING_ACCESS_KEY", "")),
+        "KLING_SECRET_KEY": _mask_secret_value(os.getenv("KLING_SECRET_KEY", "")),
+        "VIDU_API_KEY": _mask_secret_value(os.getenv("VIDU_API_KEY", "")),
+        "KLING_PROVIDER_MODE": _normalize_provider_mode(os.getenv("KLING_PROVIDER_MODE")),
+        "VIDU_PROVIDER_MODE": _normalize_provider_mode(os.getenv("VIDU_PROVIDER_MODE")),
+        "PIXVERSE_PROVIDER_MODE": _normalize_provider_mode(os.getenv("PIXVERSE_PROVIDER_MODE")),
+        "endpoint_overrides": endpoint_overrides,
+        "image_model_startup_check": _build_image_model_startup_check_payload(
+            openai_image_model,
+            openai_image_edit_model,
+        ),
+    }
+
+
+def _build_image_model_startup_check_payload(
+    image_model: str,
+    image_edit_model: str,
+) -> Dict[str, str]:
+    """Return the Image2 default check used by startup logs and /config/env."""
+    is_default = (
+        image_model == DEFAULT_OPENAI_IMAGE_MODEL
+        and image_edit_model == DEFAULT_OPENAI_IMAGE_EDIT_MODEL
+    )
+    if is_default:
+        status = "ok"
+        message = (
+            "Image2 startup check passed: /config/env resolves to gpt-image2 "
+            "for image generation and image edit."
+        )
+    else:
+        status = "drift"
+        message = (
+            "Image2 startup check drifted: /config/env image model values differ "
+            "from the gpt-image2 defaults."
+        )
+
+    return {
+        "status": status,
+        "expected_image_model": DEFAULT_OPENAI_IMAGE_MODEL,
+        "expected_image_edit_model": DEFAULT_OPENAI_IMAGE_EDIT_MODEL,
+        "image_model": image_model,
+        "image_edit_model": image_edit_model,
+        "message": message,
+    }
+
+
+def _check_startup_image_model_defaults() -> bool:
+    """Log whether the runtime /config/env image defaults still resolve to Image2."""
+    payload = _build_env_config_payload()
+    check = payload["image_model_startup_check"]
+    image_model = check["image_model"]
+    image_edit_model = check["image_edit_model"]
+    if check["status"] == "ok":
+        logger.info(
+            "STARTUP: %s OPENAI_IMAGE_MODEL=%s, OPENAI_IMAGE_EDIT_MODEL=%s",
+            check["message"],
+            image_model,
+            image_edit_model,
+        )
+        return True
+
+    logger.warning(
+        "STARTUP: %s "
+        "OPENAI_IMAGE_MODEL=%s (expected %s), OPENAI_IMAGE_EDIT_MODEL=%s (expected %s)",
+        check["message"],
+        image_model,
+        check["expected_image_model"],
+        image_edit_model,
+        check["expected_image_edit_model"],
+    )
+    return False
+
+
+project_env_path = os.path.join(_get_project_root(), ".env")
+if os.path.exists(project_env_path):
+    load_dotenv(project_env_path, override=False)
 
 env_path = _resolve_dev_config_path()
 if os.path.exists(env_path):
@@ -96,10 +387,11 @@ logger.info(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify the frontend origin
+    allow_origins=[],
+    allow_origin_regex=os.getenv("LUMENX_CORS_ORIGIN_REGEX", DEFAULT_CORS_ORIGIN_REGEX),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
     expose_headers=["Content-Disposition"],  # Allow browsers to access Content-Disposition for downloads
 )
 
@@ -112,19 +404,162 @@ async def add_cache_control_header(request: Request, call_next):
     return response
 
 # Create output directory if it doesn't exist
-os.makedirs("output", exist_ok=True)
-os.makedirs("output/uploads", exist_ok=True)
-os.makedirs("output/video", exist_ok=True)
-os.makedirs("output/assets", exist_ok=True)
+_output_root_path().mkdir(parents=True, exist_ok=True)
+for relative_dir in [
+    _output_path("uploads"),
+    _output_path("video"),
+    _output_path("assets"),
+    _output_path("storyboard"),
+    _output_path("audio"),
+    _output_path("export"),
+    _output_path("video_inputs"),
+    _output_path("codex_image_audit"),
+]:
+    Path(relative_dir).mkdir(parents=True, exist_ok=True)
 
-# Mount static files with multiple aliases to handle plural/singular inconsistencies
-# Legacy paths in projects.json often use 'outputs/videos' or 'outputs/assets'
-app.mount("/files/outputs/videos", StaticFiles(directory="output/video"), name="files_outputs_videos")
-app.mount("/files/outputs/assets", StaticFiles(directory="output/assets"), name="files_outputs_assets")
-app.mount("/files/outputs", StaticFiles(directory="output"), name="files_outputs")
-app.mount("/files/videos", StaticFiles(directory="output/video"), name="files_videos")
-app.mount("/files/assets", StaticFiles(directory="output/assets"), name="files_assets")
-app.mount("/files", StaticFiles(directory="output"), name="files")
+
+def _get_upload_max_bytes() -> int:
+    raw_value = (os.getenv(UPLOAD_MAX_MB_ENV_VAR) or str(UPLOAD_MAX_MB_DEFAULT)).strip()
+    try:
+        max_mb = int(raw_value)
+    except ValueError:
+        max_mb = UPLOAD_MAX_MB_DEFAULT
+    return max(1, max_mb) * 1024 * 1024
+
+
+def _normalize_public_file_path(file_path: str) -> Optional[Path]:
+    normalized = (file_path or "").strip().replace("\\", "/").lstrip("/")
+    if not normalized:
+        return None
+
+    for prefix, replacement in (
+        ("output/outputs/videos/", "video/"),
+        ("output/outputs/assets/", "assets/"),
+        ("output/outputs/audio/", "audio/"),
+        ("output/outputs/export/", "export/"),
+        ("output/videos/", "video/"),
+        ("output/assets/", "assets/"),
+        ("output/audio/", "audio/"),
+        ("output/export/", "export/"),
+        ("output/storyboard/", "storyboard/"),
+        ("output/uploads/", "uploads/"),
+        ("output/video_inputs/", "video_inputs/"),
+        ("output/codex_image_audit/", "codex_image_audit/"),
+        ("outputs/videos/", "video/"),
+        ("outputs/assets/", "assets/"),
+        ("outputs/audio/", "audio/"),
+        ("outputs/export/", "export/"),
+        ("videos/", "video/"),
+        ("assets/", "assets/"),
+        ("audio/", "audio/"),
+        ("export/", "export/"),
+        ("storyboard/", "storyboard/"),
+        ("uploads/", "uploads/"),
+        ("video_inputs/", "video_inputs/"),
+        ("codex_image_audit/", "codex_image_audit/"),
+    ):
+        if normalized.startswith(prefix):
+            normalized = replacement + normalized[len(prefix):]
+            break
+
+    if normalized.startswith("output/"):
+        normalized = normalized[len("output/") :]
+
+    candidate = _output_path(*Path(normalized).parts)
+    resolved_candidate = candidate.resolve()
+    output_root = _output_root_path().resolve()
+    try:
+        resolved_candidate.relative_to(output_root)
+    except ValueError:
+        return None
+
+    if resolved_candidate.is_dir():
+        return None
+    return resolved_candidate
+
+
+def _is_allowed_public_extension(path: Path) -> bool:
+    return path.suffix.lower() in (IMAGE_UPLOAD_EXTENSIONS | VIDEO_UPLOAD_EXTENSIONS | AUDIO_UPLOAD_EXTENSIONS | SUBTITLE_UPLOAD_EXTENSIONS)
+
+
+def _is_allowed_upload_mime(content_type: Optional[str], mime_prefixes: Iterable[str], allow_text: bool = False) -> bool:
+    if not content_type:
+        return True
+
+    lowered = content_type.lower()
+    if lowered == "application/octet-stream":
+        return True
+    if any(lowered.startswith(prefix) for prefix in mime_prefixes):
+        return True
+    if allow_text and any(lowered.startswith(prefix) for prefix in TEXT_MIME_PREFIXES):
+        return True
+    return False
+
+
+def _validate_upload_metadata(file: UploadFile, allowed_extensions: set[str], mime_prefixes: Iterable[str], *, allow_text: bool = False) -> str:
+    filename = (file.filename or "").strip()
+    if not filename:
+        raise HTTPException(status_code=400, detail="Uploaded file must have a filename")
+
+    file_ext = Path(filename).suffix.lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{file_ext or 'unknown'}'. Allowed types: {', '.join(sorted(allowed_extensions))}",
+        )
+
+    if not _is_allowed_upload_mime(file.content_type, mime_prefixes, allow_text=allow_text):
+        raise HTTPException(status_code=415, detail=f"Unsupported content type '{file.content_type}'")
+
+    return file_ext
+
+
+async def _save_upload_file(file: UploadFile, allowed_extensions: set[str], mime_prefixes: Iterable[str], *, allow_text: bool = False) -> Path:
+    file_ext = _validate_upload_metadata(file, allowed_extensions, mime_prefixes, allow_text=allow_text)
+    filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = _output_path("uploads", filename)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    max_upload_bytes = _get_upload_max_bytes()
+    total_bytes = 0
+
+    try:
+        with file_path.open("wb") as buffer:
+            while True:
+                chunk = await file.read(UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > max_upload_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Uploaded file exceeds the maximum size of {max_upload_bytes // (1024 * 1024)} MB",
+                    )
+                buffer.write(chunk)
+    except HTTPException:
+        if file_path.exists():
+            file_path.unlink()
+        raise
+    except Exception:
+        if file_path.exists():
+            file_path.unlink()
+        raise
+    finally:
+        await file.close()
+
+    return file_path
+
+
+@app.get("/files/{file_path:path}")
+async def get_public_file(file_path: str):
+    """Serve only approved media assets from output/."""
+    resolved_path = _normalize_public_file_path(file_path)
+    if not resolved_path or not resolved_path.exists() or not resolved_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if not _is_allowed_public_extension(resolved_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(str(resolved_path))
 
 
 # Initialize pipeline
@@ -145,8 +580,8 @@ async def debug_config():
         "oss_configured": uploader.is_configured,
         "oss_bucket_initialized": uploader.bucket is not None,
         "oss_base_path": get_oss_base_path(),
-        "output_dir_exists": os.path.exists("output"),
-        "output_contents": os.listdir("output") if os.path.exists("output") else [],
+        "output_dir_exists": _output_root_path().exists(),
+        "output_contents": os.listdir(_output_root_path()) if _output_root_path().exists() else [],
         "cwd": os.getcwd(),
         "env_vars_present": {
             "OBJECT_STORAGE_PROVIDER": bool(os.getenv("OBJECT_STORAGE_PROVIDER")),
@@ -197,7 +632,7 @@ class GenerateAssetRequest(BaseModel):
     style_preset: str = "Cinematic"
     reference_image_url: Optional[str] = None
     style_prompt: Optional[str] = None
-    generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'all'
+    generation_type: str = "all"  # 'full_body', 'three_view', 'headshot', 'expression_sheet', 'all'
     prompt: Optional[str] = None
     apply_style: bool = True
     negative_prompt: Optional[str] = None
@@ -233,26 +668,36 @@ async def check_system():
 async def upload_file(file: UploadFile = File(...)):
     """Uploads a file and returns its URL (object storage if configured, else local)."""
     try:
-        file_ext = os.path.splitext(file.filename)[1]
-        filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path = await _save_upload_file(
+            file,
+            GENERAL_UPLOAD_EXTENSIONS,
+            IMAGE_MIME_PREFIXES + VIDEO_MIME_PREFIXES + AUDIO_MIME_PREFIXES + TEXT_MIME_PREFIXES,
+            allow_text=True,
+        )
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        uploader = OSSImageUploader()
+        if file_path.suffix.lower() in VIDEO_UPLOAD_EXTENSIONS:
+            oss_url = uploader.upload_video(str(file_path), sub_path="video")
+        elif file_path.suffix.lower() in AUDIO_UPLOAD_EXTENSIONS:
+            oss_url = uploader.upload_file(str(file_path), sub_path="audio")
+        elif file_path.suffix.lower() in IMAGE_UPLOAD_EXTENSIONS:
+            oss_url = uploader.upload_image(str(file_path), sub_path="assets")
+        else:
+            oss_url = uploader.upload_file(str(file_path), sub_path="uploads")
 
-        # Try uploading to configured object storage
-        oss_url = OSSImageUploader().upload_image(file_path)
         if oss_url:
             return signed_response({"url": oss_url})
 
         # Fallback to local URL (relative path for frontend getAssetUrl)
-        return {"url": f"uploads/{filename}"}
+        return {"url": f"uploads/{file_path.name}"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 class UploadAssetRequest(BaseModel):
-    upload_type: str  # "full_body" | "head_shot" | "three_views" | "image"
+    upload_type: str  # "full_body" | "head_shot" | "three_views" | "expression_sheet" | "image"
     description: Optional[str] = None  # User-modified description for reverse generation
 
 
@@ -270,39 +715,40 @@ async def upload_asset(
     The uploaded image is marked as the 'upload source' for reverse generation.
     
     - asset_type: "character", "scene", or "prop"
-    - upload_type: "full_body", "head_shot", "three_views", or "image" (for scene/prop)
+    - upload_type: "full_body", "head_shot", "three_views", "expression_sheet", or "image" (for scene/prop)
     - description: Optional modified description for the asset
     """
     try:
-        # 1. Save file locally first
-        file_ext = os.path.splitext(file.filename)[1]
-        filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
-        
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
+        if asset_type not in {"character", "scene", "prop"}:
+            raise HTTPException(status_code=400, detail=f"Unsupported asset type '{asset_type}'")
+        if upload_type not in {"full_body", "head_shot", "three_views", "expression_sheet", "image"}:
+            raise HTTPException(status_code=400, detail=f"Unsupported upload type '{upload_type}'")
+
+        file_path = await _save_upload_file(file, IMAGE_UPLOAD_EXTENSIONS, IMAGE_MIME_PREFIXES)
+
         # 2. Upload to configured object storage
         uploader = OSSImageUploader()
-        oss_url = uploader.upload_image(file_path)
+        oss_url = await _run_blocking(uploader.upload_image, str(file_path), sub_path="assets")
         if not oss_url:
-            oss_url = f"uploads/{filename}"  # Fallback to local path
+            oss_url = f"uploads/{file_path.name}"  # Fallback to local path
         
         # 3. Update asset with new variant
-        updated_script = pipeline.add_uploaded_asset_variant(
+        updated_script = await _run_blocking(
+            pipeline.add_uploaded_asset_variant,
             script_id=script_id,
             asset_type=asset_type,
             asset_id=asset_id,
             upload_type=upload_type,
             image_url=oss_url,
-            description=description
+            description=description,
         )
         
         if not updated_script:
             raise HTTPException(status_code=404, detail="Script or asset not found")
         
         return signed_response(updated_script)
-        
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -318,12 +764,7 @@ class CreateProjectRequest(BaseModel):
 @app.post("/projects", response_model=Script)
 async def create_project(request: CreateProjectRequest, skip_analysis: bool = False):
     """Creates a new project from a novel text."""
-    # Run in thread pool to avoid blocking event loop during LLM analysis (Python 3.8 compatible)
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        None,  # Use default executor
-        partial(pipeline.create_project, request.title, request.text, skip_analysis)
-    )
+    result = await _run_blocking(pipeline.create_project, request.title, request.text, skip_analysis)
     return signed_response(result)
 
 
@@ -331,7 +772,7 @@ async def create_project(request: CreateProjectRequest, skip_analysis: bool = Fa
 async def list_fixture_story_projects():
     """List bundled fixture story projects that can be imported from the UI."""
     try:
-        return signed_response(pipeline.list_fixture_story_projects())
+        return signed_response(await _run_blocking(pipeline.list_fixture_story_projects))
     except Exception as e:
         logger.exception("Failed to list fixture story projects")
         raise HTTPException(status_code=500, detail=str(e))
@@ -341,7 +782,7 @@ async def list_fixture_story_projects():
 async def import_fixture_story_project(fixture_slug: str):
     """Create or reuse a bundled fixture story project for UI testing."""
     try:
-        result = pipeline.import_fixture_story_project(fixture_slug)
+        result = await _run_blocking(pipeline.import_fixture_story_project, fixture_slug)
         return signed_response(result)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -359,12 +800,7 @@ class ReparseProjectRequest(BaseModel):
 async def reparse_project(script_id: str, request: ReparseProjectRequest):
     """Re-parses the text for an existing project, replacing all entities."""
     try:
-        # Run the blocking LLM call in a thread pool to avoid blocking the event loop (Python 3.8 compatible)
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,  # Use default executor
-            partial(pipeline.reparse_project, script_id, request.text)
-        )
+        result = await _run_blocking(pipeline.reparse_project, script_id, request.text)
         return signed_response(result)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -394,21 +830,48 @@ class UpdateSeriesRequest(BaseModel):
     description: Optional[str] = None
 
 
-@app.post("/series")
+class SeriesEpisodeSummary(BaseModel):
+    id: str
+    title: str
+    episode_number: Optional[int] = None
+    created_at: float
+    updated_at: float
+
+
+class SeriesDetailResponse(Series):
+    episodes: List[SeriesEpisodeSummary] = Field(default_factory=list)
+
+
+class SeriesAssetsResponse(BaseModel):
+    characters: List[Character] = Field(default_factory=list)
+    scenes: List[Scene] = Field(default_factory=list)
+    props: List[Prop] = Field(default_factory=list)
+
+
+class PromptConfigResponse(BaseModel):
+    prompt_config: PromptConfig
+    defaults: Optional[PromptConfig] = None
+
+
+class DeleteResponse(BaseModel):
+    status: str
+
+
+@app.post("/series", response_model=Series)
 async def create_series(request: CreateSeriesRequest):
     """Create a new Series."""
-    series = pipeline.create_series(request.title, request.description)
+    series = await _run_blocking(pipeline.create_series, request.title, request.description)
     return signed_response(series)
 
 
-@app.get("/series")
+@app.get("/series", response_model=List[Series])
 async def list_series():
     """List all Series."""
     series_list = pipeline.list_series()
     return signed_response(series_list)
 
 
-@app.get("/series/{series_id}")
+@app.get("/series/{series_id}", response_model=SeriesDetailResponse)
 async def get_series(series_id: str):
     """Get Series details including assets and episode list."""
     series = pipeline.get_series(series_id)
@@ -430,22 +893,22 @@ async def get_series(series_id: str):
     return signed_response(result)
 
 
-@app.put("/series/{series_id}")
+@app.put("/series/{series_id}", response_model=Series)
 async def update_series(series_id: str, request: UpdateSeriesRequest):
     """Update Series title/description."""
     try:
         updates = {k: v for k, v in request.model_dump().items() if v is not None}
-        series = pipeline.update_series(series_id, updates)
+        series = await _run_blocking(pipeline.update_series, series_id, updates)
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.delete("/series/{series_id}")
+@app.delete("/series/{series_id}", response_model=DeleteResponse)
 async def delete_series(series_id: str):
     """Delete a Series and disassociate its episodes."""
     try:
-        pipeline.delete_series(series_id)
+        await _run_blocking(pipeline.delete_series, series_id)
         return {"status": "deleted"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -456,27 +919,32 @@ class AddEpisodeRequest(BaseModel):
     episode_number: Optional[int] = None
 
 
-@app.post("/series/{series_id}/episodes")
+@app.post("/series/{series_id}/episodes", response_model=Series)
 async def add_episode_to_series(series_id: str, request: AddEpisodeRequest):
     """Add an existing project as an episode to a Series."""
     try:
-        series = pipeline.add_episode_to_series(series_id, request.script_id, request.episode_number)
+        series = await _run_blocking(
+            pipeline.add_episode_to_series,
+            series_id,
+            request.script_id,
+            request.episode_number,
+        )
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.delete("/series/{series_id}/episodes/{script_id}")
+@app.delete("/series/{series_id}/episodes/{script_id}", response_model=Series)
 async def remove_episode_from_series(series_id: str, script_id: str):
     """Remove an episode from a Series (does not delete the project)."""
     try:
-        series = pipeline.remove_episode_from_series(series_id, script_id)
+        series = await _run_blocking(pipeline.remove_episode_from_series, series_id, script_id)
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/series/{series_id}/episodes")
+@app.get("/series/{series_id}/episodes", response_model=List[Script])
 async def get_series_episodes(series_id: str):
     """Get all episodes in a Series."""
     try:
@@ -486,7 +954,7 @@ async def get_series_episodes(series_id: str):
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get("/series/{series_id}/prompt_config")
+@app.get("/series/{series_id}/prompt_config", response_model=PromptConfigResponse)
 async def get_series_prompt_config(series_id: str):
     """Get Series prompt config with system defaults."""
     series = pipeline.get_series(series_id)
@@ -502,11 +970,11 @@ async def get_series_prompt_config(series_id: str):
     }
 
 
-@app.put("/series/{series_id}/prompt_config")
+@app.put("/series/{series_id}/prompt_config", response_model=Series)
 async def update_series_prompt_config(series_id: str, config: PromptConfig):
     """Update Series-level prompt config."""
     try:
-        series = pipeline.update_series(series_id, {"prompt_config": config})
+        series = await _run_blocking(pipeline.update_series, series_id, {"prompt_config": config})
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -525,7 +993,8 @@ class UpdateModelSettingsRequest(BaseModel):
     prop_aspect_ratio: Optional[str] = None
     storyboard_aspect_ratio: Optional[str] = None
 
-@app.get("/series/{series_id}/model_settings")
+
+@app.get("/series/{series_id}/model_settings", response_model=ModelSettings)
 async def get_series_model_settings(series_id: str):
     """Get Series model settings."""
     series = pipeline.get_series(series_id)
@@ -534,7 +1003,7 @@ async def get_series_model_settings(series_id: str):
     return series.model_settings.model_dump()
 
 
-@app.put("/series/{series_id}/model_settings")
+@app.put("/series/{series_id}/model_settings", response_model=Series)
 async def update_series_model_settings(series_id: str, settings: UpdateModelSettingsRequest):
     """Update Series-level model settings."""
     updates = {k: v for k, v in settings.model_dump().items() if v is not None}
@@ -548,7 +1017,7 @@ async def update_series_model_settings(series_id: str, settings: UpdateModelSett
         if not current_series:
             raise HTTPException(status_code=404, detail="Series not found")
         ms = current_series.model_settings.model_copy(update=updates)
-        series = pipeline.update_series(series_id, {"model_settings": ms})
+        series = await _run_blocking(pipeline.update_series, series_id, {"model_settings": ms})
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -558,7 +1027,7 @@ async def update_series_model_settings(series_id: str, settings: UpdateModelSett
 # Series Asset Operations
 # ============================================================
 
-@app.get("/series/{series_id}/assets")
+@app.get("/series/{series_id}/assets", response_model=SeriesAssetsResponse)
 async def get_series_assets(series_id: str):
     """Get all shared assets from a Series."""
     series = pipeline.get_series(series_id)
@@ -575,7 +1044,8 @@ async def get_series_assets(series_id: str):
 async def generate_series_asset(series_id: str, request: GenerateAssetRequest, background_tasks: BackgroundTasks):
     """Generate a single asset for a Series (async)."""
     try:
-        series, task_id = pipeline.generate_series_asset(
+        series, task_id = await _run_blocking(
+            pipeline.generate_series_asset,
             series_id,
             request.asset_id,
             request.asset_type,
@@ -589,7 +1059,7 @@ async def generate_series_asset(series_id: str, request: GenerateAssetRequest, b
             request.batch_size,
             request.model_name
         )
-        background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
+        background_tasks.add_task(process_asset_generation_task, task_id)
         response_data = _model_dump_compat(series)
         response_data["_task_id"] = task_id
         return signed_response(response_data)
@@ -603,7 +1073,12 @@ async def generate_series_asset(series_id: str, request: GenerateAssetRequest, b
 async def toggle_series_asset_lock(series_id: str, request: ToggleLockRequest):
     """Toggle the locked status of a Series asset."""
     try:
-        series = pipeline.toggle_series_asset_lock(series_id, request.asset_id, request.asset_type)
+        series = await _run_blocking(
+            pipeline.toggle_series_asset_lock,
+            series_id,
+            request.asset_id,
+            request.asset_type,
+        )
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -615,7 +1090,13 @@ async def toggle_series_asset_lock(series_id: str, request: ToggleLockRequest):
 async def update_series_asset_image(series_id: str, request: UpdateAssetImageRequest):
     """Update a Series asset's image URL."""
     try:
-        series = pipeline.update_series_asset_image(series_id, request.asset_id, request.asset_type, request.image_url)
+        series = await _run_blocking(
+            pipeline.update_series_asset_image,
+            series_id,
+            request.asset_id,
+            request.asset_type,
+            request.image_url,
+        )
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -627,7 +1108,8 @@ async def update_series_asset_image(series_id: str, request: UpdateAssetImageReq
 async def update_series_asset_attributes(series_id: str, request: UpdateAssetAttributesRequest):
     """Update arbitrary attributes of a Series asset."""
     try:
-        series = pipeline.update_series_asset_attributes(
+        series = await _run_blocking(
+            pipeline.update_series_asset_attributes,
             series_id, request.asset_id, request.asset_type, request.attributes
         )
         return signed_response(series)
@@ -642,11 +1124,16 @@ class ImportAssetsRequest(BaseModel):
     asset_ids: List[str]
 
 
-@app.post("/series/{series_id}/assets/import")
+@app.post("/series/{series_id}/assets/import", response_model=Series)
 async def import_series_assets(series_id: str, request: ImportAssetsRequest):
     """Deep-copy assets from another Series into this one."""
     try:
-        series, imported_ids, skipped_ids = pipeline.import_assets_from_series(series_id, request.source_series_id, request.asset_ids)
+        series, imported_ids, skipped_ids = await _run_blocking(
+            pipeline.import_assets_from_series,
+            series_id,
+            request.source_series_id,
+            request.asset_ids,
+        )
         return signed_response(series)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -672,11 +1159,7 @@ async def import_file_preview(
         if not text.strip():
             raise HTTPException(status_code=400, detail="文件内容为空")
 
-        loop = asyncio.get_event_loop()
-        episodes = await loop.run_in_executor(
-            None,
-            partial(pipeline.import_file_and_split, text, suggested_episodes)
-        )
+        episodes = await _run_blocking(pipeline.import_file_and_split, text, suggested_episodes)
         # Store text in pipeline cache, return import_id instead of full text
         import_id = str(uuid.uuid4())
         pipeline._import_cache[import_id] = text
@@ -714,16 +1197,12 @@ async def import_file_confirm(request: ConfirmImportRequest):
             text = request.text
         if not text:
             raise ValueError("No text available. Provide import_id or text.")
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            partial(
-                pipeline.create_series_from_import,
-                request.title,
-                text,
-                request.episodes,
-                request.description,
-            )
+        result = await _run_blocking(
+            pipeline.create_series_from_import,
+            request.title,
+            text,
+            request.episodes,
+            request.description,
         )
         if request.import_id:
             pipeline._import_cache.pop(request.import_id, None)
@@ -919,7 +1398,7 @@ def _is_masked_secret_value(value: Optional[str]) -> bool:
 def get_user_config_path() -> str:
     """
     Returns the path to the user config file.
-    - Development mode: Uses custom dev config path or .env in project root
+    - Development mode: Uses custom dev config path or ~/.lumen-x/config/runtime.env
     - Packaged app mode: Uses ~/.lumen-x/config.json
     """
     from ...utils import get_user_data_dir
@@ -975,7 +1454,7 @@ def save_user_config(config_dict: dict):
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(existing_config, f, indent=2)
     else:
-        # .env for development
+        # Runtime .env for development
         if not os.path.exists(config_path):
             with open(config_path, "a", encoding="utf-8"):
                 pass
@@ -1013,9 +1492,21 @@ def remove_user_config_keys(keys: list):
                 logger.warning(f"Failed to unset key {key} from .env: {e}")
 
 
+def _persist_env_config_blocking(config_dict: Dict[str, str], keys_to_remove: List[str]) -> str:
+    save_user_config(config_dict)
+    remove_user_config_keys(keys_to_remove)
+
+    try:
+        OSSImageUploader.reset_instance()
+        logger.info("Object storage instance reset successfully")
+    except Exception as oss_e:
+        logger.warning(f"Object storage reset failed (non-critical): {oss_e}")
+
+    return get_user_config_path()
+
+
 # Load user config on startup
 load_user_config()
-
 
 
 @app.get("/config/info")
@@ -1074,19 +1565,11 @@ async def update_env_config(config: EnvConfig):
         for key, value in config_dict.items():
             os.environ[key] = value
 
-        # Save to file
-        save_user_config(config_dict)
-        remove_user_config_keys(keys_to_remove)
-
-        # Reset object storage singleton to pick up new config (non-blocking)
-        try:
-            OSSImageUploader.reset_instance()
-            logger.info("Object storage instance reset successfully")
-        except Exception as oss_e:
-            # Object storage reset failure should not block config saving
-            logger.warning(f"Object storage reset failed (non-critical): {oss_e}")
-
-        config_path = get_user_config_path()
+        config_path = await _run_blocking(
+            _persist_env_config_blocking,
+            config_dict,
+            keys_to_remove,
+        )
         return {"status": "success", "message": f"Configuration saved to {config_path}"}
     except Exception as e:
         logger.exception("Failed to save environment configuration")
@@ -1107,22 +1590,10 @@ async def get_project(script_id: str):
 @app.delete("/projects/{script_id}")
 async def delete_project(script_id: str):
     """Deletes a project by ID. WARNING: This permanently removes the project from backend storage."""
-    script = pipeline.get_script(script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
     try:
-        # If project belongs to a Series, remove from episode_ids
-        if script.series_id:
-            series = pipeline.get_series(script.series_id)
-            if series and script_id in series.episode_ids:
-                series.episode_ids.remove(script_id)
-                pipeline._save_series_data()
-
-        # Remove from pipeline scripts
-        del pipeline.scripts[script_id]
-        pipeline._save_data()
-        return {"status": "deleted", "id": script_id, "title": script.title}
+        return await _run_blocking(_delete_project_blocking, script_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1138,7 +1609,7 @@ async def sync_descriptions(script_id: str):
     Note: This only syncs descriptions; generated images/videos are preserved.
     """
     try:
-        updated_script = pipeline.sync_descriptions_from_script_entities(script_id)
+        updated_script = await _run_blocking(pipeline.sync_descriptions_from_script_entities, script_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1154,7 +1625,12 @@ class AddCharacterRequest(BaseModel):
 async def add_character(script_id: str, request: AddCharacterRequest):
     """Adds a new character."""
     try:
-        updated_script = pipeline.add_character(script_id, request.name, request.description)
+        updated_script = await _run_blocking(
+            pipeline.add_character,
+            script_id,
+            request.name,
+            request.description,
+        )
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1165,7 +1641,7 @@ async def add_character(script_id: str, request: AddCharacterRequest):
 async def delete_character(script_id: str, char_id: str):
     """Deletes a character."""
     try:
-        updated_script = pipeline.delete_character(script_id, char_id)
+        updated_script = await _run_blocking(pipeline.delete_character, script_id, char_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1180,7 +1656,12 @@ class AddSceneRequest(BaseModel):
 async def add_scene(script_id: str, request: AddSceneRequest):
     """Adds a new scene."""
     try:
-        updated_script = pipeline.add_scene(script_id, request.name, request.description)
+        updated_script = await _run_blocking(
+            pipeline.add_scene,
+            script_id,
+            request.name,
+            request.description,
+        )
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1191,7 +1672,7 @@ async def add_scene(script_id: str, request: AddSceneRequest):
 async def delete_scene(script_id: str, scene_id: str):
     """Deletes a scene."""
     try:
-        updated_script = pipeline.delete_scene(script_id, scene_id)
+        updated_script = await _run_blocking(pipeline.delete_scene, script_id, scene_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1207,7 +1688,8 @@ class UpdateStyleRequest(BaseModel):
 async def update_project_style(script_id: str, request: UpdateStyleRequest):
     """Updates the global style settings for a project."""
     try:
-        updated_script = pipeline.update_project_style(
+        updated_script = await _run_blocking(
+            pipeline.update_project_style,
             script_id,
             request.style_preset,
             request.style_prompt
@@ -1233,7 +1715,7 @@ async def generate_assets(script_id: str, background_tasks: BackgroundTasks):
     # Given the mock nature, it's fast.
 
     try:
-        updated_script = pipeline.generate_assets(script_id)
+        updated_script = await _run_blocking(pipeline.generate_assets, script_id)
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1254,7 +1736,8 @@ class GenerateMotionRefRequest(BaseModel):
 async def generate_motion_ref(script_id: str, request: GenerateMotionRefRequest, background_tasks: BackgroundTasks):
     """Generates a Motion Reference video for an asset (Character Full Body/Headshot, Scene, or Prop)."""
     try:
-        script, task_id = pipeline.create_motion_ref_task(
+        script, task_id = await _run_blocking(
+            pipeline.create_motion_ref_task,
             script_id=script_id,
             asset_id=request.asset_id,
             asset_type=request.asset_type,
@@ -1265,7 +1748,7 @@ async def generate_motion_ref(script_id: str, request: GenerateMotionRefRequest,
         )
         
         # Add background processing
-        background_tasks.add_task(pipeline.process_motion_ref_task, script_id, task_id)
+        background_tasks.add_task(process_motion_ref_task, script_id, task_id)
         
         # Return script with task_id for frontend polling
         response_data = script.model_dump() if hasattr(script, 'model_dump') else script.dict()
@@ -1299,7 +1782,7 @@ class AnalyzeBeatStoryboardRequest(BaseModel):
 async def get_story_analysis(script_id: str):
     """Returns the structured story analysis for a project."""
     try:
-        return signed_response(pipeline.get_story_analysis(script_id))
+        return signed_response(await _run_blocking(pipeline.get_story_analysis, script_id))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -1311,7 +1794,8 @@ async def get_story_analysis(script_id: str):
 async def update_story_beat(script_id: str, beat_id: str, request: UpdateStoryBeatRequest):
     """Updates editable fields on a single structured story beat."""
     try:
-        updated_script = pipeline.update_story_beat(
+        updated_script = await _run_blocking(
+            pipeline.update_story_beat,
             script_id,
             beat_id,
             action_summary=request.action_summary,
@@ -1333,7 +1817,7 @@ async def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequ
     Replaces existing frames with newly generated ones.
     """
     try:
-        updated_script = pipeline.analyze_text_to_frames(script_id, request.text)
+        updated_script = await _run_blocking(pipeline.analyze_text_to_frames, script_id, request.text)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1348,7 +1832,7 @@ async def analyze_story_beat_to_storyboard(script_id: str, request: AnalyzeBeatS
     Re-analyzes storyboard frames for a single structured beat only.
     """
     try:
-        updated_script = pipeline.analyze_story_beat_to_frames(script_id, request.beat_id)
+        updated_script = await _run_blocking(pipeline.analyze_story_beat_to_frames, script_id, request.beat_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1372,7 +1856,8 @@ async def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest)
     Returns the refined prompts and optionally updates the frame.
     """
     try:
-        result = pipeline.refine_frame_prompt(
+        result = await _run_blocking(
+            pipeline.refine_frame_prompt,
             script_id,
             request.frame_id,
             request.raw_prompt,
@@ -1391,7 +1876,7 @@ async def refine_storyboard_prompt(script_id: str, request: RefinePromptRequest)
 async def generate_storyboard(script_id: str):
     """Triggers storyboard generation."""
     try:
-        updated_script = pipeline.generate_storyboard(script_id)
+        updated_script = await _run_blocking(pipeline.generate_storyboard, script_id)
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1402,7 +1887,7 @@ async def generate_storyboard(script_id: str):
 async def generate_video(script_id: str):
     """Triggers video generation."""
     try:
-        updated_script = pipeline.generate_video(script_id)
+        updated_script = await _run_blocking(pipeline.generate_video, script_id)
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1413,7 +1898,7 @@ async def generate_video(script_id: str):
 async def generate_audio(script_id: str):
     """Triggers audio generation."""
     try:
-        updated_script = pipeline.generate_audio(script_id)
+        updated_script = await _run_blocking(pipeline.generate_audio, script_id)
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1456,9 +1941,25 @@ class CreateVideoTaskRequest(BaseModel):
 async def process_video_task(script_id: str, task_id: str):
     """Background task to generate video."""
     try:
-        pipeline.process_video_task(script_id, task_id)
+        await _run_blocking(pipeline.process_video_task, script_id, task_id)
     except Exception as e:
         logger.error(f"Error processing video task {task_id}: {e}")
+
+
+async def process_asset_generation_task(task_id: str):
+    """Background task to generate asset variants."""
+    try:
+        await _run_blocking(pipeline.process_asset_generation_task, task_id)
+    except Exception as e:
+        logger.error(f"Error processing asset task {task_id}: {e}")
+
+
+async def process_motion_ref_task(script_id: str, task_id: str):
+    """Background task to generate motion reference videos."""
+    try:
+        await _run_blocking(pipeline.process_motion_ref_task, script_id, task_id)
+    except Exception as e:
+        logger.error(f"Error processing motion reference task {task_id}: {e}")
 
 
 @app.post("/projects/{script_id}/video_tasks", response_model=List[VideoTask])
@@ -1467,7 +1968,8 @@ async def create_video_task(script_id: str, request: CreateVideoTaskRequest, bac
     try:
         tasks = []
         for _ in range(request.batch_size):
-            script, task_id = pipeline.create_video_task(
+            script, task_id = await _run_blocking(
+                pipeline.create_video_task,
                 script_id=script_id,
                 image_url=request.image_url,
                 prompt=request.prompt,
@@ -1504,7 +2006,7 @@ async def create_video_task(script_id: str, request: CreateVideoTaskRequest, bac
                 tasks.append(created_task)
 
             # Add background processing
-            background_tasks.add_task(pipeline.process_video_task, script_id, task_id)
+            background_tasks.add_task(process_video_task, script_id, task_id)
 
         return signed_response(tasks)
 
@@ -1519,7 +2021,8 @@ async def generate_single_asset(script_id: str, request: GenerateAssetRequest, b
     """Generates a single asset with specific options (async).
     Returns immediately with task_id for polling progress."""
     try:
-        script, task_id = pipeline.create_asset_generation_task(
+        script, task_id = await _run_blocking(
+            pipeline.create_asset_generation_task,
             script_id,
             request.asset_id,
             request.asset_type,
@@ -1531,11 +2034,11 @@ async def generate_single_asset(script_id: str, request: GenerateAssetRequest, b
             request.apply_style,
             request.negative_prompt,
             request.batch_size,
-            request.model_name
+            request.model_name,
         )
         
         # Add background processing
-        background_tasks.add_task(pipeline.process_asset_generation_task, task_id)
+        background_tasks.add_task(process_asset_generation_task, task_id)
         
         # Return script with task_id for frontend polling
         response_data = script.model_dump() if hasattr(script, 'model_dump') else script.dict()
@@ -1574,7 +2077,8 @@ class GenerateAssetVideoRequest(BaseModel):
 async def generate_asset_video(script_id: str, asset_type: str, asset_id: str, request: GenerateAssetVideoRequest, background_tasks: BackgroundTasks):
     """Generates a video for a specific asset (I2V)."""
     try:
-        script, task_id = pipeline.create_asset_video_task(
+        script, task_id = await _run_blocking(
+            pipeline.create_asset_video_task,
             script_id,
             asset_id,
             asset_type,
@@ -1584,7 +2088,7 @@ async def generate_asset_video(script_id: str, asset_type: str, asset_id: str, r
         )
         
         # Add background processing
-        background_tasks.add_task(pipeline.process_video_task, script_id, task_id)
+        background_tasks.add_task(process_video_task, script_id, task_id)
         
         return signed_response(script)
 
@@ -1598,12 +2102,7 @@ async def generate_asset_video(script_id: str, asset_type: str, asset_id: str, r
 async def delete_asset_video(script_id: str, asset_type: str, asset_id: str, video_id: str):
     """Deletes a video from an asset."""
     try:
-        updated_script = pipeline.delete_asset_video(
-            script_id,
-            asset_id,
-            asset_type,
-            video_id
-        )
+        updated_script = await _run_blocking(pipeline.delete_asset_video, script_id, asset_id, asset_type, video_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1616,11 +2115,7 @@ async def delete_asset_video(script_id: str, asset_type: str, asset_id: str, vid
 async def toggle_asset_lock(script_id: str, request: ToggleLockRequest):
     """Toggles the locked status of an asset."""
     try:
-        updated_script = pipeline.toggle_asset_lock(
-            script_id,
-            request.asset_id,
-            request.asset_type
-        )
+        updated_script = await _run_blocking(pipeline.toggle_asset_lock, script_id, request.asset_id, request.asset_type)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1633,11 +2128,12 @@ async def toggle_asset_lock(script_id: str, request: ToggleLockRequest):
 async def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
     """Updates an asset's image URL manually."""
     try:
-        updated_script = pipeline.update_asset_image(
+        updated_script = await _run_blocking(
+            pipeline.update_asset_image,
             script_id,
             request.asset_id,
             request.asset_type,
-            request.image_url
+            request.image_url,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1651,11 +2147,12 @@ async def update_asset_image(script_id: str, request: UpdateAssetImageRequest):
 async def update_asset_attributes(script_id: str, request: UpdateAssetAttributesRequest):
     """Updates arbitrary attributes of an asset."""
     try:
-        updated_script = pipeline.update_asset_attributes(
+        updated_script = await _run_blocking(
+            pipeline.update_asset_attributes,
             script_id,
             request.asset_id,
             request.asset_type,
-            request.attributes
+            request.attributes,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1675,11 +2172,12 @@ class UpdateAssetDescriptionRequest(BaseModel):
 async def update_asset_description(script_id: str, request: UpdateAssetDescriptionRequest):
     """Updates an asset's description."""
     try:
-        updated_script = pipeline.update_asset_description(
+        updated_script = await _run_blocking(
+            pipeline.update_asset_description,
             script_id,
             request.asset_id,
             request.asset_type,
-            request.description
+            request.description,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1693,18 +2191,19 @@ class SelectVariantRequest(BaseModel):
     asset_id: str
     asset_type: str
     variant_id: str
-    generation_type: str = None  # For character: "full_body", "three_view", "headshot"
+    generation_type: str = None  # For character: "full_body", "three_view", "headshot", "expression_sheet"
 
 @app.post("/projects/{script_id}/assets/variant/select", response_model=Script)
 async def select_asset_variant(script_id: str, request: SelectVariantRequest):
     """Selects a specific variant for an asset."""
     try:
-        updated_script = pipeline.select_asset_variant(
+        updated_script = await _run_blocking(
+            pipeline.select_asset_variant,
             script_id,
             request.asset_id,
             request.asset_type,
             request.variant_id,
-            request.generation_type
+            request.generation_type,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1721,11 +2220,12 @@ class DeleteVariantRequest(BaseModel):
 async def delete_asset_variant(script_id: str, request: DeleteVariantRequest):
     """Deletes a specific variant from an asset."""
     try:
-        updated_script = pipeline.delete_asset_variant(
+        updated_script = await _run_blocking(
+            pipeline.delete_asset_variant,
             script_id,
             request.asset_id,
             request.asset_type,
-            request.variant_id
+            request.variant_id,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1738,20 +2238,21 @@ class FavoriteVariantRequest(BaseModel):
     asset_id: str
     asset_type: str
     variant_id: str
-    generation_type: Optional[str] = None  # For character: 'full_body', 'three_view', 'headshot'
+    generation_type: Optional[str] = None  # For character: 'full_body', 'three_view', 'headshot', 'expression_sheet'
     is_favorited: bool
 
 @app.post("/projects/{script_id}/assets/variant/favorite", response_model=Script)
 async def toggle_variant_favorite(script_id: str, request: FavoriteVariantRequest):
     """Toggles the favorite status of a variant. Favorited variants won't be auto-deleted when limit is reached."""
     try:
-        updated_script = pipeline.toggle_variant_favorite(
+        updated_script = await _run_blocking(
+            pipeline.toggle_variant_favorite,
             script_id,
             request.asset_id,
             request.asset_type,
             request.variant_id,
             request.is_favorited,
-            request.generation_type
+            request.generation_type,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1763,7 +2264,8 @@ async def toggle_variant_favorite(script_id: str, request: FavoriteVariantReques
 async def update_model_settings(script_id: str, request: UpdateModelSettingsRequest):
     """Updates project's model settings for T2I/I2I/I2V and aspect ratios."""
     try:
-        updated_script = pipeline.update_model_settings(
+        updated_script = await _run_blocking(
+            pipeline.update_model_settings,
             script_id,
             request.t2i_model,
             request.i2i_model,
@@ -1771,7 +2273,7 @@ async def update_model_settings(script_id: str, request: UpdateModelSettingsRequ
             request.character_aspect_ratio,
             request.scene_aspect_ratio,
             request.prop_aspect_ratio,
-            request.storyboard_aspect_ratio
+            request.storyboard_aspect_ratio,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1786,7 +2288,7 @@ class UpdatePromptConfigRequest(BaseModel):
     r2v_polish: str = ""
 
 
-@app.get("/projects/{script_id}/prompt_config")
+@app.get("/projects/{script_id}/prompt_config", response_model=PromptConfigResponse)
 async def get_prompt_config(script_id: str):
     """Returns project prompt_config and system default prompts for reference."""
     try:
@@ -1808,22 +2310,14 @@ async def get_prompt_config(script_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.put("/projects/{script_id}/prompt_config")
+@app.put("/projects/{script_id}/prompt_config", response_model=PromptConfigResponse)
 async def update_prompt_config(script_id: str, request: UpdatePromptConfigRequest):
     """Updates project custom prompt configuration. Empty string = use system default."""
     try:
-        script = pipeline.get_script(script_id)
-        if not script:
-            raise HTTPException(status_code=404, detail="Project not found")
-        script.prompt_config = PromptConfig(
-            storyboard_polish=request.storyboard_polish,
-            video_polish=request.video_polish,
-            r2v_polish=request.r2v_polish,
-        )
-        pipeline._save_data()
-        return {"prompt_config": script.prompt_config.model_dump()}
-    except HTTPException:
-        raise
+        prompt_config = await _run_blocking(_update_prompt_config_blocking, script_id, request)
+        return {"prompt_config": prompt_config.model_dump()}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -1837,7 +2331,13 @@ class BindVoiceRequest(BaseModel):
 async def bind_voice(script_id: str, char_id: str, request: BindVoiceRequest):
     """Binds a voice to a character."""
     try:
-        updated_script = pipeline.bind_voice(script_id, char_id, request.voice_id, request.voice_name)
+        updated_script = await _run_blocking(
+            pipeline.bind_voice,
+            script_id,
+            char_id,
+            request.voice_id,
+            request.voice_name,
+        )
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1852,17 +2352,11 @@ class UpdateVoiceParamsRequest(BaseModel):
 @app.put("/projects/{script_id}/characters/{char_id}/voice_params", response_model=Script)
 async def update_voice_params(script_id: str, char_id: str, request: UpdateVoiceParamsRequest):
     """Updates voice parameters for a character."""
-    script = pipeline.get_script(script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="Script not found")
-    char = next((c for c in script.characters if c.id == char_id), None)
-    if not char:
-        raise HTTPException(status_code=404, detail="Character not found")
-    char.voice_speed = request.speed
-    char.voice_pitch = request.pitch
-    char.voice_volume = request.volume
-    pipeline._save_data()
-    return signed_response(script)
+    try:
+        script = await _run_blocking(_update_voice_params_blocking, script_id, char_id, request)
+        return signed_response(script)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.get("/voices")
@@ -1881,7 +2375,14 @@ class GenerateLineAudioRequest(BaseModel):
 async def generate_line_audio(script_id: str, frame_id: str, request: GenerateLineAudioRequest):
     """Generates audio for a specific frame with parameters."""
     try:
-        updated_script = pipeline.generate_dialogue_line(script_id, frame_id, request.speed, request.pitch, request.volume)
+        updated_script = await _run_blocking(
+            pipeline.generate_dialogue_line,
+            script_id,
+            frame_id,
+            request.speed,
+            request.pitch,
+            request.volume,
+        )
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1891,7 +2392,7 @@ async def generate_line_audio(script_id: str, frame_id: str, request: GenerateLi
 async def generate_mix_sfx(script_id: str):
     """Generate SFX tracks for all frames in the project."""
     try:
-        updated_script = pipeline.generate_sfx(script_id)
+        updated_script = await _run_blocking(pipeline.generate_sfx, script_id)
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1901,7 +2402,7 @@ async def generate_mix_sfx(script_id: str):
 async def generate_mix_bgm(script_id: str):
     """Generate BGM tracks for all frames in the project."""
     try:
-        updated_script = pipeline.generate_bgm(script_id)
+        updated_script = await _run_blocking(pipeline.generate_bgm, script_id)
         return signed_response(updated_script)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1915,10 +2416,7 @@ class ToggleFrameLockRequest(BaseModel):
 async def toggle_frame_lock(script_id: str, request: ToggleFrameLockRequest):
     """Toggles the locked status of a frame."""
     try:
-        updated_script = pipeline.toggle_frame_lock(
-            script_id,
-            request.frame_id
-        )
+        updated_script = await _run_blocking(pipeline.toggle_frame_lock, script_id, request.frame_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1939,7 +2437,8 @@ class UpdateFrameRequest(BaseModel):
 async def update_frame(script_id: str, request: UpdateFrameRequest):
     """Updates frame data (prompt, scene, characters, etc.)."""
     try:
-        updated_script = pipeline.update_frame(
+        updated_script = await _run_blocking(
+            pipeline.update_frame,
             script_id,
             request.frame_id,
             image_prompt=request.image_prompt,
@@ -1947,7 +2446,7 @@ async def update_frame(script_id: str, request: UpdateFrameRequest):
             dialogue=request.dialogue,
             camera_angle=request.camera_angle,
             scene_id=request.scene_id,
-            character_ids=request.character_ids
+            character_ids=request.character_ids,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1965,12 +2464,13 @@ class AddFrameRequest(BaseModel):
 async def add_frame(script_id: str, request: AddFrameRequest):
     """Adds a new storyboard frame."""
     try:
-        updated_script = pipeline.add_frame(
-            script_id, 
-            request.scene_id, 
-            request.action_description, 
+        updated_script = await _run_blocking(
+            pipeline.add_frame,
+            script_id,
+            request.scene_id,
+            request.action_description,
             request.camera_angle,
-            request.insert_at
+            request.insert_at,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -1982,7 +2482,7 @@ async def add_frame(script_id: str, request: AddFrameRequest):
 async def delete_frame(script_id: str, frame_id: str):
     """Deletes a storyboard frame."""
     try:
-        updated_script = pipeline.delete_frame(script_id, frame_id)
+        updated_script = await _run_blocking(pipeline.delete_frame, script_id, frame_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -1997,7 +2497,7 @@ class CopyFrameRequest(BaseModel):
 async def copy_frame(script_id: str, request: CopyFrameRequest):
     """Copies a storyboard frame."""
     try:
-        updated_script = pipeline.copy_frame(script_id, request.frame_id, request.insert_at)
+        updated_script = await _run_blocking(pipeline.copy_frame, script_id, request.frame_id, request.insert_at)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -2011,7 +2511,7 @@ class ReorderFramesRequest(BaseModel):
 async def reorder_frames(script_id: str, request: ReorderFramesRequest):
     """Reorders storyboard frames."""
     try:
-        updated_script = pipeline.reorder_frames(script_id, request.frame_ids)
+        updated_script = await _run_blocking(pipeline.reorder_frames, script_id, request.frame_ids)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -2031,12 +2531,13 @@ async def render_frame(script_id: str, request: RenderFrameRequest):
     try:
         logger.info(f"Rendering frame {request.frame_id}")
         
-        updated_script = pipeline.generate_storyboard_render(
+        updated_script = await _run_blocking(
+            pipeline.generate_storyboard_render,
             script_id,
             request.frame_id,
             request.composition_data,
             request.prompt,
-            request.batch_size
+            request.batch_size,
         )
         return signed_response(updated_script)
     except ValueError as e:
@@ -2056,7 +2557,8 @@ class ComposeFrameCropsRequest(BaseModel):
 async def compose_frame_crops(script_id: str, frame_id: str, request: ComposeFrameCropsRequest):
     """Composes edited crop outputs into the frame's rendered image asset."""
     try:
-        updated_script = pipeline.compose_frame_crops(
+        updated_script = await _run_blocking(
+            pipeline.compose_frame_crops,
             script_id,
             frame_id,
             request.manifest_path,
@@ -2079,7 +2581,7 @@ class SelectVideoRequest(BaseModel):
 async def select_video(script_id: str, frame_id: str, request: SelectVideoRequest):
     """Selects a video variant for a specific frame."""
     try:
-        updated_script = pipeline.select_video_for_frame(script_id, frame_id, request.video_id)
+        updated_script = await _run_blocking(pipeline.select_video_for_frame, script_id, frame_id, request.video_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -2095,7 +2597,7 @@ class ExtractLastFrameRequest(BaseModel):
 async def extract_last_frame(script_id: str, frame_id: str, request: ExtractLastFrameRequest):
     """Extract the last frame from a completed video and add it as a variant to the frame's rendered_image_asset."""
     try:
-        updated_script = pipeline.extract_last_frame(script_id, frame_id, request.video_task_id)
+        updated_script = await _run_blocking(pipeline.extract_last_frame, script_id, frame_id, request.video_task_id)
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -2110,16 +2612,12 @@ async def extract_last_frame(script_id: str, frame_id: str, request: ExtractLast
 async def upload_frame_image(script_id: str, frame_id: str, file: UploadFile = File(...)):
     """Upload an image as a variant for a frame's rendered_image_asset."""
     try:
-        # Save file locally first
-        file_ext = os.path.splitext(file.filename)[1]
-        filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join("output/uploads", filename)
+        file_path = await _save_upload_file(file, IMAGE_UPLOAD_EXTENSIONS, IMAGE_MIME_PREFIXES)
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        updated_script = pipeline.upload_frame_image(script_id, frame_id, file_path)
+        updated_script = await _run_blocking(pipeline.upload_frame_image, script_id, frame_id, str(file_path))
         return signed_response(updated_script)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2130,9 +2628,8 @@ async def upload_frame_image(script_id: str, frame_id: str, file: UploadFile = F
 @app.post("/projects/{script_id}/merge", response_model=Script)
 async def merge_videos(script_id: str):
     """Merge all selected frame videos into final output"""
-    import traceback
     try:
-        merged_script = pipeline.merge_videos(script_id)
+        merged_script = await _run_blocking(pipeline.merge_videos, script_id)
         return signed_response(merged_script)
     except ValueError as e:
         # Known validation errors (no videos, etc.)
@@ -2175,10 +2672,10 @@ async def export_project(script_id: str, request: ExportRequest):
             raise HTTPException(status_code=404, detail="Project not found")
 
         if not script.merged_video_url:
-            script = pipeline.merge_videos(script_id)
+            script = await _run_blocking(pipeline.merge_videos, script_id)
 
         options = request.model_dump() if hasattr(request, "model_dump") else request.dict()
-        export_result = pipeline.export_project(script_id, options)
+        export_result = await _run_blocking(pipeline.export_project, script_id, options)
         return signed_response(export_result)
     except HTTPException:
         raise
@@ -2214,14 +2711,17 @@ async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest
         if not script:
             raise HTTPException(status_code=404, detail="Script not found")
 
-        # Use LLM to analyze and recommend styles (run in thread pool to avoid blocking, Python 3.8 compatible)
-        loop = asyncio.get_event_loop()
-        recommendations = await loop.run_in_executor(
-            None,  # Use default executor
-            partial(pipeline.script_processor.analyze_script_for_styles, request.script_text)
-        )
+        recommendations = await _run_blocking(pipeline.script_processor.analyze_script_for_styles, request.script_text)
+        analysis_degraded = any(bool(item.get("generation_degraded")) for item in recommendations)
+        analysis_source = next((str(item.get("generation_source")) for item in recommendations if item.get("generation_source")), "llm")
+        analysis_reason = next((item.get("generation_reason") for item in recommendations if item.get("generation_reason")), None)
 
-        return {"recommendations": recommendations}
+        return {
+            "recommendations": recommendations,
+            "analysis_source": analysis_source,
+            "analysis_degraded": analysis_degraded,
+            "analysis_reason": analysis_reason,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -2234,7 +2734,8 @@ async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest
 async def save_art_direction(script_id: str, request: SaveArtDirectionRequest):
     """Save Art Direction configuration to the project"""
     try:
-        updated_script = pipeline.save_art_direction(
+        updated_script = await _run_blocking(
+            pipeline.save_art_direction,
             script_id,
             request.selected_style_id,
             request.style_config,
@@ -2254,8 +2755,6 @@ async def save_art_direction(script_id: str, request: SaveArtDirectionRequest):
 async def get_style_presets():
     """Get built-in style presets"""
     try:
-        import json
-        import os
         preset_file = os.path.join(os.path.dirname(__file__), "style_presets.json")
         logger.debug(f"Loading presets from {preset_file}")
         logger.debug(f"File exists: {os.path.exists(preset_file)}")
@@ -2264,9 +2763,8 @@ async def get_style_presets():
             logger.debug("DEBUG: Preset file not found!")
             return {"presets": []}
 
-        with open(preset_file, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return {"presets": data}
+        data = await _run_blocking(_read_json_file, preset_file)
+        return {"presets": data}
     except Exception as e:
         import traceback
         logger.exception("An error occurred")
@@ -2310,10 +2808,13 @@ async def polish_video_prompt(request: PolishVideoPromptRequest):
     try:
         custom_prompt = _get_custom_prompt(request.script_id, "video_polish")
         processor = ScriptProcessor()
-        result = processor.polish_video_prompt(request.draft_prompt, request.feedback, custom_prompt)
+        result = await _run_blocking(processor.polish_video_prompt, request.draft_prompt, request.feedback, custom_prompt)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
-            "prompt_en": result.get("prompt_en", "")
+            "prompt_en": result.get("prompt_en", ""),
+            "generation_source": result.get("generation_source", "fallback"),
+            "generation_degraded": bool(result.get("generation_degraded", False)),
+            "generation_reason": result.get("generation_reason"),
         }
     except Exception as e:
         import traceback
@@ -2339,10 +2840,13 @@ async def polish_r2v_prompt(request: PolishR2VPromptRequest):
         custom_prompt = _get_custom_prompt(request.script_id, "r2v_polish")
         processor = ScriptProcessor()
         slot_info = [{"description": s.description} for s in request.slots]
-        result = processor.polish_r2v_prompt(request.draft_prompt, slot_info, request.feedback, custom_prompt)
+        result = await _run_blocking(processor.polish_r2v_prompt, request.draft_prompt, slot_info, request.feedback, custom_prompt)
         return {
             "prompt_cn": result.get("prompt_cn", ""),
-            "prompt_en": result.get("prompt_en", "")
+            "prompt_en": result.get("prompt_en", ""),
+            "generation_source": result.get("generation_source", "fallback"),
+            "generation_degraded": bool(result.get("generation_degraded", False)),
+            "generation_reason": result.get("generation_reason"),
         }
     except Exception as e:
         import traceback
@@ -2356,83 +2860,7 @@ async def polish_r2v_prompt(request: PolishR2VPromptRequest):
 async def get_env_config():
     """Get current environment configuration."""
     try:
-        from ...utils.endpoints import PROVIDER_DEFAULTS
-        endpoint_overrides = {}
-        for provider in PROVIDER_DEFAULTS:
-            env_key = f"{provider}_BASE_URL"
-            value = os.getenv(env_key)
-            if value:
-                endpoint_overrides[env_key] = value
-
-        return {
-            "IMAGE_PROVIDER": _current_image_provider(),
-            "IMAGE_EDIT_PROVIDER": _current_image_edit_provider(),
-            "TTS_PROVIDER": _current_tts_provider(),
-            "LLM_PROVIDER": os.getenv("LLM_PROVIDER", "dashscope"),
-            "OPENAI_API_KEY": _mask_secret_value(os.getenv("OPENAI_API_KEY", "")),
-            "OPENAI_BASE_URL": os.getenv("OPENAI_BASE_URL", ""),
-            "OPENAI_MODEL": os.getenv("OPENAI_MODEL", ""),
-            "OPENAI_IMAGE_API_KEY": _mask_secret_value(os.getenv("OPENAI_IMAGE_API_KEY", "")),
-            "OPENAI_IMAGE_EDIT_API_KEY": _mask_secret_value(os.getenv("OPENAI_IMAGE_EDIT_API_KEY", "")),
-            "OPENAI_IMAGE_BASE_URL": _first_non_empty_value(
-                os.getenv("OPENAI_IMAGE_BASE_URL"),
-                DEFAULT_OPENAI_IMAGE_BASE_URL,
-            ),
-            "OPENAI_IMAGE_EDIT_BASE_URL": _first_non_empty_value(
-                os.getenv("OPENAI_IMAGE_EDIT_BASE_URL"),
-                DEFAULT_OPENAI_IMAGE_EDIT_BASE_URL,
-            ),
-            "OPENAI_IMAGE_MODEL": _first_non_empty_value(
-                os.getenv("OPENAI_IMAGE_MODEL"),
-                DEFAULT_OPENAI_IMAGE_MODEL,
-            ),
-            "OPENAI_IMAGE_EDIT_MODEL": _first_non_empty_value(
-                os.getenv("OPENAI_IMAGE_EDIT_MODEL"),
-                DEFAULT_OPENAI_IMAGE_EDIT_MODEL,
-            ),
-            "OPENAI_TTS_API_KEY": _mask_secret_value(
-                _first_non_empty_env("OPENAI_TTS_API_KEY", "OPENAI_API_KEY")
-            ),
-            "OPENAI_TTS_BASE_URL": _first_non_empty_env("OPENAI_TTS_BASE_URL", "OPENAI_BASE_URL"),
-            "OPENAI_TTS_MODEL": _first_non_empty_value(
-                os.getenv("OPENAI_TTS_MODEL"),
-                DEFAULT_OPENAI_TTS_MODEL,
-            ),
-            "OPENAI_MULTIMODAL_API_KEY": _mask_secret_value(
-                _first_non_empty_env(
-                    "OPENAI_MULTIMODAL_API_KEY",
-                    "OPENAI_API_KEY",
-                    "DASHSCOPE_API_KEY",
-                )
-            ),
-            "OPENAI_MULTIMODAL_BASE_URL": _current_multimodal_base_url(),
-            "OPENAI_MULTIMODAL_MODEL": _first_non_empty_value(
-                os.getenv("OPENAI_MULTIMODAL_MODEL"),
-                _looks_like_multimodal_model(os.getenv("OPENAI_MODEL")),
-                DEFAULT_OPENAI_MULTIMODAL_MODEL,
-            ),
-            "ARK_API_KEY": _mask_secret_value(os.getenv("ARK_API_KEY", "")),
-            "DASHSCOPE_API_KEY": _mask_secret_value(os.getenv("DASHSCOPE_API_KEY", "")),
-            "OBJECT_STORAGE_PROVIDER": get_object_storage_provider(),
-            "OBJECT_STORAGE_BUCKET_NAME": get_object_storage_bucket_name(),
-            "OBJECT_STORAGE_ENDPOINT": get_object_storage_endpoint(),
-            "OBJECT_STORAGE_REGION": get_object_storage_region(),
-            "OBJECT_STORAGE_BASE_PATH": get_oss_base_path(),
-            "TOS_ACCESS_KEY_ID": _mask_secret_value(os.getenv("TOS_ACCESS_KEY_ID", "")),
-            "TOS_SECRET_ACCESS_KEY": _mask_secret_value(os.getenv("TOS_SECRET_ACCESS_KEY", "")),
-            "ALIBABA_CLOUD_ACCESS_KEY_ID": _mask_secret_value(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID", "")),
-            "ALIBABA_CLOUD_ACCESS_KEY_SECRET": _mask_secret_value(os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET", "")),
-            "OSS_BUCKET_NAME": get_object_storage_bucket_name(),
-            "OSS_ENDPOINT": get_object_storage_endpoint(),
-            "OSS_BASE_PATH": get_oss_base_path(),
-            "KLING_ACCESS_KEY": _mask_secret_value(os.getenv("KLING_ACCESS_KEY", "")),
-            "KLING_SECRET_KEY": _mask_secret_value(os.getenv("KLING_SECRET_KEY", "")),
-            "VIDU_API_KEY": _mask_secret_value(os.getenv("VIDU_API_KEY", "")),
-            "KLING_PROVIDER_MODE": _normalize_provider_mode(os.getenv("KLING_PROVIDER_MODE")),
-            "VIDU_PROVIDER_MODE": _normalize_provider_mode(os.getenv("VIDU_PROVIDER_MODE")),
-            "PIXVERSE_PROVIDER_MODE": _normalize_provider_mode(os.getenv("PIXVERSE_PROVIDER_MODE")),
-            "endpoint_overrides": endpoint_overrides,
-        }
+        return _build_env_config_payload()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2451,46 +2879,23 @@ class CreatePropRequest(BaseModel):
 @app.post("/projects/{script_id}/props")
 async def create_prop(script_id: str, request: CreatePropRequest):
     """Creates a new prop in the project."""
-    script = pipeline.get_script(script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    import uuid
-    from .models import Prop, GenerationStatus
-
-    new_prop = Prop(
-        id=f"prop_{uuid.uuid4().hex[:8]}",
-        name=request.name,
-        description=request.description,
-        status=GenerationStatus.PENDING
-    )
-
-    script.props.append(new_prop)
-    script.updated_at = time.time()
-    pipeline._save_data()
-
-    return signed_response(script)
+    try:
+        script = await _run_blocking(
+            _create_prop_blocking,
+            script_id,
+            request.name,
+            request.description,
+        )
+        return signed_response(script)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.delete("/projects/{script_id}/props/{prop_id}")
 async def delete_prop(script_id: str, prop_id: str):
     """Deletes a prop from the project."""
-    script = pipeline.get_script(script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    original_count = len(script.props)
-    script.props = [p for p in script.props if p.id != prop_id]
-
-    if len(script.props) == original_count:
-        raise HTTPException(status_code=404, detail="Prop not found")
-
-    # Remove prop references from frames
-    for frame in script.frames:
-        if prop_id in frame.prop_ids:
-            frame.prop_ids.remove(prop_id)
-
-    script.updated_at = time.time()
-    pipeline._save_data()
-
-    return signed_response(script)
+    try:
+        script = await _run_blocking(_delete_prop_blocking, script_id, prop_id)
+        return signed_response(script)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))

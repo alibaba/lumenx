@@ -15,6 +15,7 @@ import requests
 
 from .base import VideoGenModel
 from ..utils.endpoints import get_provider_base_url
+from ..utils.http_downloads import download_url_to_file
 from ..utils.oss_utils import OSSImageUploader
 from ..utils.provider_media import resolve_media_input
 
@@ -176,11 +177,7 @@ class KlingModel(VideoGenModel):
 
             if status == "succeed":
                 video_url = result_data["data"]["task_result"]["videos"][0]["url"]
-                # Download video
-                video_content = requests.get(video_url, timeout=120).content
-                os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                with open(output_path, "wb") as f:
-                    f.write(video_content)
+                download_url_to_file(video_url, output_path, timeout=(30, 120))
 
                 generation_time = time.time() - start_time
                 logger.info(f"[Kling] Done in {generation_time:.1f}s -> {output_path}")

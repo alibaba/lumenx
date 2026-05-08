@@ -1,4 +1,5 @@
 import os
+import os
 import time
 from typing import Dict, Any, List
 from .models import StoryboardFrame, Character, Scene, Prop, GenerationStatus, ImageAsset, ImageVariant
@@ -88,10 +89,17 @@ class StoryboardGenerator:
                         if selected_variant:
                             target_url = selected_variant.url
                             source = f"headshot_asset"
+
+                    # Priority 4: Use selected variant from expression_sheet_asset
+                    if not target_url and char.expression_sheet_asset and char.expression_sheet_asset.selected_id:
+                        selected_variant = next((v for v in char.expression_sheet_asset.variants if v.id == char.expression_sheet_asset.selected_id), None)
+                        if selected_variant:
+                            target_url = selected_variant.url
+                            source = f"expression_sheet_asset"
                     
-                    # Priority 4: Fallback to legacy fields
+                    # Priority 5: Fallback to legacy fields
                     if not target_url:
-                        target_url = char.three_view_image_url or char.full_body_image_url or char.headshot_image_url or char.avatar_url or char.image_url
+                        target_url = char.three_view_image_url or char.full_body_image_url or char.headshot_image_url or char.expression_sheet_image_url or char.avatar_url or char.image_url
                         source = "legacy_fields"
                     
                     logger.info(f"[Storyboard] Character '{char.name}' reference: source={source}, url={target_url}")

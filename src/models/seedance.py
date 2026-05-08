@@ -14,6 +14,7 @@ import requests
 
 from .base import VideoGenModel
 from ..utils.endpoints import get_provider_base_url
+from ..utils.http_downloads import download_url_to_file
 from ..utils.oss_utils import OSSImageUploader
 from ..utils.provider_media import resolve_media_input, resolve_media_inputs
 
@@ -321,11 +322,7 @@ class SeedanceModel(VideoGenModel):
                 if not video_url:
                     raise RuntimeError(f"Seedance task succeeded but video_url is missing: {payload}")
 
-                download_resp = requests.get(video_url, timeout=120)
-                download_resp.raise_for_status()
-                os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                with open(output_path, "wb") as f:
-                    f.write(download_resp.content)
+                download_url_to_file(video_url, output_path, timeout=(30, 120))
 
                 generation_time = time.time() - start_time
                 logger.info("[Seedance] Done in %.1fs -> %s", generation_time, output_path)

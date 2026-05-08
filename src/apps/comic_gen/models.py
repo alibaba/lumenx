@@ -47,7 +47,7 @@ class ImageVariant(BaseModel):
     is_favorited: bool = Field(False, description="Whether this variant is favorited/pinned (won't be auto-deleted)")
     # NEW: 上传来源标记
     is_uploaded_source: bool = Field(False, description="Whether this is a user-uploaded source file")
-    upload_type: Optional[str] = Field(None, description="Upload type if is_uploaded_source: full_body/head_shot/three_views/image")
+    upload_type: Optional[str] = Field(None, description="Upload type if is_uploaded_source: full_body/head_shot/three_views/expression_sheet/image")
 
 # Maximum variants to keep per asset (excluding favorited ones)
 MAX_VARIANTS_PER_ASSET = 10
@@ -137,6 +137,7 @@ class Character(BaseModel):
     # Each unit holds both static images and motion references
     full_body: Optional[AssetUnit] = Field(default_factory=AssetUnit, description="Full Body asset unit (Master)")
     three_views: Optional[AssetUnit] = Field(default_factory=AssetUnit, description="Three Views asset unit")
+    expression_sheet: Optional[AssetUnit] = Field(default_factory=AssetUnit, description="Expression sheet asset unit")
     head_shot: Optional[AssetUnit] = Field(default_factory=AssetUnit, description="Headshot/Avatar asset unit")
     
     # === LEGACY: Kept for backwards compatibility ===
@@ -149,6 +150,11 @@ class Character(BaseModel):
     three_view_image_url: Optional[str] = Field(None, description="[LEGACY] URL of the 3-view character sheet")
     three_view_prompt: Optional[str] = Field(None, description="[LEGACY] Prompt used for 3-view generation")
     three_view_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="[LEGACY] Three view asset container")
+
+    # Level 2: Expression Sheet (Derived)
+    expression_sheet_image_url: Optional[str] = Field(None, description="[LEGACY] URL of the character expression sheet")
+    expression_sheet_prompt: Optional[str] = Field(None, description="[LEGACY] Prompt used for expression sheet generation")
+    expression_sheet_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="[LEGACY] Expression sheet asset container")
 
     # Level 2: Headshot (Derived)
     headshot_image_url: Optional[str] = Field(None, description="[LEGACY] URL of the headshot/avatar")
@@ -168,6 +174,7 @@ class Character(BaseModel):
     # Timestamps for consistency tracking (Legacy - now in AssetUnit)
     full_body_updated_at: float = Field(default_factory=time.time, description="[LEGACY] Timestamp of last full body update")
     three_view_updated_at: float = Field(0.0, description="[LEGACY] Timestamp of last three view update")
+    expression_sheet_updated_at: float = Field(0.0, description="[LEGACY] Timestamp of last expression sheet update")
     headshot_updated_at: float = Field(0.0, description="[LEGACY] Timestamp of last headshot update")
 
     base_character_id: Optional[str] = Field(None, description="ID of the base character if this is a variant")
@@ -265,6 +272,11 @@ class StoryboardFrame(BaseModel):
     audio_error: Optional[str] = Field(None, description="Audio generation error message")
     sfx_url: Optional[str] = Field(None, description="URL of the generated sound effect")
     bgm_url: Optional[str] = Field(None, description="URL of the generated background music")
+
+    # Generation provenance
+    generation_source: Optional[str] = Field(None, description="Source of the latest frame generation (llm/mock/fallback)")
+    generation_degraded: bool = Field(False, description="Whether the latest frame generation used a fallback or mock path")
+    generation_reason: Optional[str] = Field(None, description="Optional note explaining degraded generation")
     
     selected_video_id: Optional[str] = Field(None, description="ID of the selected VideoTask for this frame")
     locked: bool = Field(False, description="Whether this frame is locked from regeneration")
@@ -376,6 +388,9 @@ class Script(BaseModel):
 
     # Structured text analysis
     story_analysis: StoryAnalysis = Field(default_factory=StoryAnalysis, description="Structured analysis for plot summary, beats, and character presence")
+
+    # Generation provenance for parse/analyze steps
+    generation_metadata: Dict[str, Any] = Field(default_factory=dict, description="Provenance and degradation flags for generation steps")
 
     # Merged video URL
     merged_video_url: Optional[str] = Field(None, description="URL of the merged final video")

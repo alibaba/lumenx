@@ -4,11 +4,18 @@ import os
 import time
 import requests
 from http import HTTPStatus
-from dashscope import VideoSynthesis
-import dashscope
+
+try:
+    import dashscope
+    from dashscope import VideoSynthesis
+except ImportError:  # pragma: no cover - optional in local/test setups
+    dashscope = None
+    VideoSynthesis = None
+
 from .base import VideoGenModel
 from ..utils import get_logger
 from ..utils.endpoints import get_provider_base_url
+from ..utils.http_downloads import download_url_to_file
 
 from typing import Callable, Dict, List, Mapping, Optional, Tuple
 
@@ -602,6 +609,12 @@ class WanxModel(VideoGenModel):
                       audio_url: str = None, watermark: bool = False, seed: int = None,
                       camera_motion: str = None, subject_motion: str = None) -> str:
         """Generate video using Dashscope SDK (for older models)."""
+        if VideoSynthesis is None:
+            raise RuntimeError(
+                "DashScope video SDK is not installed. Install the optional 'dashscope' "
+                "package before using SDK-based Wanx video generation."
+            )
+
         # Prepare arguments
         call_args = {
             "api_key": self.api_key,
@@ -661,31 +674,9 @@ class WanxModel(VideoGenModel):
 
     def _download_video(self, url: str, path: str):
         logger.info(f"Downloading video to {path}...")
-
-        from requests.adapters import HTTPAdapter
-        from requests.packages.urllib3.util.retry import Retry
-
-        session = requests.Session()
-        retry = Retry(connect=3, backoff_factor=0.5)
-        adapter = HTTPAdapter(max_retries=retry)
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
-
-        temp_path = path + ".tmp"
         try:
-            response = session.get(url, stream=True, timeout=120)  # 2 minutes for large video files
-            response.raise_for_status()
-
-            with open(temp_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            # Atomic rename
-            os.rename(temp_path, path)
+            download_url_to_file(url, path, timeout=(30, 120))
             logger.info("Download complete.")
-
         except Exception as e:
             logger.error(f"Failed to download video: {e}")
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
             raise

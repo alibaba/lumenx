@@ -67,6 +67,7 @@ sys.stderr = TeeOutput(log_file, original_stderr)
 import uvicorn
 from src.apps.comic_gen.api import app
 from src.utils import setup_logging
+from src.utils.runtime_config import get_api_host, get_api_port, get_api_base_url
 
 import mimetypes
 mimetypes.add_type('text/css', '.css')
@@ -79,13 +80,15 @@ setup_logging(log_file=log_file)
 def run_server():
     app.mount("/static", StaticFiles(directory=
                                      os.path.join(cwd, "static"), html=True), name="static")
+    api_host = get_api_host()
+    api_port = get_api_port()
 
     # 直接传入 app 对象,而非字符串路径
     # 这样可以避免 PyArmor 混淆后字符串导入失败的问题
     # 注意: Windows 不支持 uvloop, 使用默认的 asyncio 事件循环
     uvicorn.run(app,
-                host="127.0.0.1",
-                port=18177,
+                host=api_host,
+                port=api_port,
                 reload=False,
                 log_level="info",
                 )
@@ -109,9 +112,10 @@ def open_webview():
             print("将尝试继续启动...")
 
     # 创建 pywebview 窗口
+    api_base_url = get_api_base_url()
     window = webview.create_window(
         title="LumenX Studio",
-        url=f"http://127.0.0.1:18177/static/index.html?timestamp={datetime.now().timestamp()}",
+        url=f"{api_base_url}/static/index.html?timestamp={datetime.now().timestamp()}",
         width=1280,
         height=800,
         resizable=True,

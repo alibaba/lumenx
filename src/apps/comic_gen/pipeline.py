@@ -20,14 +20,17 @@ from .video import VideoGenerator
 from .audio import AudioGenerator
 from .export import ExportManager
 from ...utils import get_logger
+from ...utils.http_downloads import download_url_to_file
+from ...utils.json_store import load_json_object_with_backup, save_json_object_atomic
 from ...utils.media_refs import normalize_project_media_ref, output_media_ref
 from ...utils.oss_utils import extract_object_key_from_url, is_object_key
 from ...utils.provider_registry import resolve_provider_backend
+from ...utils.runtime_config import get_output_root
 from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
 
 logger = get_logger(__name__)
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_OUTPUT_ROOT = (_PROJECT_ROOT / "output").resolve()
+LOCAL_VIDEO_SMOKE_ENV = "LUMENX_LOCAL_VIDEO_SMOKE"
 
 # --- Security helpers ---
 
@@ -77,6 +80,15 @@ _VULNERABLE_PATIENT_KEYWORDS = (
 )
 
 
+def _write_local_video_smoke_placeholder(output_path: str) -> None:
+    """Write a tiny local placeholder for browser/API smoke jobs."""
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(output_path).write_bytes(
+        b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"
+        b"\x00\x00\x00\x1clumenx-local-video-smoke\n"
+    )
+
+
 def _validate_safe_id(value: str, label: str = "id") -> str:
     """Ensure a value is safe to embed in file paths / command args (UUID-like)."""
     if not value or not _SAFE_ID_RE.match(value):
@@ -97,6 +109,31 @@ def _safe_resolve_path(base_dir: str, untrusted_rel: str) -> str:
     return resolved
 
 
+def _get_output_root_path() -> Path:
+    return get_output_root(project_root=_PROJECT_ROOT)
+
+
+def _get_output_dir() -> str:
+    return str(_get_output_root_path())
+
+
+def _output_path(*parts: str) -> str:
+    return str(_get_output_root_path().joinpath(*parts))
+
+
+def _output_relative_ref(value: str) -> str:
+    normalized = normalize_project_media_ref(value).lstrip("/")
+    if normalized.startswith("output/"):
+        return normalized[len("output/") :]
+    if normalized.startswith("outputs/"):
+        return normalized[len("outputs/") :]
+    return normalized
+
+
+def _safe_resolve_output_ref(value: str) -> str:
+    return _safe_resolve_path(_get_output_dir(), _output_relative_ref(value))
+
+
 def _resolve_reference_path(url: str | None) -> Optional[str]:
     if not url:
         return None
@@ -104,7 +141,7 @@ def _resolve_reference_path(url: str | None) -> Optional[str]:
         return url
     if os.path.isabs(url) and os.path.exists(url):
         return url
-    potential_path = _safe_resolve_path("output", url)
+    potential_path = _safe_resolve_output_ref(url)
     if os.path.exists(potential_path):
         return potential_path
     return None
@@ -120,10 +157,11 @@ def _project_relative_path(path: str | Path) -> str:
 
 def _ensure_output_path(path: str | Path) -> Path:
     resolved = Path(path).resolve()
+    output_root = _get_output_root_path()
     try:
-        resolved.relative_to(_OUTPUT_ROOT)
+        resolved.relative_to(output_root)
     except ValueError as exc:
-        raise ValueError("Composed frame output must stay under output/.") from exc
+        raise ValueError("Composed frame output must stay under configured output directory.") from exc
     return resolved
 
 
@@ -134,6 +172,28 @@ def _ensure_project_path(path: str | Path, label: str) -> Path:
     except ValueError as exc:
         raise ValueError(f"{label} must stay inside the project workspace.") from exc
     return resolved
+
+
+def _set_script_generation_metadata(
+    script: Script,
+    stage: str,
+    source: str,
+    degraded: bool,
+    *,
+    reason: str = "",
+    details: Optional[Dict[str, Any]] = None,
+) -> None:
+    metadata = dict(script.generation_metadata or {})
+    stage_meta: Dict[str, Any] = {
+        "source": source,
+        "degraded": degraded,
+    }
+    if reason:
+        stage_meta["reason"] = reason
+    if details:
+        stage_meta.update(details)
+    metadata[stage] = stage_meta
+    script.generation_metadata = metadata
 
 
 def _resolve_fixture_crop_manifest_path(script: Script, frame: StoryboardFrame) -> Optional[Path]:
@@ -185,9 +245,11 @@ def _get_character_reference_url(character: Character) -> Optional[str]:
         _get_selected_image_asset_url(character.three_view_asset)
         or _get_selected_image_asset_url(character.full_body_asset)
         or _get_selected_image_asset_url(character.headshot_asset)
+        or _get_selected_image_asset_url(character.expression_sheet_asset)
         or character.three_view_image_url
         or character.full_body_image_url
         or character.headshot_image_url
+        or character.expression_sheet_image_url
         or character.avatar_url
         or character.image_url
     )
@@ -418,6 +480,7 @@ def _strip_markdown_lines(value: str) -> str:
 def _fixture_slug_to_dirname(slug: str) -> str:
     slug_map = {
         "liuyi-that-day": "六一那天",
+        "liuyi-that-day-v2": "六一那天_v2",
         "六一那天": "六一那天",
     }
     return slug_map.get(slug, slug)
@@ -426,6 +489,90 @@ def _fixture_slug_to_dirname(slug: str) -> str:
 def _slugify_fixture_dirname(value: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9_\-]+", "-", value or "").strip("-").lower()
     return slug or value
+
+
+def _normalize_fixture_upload_type(upload_type: Any) -> str:
+    normalized = str(upload_type or "").strip().lower().replace("-", "_")
+    if normalized in {"three_view", "three_views"}:
+        return "three_views"
+    if normalized in {"headshot", "head_shot", "avatar"}:
+        return "head_shot"
+    if normalized in {"expression", "expression_sheet", "expressionsheet"}:
+        return "expression_sheet"
+    if normalized in {"fullbody", "full_body"}:
+        return "full_body"
+    if normalized in {"image", "scene", "prop"}:
+        return "image"
+    return normalized
+
+
+def _flatten_fixture_reference_assets(manifest: Dict[str, Any]) -> List[Dict[str, Any]]:
+    flattened: List[Dict[str, Any]] = []
+    seen_keys: set[tuple[str, str, str, str]] = set()
+
+    def add_entry(entry: Dict[str, Any], *, default_locked: bool = True) -> None:
+        asset_type = str(entry.get("asset_type") or "").strip().lower()
+        asset_id = str(entry.get("asset_id") or "").strip()
+        upload_type = _normalize_fixture_upload_type(entry.get("upload_type") or entry.get("role"))
+        source_path = str(entry.get("path") or "").strip()
+        if not asset_type or not asset_id or not source_path:
+            return
+        key = (asset_type, asset_id, upload_type, source_path)
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+
+        normalized_entry = dict(entry)
+        normalized_entry["asset_type"] = asset_type
+        normalized_entry["asset_id"] = asset_id
+        normalized_entry["upload_type"] = upload_type
+        normalized_entry["path"] = source_path
+        normalized_entry["locked"] = bool(entry.get("locked", entry.get("lock", default_locked)))
+        flattened.append(normalized_entry)
+
+    for entry in [item for item in manifest.get("reference_assets", []) if isinstance(item, dict)]:
+        add_entry(entry)
+
+    for package in [item for item in manifest.get("asset_packages", []) if isinstance(item, dict)]:
+        package_asset_type = str(package.get("asset_type") or "").strip().lower()
+        package_asset_id = str(package.get("asset_id") or "").strip()
+        package_name = str(package.get("name") or package_asset_id or "asset").strip()
+        package_locked = bool(package.get("locked", package.get("lock", True)))
+        if not package_asset_type or not package_asset_id:
+            continue
+
+        board = package.get("board")
+        if isinstance(board, dict) and board.get("runtime_binding", True):
+            add_entry(
+                {
+                    "asset_type": package_asset_type,
+                    "asset_id": package_asset_id,
+                    "upload_type": _normalize_fixture_upload_type(board.get("upload_type") or board.get("role")),
+                    "path": board.get("path"),
+                    "label": board.get("label") or f"{package_name} 主板",
+                    "prompt_used": board.get("prompt_used") or package_name,
+                    "locked": bool(board.get("locked", package_locked)),
+                },
+                default_locked=package_locked,
+            )
+
+        for derivative in [item for item in package.get("derivatives", []) if isinstance(item, dict)]:
+            if derivative.get("runtime_binding", True) is False:
+                continue
+            add_entry(
+                {
+                    "asset_type": package_asset_type,
+                    "asset_id": package_asset_id,
+                    "upload_type": _normalize_fixture_upload_type(derivative.get("upload_type") or derivative.get("role")),
+                    "path": derivative.get("path"),
+                    "label": derivative.get("label") or f"{package_name} {derivative.get('role') or 'derivative'}",
+                    "prompt_used": derivative.get("prompt_used") or package_name,
+                    "locked": bool(derivative.get("locked", package_locked)),
+                },
+                default_locked=package_locked,
+            )
+
+    return flattened
 
 
 def _get_fixture_root_dir() -> str:
@@ -515,6 +662,7 @@ def _asset_has_static_reference(asset: Any) -> bool:
         "full_body_image_url",
         "three_view_image_url",
         "headshot_image_url",
+        "expression_sheet_image_url",
     )
     if any(bool(getattr(asset, field, None)) for field in reference_fields):
         return True
@@ -524,21 +672,33 @@ def _asset_has_static_reference(asset: Any) -> bool:
         "full_body_asset",
         "three_view_asset",
         "headshot_asset",
+        "expression_sheet_asset",
     )
     return any(_image_asset_has_selected_or_any_variant(getattr(asset, field, None)) for field in image_asset_fields)
 
 class ComicGenPipeline:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
+        self.output_root = _get_output_root_path()
         self.script_processor = ScriptProcessor()
-        self.asset_generator = AssetGenerator(self.config.get('assets'))
-        self.storyboard_generator = StoryboardGenerator(self.config.get('storyboard'))
-        self.video_generator = VideoGenerator(self.config.get('video'))
-        self.audio_generator = AudioGenerator(self.config.get('audio'))
-        self.export_manager = ExportManager(self.config.get('export'))
+        asset_config = dict(self.config.get('assets') or {})
+        storyboard_config = dict(self.config.get('storyboard') or {})
+        video_config = dict(self.config.get('video') or {})
+        audio_config = dict(self.config.get('audio') or {})
+        export_config = dict(self.config.get('export') or {})
+        asset_config.setdefault('output_dir', _output_path("assets"))
+        storyboard_config.setdefault('output_dir', _output_path("storyboard"))
+        video_config.setdefault('output_dir', _output_path("video"))
+        audio_config.setdefault('output_dir', _output_path("audio"))
+        export_config.setdefault('output_dir', _output_path("export"))
+        self.asset_generator = AssetGenerator(asset_config)
+        self.storyboard_generator = StoryboardGenerator(storyboard_config)
+        self.video_generator = VideoGenerator(video_config)
+        self.audio_generator = AudioGenerator(audio_config)
+        self.export_manager = ExportManager(export_config)
         
-        self.data_file = "output/projects.json"
-        self.series_data_file = "output/series.json"
+        self.data_file = _output_path("projects.json")
+        self.series_data_file = _output_path("series.json")
         self._save_lock = threading.RLock()  # Reentrant lock to prevent concurrent file writes
         self.scripts: Dict[str, Script] = self._load_data()
         self.series_store: Dict[str, Series] = self._load_series_data()
@@ -622,12 +782,9 @@ class ComicGenPipeline:
         return self.scripts.get(script_id)
 
     def _load_data(self) -> Dict[str, Script]:
-        if not os.path.exists(self.data_file):
-            return {}
         try:
-            with open(self.data_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return {k: Script(**v) for k, v in data.items()}
+            data = load_json_object_with_backup(self.data_file)
+            return {k: Script(**v) for k, v in data.items()}
         except Exception as e:
             logger.error(f"Failed to load data: {e}")
             return {}
@@ -636,9 +793,10 @@ class ComicGenPipeline:
         """Save data with thread lock to prevent concurrent write issues."""
         with self._save_lock:
             try:
-                os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
-                with open(self.data_file, 'w', encoding='utf-8') as f:
-                    json.dump({k: _model_dump_compat(v) for k, v in self.scripts.items()}, f, indent=2)
+                save_json_object_atomic(
+                    self.data_file,
+                    {k: _model_dump_compat(v) for k, v in self.scripts.items()},
+                )
             except Exception as e:
                 logger.error(f"Failed to save data: {e}")
 
@@ -693,7 +851,8 @@ class ComicGenPipeline:
 
         source_files = [item for item in manifest.get("source_files", []) if isinstance(item, dict)]
         reference_images = [item for item in manifest.get("reference_images", []) if isinstance(item, dict)]
-        reference_assets = [item for item in manifest.get("reference_assets", []) if isinstance(item, dict)]
+        reference_assets = _flatten_fixture_reference_assets(manifest)
+        asset_packages = [item for item in manifest.get("asset_packages", []) if isinstance(item, dict)]
         imported_project = self._find_imported_fixture_project(slug, fixture_name)
         model_settings = manifest.get("model_settings", {}) if isinstance(manifest.get("model_settings"), dict) else {}
         parser = str(manifest.get("parser") or "seedance_storyboard_markdown")
@@ -707,9 +866,11 @@ class ComicGenPipeline:
             "dirname": dirname,
             "source_count": len(source_files),
             "reference_count": len(reference_images) + len(reference_assets),
+            "asset_package_count": len(asset_packages),
             "source_files": source_files,
             "reference_images": reference_images,
             "reference_assets": reference_assets,
+            "asset_packages": asset_packages,
             "model_settings": model_settings,
             "notes": notes,
             "is_imported": imported_project is not None,
@@ -880,7 +1041,7 @@ class ComicGenPipeline:
             return None
         _, ext = os.path.splitext(source_path)
         safe_name = re.sub(r"[^a-zA-Z0-9_\-]+", "-", fixture_name).strip("-") or "fixture"
-        output_dir = os.path.join("output", "uploads", "fixtures")
+        output_dir = _output_path("uploads", "fixtures")
         os.makedirs(output_dir, exist_ok=True)
         dest_path = os.path.join(output_dir, f"{safe_name}-storyboard-reference{ext or '.png'}")
         shutil.copyfile(source_path, dest_path)
@@ -892,14 +1053,14 @@ class ComicGenPipeline:
         source_path = _safe_resolve_path(fixture_dir, reference_rel)
         if not os.path.exists(source_path):
             return None
-        output_dir = os.path.join("output", "uploads", "fixtures")
+        output_dir = _output_path("uploads", "fixtures")
         os.makedirs(output_dir, exist_ok=True)
         dest_path = os.path.join(output_dir, os.path.basename(source_path))
         shutil.copyfile(source_path, dest_path)
         return output_media_ref(dest_path)
 
     def _apply_fixture_reference_assets(self, script: Script, fixture_dir: str, manifest: Dict[str, Any]) -> None:
-        reference_assets = [item for item in manifest.get("reference_assets", []) if isinstance(item, dict)]
+        reference_assets = _flatten_fixture_reference_assets(manifest)
         if not reference_assets:
             return
 
@@ -999,6 +1160,18 @@ class ComicGenPipeline:
                 target.three_view_asset.variants = [legacy_variant]
                 target.three_view_asset.selected_id = variant_id
                 target.three_view_image_url = image_url
+            elif upload_type == "expression_sheet":
+                target.expression_sheet = AssetUnit(
+                    selected_image_id=variant_id,
+                    image_variants=[unit_variant],
+                    image_prompt=prompt_used or target.description,
+                    image_updated_at=now,
+                )
+                if target.expression_sheet_asset is None:
+                    target.expression_sheet_asset = ImageAsset()
+                target.expression_sheet_asset.variants = [legacy_variant]
+                target.expression_sheet_asset.selected_id = variant_id
+                target.expression_sheet_image_url = image_url
             else:
                 logger.warning("Unsupported fixture character upload type: %s", upload_type)
                 return
@@ -1011,6 +1184,8 @@ class ComicGenPipeline:
                 target.headshot_updated_at = now
             elif upload_type == "three_views":
                 target.three_view_updated_at = now
+            elif upload_type == "expression_sheet":
+                target.expression_sheet_updated_at = now
             return
 
         if asset_type == "scene":
@@ -2158,7 +2333,7 @@ class ComicGenPipeline:
             script_id: The project ID
             asset_type: "character", "scene", or "prop"
             asset_id: The asset ID
-            upload_type: "full_body", "head_shot", "three_views", or "image"
+            upload_type: "full_body", "head_shot", "three_views", "expression_sheet", or "image"
             image_url: URL of the uploaded image (OSS Object Key)
             description: Optional modified description for reverse generation
         """
@@ -2202,6 +2377,8 @@ class ComicGenPipeline:
                 target_unit = target_asset.head_shot
             elif upload_type == "three_views":
                 target_unit = target_asset.three_views
+            elif upload_type == "expression_sheet":
+                target_unit = target_asset.expression_sheet
             else:
                 raise ValueError(f"Invalid upload_type for character: {upload_type}")
             
@@ -2214,6 +2391,8 @@ class ComicGenPipeline:
                     target_asset.head_shot = target_unit
                 elif upload_type == "three_views":
                     target_asset.three_views = target_unit
+                elif upload_type == "expression_sheet":
+                    target_asset.expression_sheet = target_unit
             
             # Add variant and select it
             target_unit.image_variants.append(new_variant)
@@ -2254,6 +2433,14 @@ class ComicGenPipeline:
                 target_asset.three_view_asset.variants.append(legacy_variant)
                 target_asset.three_view_asset.selected_id = new_variant.id
                 target_asset.three_view_image_url = image_url
+            elif upload_type == "expression_sheet":
+                # Ensure expression_sheet_asset exists
+                if target_asset.expression_sheet_asset is None:
+                    from .models import ImageAsset
+                    target_asset.expression_sheet_asset = ImageAsset()
+                target_asset.expression_sheet_asset.variants.append(legacy_variant)
+                target_asset.expression_sheet_asset.selected_id = new_variant.id
+                target_asset.expression_sheet_image_url = image_url
             
             logger.info(f"Added uploaded variant {new_variant.id} to character {asset_id} {upload_type}")
             
@@ -2523,6 +2710,10 @@ class ComicGenPipeline:
                 speaker = dialogue.get("speaker") or speaker
                 dialogue = dialogue.get("text")
 
+            generation_source = str(frame_data.get("generation_source") or "llm")
+            generation_degraded = bool(frame_data.get("generation_degraded", False))
+            generation_reason = str(frame_data.get("generation_reason", "") or "").strip() or None
+
             new_frames.append(
                 StoryboardFrame(
                     id=str(uuid.uuid4()),
@@ -2541,6 +2732,9 @@ class ComicGenPipeline:
                     camera_movement=frame_data.get("camera_movement"),
                     dialogue=dialogue,
                     speaker=speaker,
+                    generation_source=generation_source,
+                    generation_degraded=generation_degraded,
+                    generation_reason=generation_reason,
                     status=GenerationStatus.PENDING,
                 )
             )
@@ -2651,6 +2845,16 @@ class ComicGenPipeline:
         )
         self._replace_story_beat_frames(script, beat_id, new_frames, story_analysis)
         script.story_analysis = story_analysis
+        _set_script_generation_metadata(
+            script,
+            "storyboard_analysis",
+            new_frames[0].generation_source if new_frames else "llm",
+            any(frame.generation_degraded for frame in new_frames),
+            details={
+                "frame_count": len(new_frames),
+                "target_beat_id": beat_id,
+            },
+        )
         script.updated_at = time.time()
         self._save_data()
         return script
@@ -2695,6 +2899,16 @@ class ComicGenPipeline:
 
         script.frames = new_frames
         script.story_analysis = story_analysis
+        _set_script_generation_metadata(
+            script,
+            "storyboard_analysis",
+            new_frames[0].generation_source if new_frames else "llm",
+            any(frame.generation_degraded for frame in new_frames),
+            details={
+                "frame_count": len(new_frames),
+                "source_text_length": len(text),
+            },
+        )
         script.updated_at = time.time()
 
         logger.info(f"Generated {len(new_frames)} frames from text analysis")
@@ -2736,11 +2950,14 @@ class ComicGenPipeline:
         
         if frame_found:
             self._save_data()
-        
+
         return {
             "prompt_cn": result.get("prompt_cn"),
             "prompt_en": result.get("prompt_en"),
-            "frame_updated": frame_found
+            "frame_updated": frame_found,
+            "generation_source": result.get("generation_source", "fallback"),
+            "generation_degraded": bool(result.get("generation_degraded", False)),
+            "generation_reason": result.get("generation_reason"),
         }
 
     def generate_storyboard(self, script_id: str) -> Script:
@@ -3177,28 +3394,10 @@ class ComicGenPipeline:
             self._save_data()
             return script
         except Exception as e:
-            frame.status = GenerationStatus.FAILED
-            self._save_data()
-            raise e
-            # 1. Take the composition_data (positions of assets)
-            # 2. Construct a composite image (ControlNet input)
-            # 3. Call Img2Img with the composite + prompt
-            
-            logger.debug(f"Rendering frame {frame_id} with prompt: {prompt}")
-            time.sleep(1.5) # Simulate processing
-            
-            # Mock Result
-            mock_url = f"https://placehold.co/1280x720/2a2a2a/FFF?text=Rendered+Frame+{frame_id}"
-            frame.rendered_image_url = mock_url
-            frame.image_url = mock_url # Update main image too
-            frame.status = GenerationStatus.COMPLETED
-            
-        except Exception as e:
             logger.error(f"Frame rendering failed: {e}")
             frame.status = GenerationStatus.FAILED
-            
-        self._save_data()
-        return script
+            self._save_data()
+            raise
 
     def compose_frame_crops(
         self,
@@ -3341,10 +3540,10 @@ class ComicGenPipeline:
             # Resolve source path
             if image_url and not image_url.startswith("http"):
                 # Assume relative to output dir
-                src_path = _safe_resolve_path("output", image_url)
+                src_path = _safe_resolve_output_ref(image_url)
                 if os.path.exists(src_path) and os.path.isfile(src_path):
                     # Create snapshot dir
-                    snapshot_dir = os.path.join("output", "video_inputs")
+                    snapshot_dir = _output_path("video_inputs")
                     os.makedirs(snapshot_dir, exist_ok=True)
 
                     # Define snapshot path
@@ -3352,11 +3551,11 @@ class ComicGenPipeline:
                     _validate_safe_id(task_id, "task_id")
                     snapshot_filename = f"{task_id}{ext}"
                     snapshot_path = _safe_resolve_path(snapshot_dir, snapshot_filename)
-                    
+
                     # Copy file
                     import shutil
                     shutil.copy2(src_path, snapshot_path)
-                    
+
                     # Update URL to relative path
                     snapshot_url = f"video_inputs/{snapshot_filename}"
         except Exception as e:
@@ -3424,7 +3623,7 @@ class ComicGenPipeline:
         # Resolve video path
         video_path = video_task.video_url
         if not video_path.startswith("/") and not video_path.startswith("http"):
-            video_path = _safe_resolve_path("output", video_path)
+            video_path = _safe_resolve_output_ref(video_path)
 
         if video_path.startswith("http"):
             # Download to temp file first
@@ -3438,7 +3637,7 @@ class ComicGenPipeline:
         if not ffmpeg_path:
             raise RuntimeError("FFmpeg is required for frame extraction but was not found.")
 
-        output_dir = os.path.join("output", "storyboard")
+        output_dir = _output_path("storyboard")
         os.makedirs(output_dir, exist_ok=True)
         _validate_safe_id(frame_id, "frame_id")
         output_filename = f"frame_{frame_id}_lastframe_{uuid.uuid4().hex[:8]}.jpg"
@@ -3496,7 +3695,7 @@ class ComicGenPipeline:
 
         # Validate that image_path is inside the output directory
         safe_rel_path = output_media_ref(image_path) if os.path.isabs(image_path) else normalize_project_media_ref(image_path)
-        safe_path = _safe_resolve_path("output", safe_rel_path)
+        safe_path = _safe_resolve_output_ref(safe_rel_path)
 
         script = self.get_script(script_id)
         if not script:
@@ -3535,25 +3734,21 @@ class ComicGenPipeline:
 
     def _download_temp_image(self, url: str) -> str:
         """Downloads an image to a temporary file."""
-        import requests
         import tempfile
         
         # If it's a local file path (relative to output)
         if not url.startswith("http"):
-            local_path = _safe_resolve_path("output", url)
+            local_path = _safe_resolve_output_ref(url)
             if os.path.exists(local_path):
                 return local_path
                 
         # Download from URL
         try:
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
-            
             # Create temp file
             fd, path = tempfile.mkstemp(suffix=".png")
-            with os.fdopen(fd, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+            os.close(fd)
+            os.unlink(path)
+            download_url_to_file(url, path, timeout=(30, 120))
             return path
         except Exception as e:
             logger.error(f"Failed to download image: {e}")
@@ -3648,14 +3843,14 @@ class ComicGenPipeline:
         logger.info(f"[MERGE] Found {len(video_paths)} videos to merge")
             
         # Create file list for ffmpeg
-        list_path = _safe_resolve_path("output", f"merge_list_{script_id}.txt")
+        list_path = _safe_resolve_output_ref(f"merge_list_{script_id}.txt")
         abs_video_paths = []
 
         with open(list_path, "w") as f:
             for path in video_paths:
                 # Resolve to absolute path
                 if not path.startswith("http"):
-                    abs_path = _safe_resolve_path("output", path)
+                    abs_path = _safe_resolve_output_ref(path)
                     if os.path.exists(abs_path):
                         f.write(f"file '{abs_path}'\n")
                         abs_video_paths.append(abs_path)
@@ -3671,7 +3866,7 @@ class ComicGenPipeline:
 
         # Output path
         output_filename = f"merged_{script_id}_{int(time.time())}.mp4"
-        output_path = _safe_resolve_path(os.path.join("output", "video"), output_filename)
+        output_path = _safe_resolve_path(_output_path("video"), output_filename)
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         
         logger.debug(f"[MERGE] Output path: {output_path}")
@@ -3912,16 +4107,26 @@ class ComicGenPipeline:
             # Update status to processing
             task.status = "processing"
             self._save_data()
-            
+
+            output_filename = f"video_{task_id}.mp4"
+            output_path = _output_path("video", output_filename)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+            if os.getenv(LOCAL_VIDEO_SMOKE_ENV) == "1":
+                _write_local_video_smoke_placeholder(output_path)
+                task.video_url = output_media_ref(output_path)
+                task.status = "completed"
+                if task.asset_id:
+                    self._sync_asset_video_task(script, task)
+                self._save_data()
+                return
+
             # Download image to temp file
             img_path = None
             if task.image_url:
                 img_path = self._download_temp_image(task.image_url)
-            
+
             # Generate video
-            output_filename = f"video_{task_id}.mp4"
-            output_path = os.path.join("output", "video", output_filename)
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             # Handle Audio Logic
             # 1. Silent: audio_url=None, audio=False
@@ -4143,13 +4348,13 @@ class ComicGenPipeline:
         snapshot_url = image_url
         try:
             if not image_url.startswith("http"):
-                src_path = os.path.join("output", image_url)
+                src_path = _safe_resolve_output_ref(image_url)
                 if os.path.exists(src_path):
-                    snapshot_dir = os.path.join("output", "video_inputs")
+                    snapshot_dir = _output_path("video_inputs")
                     os.makedirs(snapshot_dir, exist_ok=True)
                     ext = os.path.splitext(image_url)[1] or ".png"
                     snapshot_filename = f"{task_id}{ext}"
-                    snapshot_path = os.path.join(snapshot_dir, snapshot_filename)
+                    snapshot_path = _safe_resolve_path(snapshot_dir, snapshot_filename)
                     import shutil
                     shutil.copy2(src_path, snapshot_path)
                     snapshot_url = f"video_inputs/{snapshot_filename}"
@@ -4223,7 +4428,7 @@ class ComicGenPipeline:
         # Try to delete the video file
         try:
             if video_task_to_delete and video_task_to_delete.video_url:
-                video_path = os.path.join("output", video_task_to_delete.video_url)
+                video_path = _safe_resolve_output_ref(video_task_to_delete.video_url)
                 if os.path.exists(video_path):
                     os.remove(video_path)
                     logger.info(f"Deleted video file: {video_path}")
@@ -4431,6 +4636,10 @@ class ComicGenPipeline:
                     if variant:
                         target_asset.headshot_image_url = variant.url
                         target_asset.avatar_url = variant.url  # Sync avatar
+                elif generation_type == "expression_sheet":
+                    variant = self._select_variant_in_asset(target_asset.expression_sheet_asset, variant_id)
+                    if variant:
+                        target_asset.expression_sheet_image_url = variant.url
                 else:
                     # Legacy fallback: search all assets (for backward compatibility)
                     variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
@@ -4448,6 +4657,11 @@ class ComicGenPipeline:
                         if variant:
                             target_asset.headshot_image_url = variant.url
                             target_asset.avatar_url = variant.url
+
+                    if not variant:
+                        variant = self._select_variant_in_asset(target_asset.expression_sheet_asset, variant_id)
+                        if variant:
+                            target_asset.expression_sheet_image_url = variant.url
                         
         elif asset_type == "scene":
             target_asset = next((s for s in script.scenes if s.id == asset_id), None)
@@ -4512,6 +4726,13 @@ class ComicGenPipeline:
                         target_asset.headshot_image_url = selected.url if selected else None
                     else:
                         target_asset.headshot_image_url = None
+
+                elif self._delete_variant_in_asset(target_asset.expression_sheet_asset, variant_id):
+                    if target_asset.expression_sheet_asset.selected_id:
+                        selected = next((v for v in target_asset.expression_sheet_asset.variants if v.id == target_asset.expression_sheet_asset.selected_id), None)
+                        target_asset.expression_sheet_image_url = selected.url if selected else None
+                    else:
+                        target_asset.expression_sheet_image_url = None
 
         elif asset_type == "scene":
             target_asset = next((s for s in script.scenes if s.id == asset_id), None)
@@ -4598,11 +4819,14 @@ class ComicGenPipeline:
                     found = self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited)
                 elif generation_type == "headshot":
                     found = self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited)
+                elif generation_type == "expression_sheet":
+                    found = self._set_variant_favorite(target_asset.expression_sheet_asset, variant_id, is_favorited)
                 else:
                     # Try all character assets
                     found = self._set_variant_favorite(target_asset.full_body_asset, variant_id, is_favorited) or \
                             self._set_variant_favorite(target_asset.three_view_asset, variant_id, is_favorited) or \
-                            self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited)
+                            self._set_variant_favorite(target_asset.headshot_asset, variant_id, is_favorited) or \
+                            self._set_variant_favorite(target_asset.expression_sheet_asset, variant_id, is_favorited)
         
         elif asset_type == "scene":
             target_asset = next((s for s in script.scenes if s.id == asset_id), None)
@@ -4631,12 +4855,9 @@ class ComicGenPipeline:
     # ============================================================
 
     def _load_series_data(self) -> Dict[str, Series]:
-        if not os.path.exists(self.series_data_file):
-            return {}
         try:
-            with open(self.series_data_file, 'r') as f:
-                data = json.load(f)
-                return {k: Series(**v) for k, v in data.items()}
+            data = load_json_object_with_backup(self.series_data_file)
+            return {k: Series(**v) for k, v in data.items()}
         except Exception as e:
             logger.error(f"Failed to load series data: {e}")
             return {}
@@ -4644,9 +4865,10 @@ class ComicGenPipeline:
     def _save_series_data_unlocked(self):
         """Save series data without acquiring the lock (caller must hold self._save_lock)."""
         try:
-            os.makedirs(os.path.dirname(self.series_data_file) or ".", exist_ok=True)
-            with open(self.series_data_file, 'w') as f:
-                json.dump({k: _model_dump_compat(v) for k, v in self.series_store.items()}, f, indent=2)
+            save_json_object_atomic(
+                self.series_data_file,
+                {k: _model_dump_compat(v) for k, v in self.series_store.items()},
+            )
         except Exception as e:
             logger.error(f"Failed to save series data: {e}")
 

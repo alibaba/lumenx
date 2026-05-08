@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from .runtime_config import get_output_root
+
 
 LOCAL_MEDIA_PREFIXES = (
     "assets/",
@@ -30,7 +32,7 @@ def _project_root(project_root: Optional[str] = None) -> Path:
 
 
 def _output_root(project_root: Optional[str] = None) -> Path:
-    return _project_root(project_root) / "output"
+    return get_output_root(project_root=project_root)
 
 
 def normalize_project_media_ref(value: str) -> str:

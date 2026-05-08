@@ -4,6 +4,7 @@ import logging
 import base64
 from typing import Tuple, Optional
 from .base import VideoGenModel
+from ..utils.http_downloads import download_url_to_file
 
 # Try to import Ark, handle if not installed (though user said they installed it)
 try:
@@ -118,11 +119,6 @@ class DoubaoModel(VideoGenModel):
         return output_path, api_duration
 
     def _download_video(self, url: str, output_path: str):
-        import requests
         logger.info(f"Downloading video from {url} to {output_path}...")
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        with open(output_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
+        download_url_to_file(url, output_path, timeout=(30, 120))
         logger.info("Download complete.")

@@ -193,6 +193,19 @@ def build_character_prompt(
             ]
         )
 
+    if shot == "expression_sheet":
+        return _sentence_parts(
+            [
+                f"Character expression reference sheet for {character.name}",
+                *identity,
+                "One 4K authoring board with a primary neutral full-body anchor, front/side/back mini views, and a row of facial expressions",
+                "Include neutral, gentle smile, worried, holding back tears, determined, and softly relieved expressions",
+                "Keep the same face, hairstyle, age impression, body proportions, clothing silhouette, and signature accessories across every panel",
+                "clean studio reference layout, simple background, evenly lit",
+                ", ".join(shared_constraints),
+            ]
+        )
+
     return _sentence_parts(
         [
             f"Full body character design sheet of {character.name}",

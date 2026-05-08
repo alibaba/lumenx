@@ -93,9 +93,14 @@ class AssetGenerator:
     def generate_character(self, character: Character, generation_type: str = "all", prompt: str = "", positive_prompt: str = None, negative_prompt: str = "", batch_size: int = 1, model_name: str = None, i2i_model_name: str = None, size: str = None, style_reference_paths: Optional[List[str]] = None) -> Character:
         """
         Generates character assets based on generation_type.
-        Types: 'full_body', 'three_view', 'headshot', 'all'
+        Types: 'full_body', 'three_view', 'headshot', 'expression_sheet', 'all'
         """
         character.status = GenerationStatus.PROCESSING
+        valid_generation_types = {"all", "full_body", "three_view", "headshot", "expression_sheet"}
+        if generation_type not in valid_generation_types:
+            raise ValueError(
+                f"Invalid generation_type: {generation_type}. Must be one of {sorted(valid_generation_types)}"
+            )
         
         # Default style suffix if not provided (None means use default, "" means no style)
         style_suffix = positive_prompt if positive_prompt is not None else "cinematic lighting, movie still, 8k, highly detailed, realistic"
@@ -148,7 +153,7 @@ class AssetGenerator:
                                 if os.path.exists(local_path):
                                     ref_image_path = local_path
                                     logger.debug(f"Reverse generation: Using local three_views as reference: {local_path}")
-                    
+
                     # Check for uploaded headshot
                     if not ref_image_path and character.headshot_asset:
                         uploaded_variant = next(
@@ -293,10 +298,32 @@ class AssetGenerator:
                     if uploaded_variant:
                         uploaded_reference_url = uploaded_variant.url
                         logger.debug(f"Reverse generation: Will use uploaded three_views as reference for headshot")
+                elif generation_type == "expression_sheet":
+                    if character.three_view_asset:
+                        uploaded_variant = next(
+                            (v for v in character.three_view_asset.variants if getattr(v, 'is_uploaded_source', False)),
+                            None
+                        )
+                        if uploaded_variant:
+                            uploaded_reference_url = uploaded_variant.url
+                            logger.debug("Reverse generation: Will use uploaded three_views as reference for expression_sheet")
+                    if not uploaded_reference_url and character.headshot_asset:
+                        uploaded_variant = next(
+                            (v for v in character.headshot_asset.variants if getattr(v, 'is_uploaded_source', False)),
+                            None
+                        )
+                        if uploaded_variant:
+                            uploaded_reference_url = uploaded_variant.url
+                            logger.debug("Reverse generation: Will use uploaded headshot as reference for expression_sheet")
                 
                 # Also check own asset type for uploaded source
                 if not uploaded_reference_url:
-                    own_asset = character.three_view_asset if generation_type == "three_view" else character.headshot_asset
+                    own_asset = (
+                        character.three_view_asset if generation_type == "three_view" else
+                        character.headshot_asset if generation_type == "headshot" else
+                        character.expression_sheet_asset if generation_type == "expression_sheet" else
+                        None
+                    )
                     if own_asset:
                         uploaded_variant = next(
                             (v for v in own_asset.variants if getattr(v, 'is_uploaded_source', False)),
@@ -306,7 +333,7 @@ class AssetGenerator:
                             uploaded_reference_url = uploaded_variant.url
                             logger.debug(f"Reverse generation: Will use own uploaded image as reference")
 
-            if generation_type in ["three_view", "headshot"] and not current_full_body_url and not uploaded_reference_url:
+            if generation_type in ["three_view", "headshot", "expression_sheet"] and not current_full_body_url and not uploaded_reference_url:
                 raise ValueError("Full body image is required to generate derived assets. Upload an image or generate a full body first.")
             
             # Handle reference image path: could be OSS Object Key or local path
@@ -507,11 +534,104 @@ class AssetGenerator:
                 if successful_generations == 0:
                     _raise_asset_generation_error(last_error)
 
+            # 4. Expression Sheet (Derived)
+            if generation_type in ["all", "expression_sheet"]:
+                if not prompt or generation_type == "all":
+                    base_prompt = build_character_prompt(character, "expression_sheet", strict_reference=True)
+                else:
+                    base_prompt = prompt
+
+                character.expression_sheet_prompt = base_prompt
+
+                generation_prompt, final_negative_prompt = _compose_prompt_with_guardrails(
+                    base_prompt,
+                    style_suffix=style_suffix,
+                    negative_prompt=negative_prompt,
+                    asset_kind="character",
+                )
+
+                sheet_negative = merge_negative_prompt(
+                    final_negative_prompt,
+                    "background, scenery, landscape, shadows, complex background, text, watermark, messy panel grid, unreadable labels, duplicated face, distorted anatomy",
+                )
+                sheet_size = size if size and size not in {"576*1024", "576x1024"} else "1024*1024"
+
+                successful_generations = 0
+                last_error = None
+                for i in range(batch_size):
+                    try:
+                        variant_id = str(uuid.uuid4())
+                        expression_path = os.path.join(self.output_dir, 'characters', f"{character.id}_expression_sheet_{variant_id}.png")
+
+                        self.model.generate(
+                            generation_prompt,
+                            expression_path,
+                            ref_image_path=fullbody_path,
+                            ref_image_paths=style_reference_paths,
+                            negative_prompt=sheet_negative,
+                            ref_strength=0.8,
+                            model_name=i2i_model_name,
+                            size=sheet_size,
+                        )
+
+                        rel_expression_path = output_media_ref(expression_path)
+
+                        if not character.expression_sheet_asset:
+                            from .models import ImageAsset
+                            character.expression_sheet_asset = ImageAsset()
+
+                        from .models import ImageVariant
+                        variant = ImageVariant(
+                            id=variant_id,
+                            url=rel_expression_path,
+                            created_at=time.time(),
+                            prompt_used=generation_prompt
+                        )
+                        character.expression_sheet_asset.variants.insert(0, variant)
+                        cleanup_old_variants(character.expression_sheet_asset)
+
+                        if not character.expression_sheet_asset.selected_id or batch_size == 1:
+                            character.expression_sheet_asset.selected_id = variant_id
+                            character.expression_sheet_image_url = rel_expression_path
+
+                        successful_generations += 1
+                        logger.debug(f"Expression sheet variant {i+1}/{batch_size} generated successfully")
+
+                        if i < batch_size - 1:
+                            time.sleep(1)
+                    except Exception as e:
+                        last_error = e
+                        logger.error(f"Failed to generate expression sheet variant {i+1}/{batch_size}: {e}")
+                        continue
+
+                    try:
+                        from ...utils.oss_utils import OSSImageUploader
+                        uploader = OSSImageUploader()
+                        if uploader.is_configured:
+                            object_key = uploader.upload_file(expression_path, sub_path="assets/characters")
+                            if object_key:
+                                logger.debug(f"Uploaded expression sheet variant {i+1} to OSS: {object_key}")
+                                variant.url = object_key
+                                if character.expression_sheet_asset.selected_id == variant.id:
+                                    character.expression_sheet_image_url = object_key
+                    except Exception as e:
+                        logger.error(f"Failed to upload expression sheet variant {i+1} to OSS: {e}")
+
+                logger.info(f"Expression sheet generation complete: {successful_generations}/{batch_size} variants generated")
+                character.expression_sheet_updated_at = time.time()
+
+                if successful_generations == 0:
+                    _raise_asset_generation_error(last_error)
+
             # Update consistency status (Legacy support, but also useful for quick checks)
             if generation_type == "all":
                 character.is_consistent = True
             elif character.three_view_updated_at >= character.full_body_updated_at and \
-                 character.headshot_updated_at >= character.full_body_updated_at:
+                 character.headshot_updated_at >= character.full_body_updated_at and \
+                 (
+                     not (character.expression_sheet_asset and character.expression_sheet_asset.variants)
+                     or character.expression_sheet_updated_at >= character.full_body_updated_at
+                 ):
                 character.is_consistent = True
 
             character.status = GenerationStatus.COMPLETED
