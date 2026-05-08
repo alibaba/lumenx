@@ -32,6 +32,52 @@ describe("normalizeProjectPayload", () => {
     });
     expect(project.createdAt).toBe(new Date(1000).toISOString());
     expect(project.updatedAt).toBe(new Date(2000).toISOString());
+    expect(project.codex_imagegen_policy).toMatchObject({
+      enabled: true,
+      mode: "safe_refs_only",
+      max_total_bytes: 1048576,
+      recommendation: {
+        enabled: true,
+        auto_apply: false,
+        two_stage_min_ready_refs: 5,
+      },
+    });
+  });
+
+  it("normalizes codex imagegen two-stage aliases into the project policy", () => {
+    const project = normalizeProjectPayload({
+      id: "project-two-stage",
+      title: "Two Stage DTO",
+      codex_imagegen_policy: {
+        enabled: true,
+        mode: "two_stage",
+        max_total_bytes: 1048576,
+        recommendation: {
+          auto_apply: true,
+          two_stage_min_ready_refs: 6,
+          shot_type_overrides: {
+            closeup: {
+              two_stage_min_ready_refs: 3,
+            },
+          },
+        },
+      },
+    });
+
+    expect(project.codex_imagegen_policy).toMatchObject({
+      enabled: true,
+      mode: "two_stage_high_consistency",
+      max_total_bytes: 1048576,
+      recommendation: {
+        auto_apply: true,
+        two_stage_min_ready_refs: 6,
+        shot_type_overrides: {
+          closeup: {
+            two_stage_min_ready_refs: 3,
+          },
+        },
+      },
+    });
   });
 
   it("accepts generated storyboard DTO fields while keeping legacy aliases as fallbacks", () => {

@@ -6,14 +6,20 @@ import NextImage from "next/image";
 import {
     Layout, Image as ImageIcon,
     Trash2, Copy, Wand2, FileText, RefreshCw, Loader2, X, Lock, Unlock,
-    Plus, ArrowUp, ArrowDown, Zap, Upload, Film
+    Plus, ArrowUp, ArrowDown, Zap, Upload, Film, Sparkles
 } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import type { Scene, StoryboardFrame } from "@/store/projectStore";
 import { api, crudApi } from "@/lib/api";
 import { appendAssetQueryParam, getAssetUrlWithTimestamp, extractErrorDetail } from "@/lib/utils";
 import { getCameraTerm, messages, shotTerms } from "@/lib/i18n";
-import { buildStoryboardCompositionData, getArtDirectionPromptPrefix } from "@/lib/storyboard-references";
+import {
+    buildStoryboardCompositionData,
+    buildStoryboardReferencePreview,
+    getArtDirectionPromptPrefix,
+    normalizeCodexImagegenRecommendation,
+    recommendCodexImagegenMode,
+} from "@/lib/storyboard-references";
 import { getGenerationBadgeText, getGenerationTooltip, isGenerationDegraded } from "@/lib/generation-provenance";
 
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
@@ -300,6 +306,7 @@ export default function StoryboardComposer() {
             const compositionData = buildStoryboardCompositionData(currentProject, frame, {
                 continuityLock: true,
                 includeStyleReferences: false,
+                codexRecommendationIncludeStyleReferences: true,
             });
 
             // Construct enhanced prompt using Art Direction style config.
@@ -437,6 +444,19 @@ export default function StoryboardComposer() {
         const qualityFlags = beatMeta?.qualityFlags || [];
         const generationBadge = getGenerationBadgeText(frame);
         const generationBadgeDegraded = isGenerationDegraded(frame);
+        const backendCodexImagegenRecommendation = normalizeCodexImagegenRecommendation(frame.composition_data?.codex_imagegen_recommendation);
+        const codexImagegenRecommendation = backendCodexImagegenRecommendation
+            ? backendCodexImagegenRecommendation
+            : recommendCodexImagegenMode(
+                buildStoryboardReferencePreview(currentProject, frame, {
+                    continuityLock: true,
+                    includeStyleReferences: true,
+                }),
+            );
+        const codexImagegenRecommendationLabel =
+            codexImagegenRecommendation.mode === "two_stage_high_consistency"
+                ? copy.codexImagegenTwoStageMode
+                : copy.codexImagegenDirectMode;
 
         return (
             <Fragment key={frame.id}>
@@ -583,6 +603,24 @@ export default function StoryboardComposer() {
                                 <p className="text-sm text-gray-200 leading-relaxed line-clamp-3">
                                     {frame.action_description}
                                 </p>
+                                <div className="flex flex-wrap items-center gap-2 text-[11px]" title={codexImagegenRecommendation.reason}>
+                                    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${
+                                        codexImagegenRecommendation.mode === "two_stage_high_consistency"
+                                            ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-100"
+                                            : "border-violet-300/25 bg-violet-400/10 text-violet-100"
+                                    }`}>
+                                        <Sparkles size={11} />
+                                        {copy.codexImagegenRecommendationChip(codexImagegenRecommendationLabel)}
+                                    </span>
+                                    <span className="text-gray-500">
+                                        {copy.codexImagegenRecommendationStats(
+                                            codexImagegenRecommendation.metrics.readyCount,
+                                            codexImagegenRecommendation.metrics.totalCount,
+                                            codexImagegenRecommendation.metrics.identityCount,
+                                            codexImagegenRecommendation.metrics.environmentCount,
+                                        )}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 

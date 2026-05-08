@@ -172,12 +172,198 @@ export interface StoryboardReferencePreviewItem {
   source: string;
 }
 
+export type CodexImagegenRecommendedMode = "safe_refs_only" | "two_stage_high_consistency";
+
+export interface CodexImagegenRecommendationMetrics {
+  readyCount: number;
+  totalCount: number;
+  requiredReadyCount: number;
+  missingRequiredCount: number;
+  continuityCount: number;
+  sceneCount: number;
+  characterCount: number;
+  propCount: number;
+  styleCount: number;
+  identityCount: number;
+  environmentCount: number;
+  lockedCount: number;
+}
+
+export interface CodexImagegenRecommendation {
+  mode: CodexImagegenRecommendedMode;
+  score: number;
+  reason: string;
+  metrics: CodexImagegenRecommendationMetrics;
+  thresholds?: Record<string, number>;
+  policy?: Record<string, unknown>;
+  shot_type?: string | null;
+  genre?: string | null;
+}
+
 function buildPreviewItem(
   item: Omit<StoryboardReferencePreviewItem, "status">,
 ): StoryboardReferencePreviewItem {
   return {
     ...item,
     status: item.url ? "ready" : "missing",
+  };
+}
+
+function clampScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function metricNumber(
+  metrics: Record<string, unknown> | null,
+  camelKey: string,
+  snakeKey: string,
+): number {
+  const value = metrics?.[camelKey] ?? metrics?.[snakeKey];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function normalizeRecommendationMode(value: unknown): CodexImagegenRecommendedMode | null {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "two_stage_high_consistency" || raw === "two_stage" || raw === "high_consistency") {
+    return "two_stage_high_consistency";
+  }
+  if (raw === "safe_refs_only" || raw === "safe_direct" || raw === "direct") {
+    return "safe_refs_only";
+  }
+  return null;
+}
+
+function normalizeThresholds(value: unknown): Record<string, number> | undefined {
+  const record = asRecord(value);
+  if (!record) return undefined;
+  const normalized = Object.entries(record).reduce<Record<string, number>>((acc, [key, rawValue]) => {
+    if (typeof rawValue === "number" && Number.isFinite(rawValue)) {
+      acc[key] = rawValue;
+    }
+    return acc;
+  }, {});
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+export function normalizeCodexImagegenRecommendation(
+  value: unknown,
+): CodexImagegenRecommendation | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const mode = normalizeRecommendationMode(record.mode);
+  if (!mode) return null;
+
+  const metrics = asRecord(record.metrics);
+  return {
+    mode,
+    score: clampScore(typeof record.score === "number" ? record.score : 0),
+    reason: typeof record.reason === "string" ? record.reason : "",
+    metrics: {
+      readyCount: metricNumber(metrics, "readyCount", "ready_count"),
+      totalCount: metricNumber(metrics, "totalCount", "total_count"),
+      requiredReadyCount: metricNumber(metrics, "requiredReadyCount", "required_ready_count"),
+      missingRequiredCount: metricNumber(metrics, "missingRequiredCount", "missing_required_count"),
+      continuityCount: metricNumber(metrics, "continuityCount", "continuity_count"),
+      sceneCount: metricNumber(metrics, "sceneCount", "scene_count"),
+      characterCount: metricNumber(metrics, "characterCount", "character_count"),
+      propCount: metricNumber(metrics, "propCount", "prop_count"),
+      styleCount: metricNumber(metrics, "styleCount", "style_count"),
+      identityCount: metricNumber(metrics, "identityCount", "identity_count"),
+      environmentCount: metricNumber(metrics, "environmentCount", "environment_count"),
+      lockedCount: metricNumber(metrics, "lockedCount", "locked_count"),
+    },
+    thresholds: normalizeThresholds(record.thresholds),
+    policy: asRecord(record.policy) ?? undefined,
+    shot_type: typeof record.shot_type === "string" ? record.shot_type : null,
+    genre: typeof record.genre === "string" ? record.genre : null,
+  };
+}
+
+export function recommendCodexImagegenMode(
+  previewItems?: StoryboardReferencePreviewItem[] | null,
+): CodexImagegenRecommendation {
+  const items = Array.isArray(previewItems) ? previewItems : [];
+  const readyItems = items.filter((item) => item.status === "ready" && Boolean(item.url));
+  const requiredItems = items.filter((item) => item.required);
+  const readyRequiredItems = requiredItems.filter((item) => item.status === "ready" && Boolean(item.url));
+
+  const counts = readyItems.reduce(
+    (acc, item) => {
+      acc[item.type] += 1;
+      if (item.locked) acc.lockedCount += 1;
+      return acc;
+    },
+    {
+      continuity: 0,
+      scene: 0,
+      character: 0,
+      prop: 0,
+      style: 0,
+      lockedCount: 0,
+    },
+  );
+
+  const identityCount = counts.character + counts.prop;
+  const environmentCount = counts.continuity + counts.scene + counts.style;
+  const missingRequiredCount = Math.max(0, requiredItems.length - readyRequiredItems.length);
+
+  const shouldUseTwoStage =
+    missingRequiredCount === 0
+    && (
+      readyItems.length >= 5
+      || identityCount >= 3
+      || (counts.character >= 2 && counts.prop >= 1)
+      || (counts.character >= 2 && counts.scene >= 1)
+      || (counts.prop >= 2 && counts.character >= 1)
+    );
+
+  let score = readyItems.length * 11
+    + identityCount * 9
+    + environmentCount * 7
+    + counts.lockedCount * 3
+    + (counts.character >= 2 ? 10 : 0)
+    + (counts.prop >= 2 ? 6 : 0)
+    + (counts.scene >= 1 && identityCount >= 2 ? 8 : 0)
+    + (counts.continuity >= 1 && counts.scene >= 1 ? 4 : 0)
+    - missingRequiredCount * 18;
+
+  if (!shouldUseTwoStage) {
+    score = Math.min(score, 59);
+  } else {
+    score = Math.max(score, 60);
+  }
+
+  const reason = missingRequiredCount > 0
+    ? `当前有 ${missingRequiredCount} 个主参考缺失，先用安全直连稳住可用参考，补齐后再考虑两段式。`
+    : shouldUseTwoStage
+      ? "参考数量较多且身份锚点分散，建议先用两段式锁人物与关键道具，再细化场景和光影。"
+      : "当前参考量较轻，安全直连已足够覆盖镜头一致性。";
+
+  return {
+    mode: shouldUseTwoStage ? "two_stage_high_consistency" : "safe_refs_only",
+    score: clampScore(score),
+    reason,
+    metrics: {
+      readyCount: readyItems.length,
+      totalCount: items.length,
+      requiredReadyCount: readyRequiredItems.length,
+      missingRequiredCount,
+      continuityCount: counts.continuity,
+      sceneCount: counts.scene,
+      characterCount: counts.character,
+      propCount: counts.prop,
+      styleCount: counts.style,
+      identityCount,
+      environmentCount,
+      lockedCount: counts.lockedCount,
+    },
   };
 }
 
@@ -279,6 +465,7 @@ export function buildStoryboardCompositionData(
   options?: {
     continuityLock?: boolean;
     includeStyleReferences?: boolean;
+    codexRecommendationIncludeStyleReferences?: boolean;
   },
 ) {
   const continuityLock = options?.continuityLock ?? true;
@@ -345,6 +532,15 @@ export function buildStoryboardCompositionData(
 
   const dedupedReferenceUrls = referenceImageUrls.filter((value, index, all) => all.indexOf(value) === index);
   const referencePreview = buildStoryboardReferencePreview(project, frame, options);
+  const codexRecommendationReferencePreview = buildStoryboardReferencePreview(project, frame, {
+    ...options,
+    includeStyleReferences: options?.codexRecommendationIncludeStyleReferences ?? options?.includeStyleReferences ?? true,
+  });
+  const existingCodexRecommendation = normalizeCodexImagegenRecommendation(baseComposition.codex_imagegen_recommendation);
+  const codexImagegenRecommendation =
+    existingCodexRecommendation
+      ? existingCodexRecommendation
+      : recommendCodexImagegenMode(codexRecommendationReferencePreview);
 
   return {
     ...baseComposition,
@@ -356,5 +552,7 @@ export function buildStoryboardCompositionData(
     reference_image_url: dedupedReferenceUrls[0] || undefined,
     reference_image_urls: dedupedReferenceUrls,
     reference_preview: referencePreview,
+    codex_imagegen_recommended_mode: codexImagegenRecommendation.mode,
+    codex_imagegen_recommendation: codexImagegenRecommendation,
   };
 }

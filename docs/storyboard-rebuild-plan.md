@@ -158,6 +158,15 @@ source 不复用旧 prompt 文本，只保留故事骨架和 parser 友好的 ma
 - 新增 prompt 变更测试，确认 `source/` 与旧项目文本不重合。
 - 新增输出门禁测试，确认 final 文件只认新的 `stage3_full_formal_v1` 路径。
 
+### Codex imagegen 413 防线
+
+- 多参考图真实请求必须先过 aggregate payload budget，不只看引用张数。
+- Codex handoff 默认使用 `scripts/prepare_codex_imagegen_refs.py` 生成 JPEG safe refs，预算默认且硬上限为 1 MiB 的 prepared JPEG refs，压缩策略改为在预算内优先保真而不是盲目压小。
+- handoff 公开 manifest 只暴露 safe refs；原始 PNG 路径只允许存在于 frame spec/fixture 输入，不进入 Codex 内置生图交接面。
+- 高一致性镜头可使用 `two_stage_high_consistency` 独立 pack：stage 1 只锁人物与关键道具，stage 2 接入 stage 1 结果后再处理场景、构图与光影。
+- `frame_17` 的 6 张真实引用原始总量约 10.6 MiB，base64/JSON 估算约 14.12 MiB；必须使用 handoff 包里的 safe refs，不允许把原始 PNG 直接加载进 Codex 对话。
+- 后端 OpenAI-compatible 图编请求同样有 `OPENAI_EDIT_REQUEST_MAX_BYTES` 总预算保护，避免 16 张合法单图叠加成网关 413。
+
 ## 6. 完成标准
 
 - 新目录能被导入成独立 project。

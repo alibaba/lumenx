@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "project_slug": "liuyi-that-day-v2",
+  "frame_id": "liuyi_frame_17",
+  "title": "六一那天 v2 frame 17 Codex imagegen handoff",
+  "policy": {
+    "enabled": true,
+    "mode": "safe_refs_only",
+    "max_total_bytes": 1048576,
+    "max_side": 1920,
+    "min_side": 640,
+    "jpeg_quality": 92,
+    "min_jpeg_quality": 45,
+    "never_attach_raw_references": true
+  },
+  "references": [
+    {
+      "role": "scene",
+      "path": "tests/fixtures/story_projects/六一那天_v2/references/scenes/liuyi_scene_2026_ward_v2/liuyi_scene_2026_ward_v2_childrens_day_daylight.png"
+    },
+    {
+      "role": "character",
+      "asset_id": "liuyi_char_xiaoqi_adult_v2",
+      "path": "tests/fixtures/story_projects/六一那天_v2/references/characters/liuyi_char_xiaoqi_adult_v2/liuyi_char_xiaoqi_adult_v2_full_body.png"
+    },
+    {
+      "role": "character",
+      "asset_id": "liuyi_char_boy_v2",
+      "path": "tests/fixtures/story_projects/六一那天_v2/references/characters/liuyi_char_boy_v2/liuyi_char_boy_v2_full_body.png"
+    },
+    {
+      "role": "character",
+      "asset_id": "liuyi_char_boy_father_v2",
+      "path": "tests/fixtures/story_projects/六一那天_v2/references/characters/liuyi_char_boy_father_v2/liuyi_char_boy_father_v2_full_body.png"
+    },
+    {
+      "role": "prop",
+      "asset_id": "liuyi_prop_white_bear_v2",
+      "path": "tests/fixtures/story_projects/六一那天_v2/references/props/liuyi_prop_white_bear_v2/liuyi_prop_white_bear_v2_usage_view.png"
+    },
+    {
+      "role": "prop",
+      "asset_id": "liuyi_prop_childrens_day_balloons_v2",
+      "path": "tests/fixtures/story_projects/六一那天_v2/references/props/liuyi_prop_childrens_day_balloons_v2/liuyi_prop_childrens_day_balloons_v2_usage_view.png"
+    }
+  ],
+  "prompt": "Use only the safe reference images generated from this handoff package. Create one polished cinematic 16:9 storyboard frame for a bright Children’s Day hospital ward. Preserve the adult female doctor, the young boy, the boy’s father, the white teddy bear with blue bow, and the red/yellow/blue balloons. Everyone is fully clothed and calm. No injury, no blood, no surgery, no tubes, no emergency treatment, no text, no watermark."
+}

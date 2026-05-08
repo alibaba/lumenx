@@ -11,6 +11,8 @@ import type {
     BindVoiceRequest as ApiBindVoiceRequest,
     Character as ApiCharacter,
     CopyFrameRequest as ApiCopyFrameRequest,
+    CodexImagegenPolicy as ApiCodexImagegenPolicy,
+    CodexImagegenRecommendationPolicy as ApiCodexImagegenRecommendationPolicy,
     CreatePropRequest as ApiCreatePropRequest,
     CreateSeriesRequest as ApiCreateSeriesRequest,
     CreateProjectRequest as ApiCreateProjectRequest,
@@ -50,6 +52,7 @@ import type {
     UpdateAssetAttributesRequest as ApiUpdateAssetAttributesRequest,
     UpdateAssetDescriptionRequest as ApiUpdateAssetDescriptionRequest,
     UpdateAssetImageRequest as ApiUpdateAssetImageRequest,
+    UpdateCodexImagegenPolicyRequest as ApiUpdateCodexImagegenPolicyRequest,
     UpdateFrameRequest as ApiUpdateFrameRequest,
     UpdateModelSettingsRequest as ApiUpdateModelSettingsRequest,
     UpdatePromptConfigRequest as ApiUpdatePromptConfigRequest,
@@ -62,6 +65,9 @@ import type {
 import type {
     ArtDirection,
     Character,
+    CodexImagegenMode,
+    CodexImagegenPolicy,
+    CodexImagegenRecommendationPolicy,
     ImageAsset,
     ImageVariant,
     ModelSettings,
@@ -400,6 +406,7 @@ type ProjectApiScriptBase = Omit<
     | "characters"
     | "created_at"
     | "frames"
+    | "codex_imagegen_policy"
     | "model_settings"
     | "prompt_config"
     | "props"
@@ -428,6 +435,7 @@ interface ProjectApiPayload extends Partial<ProjectApiScriptBase> {
     art_direction?: ApiArtDirection | null;
     model_settings?: ApiModelSettings | null;
     prompt_config?: ApiPromptConfig | null;
+    codex_imagegen_policy?: ApiCodexImagegenPolicy | null;
     story_analysis?: ApiStoryAnalysis | null;
 }
 
@@ -874,6 +882,95 @@ const normalizeModelSettings = (value: ApiModelSettings | unknown): ModelSetting
     };
 };
 
+const normalizeCodexThresholdOverrides = (value: unknown): Record<string, Record<string, number>> => {
+    if (!isRecord(value)) return {};
+    return Object.entries(value).reduce<Record<string, Record<string, number>>>((acc, [key, rawOverrides]) => {
+        if (!isRecord(rawOverrides)) return acc;
+        const normalized = Object.entries(rawOverrides).reduce<Record<string, number>>((inner, [innerKey, rawValue]) => {
+            const numericValue = optionalNumber(rawValue);
+            if (numericValue !== undefined) {
+                inner[innerKey] = numericValue;
+            }
+            return inner;
+        }, {});
+        acc[key] = normalized;
+        return acc;
+    }, {});
+};
+
+const normalizeCodexImagegenRecommendationPolicy = (
+    value: ApiCodexImagegenRecommendationPolicy | unknown,
+): CodexImagegenRecommendationPolicy => {
+    if (!isRecord(value)) {
+        return {
+            enabled: true,
+            auto_apply: false,
+            safe_direct_max_ready_refs: 4,
+            two_stage_min_ready_refs: 5,
+            two_stage_min_identity_refs: 3,
+            two_stage_min_character_refs: 2,
+            two_stage_min_prop_refs: 2,
+            two_stage_min_scene_refs: 1,
+            direct_when_required_refs_missing: true,
+            shot_type_overrides: {},
+            genre_overrides: {},
+        };
+    }
+
+    return {
+        enabled: optionalBoolean(value.enabled) ?? true,
+        auto_apply: optionalBoolean(value.auto_apply) ?? false,
+        safe_direct_max_ready_refs: optionalNumber(value.safe_direct_max_ready_refs) ?? 4,
+        two_stage_min_ready_refs: optionalNumber(value.two_stage_min_ready_refs) ?? 5,
+        two_stage_min_identity_refs: optionalNumber(value.two_stage_min_identity_refs) ?? 3,
+        two_stage_min_character_refs: optionalNumber(value.two_stage_min_character_refs) ?? 2,
+        two_stage_min_prop_refs: optionalNumber(value.two_stage_min_prop_refs) ?? 2,
+        two_stage_min_scene_refs: optionalNumber(value.two_stage_min_scene_refs) ?? 1,
+        direct_when_required_refs_missing: optionalBoolean(value.direct_when_required_refs_missing) ?? true,
+        shot_type_overrides: normalizeCodexThresholdOverrides(value.shot_type_overrides),
+        genre_overrides: normalizeCodexThresholdOverrides(value.genre_overrides),
+    };
+};
+
+const normalizeCodexImagegenPolicy = (
+    value: ApiCodexImagegenPolicy | unknown,
+): CodexImagegenPolicy => {
+    if (!isRecord(value)) {
+        return {
+            enabled: true,
+            mode: "safe_refs_only",
+            max_total_bytes: 1 * 1024 * 1024,
+            max_side: 1920,
+            min_side: 640,
+            jpeg_quality: 92,
+            min_jpeg_quality: 45,
+            never_attach_raw_references: true,
+            recommendation: normalizeCodexImagegenRecommendationPolicy(undefined),
+        };
+    }
+
+    return {
+        enabled: optionalBoolean(value.enabled) ?? true,
+        mode: normalizeCodexImagegenMode(value.mode),
+        max_total_bytes: optionalNumber(value.max_total_bytes) ?? 1 * 1024 * 1024,
+        max_side: optionalNumber(value.max_side) ?? 1920,
+        min_side: optionalNumber(value.min_side) ?? 640,
+        jpeg_quality: optionalNumber(value.jpeg_quality) ?? 92,
+        min_jpeg_quality: optionalNumber(value.min_jpeg_quality) ?? 45,
+        never_attach_raw_references:
+            optionalBoolean(value.never_attach_raw_references) ?? true,
+        recommendation: normalizeCodexImagegenRecommendationPolicy(value.recommendation),
+    };
+};
+
+const normalizeCodexImagegenMode = (value: unknown): CodexImagegenMode => {
+    const raw = optionalString(value)?.trim().toLowerCase();
+    if (raw === "two_stage_high_consistency" || raw === "two_stage" || raw === "high_consistency") {
+        return "two_stage_high_consistency";
+    }
+    return "safe_refs_only";
+};
+
 export const normalizePromptConfig = (value: unknown): PromptConfig => {
     if (!isRecord(value)) {
         return {
@@ -984,6 +1081,9 @@ const parseProjectPayload = (data: unknown): ProjectApiPayload => {
         art_direction: isRecord(data.art_direction) ? (data.art_direction as unknown as ApiArtDirection) : undefined,
         model_settings: isRecord(data.model_settings) ? (data.model_settings as unknown as ApiModelSettings) : undefined,
         prompt_config: isRecord(data.prompt_config) ? (data.prompt_config as unknown as ApiPromptConfig) : undefined,
+        codex_imagegen_policy: isRecord(data.codex_imagegen_policy)
+            ? (data.codex_imagegen_policy as unknown as ApiCodexImagegenPolicy)
+            : undefined,
         merged_video_url: optionalString(data.merged_video_url),
         series_id: optionalString(data.series_id),
         episode_number: optionalNumber(data.episode_number),
@@ -1039,6 +1139,7 @@ export const normalizeProjectPayload = (data: unknown): Project => {
         art_direction: normalizeArtDirection(project.art_direction),
         model_settings: normalizeModelSettings(project.model_settings),
         prompt_config: project.prompt_config ? normalizePromptConfig(project.prompt_config) : undefined,
+        codex_imagegen_policy: normalizeCodexImagegenPolicy(project.codex_imagegen_policy),
         merged_video_url: project.merged_video_url ?? undefined,
         series_id: project.series_id ?? undefined,
         episode_number: project.episode_number ?? undefined,
@@ -1304,6 +1405,19 @@ export const api = {
             prop_aspect_ratio: payload.propAspectRatio,
             storyboard_aspect_ratio: payload.storyboardAspectRatio
         });
+        return normalizeProjectPayload(res.data);
+    },
+
+    getCodexImagegenPolicy: async (scriptId: string): Promise<ApiCodexImagegenPolicy> => {
+        const res = await axios.get<ApiCodexImagegenPolicy>(`${API_URL}/projects/${scriptId}/codex_imagegen_policy`);
+        return res.data;
+    },
+
+    updateCodexImagegenPolicy: async (
+        scriptId: string,
+        request: ApiUpdateCodexImagegenPolicyRequest,
+    ): Promise<Project> => {
+        const res = await axios.put<ProjectApiPayload>(`${API_URL}/projects/${scriptId}/codex_imagegen_policy`, request);
         return normalizeProjectPayload(res.data);
     },
 

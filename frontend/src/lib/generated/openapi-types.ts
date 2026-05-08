@@ -350,6 +350,32 @@ export interface ModelSettings {
   storyboard_aspect_ratio?: string;
 }
 
+export interface CodexImagegenPolicy {
+  enabled?: boolean;
+  mode?: string;
+  max_total_bytes?: number;
+  max_side?: number;
+  min_side?: number;
+  jpeg_quality?: number;
+  min_jpeg_quality?: number;
+  never_attach_raw_references?: boolean;
+  recommendation?: CodexImagegenRecommendationPolicy;
+}
+
+export interface CodexImagegenRecommendationPolicy {
+  enabled?: boolean;
+  auto_apply?: boolean;
+  safe_direct_max_ready_refs?: number;
+  two_stage_min_ready_refs?: number;
+  two_stage_min_identity_refs?: number;
+  two_stage_min_character_refs?: number;
+  two_stage_min_prop_refs?: number;
+  two_stage_min_scene_refs?: number;
+  direct_when_required_refs_missing?: boolean;
+  shot_type_overrides?: Record<string, Record<string, number>>;
+  genre_overrides?: Record<string, Record<string, number>>;
+}
+
 export interface PolishR2VPromptRequest {
   draft_prompt: string;
   slots: Array<RefSlot>;
@@ -459,6 +485,7 @@ export interface Script {
   art_direction?: ArtDirection | null;
   model_settings?: ModelSettings;
   prompt_config?: PromptConfig;
+  codex_imagegen_policy?: CodexImagegenPolicy;
   story_analysis?: StoryAnalysis;
   generation_metadata?: Record<string, unknown>;
   merged_video_url?: string | null;
@@ -645,6 +672,18 @@ export interface UpdateModelSettingsRequest {
   scene_aspect_ratio?: string | null;
   prop_aspect_ratio?: string | null;
   storyboard_aspect_ratio?: string | null;
+}
+
+export interface UpdateCodexImagegenPolicyRequest {
+  enabled?: boolean | null;
+  mode?: string | null;
+  max_total_bytes?: number | null;
+  max_side?: number | null;
+  min_side?: number | null;
+  jpeg_quality?: number | null;
+  min_jpeg_quality?: number | null;
+  never_attach_raw_references?: boolean | null;
+  recommendation?: CodexImagegenRecommendationPolicy | null;
 }
 
 export interface UpdatePromptConfigRequest {

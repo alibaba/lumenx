@@ -11,6 +11,7 @@ from src.models.image import (
     DEFAULT_OPENAI_IMAGE_EDIT_BASE_URL,
     DEFAULT_OPENAI_IMAGE_EDIT_MODEL,
     DEFAULT_OPENAI_IMAGE_MODEL,
+    OPENAI_EDIT_REQUEST_MAX_BYTES_ENV,
     OPENAI_EDIT_REFERENCE_MAX_BYTES,
     OPENAI_EDIT_REFERENCE_MAX_SIDE,
     OPENAI_EDIT_REFERENCE_MIN_SIDE,
@@ -19,7 +20,6 @@ from src.models.image import (
     OPENAI_T2I_MODEL_ALIAS,
     WanxImageModel,
 )
-
 
 PNG_1X1_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+"
@@ -305,7 +305,50 @@ def test_openai_i2i_alias_limits_gpt_image_references_to_16(monkeypatch, tmp_pat
     assert captured["files"][-1][1][0] == os.path.basename(refs[15])
 
 
-def test_openai_t2i_alias_uses_recommended_gpt_image2_defaults_when_not_overridden(monkeypatch, tmp_path):
+def test_openai_i2i_alias_fits_multi_reference_request_to_aggregate_budget(
+    monkeypatch,
+    tmp_path,
+):
+    captured = {}
+    refs = []
+    for index in range(3):
+        ref = tmp_path / f"large-reference-{index}.png"
+        Image.effect_noise((1400, 1000), 96).convert("RGB").save(ref, format="PNG")
+        refs.append(ref)
+
+    assert sum(ref.stat().st_size for ref in refs) > 1_200_000
+
+    def fake_post(url, headers=None, data=None, files=None, timeout=None):
+        captured["files"] = files
+        return FakeResponse({"data": [{"b64_json": PNG_1X1_BASE64}]})
+
+    monkeypatch.setenv("IMAGE_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "img-key")
+    monkeypatch.setenv("OPENAI_IMAGE_BASE_URL", "https://image.example.com/v1")
+    monkeypatch.setenv("OPENAI_IMAGE_EDIT_BASE_URL", "https://image.example.com/v1")
+    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", "gpt-image2")
+    monkeypatch.setenv(OPENAI_EDIT_REQUEST_MAX_BYTES_ENV, "1200000")
+    monkeypatch.setattr("src.models.image.requests.post", fake_post)
+
+    output_path = tmp_path / "gpt-image2-budgeted-edit.png"
+    model = WanxImageModel({"params": {"i2i_model_name": OPENAI_I2I_MODEL_ALIAS}})
+
+    model.generate(
+        "use the references without exceeding the gateway body limit",
+        str(output_path),
+        ref_image_paths=[str(ref) for ref in refs],
+        model_name=OPENAI_I2I_MODEL_ALIAS,
+    )
+
+    total_uploaded_bytes = sum(len(file_info[1][1]) for file_info in captured["files"])
+    assert total_uploaded_bytes <= 1_200_000
+    assert all(file_info[1][0].endswith(".jpg") for file_info in captured["files"])
+    assert all(file_info[1][2] == "image/jpeg" for file_info in captured["files"])
+
+
+def test_openai_t2i_alias_uses_recommended_gpt_image2_defaults_when_not_overridden(
+    monkeypatch, tmp_path
+):
     captured = {}
 
     def fake_post(url, headers=None, json=None, timeout=None):
@@ -483,7 +526,9 @@ def test_openai_generation_retries_with_default_model_when_distributor_unavailab
     output_path = tmp_path / "image-fallback.png"
     model = WanxImageModel({"params": {"model_name": OPENAI_T2I_MODEL_ALIAS}})
 
-    generated_path, duration = model.generate("a studio portrait of a ceramic mug", str(output_path))
+    generated_path, duration = model.generate(
+        "a studio portrait of a ceramic mug", str(output_path)
+    )
 
     assert generated_path == str(output_path)
     assert duration >= 0
@@ -565,9 +610,7 @@ def test_openai_edit_reports_missing_dedicated_edit_key_clearly(monkeypatch, tmp
         raise AssertionError("Expected RuntimeError for missing dedicated edit key")
 
 
-def test_openai_edit_uses_dedicated_image_key_as_backup_before_general_key(
-    monkeypatch, tmp_path
-):
+def test_openai_edit_uses_dedicated_image_key_as_backup_before_general_key(monkeypatch, tmp_path):
     captured = {}
     ref = tmp_path / "reference.png"
     ref.write_bytes(base64.b64decode(PNG_1X1_BASE64))

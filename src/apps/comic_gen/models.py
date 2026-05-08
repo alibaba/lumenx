@@ -1,7 +1,15 @@
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import time
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from src.utils.image_payload_budget import (
+    DEFAULT_CODEX_IMAGEGEN_HANDOFF_MAX_REFERENCE_BYTES,
+    DEFAULT_CODEX_IMAGEGEN_JPEG_QUALITY,
+    DEFAULT_CODEX_IMAGEGEN_MAX_SIDE,
+    DEFAULT_CODEX_IMAGEGEN_MIN_JPEG_QUALITY,
+    DEFAULT_CODEX_IMAGEGEN_MIN_SIDE,
+)
 
 DEFAULT_I2V_MODEL = "doubao-seedance-2-0-260128"
 DEFAULT_T2I_MODEL = "openai-image"
@@ -308,6 +316,135 @@ class PromptConfig(BaseModel):
     r2v_polish: str = Field("", description="Custom system prompt for video R2V polish (Prompt E)")
 
 
+class CodexImagegenRecommendationPolicy(BaseModel):
+    """Project-level tuning for Codex safe-direct vs two-stage recommendations."""
+
+    enabled: bool = Field(
+        True,
+        description="Whether backend responses should include Codex imagegen mode recommendations.",
+    )
+    auto_apply: bool = Field(
+        False,
+        description="Whether backend pack selection should prefer the recommendation when no explicit mode is chosen.",
+    )
+    safe_direct_max_ready_refs: int = Field(
+        4,
+        description="Highest ready reference count that is still normally treated as safe direct.",
+    )
+    two_stage_min_ready_refs: int = Field(
+        5,
+        description="Ready reference count that recommends two-stage mode.",
+    )
+    two_stage_min_identity_refs: int = Field(
+        3,
+        description="Character + prop reference count that recommends two-stage mode.",
+    )
+    two_stage_min_character_refs: int = Field(
+        2,
+        description="Character reference count that can trigger two-stage with scene/prop support.",
+    )
+    two_stage_min_prop_refs: int = Field(
+        2,
+        description="Prop reference count that can trigger two-stage with character support.",
+    )
+    two_stage_min_scene_refs: int = Field(
+        1,
+        description="Scene/environment reference count needed for scene+identity two-stage triggers.",
+    )
+    direct_when_required_refs_missing: bool = Field(
+        True,
+        description="Prefer safe direct while required references are missing.",
+    )
+    shot_type_overrides: Dict[str, Dict[str, int]] = Field(
+        default_factory=dict,
+        description="Optional threshold overrides keyed by shot type/camera label.",
+    )
+    genre_overrides: Dict[str, Dict[str, int]] = Field(
+        default_factory=dict,
+        description="Optional threshold overrides keyed by project genre/type.",
+    )
+
+    @field_validator(
+        "safe_direct_max_ready_refs",
+        "two_stage_min_ready_refs",
+        "two_stage_min_identity_refs",
+        "two_stage_min_character_refs",
+        "two_stage_min_prop_refs",
+        "two_stage_min_scene_refs",
+    )
+    @classmethod
+    def _normalize_threshold(cls, value: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return 1
+        return max(0, parsed)
+
+
+class CodexImagegenPolicy(BaseModel):
+    """Project-level safety policy for Codex built-in imagegen handoffs."""
+
+    enabled: bool = Field(
+        True,
+        description="Whether Codex built-in imagegen handoffs must use safe reference images.",
+    )
+    mode: str = Field(
+        "safe_refs_only",
+        description="Codex handoff mode: safe_refs_only, two_stage_high_consistency, or off.",
+    )
+    max_total_bytes: int = Field(
+        1 * 1024 * 1024,
+        description="Maximum aggregate bytes for safe reference images in one Codex handoff.",
+    )
+    max_side: int = Field(
+        DEFAULT_CODEX_IMAGEGEN_MAX_SIDE,
+        description="Maximum long side for Codex safe references.",
+    )
+    min_side: int = Field(
+        DEFAULT_CODEX_IMAGEGEN_MIN_SIDE,
+        description="Minimum long side while fitting safe references.",
+    )
+    jpeg_quality: int = Field(
+        DEFAULT_CODEX_IMAGEGEN_JPEG_QUALITY,
+        description="Initial JPEG quality for Codex safe references.",
+    )
+    min_jpeg_quality: int = Field(
+        DEFAULT_CODEX_IMAGEGEN_MIN_JPEG_QUALITY,
+        description="Minimum JPEG quality while fitting Codex safe references.",
+    )
+    never_attach_raw_references: bool = Field(
+        True,
+        description="When true, raw reference paths must not be attached to Codex built-in imagegen.",
+    )
+    recommendation: CodexImagegenRecommendationPolicy = Field(
+        default_factory=CodexImagegenRecommendationPolicy,
+        description="Project-level recommendation thresholds for Codex handoff mode selection.",
+    )
+
+    @field_validator("mode")
+    @classmethod
+    def _normalize_mode(cls, value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized in {"safe_refs_only", "safe_direct", "direct", "auto"}:
+            return "safe_refs_only"
+        if normalized in {"two_stage_high_consistency", "two_stage", "high_consistency"}:
+            return "two_stage_high_consistency"
+        if normalized == "off":
+            return "off"
+        return "safe_refs_only"
+
+    @field_validator("max_total_bytes")
+    @classmethod
+    def _normalize_max_total_bytes(cls, value: int) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return DEFAULT_CODEX_IMAGEGEN_HANDOFF_MAX_REFERENCE_BYTES
+        if parsed <= 0:
+            return DEFAULT_CODEX_IMAGEGEN_HANDOFF_MAX_REFERENCE_BYTES
+        return min(parsed, DEFAULT_CODEX_IMAGEGEN_HANDOFF_MAX_REFERENCE_BYTES)
+
+
 class StoryBeat(BaseModel):
     id: str = Field(..., description="Unique identifier for the structured story beat")
     order: int = Field(..., description="1-based order in the source narrative")
@@ -385,6 +522,12 @@ class Script(BaseModel):
 
     # Custom prompt configuration for polish stages
     prompt_config: PromptConfig = Field(default_factory=PromptConfig, description="Custom system prompts for polish stages")
+
+    # Codex built-in imagegen handoff safety.
+    codex_imagegen_policy: CodexImagegenPolicy = Field(
+        default_factory=CodexImagegenPolicy,
+        description="Safe reference policy for Codex built-in imagegen handoffs",
+    )
 
     # Structured text analysis
     story_analysis: StoryAnalysis = Field(default_factory=StoryAnalysis, description="Structured analysis for plot summary, beats, and character presence")

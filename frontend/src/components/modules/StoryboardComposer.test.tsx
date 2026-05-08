@@ -131,7 +131,28 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/lib/storyboard-references", () => ({
   buildStoryboardCompositionData: vi.fn(() => ({})),
+  buildStoryboardReferencePreview: vi.fn(() => []),
   getArtDirectionPromptPrefix: vi.fn(() => ""),
+  normalizeCodexImagegenRecommendation: vi.fn(() => null),
+  recommendCodexImagegenMode: vi.fn(() => ({
+    mode: "safe_refs_only",
+    score: 25,
+    reason: "当前参考量较轻，安全直连已足够覆盖镜头一致性。",
+    metrics: {
+      readyCount: 0,
+      totalCount: 0,
+      requiredReadyCount: 0,
+      missingRequiredCount: 0,
+      continuityCount: 0,
+      sceneCount: 0,
+      characterCount: 0,
+      propCount: 0,
+      styleCount: 0,
+      identityCount: 0,
+      environmentCount: 0,
+      lockedCount: 0,
+    },
+  })),
 }));
 
 vi.mock("@/lib/utils", () => ({

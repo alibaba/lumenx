@@ -52,6 +52,12 @@ OPENAI_EDIT_REFERENCE_MIN_JPEG_QUALITY = 45
 OPENAI_EDIT_REFERENCE_MIN_SIDE = 1024
 OPENAI_EDIT_REFERENCE_SCALE_FACTOR = 0.85
 OPENAI_GPT_IMAGE_EDIT_REFERENCE_LIMIT = 16
+OPENAI_EDIT_REQUEST_MAX_BYTES_ENV = "OPENAI_EDIT_REQUEST_MAX_BYTES"
+OPENAI_EDIT_REQUEST_MAX_BYTES = 8 * 1024 * 1024
+OPENAI_EDIT_REQUEST_SAFETY_OVERHEAD_BYTES = 256 * 1024
+OPENAI_EDIT_REQUEST_MIN_PER_REFERENCE_BYTES = 256 * 1024
+OPENAI_EDIT_REQUEST_FIT_MAX_SIDES = (1920, 1600, 1360, 1156, 1024, 870, 768)
+OPENAI_EDIT_REQUEST_FIT_MIN_SIDE = 768
 OPENAI_EDIT_REFERENCE_SUPPORTED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 OPENAI_IMAGE_DEFAULT_MAX_RETRY_ATTEMPTS = 5
 OPENAI_IMAGE_RETRY_MAX_WAIT_SECONDS = 60
@@ -206,7 +212,9 @@ class WanxImageModel(ImageGenModel):
         if final_model_name == DASHSCOPE_WAN_T2I_DEFAULT:
             image_url = self._generate_wan26_http(prompt, size, n, negative_prompt)
         elif final_model_name == DASHSCOPE_WAN_I2I_DEFAULT:
-            image_url = self._generate_wan26_image_http(prompt, size, n, negative_prompt, all_ref_paths)
+            image_url = self._generate_wan26_image_http(
+                prompt, size, n, negative_prompt, all_ref_paths
+            )
         else:
             image_url = self._generate_sdk(
                 prompt,
@@ -224,7 +232,9 @@ class WanxImageModel(ImageGenModel):
         self._download_image(image_url, output_path)
         return output_path, api_duration
 
-    def _resolve_target_model_name(self, explicit_model_name: Optional[str], all_ref_paths: List[str]) -> str:
+    def _resolve_target_model_name(
+        self, explicit_model_name: Optional[str], all_ref_paths: List[str]
+    ) -> str:
         if explicit_model_name:
             return explicit_model_name
         if all_ref_paths:
@@ -232,13 +242,17 @@ class WanxImageModel(ImageGenModel):
         return self.params.get("model_name", self._default_model_name(for_i2i=False))
 
     def _default_model_name(self, for_i2i: bool) -> str:
-        provider = self._resolve_default_edit_provider() if for_i2i else self._resolve_default_provider()
+        provider = (
+            self._resolve_default_edit_provider() if for_i2i else self._resolve_default_provider()
+        )
         if provider == IMAGE_PROVIDER_OPENAI:
             return OPENAI_I2I_MODEL_ALIAS if for_i2i else OPENAI_T2I_MODEL_ALIAS
         return DASHSCOPE_WAN_I2I_DEFAULT if for_i2i else DASHSCOPE_WAN_T2I_DEFAULT
 
     def _resolve_default_provider(self) -> str:
-        configured = (self.params.get("provider") or os.getenv("IMAGE_PROVIDER") or "").strip().lower()
+        configured = (
+            (self.params.get("provider") or os.getenv("IMAGE_PROVIDER") or "").strip().lower()
+        )
         if configured in {IMAGE_PROVIDER_OPENAI, IMAGE_PROVIDER_DASHSCOPE}:
             return configured
         if any(
@@ -256,7 +270,11 @@ class WanxImageModel(ImageGenModel):
         return IMAGE_PROVIDER_DASHSCOPE
 
     def _resolve_default_edit_provider(self) -> str:
-        configured = (self.params.get("edit_provider") or os.getenv("IMAGE_EDIT_PROVIDER") or "").strip().lower()
+        configured = (
+            (self.params.get("edit_provider") or os.getenv("IMAGE_EDIT_PROVIDER") or "")
+            .strip()
+            .lower()
+        )
         if configured in {IMAGE_PROVIDER_OPENAI, IMAGE_PROVIDER_DASHSCOPE}:
             return configured
         if any(
@@ -279,9 +297,15 @@ class WanxImageModel(ImageGenModel):
             return self._resolve_default_edit_provider()
         if normalized.startswith("wan"):
             return IMAGE_PROVIDER_DASHSCOPE
-        return self._resolve_default_edit_provider() if has_reference else self._resolve_default_provider()
+        return (
+            self._resolve_default_edit_provider()
+            if has_reference
+            else self._resolve_default_provider()
+        )
 
-    def _resolve_runtime_model_name(self, model_name: str, provider: str, has_reference: bool) -> str:
+    def _resolve_runtime_model_name(
+        self, model_name: str, provider: str, has_reference: bool
+    ) -> str:
         normalized = (model_name or "").strip().lower()
         if provider == IMAGE_PROVIDER_DASHSCOPE and normalized in {
             OPENAI_T2I_MODEL_ALIAS,
@@ -340,7 +364,9 @@ class WanxImageModel(ImageGenModel):
 
     def _is_distributor_unavailable_error(self, error_payload: Any) -> bool:
         if isinstance(error_payload, dict):
-            message = error_payload.get("error", {}).get("message") or error_payload.get("message") or ""
+            message = (
+                error_payload.get("error", {}).get("message") or error_payload.get("message") or ""
+            )
         else:
             message = str(error_payload or "")
         normalized = message.lower()
@@ -348,17 +374,27 @@ class WanxImageModel(ImageGenModel):
 
     def _is_invalid_token_error(self, error_payload: Any) -> bool:
         if isinstance(error_payload, dict):
-            message = error_payload.get("error", {}).get("message") or error_payload.get("message") or ""
+            message = (
+                error_payload.get("error", {}).get("message") or error_payload.get("message") or ""
+            )
             code = error_payload.get("error", {}).get("code") or error_payload.get("code") or ""
         else:
             message = str(error_payload or "")
             code = ""
         normalized = message.lower()
-        return ("无效的令牌" in message) or ("invalid token" in normalized) or (str(code).lower() == "invalid_request")
+        return (
+            ("无效的令牌" in message)
+            or ("invalid token" in normalized)
+            or (str(code).lower() == "invalid_request")
+        )
 
     def _is_moderation_blocked_error(self, error_payload: Any) -> bool:
         if isinstance(error_payload, dict):
-            error = error_payload.get("error", {}) if isinstance(error_payload.get("error"), dict) else {}
+            error = (
+                error_payload.get("error", {})
+                if isinstance(error_payload.get("error"), dict)
+                else {}
+            )
             message = error.get("message") or error_payload.get("message") or ""
             code = error.get("code") or error_payload.get("code") or ""
         else:
@@ -380,7 +416,9 @@ class WanxImageModel(ImageGenModel):
             return False
 
         if isinstance(error_payload, dict):
-            message = error_payload.get("error", {}).get("message") or error_payload.get("message") or ""
+            message = (
+                error_payload.get("error", {}).get("message") or error_payload.get("message") or ""
+            )
         else:
             message = str(error_payload or "")
         normalized = message.lower()
@@ -399,7 +437,9 @@ class WanxImageModel(ImageGenModel):
             "timed out",
             "upstream",
         )
-        return response.status_code >= 500 or any(marker in normalized or marker in message for marker in transient_markers)
+        return response.status_code >= 500 or any(
+            marker in normalized or marker in message for marker in transient_markers
+        )
 
     def _openai_retry_after_seconds(self, response: requests.Response) -> Optional[float]:
         raw_retry_after = ""
@@ -571,7 +611,9 @@ class WanxImageModel(ImageGenModel):
         negative_prompt: Optional[str],
         ref_image_paths: List[str],
     ) -> float:
-        required_api_key = self.openai_image_edit_api_key if ref_image_paths else self.openai_image_api_key
+        required_api_key = (
+            self.openai_image_edit_api_key if ref_image_paths else self.openai_image_api_key
+        )
         if not required_api_key:
             raise ValueError(
                 "OpenAI-compatible image provider requires a usable API key. "
@@ -625,7 +667,10 @@ class WanxImageModel(ImageGenModel):
         response = self._post_openai_request_with_retries(
             request_url=request_url,
             action="generation",
-            headers={**self._openai_headers(self.openai_image_api_key), "Content-Type": "application/json"},
+            headers={
+                **self._openai_headers(self.openai_image_api_key),
+                "Content-Type": "application/json",
+            },
             json=payload,
             timeout=300,
         )
@@ -645,7 +690,10 @@ class WanxImageModel(ImageGenModel):
                 response = self._post_openai_request_with_retries(
                     request_url=request_url,
                     action="generation",
-                    headers={**self._openai_headers(self.openai_image_api_key), "Content-Type": "application/json"},
+                    headers={
+                        **self._openai_headers(self.openai_image_api_key),
+                        "Content-Type": "application/json",
+                    },
                     json=fallback_payload,
                     timeout=300,
                 )
@@ -662,11 +710,10 @@ class WanxImageModel(ImageGenModel):
         ref_image_paths: List[str],
     ) -> Dict[str, str]:
         if not ref_image_paths:
-            raise RuntimeError("OpenAI-compatible image edit requires at least one reference image.")
-        loaded_references = [
-            self._load_openai_reference_image(ref_image_path)
-            for ref_image_path in ref_image_paths
-        ]
+            raise RuntimeError(
+                "OpenAI-compatible image edit requires at least one reference image."
+            )
+        loaded_references = self._load_openai_reference_images_for_request(ref_image_paths)
         request_url = f"{self.openai_image_edit_base_url}/images/edits"
         data = {
             "model": self._resolve_openai_model_name(model_name, has_reference=True),
@@ -725,7 +772,9 @@ class WanxImageModel(ImageGenModel):
         if image_b64:
             return {"kind": "b64_json", "value": image_b64}
 
-        raise RuntimeError(f"OpenAI-compatible image {action} returned no usable artifact: {result}")
+        raise RuntimeError(
+            f"OpenAI-compatible image {action} returned no usable artifact: {result}"
+        )
 
     def _persist_openai_artifact(self, artifact: Dict[str, str], output_path: str) -> None:
         if artifact["kind"] == "url":
@@ -738,7 +787,112 @@ class WanxImageModel(ImageGenModel):
             return
         raise RuntimeError(f"Unsupported OpenAI-compatible image artifact kind: {artifact['kind']}")
 
-    def _load_openai_reference_image(self, ref: str) -> Tuple[str, bytes, str]:
+    def _openai_edit_request_max_bytes(self) -> int:
+        raw_value = (os.getenv(OPENAI_EDIT_REQUEST_MAX_BYTES_ENV) or "").strip()
+        if not raw_value:
+            return OPENAI_EDIT_REQUEST_MAX_BYTES
+        try:
+            parsed = int(raw_value)
+        except ValueError:
+            logger.warning(
+                "Invalid %s=%r; using default %s bytes.",
+                OPENAI_EDIT_REQUEST_MAX_BYTES_ENV,
+                raw_value,
+                OPENAI_EDIT_REQUEST_MAX_BYTES,
+            )
+            return OPENAI_EDIT_REQUEST_MAX_BYTES
+        if parsed <= 0:
+            logger.warning(
+                "Invalid %s=%r; using default %s bytes.",
+                OPENAI_EDIT_REQUEST_MAX_BYTES_ENV,
+                raw_value,
+                OPENAI_EDIT_REQUEST_MAX_BYTES,
+            )
+            return OPENAI_EDIT_REQUEST_MAX_BYTES
+        return parsed
+
+    def _load_openai_reference_images_for_request(
+        self,
+        ref_image_paths: List[str],
+    ) -> List[Tuple[str, bytes, str]]:
+        loaded_references = [
+            self._load_openai_reference_image(ref_image_path) for ref_image_path in ref_image_paths
+        ]
+        request_budget = self._openai_edit_request_max_bytes()
+        total_bytes = sum(len(content) for _, content, _ in loaded_references)
+        if total_bytes <= request_budget:
+            logger.info(
+                "OpenAI edit reference aggregate preflight: refs=%s, bytes=%s, budget=%s.",
+                len(loaded_references),
+                total_bytes,
+                request_budget,
+            )
+            return loaded_references
+
+        logger.warning(
+            "OpenAI edit reference aggregate bytes %s exceed request budget %s; "
+            "compressing references before upload.",
+            total_bytes,
+            request_budget,
+        )
+
+        available_budget = max(
+            OPENAI_EDIT_REQUEST_MIN_PER_REFERENCE_BYTES,
+            request_budget - OPENAI_EDIT_REQUEST_SAFETY_OVERHEAD_BYTES,
+        )
+        per_reference_budget = max(
+            OPENAI_EDIT_REQUEST_MIN_PER_REFERENCE_BYTES,
+            available_budget // max(1, len(ref_image_paths)),
+        )
+        best_references: Optional[List[Tuple[str, bytes, str]]] = None
+        best_total: Optional[int] = None
+
+        for max_side in OPENAI_EDIT_REQUEST_FIT_MAX_SIDES:
+            candidate_references = [
+                self._load_openai_reference_image(
+                    ref_image_path,
+                    max_bytes=per_reference_budget,
+                    force_transcode=True,
+                    max_side=max_side,
+                    min_side=OPENAI_EDIT_REQUEST_FIT_MIN_SIDE,
+                )
+                for ref_image_path in ref_image_paths
+            ]
+            candidate_total = sum(len(content) for _, content, _ in candidate_references)
+            if best_total is None or candidate_total < best_total:
+                best_total = candidate_total
+                best_references = candidate_references
+            if candidate_total <= request_budget:
+                logger.info(
+                    "OpenAI edit references fit aggregate budget after compression: "
+                    "refs=%s, bytes=%s, budget=%s, max_side=%s, per_ref_budget=%s.",
+                    len(candidate_references),
+                    candidate_total,
+                    request_budget,
+                    max_side,
+                    per_reference_budget,
+                )
+                return candidate_references
+
+        if best_references is None or best_total is None:
+            return loaded_references
+
+        raise RuntimeError(
+            "OpenAI-compatible image edit request would exceed the configured aggregate "
+            f"payload budget after compression: {best_total} bytes > {request_budget} bytes. "
+            f"Reduce reference count or lower {OPENAI_EDIT_REQUEST_MAX_BYTES_ENV} only if the "
+            "upstream gateway is known to allow larger request bodies."
+        )
+
+    def _load_openai_reference_image(
+        self,
+        ref: str,
+        *,
+        max_bytes: Optional[int] = None,
+        force_transcode: bool = False,
+        max_side: Optional[int] = None,
+        min_side: Optional[int] = None,
+    ) -> Tuple[str, bytes, str]:
         resolved_ref = ref
         uploader = OSSImageUploader()
 
@@ -759,7 +913,15 @@ class WanxImageModel(ImageGenModel):
             )
             filename = os.path.basename(urlparse(resolved_ref).path) or "reference.png"
             content_type = headers.get("Content-Type") or self._guess_content_type(filename)
-            return self._prepare_openai_edit_reference_image(filename, content, content_type)
+            return self._prepare_openai_edit_reference_image(
+                filename,
+                content,
+                content_type,
+                max_bytes=max_bytes,
+                force_transcode=force_transcode,
+                max_side=max_side,
+                min_side=min_side,
+            )
 
         candidate_paths = [resolved_ref]
         if isinstance(resolved_ref, str) and not os.path.isabs(resolved_ref):
@@ -772,23 +934,43 @@ class WanxImageModel(ImageGenModel):
                         os.path.basename(candidate),
                         image_file.read(),
                         self._guess_content_type(candidate),
+                        max_bytes=max_bytes,
+                        force_transcode=force_transcode,
+                        max_side=max_side,
+                        min_side=min_side,
                     )
 
-        raise RuntimeError(f"Reference image not found or unsupported for OpenAI-compatible edit: {ref}")
+        raise RuntimeError(
+            f"Reference image not found or unsupported for OpenAI-compatible edit: {ref}"
+        )
 
     def _prepare_openai_edit_reference_image(
         self,
         filename: str,
         content: bytes,
         content_type: str,
+        *,
+        max_bytes: Optional[int] = None,
+        force_transcode: bool = False,
+        max_side: Optional[int] = None,
+        min_side: Optional[int] = None,
     ) -> Tuple[str, bytes, str]:
-        normalized_content_type = (content_type or self._guess_content_type(filename)).split(";")[0].strip().lower()
+        max_bytes = max_bytes if max_bytes is not None else OPENAI_EDIT_REFERENCE_MAX_BYTES
+        max_side = max_side if max_side is not None else OPENAI_EDIT_REFERENCE_MAX_SIDE
+        min_side = min_side if min_side is not None else OPENAI_EDIT_REFERENCE_MIN_SIDE
+        normalized_content_type = (
+            (content_type or self._guess_content_type(filename)).split(";")[0].strip().lower()
+        )
         if not content or Image is None:
             return filename, content, normalized_content_type or self._guess_content_type(filename)
 
         try:
             with Image.open(BytesIO(content)) as source_image:
-                image = ImageOps.exif_transpose(source_image) if ImageOps is not None else source_image.copy()
+                image = (
+                    ImageOps.exif_transpose(source_image)
+                    if ImageOps is not None
+                    else source_image.copy()
+                )
                 image.load()
         except (UnidentifiedImageError, OSError, ValueError) as exc:
             logger.warning("Failed to preprocess OpenAI edit reference image %s: %s", filename, exc)
@@ -796,13 +978,16 @@ class WanxImageModel(ImageGenModel):
 
         original_width, original_height = image.size
         has_alpha = self._image_has_transparency(image)
-        should_resize = max(image.size) > OPENAI_EDIT_REFERENCE_MAX_SIDE
-        supported_content_type = normalized_content_type in OPENAI_EDIT_REFERENCE_SUPPORTED_CONTENT_TYPES
+        should_resize = max(image.size) > max_side
+        supported_content_type = (
+            normalized_content_type in OPENAI_EDIT_REFERENCE_SUPPORTED_CONTENT_TYPES
+        )
         target_content_type = "image/png" if has_alpha else "image/jpeg"
         target_extension = ".png" if has_alpha else ".jpg"
         should_attempt_transcode = (
-            should_resize
-            or len(content) > OPENAI_EDIT_REFERENCE_MAX_BYTES
+            force_transcode
+            or should_resize
+            or len(content) > max_bytes
             or not supported_content_type
         )
 
@@ -818,8 +1003,8 @@ class WanxImageModel(ImageGenModel):
             original_height,
             len(content),
             has_alpha,
-            OPENAI_EDIT_REFERENCE_MAX_SIDE,
-            OPENAI_EDIT_REFERENCE_MAX_BYTES,
+            max_side,
+            max_bytes,
             should_resize,
             should_attempt_transcode,
         )
@@ -837,7 +1022,7 @@ class WanxImageModel(ImageGenModel):
 
         working = image
         if should_resize:
-            scale = OPENAI_EDIT_REFERENCE_MAX_SIDE / float(max(image.size))
+            scale = max_side / float(max(image.size))
             resized_width = max(1, int(round(image.size[0] * scale)))
             resized_height = max(1, int(round(image.size[1] * scale)))
             resampling = getattr(Image, "Resampling", Image).LANCZOS
@@ -881,19 +1066,19 @@ class WanxImageModel(ImageGenModel):
                 candidate_meta = (processed_content, candidate_image.size, jpeg_quality)
                 if best_candidate is None or len(processed_content) < len(best_candidate[0]):
                     best_candidate = candidate_meta
-                if len(processed_content) <= OPENAI_EDIT_REFERENCE_MAX_BYTES:
+                if len(processed_content) <= max_bytes:
                     best_candidate = candidate_meta
                     break
 
-            if best_candidate is not None and len(best_candidate[0]) <= OPENAI_EDIT_REFERENCE_MAX_BYTES:
+            if best_candidate is not None and len(best_candidate[0]) <= max_bytes:
                 break
 
             max_side = max(current_size)
-            if max_side <= OPENAI_EDIT_REFERENCE_MIN_SIDE:
+            if max_side <= min_side:
                 break
 
             next_max_side = max(
-                OPENAI_EDIT_REFERENCE_MIN_SIDE,
+                min_side,
                 int(round(max_side * OPENAI_EDIT_REFERENCE_SCALE_FACTOR)),
             )
             if next_max_side >= max_side:
@@ -909,9 +1094,17 @@ class WanxImageModel(ImageGenModel):
             return filename, content, normalized_content_type or self._guess_content_type(filename)
 
         processed_content, processed_size, used_quality = best_candidate
+        force_use_processed = force_transcode and (
+            len(processed_content) < len(content)
+            or len(content) > max_bytes
+            or not supported_content_type
+            or should_resize
+        )
         should_use_processed = (
             should_resize
-            or len(content) > OPENAI_EDIT_REFERENCE_MAX_BYTES
+            or len(content) > max_bytes
+            or not supported_content_type
+            or force_use_processed
             or len(processed_content) + 1024 < len(content)
         )
         if not should_use_processed:
@@ -925,12 +1118,12 @@ class WanxImageModel(ImageGenModel):
             )
             return filename, content, normalized_content_type or self._guess_content_type(filename)
 
-        if len(processed_content) > OPENAI_EDIT_REFERENCE_MAX_BYTES:
+        if len(processed_content) > max_bytes:
             logger.warning(
                 "OpenAI edit reference image %s is still %s bytes after compression target %s bytes; using the smallest candidate %sx%s.",
                 filename,
                 len(processed_content),
-                OPENAI_EDIT_REFERENCE_MAX_BYTES,
+                max_bytes,
                 processed_size[0],
                 processed_size[1],
             )
@@ -993,7 +1186,9 @@ class WanxImageModel(ImageGenModel):
                 )
         return buffer.getvalue()
 
-    def _generate_wan26_http(self, prompt: str, size: str, n: int, negative_prompt: str = None) -> str:
+    def _generate_wan26_http(
+        self, prompt: str, size: str, n: int, negative_prompt: str = None
+    ) -> str:
         base = get_provider_base_url("DASHSCOPE")
         url = f"{base}/api/v1/services/aigc/multimodal-generation/generation"
 
@@ -1266,7 +1461,9 @@ class WanxImageModel(ImageGenModel):
                         else:
                             raise RuntimeError(f"Failed to upload reference image to OSS: {path}")
                     else:
-                        logger.warning("OSS not configured, cannot upload reference image: %s", path)
+                        logger.warning(
+                            "OSS not configured, cannot upload reference image: %s", path
+                        )
                 elif path.startswith("http"):
                     ref_image_urls.append(path)
                 else:
@@ -1281,7 +1478,9 @@ class WanxImageModel(ImageGenModel):
 
             ref_limit = 4 if model_name == DASHSCOPE_WAN_I2I_DEFAULT else 3
             if len(ref_image_urls) > ref_limit:
-                logger.warning("Limiting reference images from %s to %s", len(ref_image_urls), ref_limit)
+                logger.warning(
+                    "Limiting reference images from %s to %s", len(ref_image_urls), ref_limit
+                )
                 ref_image_urls = ref_image_urls[:ref_limit]
             call_args["images"] = ref_image_urls
 

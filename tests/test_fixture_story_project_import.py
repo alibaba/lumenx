@@ -9,11 +9,17 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.apps.comic_gen import api as api_module
-from src.apps.comic_gen.pipeline import ComicGenPipeline
+from src.apps.comic_gen.models import Scene, Script, StoryboardFrame
+from src.apps.comic_gen.pipeline import ComicGenPipeline, _normalize_codex_imagegen_policy
 
 
 def _normalize_ref_paths(ref_paths):
     return [str(ref).replace("\\", "/") for ref in ref_paths]
+
+
+def _normalize_preflight_source_paths(frame):
+    preflight = frame.composition_data["reference_payload_preflight"]
+    return _normalize_ref_paths([entry["path"] for entry in preflight["references"]])
 
 
 def _bbox_text(bbox):
@@ -47,12 +53,20 @@ def _assert_edited_crop_visual_gate(manifest, crop):
     assert edited_crop_path.exists(), crop["edited_crop"]
     assert output_path.exists(), manifest["output_image"]
 
-    with Image.open(base_crop_path).convert("RGB") as base_crop, Image.open(edited_crop_path).convert("RGB") as edited_crop:
+    with (
+        Image.open(base_crop_path).convert("RGB") as base_crop,
+        Image.open(edited_crop_path).convert("RGB") as edited_crop,
+    ):
         assert base_crop.size == edited_crop.size == (bbox["width"], bbox["height"])
         assert ImageChops.difference(base_crop, edited_crop).getbbox() is not None
-        assert _mean_rgb_delta(base_crop, edited_crop) > crop["visual_gate"]["min_changed_mean_delta"]
+        assert (
+            _mean_rgb_delta(base_crop, edited_crop) > crop["visual_gate"]["min_changed_mean_delta"]
+        )
 
-    with Image.open(output_path).convert("RGB") as output_image, Image.open(edited_crop_path).convert("RGB") as edited_crop:
+    with (
+        Image.open(output_path).convert("RGB") as output_image,
+        Image.open(edited_crop_path).convert("RGB") as edited_crop,
+    ):
         output_crop = output_image.crop(
             (
                 bbox["x"],
@@ -65,11 +79,13 @@ def _assert_edited_crop_visual_gate(manifest, crop):
 
 
 def _make_pipeline(state_root: Path | None = None):
-    with patch("src.apps.comic_gen.pipeline.AssetGenerator"), \
-         patch("src.apps.comic_gen.pipeline.StoryboardGenerator"), \
-         patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
-         patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
-         patch("src.apps.comic_gen.pipeline.ExportManager"):
+    with (
+        patch("src.apps.comic_gen.pipeline.AssetGenerator"),
+        patch("src.apps.comic_gen.pipeline.StoryboardGenerator"),
+        patch("src.apps.comic_gen.pipeline.VideoGenerator"),
+        patch("src.apps.comic_gen.pipeline.AudioGenerator"),
+        patch("src.apps.comic_gen.pipeline.ExportManager"),
+    ):
         pipeline = ComicGenPipeline()
 
     if state_root is None:
@@ -90,8 +106,7 @@ LIUYI_READY_FRAME_CROP_EXPECTATIONS = {
     "frame_16": {
         "frame_id": "liuyi_frame_16",
         "base_image": (
-            "output/codex_image_audit/liuyi-that-day/generated/"
-            "liuyi_frame_16_stage1_base.png"
+            "output/codex_image_audit/liuyi-that-day/generated/" "liuyi_frame_16_stage1_base.png"
         ),
         "output_image": (
             "output/codex_image_audit/liuyi-that-day/generated/"
@@ -111,8 +126,7 @@ LIUYI_READY_FRAME_CROP_EXPECTATIONS = {
     "frame_17": {
         "frame_id": "liuyi_frame_17",
         "base_image": (
-            "output/codex_image_audit/liuyi-that-day/generated/"
-            "liuyi_frame_17_stage1_base.png"
+            "output/codex_image_audit/liuyi-that-day/generated/" "liuyi_frame_17_stage1_base.png"
         ),
         "output_image": (
             "output/codex_image_audit/liuyi-that-day/generated/"
@@ -132,8 +146,7 @@ LIUYI_READY_FRAME_CROP_EXPECTATIONS = {
     "frame_18": {
         "frame_id": "liuyi_frame_18",
         "base_image": (
-            "output/codex_image_audit/liuyi-that-day/generated/"
-            "liuyi_frame_18_stage1_base.png"
+            "output/codex_image_audit/liuyi-that-day/generated/" "liuyi_frame_18_stage1_base.png"
         ),
         "output_image": (
             "output/codex_image_audit/liuyi-that-day/generated/"
@@ -391,9 +404,9 @@ def test_liuyi_frame_15_two_stage_prompt_pack_is_reproducible():
         assert "exactly two input images" in prompt
         assert "Keep the edit localized" in prompt
 
-    fallback_prompt = (
-        prompt_dir / "99_fallback_multiref_low_semantic_risk_prompt.txt"
-    ).read_text(encoding="utf-8")
+    fallback_prompt = (prompt_dir / "99_fallback_multiref_low_semantic_risk_prompt.txt").read_text(
+        encoding="utf-8"
+    )
     assert "semantically gentler" in fallback_prompt
     assert "not the default production path" in fallback_prompt
     assert "If the request is blocked or unstable" in fallback_prompt
@@ -407,8 +420,7 @@ def test_liuyi_frame_15_crop_composition_manifest_locks_bbox_and_output():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     assert manifest["base_image"] == (
-        "output/codex_image_audit/liuyi-that-day/generated/"
-        "liuyi_frame_15_stage1_base_v3.png"
+        "output/codex_image_audit/liuyi-that-day/generated/" "liuyi_frame_15_stage1_base_v3.png"
     )
     assert manifest["output_image"] == (
         "output/codex_image_audit/liuyi-that-day/generated/"
@@ -425,9 +437,7 @@ def test_liuyi_frame_15_crop_composition_manifest_locks_bbox_and_output():
     )
     assert any("compose_fixture_frame_crops.ps1" in note for note in manifest["notes"])
     assert any("Stage2 crops must differ" in note for note in manifest["notes"])
-    assert (
-        manifest_path.parent / "run_formal_crop_edits.ps1"
-    ).exists()
+    assert (manifest_path.parent / "run_formal_crop_edits.ps1").exists()
     ascii_wrapper = Path("scripts/run_liuyi_frame15_formal_crop_edits.ps1")
     generic_wrapper = Path("scripts/run_fixture_frame_script.ps1")
     compose_wrapper = Path("scripts/compose_fixture_frame_crops.ps1")
@@ -524,7 +534,9 @@ def test_fixture_frame_powershell_scripts_use_ascii_entrypoints():
     assert "visual_gate" in template_readme
     assert "文件存在" in template_readme
 
-    template_script = (template_dir / "run_formal_crop_edits.template.ps1").read_text(encoding="utf-8")
+    template_script = (template_dir / "run_formal_crop_edits.template.ps1").read_text(
+        encoding="utf-8"
+    )
     assert "六一那天" not in template_script
     assert "$ProjectSlug" in template_script
     assert "$FrameId" in template_script
@@ -534,7 +546,8 @@ def test_fixture_frame_powershell_scripts_use_ascii_entrypoints():
     root_fixture_wrappers = [
         path
         for path in scripts_root.glob("*.ps1")
-        if path.name not in {
+        if path.name
+        not in {
             "run_fixture_frame_script.ps1",
             "compose_fixture_frame_crops.ps1",
         }
@@ -546,7 +559,9 @@ def test_fixture_frame_powershell_scripts_use_ascii_entrypoints():
         if wrapper.name.startswith("run_"):
             assert "run_fixture_frame_script.ps1" in text
 
-    fixture_scripts = list(Path("tests/fixtures/story_projects").glob("*/generation_prompts/frame_*/*.ps1"))
+    fixture_scripts = list(
+        Path("tests/fixtures/story_projects").glob("*/generation_prompts/frame_*/*.ps1")
+    )
     assert fixture_scripts
     for script in fixture_scripts:
         text = script.read_text(encoding="utf-8")
@@ -586,7 +601,7 @@ def test_liuyi_formal_frame_template_dirs_are_scaffolded():
         assert _bbox_text(expected["bbox"]) in readme_text
         assert _bbox_text(expected["source_collage_bbox"]) in readme_text
         assert "Reference source bbox" in readme_text
-        assert 'Identity patch bbox:' in readme_text
+        assert "Identity patch bbox:" in readme_text
         assert expected["base_crop"] in readme_text
         assert expected["edited_crop"] in readme_text
         assert expected["output_image"] in readme_text
@@ -610,7 +625,10 @@ def test_liuyi_formal_frame_template_dirs_are_scaffolded():
             "height": 420,
         }
         assert manifest["crops"][0]["identity_patch_bbox"] == expected.get("identity_patch_bbox")
-        assert manifest["crops"][0]["visual_gate"]["gate_id"] == "child_xiaoqi_reference_patch_similarity"
+        assert (
+            manifest["crops"][0]["visual_gate"]["gate_id"]
+            == "child_xiaoqi_reference_patch_similarity"
+        )
         assert manifest["crops"][0]["edited_crop"] == expected["edited_crop"]
         assert manifest["crops"][0]["base_crop"] == expected["base_crop"]
         assert script_path.exists()
@@ -655,21 +673,28 @@ def test_liuyi_formal_frame_template_dirs_are_scaffolded():
 
 def test_liuyi_static_frame_exports_are_complete_and_openable():
     export_manifest = json.loads(
-        Path("tests/fixtures/story_projects/六一那天/generation_prompts/static_frame_exports.json").read_text(
-            encoding="utf-8"
-        )
+        Path(
+            "tests/fixtures/story_projects/六一那天/generation_prompts/static_frame_exports.json"
+        ).read_text(encoding="utf-8")
     )
     exports = export_manifest["frame_exports"]
     frame_ids = {f"liuyi_frame_{index:02d}" for index in range(1, 19)}
-    collage_frame_ids = {f"liuyi_{frame_dirname}" for frame_dirname in LIUYI_STATIC_FRAME_EXPORT_EXPECTATIONS}
-    child_frame_ids = {f"liuyi_{frame_dirname}" for frame_dirname in LIUYI_CHILD_IDENTITY_FRAME_EXPECTATIONS}
+    collage_frame_ids = {
+        f"liuyi_{frame_dirname}" for frame_dirname in LIUYI_STATIC_FRAME_EXPORT_EXPECTATIONS
+    }
+    child_frame_ids = {
+        f"liuyi_{frame_dirname}" for frame_dirname in LIUYI_CHILD_IDENTITY_FRAME_EXPECTATIONS
+    }
 
     assert export_manifest["project_slug"] == "liuyi-that-day"
     assert export_manifest["status"] == "formal_static_frame_files_complete_visual_gate_required"
     assert export_manifest["completion_scope"]["file_exports"] == (
         "18/18 stage3 output files are declared and openable; file completion only, not visual consistency"
     )
-    assert "base-vs-edited pixel checks" in export_manifest["completion_scope"]["formal_crop_workflows"]
+    assert (
+        "base-vs-edited pixel checks"
+        in export_manifest["completion_scope"]["formal_crop_workflows"]
+    )
     assert export_manifest["output_size"] == {"width": 2048, "height": 1152}
     assert len(exports) == 18
     assert {entry["frame_id"] for entry in exports} == frame_ids
@@ -710,13 +735,19 @@ def test_liuyi_static_frame_exports_are_complete_and_openable():
                 "height": 420,
             }
             assert entry["identity_patch_bbox"] == expected["identity_patch_bbox"]
-            assert entry["visual_gate"] == "test_liuyi_child_identity_visual_gate_embeds_locked_reference"
+            assert (
+                entry["visual_gate"]
+                == "test_liuyi_child_identity_visual_gate_embeds_locked_reference"
+            )
             assert entry["identity_crop_bbox"] == expected["bbox"]
             assert entry["output_image"] == expected["output_image"]
         else:
             assert entry["source_type"] == "formal_crop_workflow"
             assert Path(entry["workflow_manifest"]).exists()
-            assert entry["visual_gate"] == "test_liuyi_formal_crop_workflows_change_pixels_and_compose_outputs"
+            assert (
+                entry["visual_gate"]
+                == "test_liuyi_formal_crop_workflows_change_pixels_and_compose_outputs"
+            )
 
 
 def test_story_fixture_projects_use_explicit_visual_gate_contracts():
@@ -746,7 +777,9 @@ def test_story_fixture_projects_use_explicit_visual_gate_contracts():
             assert crops, manifest_path
             for crop in crops:
                 visual_gate = crop.get("visual_gate") or {}
-                assert isinstance(visual_gate.get("gate_id"), str) and visual_gate["gate_id"].strip()
+                assert (
+                    isinstance(visual_gate.get("gate_id"), str) and visual_gate["gate_id"].strip()
+                )
 
 
 def test_liuyi_static_frame_reference_readmes_lock_exports_and_bboxes():
@@ -768,7 +801,9 @@ def test_liuyi_child_identity_visual_gate_embeds_locked_reference():
 
     for frame_dirname, expected in LIUYI_CHILD_IDENTITY_FRAME_EXPECTATIONS.items():
         frame_dir = prompts_root / frame_dirname
-        manifest = json.loads((frame_dir / "crop_composition_manifest.json").read_text(encoding="utf-8"))
+        manifest = json.loads(
+            (frame_dir / "crop_composition_manifest.json").read_text(encoding="utf-8")
+        )
         base_crop = Path(expected["base_crop"])
         edited_crop = Path(expected["edited_crop"])
         reference_path = Path("output/uploads/fixtures/liuyi_char_xiaoqi_child_full_body.png")
@@ -782,8 +817,15 @@ def test_liuyi_child_identity_visual_gate_embeds_locked_reference():
         assert base_crop.exists()
         assert edited_crop.exists()
 
-        with Image.open(base_crop).convert("RGB") as base_image, Image.open(edited_crop).convert("RGB") as edited_image:
-            assert base_image.size == edited_image.size == (expected["bbox"]["width"], expected["bbox"]["height"])
+        with (
+            Image.open(base_crop).convert("RGB") as base_image,
+            Image.open(edited_crop).convert("RGB") as edited_image,
+        ):
+            assert (
+                base_image.size
+                == edited_image.size
+                == (expected["bbox"]["width"], expected["bbox"]["height"])
+            )
             diff = ImageChops.difference(base_image, edited_image)
             assert diff.getbbox() is not None
             assert sum(ImageStat.Stat(diff).mean) / 3.0 > 1.0
@@ -798,13 +840,26 @@ def test_liuyi_child_identity_visual_gate_embeds_locked_reference():
                 )
             )
 
-        from scripts.compose_liuyi_child_identity_crop import _multiply_masks, _reference_alpha_mask, _soft_ellipse_mask
+        from scripts.compose_liuyi_child_identity_crop import (
+            _multiply_masks,
+            _reference_alpha_mask,
+            _soft_ellipse_mask,
+        )
 
-        mask = _multiply_masks(_reference_alpha_mask(source_crop), _soft_ellipse_mask(source_crop.size))
-        resized_mask = mask.resize((patch_bbox["width"], patch_bbox["height"]), Image.Resampling.LANCZOS)
-        resized_source = source_crop.resize((patch_bbox["width"], patch_bbox["height"]), Image.Resampling.LANCZOS)
+        mask = _multiply_masks(
+            _reference_alpha_mask(source_crop), _soft_ellipse_mask(source_crop.size)
+        )
+        resized_mask = mask.resize(
+            (patch_bbox["width"], patch_bbox["height"]), Image.Resampling.LANCZOS
+        )
+        resized_source = source_crop.resize(
+            (patch_bbox["width"], patch_bbox["height"]), Image.Resampling.LANCZOS
+        )
 
-        with Image.open(edited_crop).convert("RGB") as edited_image, Image.open(base_crop).convert("RGB") as base_image:
+        with (
+            Image.open(edited_crop).convert("RGB") as edited_image,
+            Image.open(base_crop).convert("RGB") as base_image,
+        ):
             patch = edited_image.crop(
                 (
                     patch_bbox["x"],
@@ -824,7 +879,10 @@ def test_liuyi_child_identity_visual_gate_embeds_locked_reference():
             assert _masked_rgb_mean_delta(patch, resized_source, resized_mask) < 6.0
             assert _masked_rgb_mean_delta(patch, base_patch, resized_mask) > 1.0
 
-        with Image.open(expected["output_image"]).convert("RGB") as full_output, Image.open(edited_crop).convert("RGB") as edited_image:
+        with (
+            Image.open(expected["output_image"]).convert("RGB") as full_output,
+            Image.open(edited_crop).convert("RGB") as edited_image,
+        ):
             full_crop = full_output.crop(
                 (
                     expected["bbox"]["x"],
@@ -840,7 +898,9 @@ def test_liuyi_manifest_references_match_fixture_and_uploaded_copies():
     fixture_dir = Path("tests/fixtures/story_projects/六一那天")
     manifest = json.loads((fixture_dir / "project_manifest.json").read_text(encoding="utf-8"))
     export_manifest = json.loads(
-        (fixture_dir / "generation_prompts" / "static_frame_exports.json").read_text(encoding="utf-8")
+        (fixture_dir / "generation_prompts" / "static_frame_exports.json").read_text(
+            encoding="utf-8"
+        )
     )
     entries = manifest["reference_images"] + manifest["reference_assets"]
 
@@ -868,8 +928,7 @@ def test_liuyi_manifest_references_match_fixture_and_uploaded_copies():
         used_asset_ids.update(frame.prop_ids)
 
     actual_reference_paths = {
-        f"references/{path.name}"
-        for path in (fixture_dir / "references").glob("*.png")
+        f"references/{path.name}" for path in (fixture_dir / "references").glob("*.png")
     }
     expected_reference_paths = set(manifest_paths)
 
@@ -893,10 +952,7 @@ def test_liuyi_manifest_references_match_fixture_and_uploaded_copies():
         assert uploaded_path.read_bytes() == source_path.read_bytes()
 
     assert len(set(expected_upload_names.values())) == len(expected_upload_names)
-    actual_project_upload_names = {
-        path.name
-        for path in uploads_dir.glob("liuyi*.png")
-    }
+    actual_project_upload_names = {path.name for path in uploads_dir.glob("liuyi*.png")}
     assert actual_project_upload_names == set(expected_upload_names.values())
 
 
@@ -911,8 +967,10 @@ def test_compose_frame_crops_backend_entry_updates_rendered_variant():
     result = {
         "manifest_path": str(manifest_path),
         "base_image": str(
-            Path("output/codex_image_audit/liuyi-that-day/generated/"
-                 "liuyi_frame_15_stage1_base_v3.png").resolve()
+            Path(
+                "output/codex_image_audit/liuyi-that-day/generated/"
+                "liuyi_frame_15_stage1_base_v3.png"
+            ).resolve()
         ),
         "output_image": str(output_path),
         "frame_id": "liuyi_frame_15",
@@ -931,12 +989,16 @@ def test_compose_frame_crops_backend_entry_updates_rendered_variant():
                     "output/uploads/fixtures/liuyi_char_xiaoqi_adult_full_body.png"
                 ],
                 "base_crop": str(
-                    Path("output/codex_image_audit/liuyi-that-day/generated/"
-                         "liuyi_frame_15_stage1_base_v3_crop_xiaoqi.png").resolve()
+                    Path(
+                        "output/codex_image_audit/liuyi-that-day/generated/"
+                        "liuyi_frame_15_stage1_base_v3_crop_xiaoqi.png"
+                    ).resolve()
                 ),
                 "edited_crop": str(
-                    Path("output/codex_image_audit/liuyi-that-day/generated/"
-                         "liuyi_frame_15_stage2a_xiaoqi_crop_formal_v1.png").resolve()
+                    Path(
+                        "output/codex_image_audit/liuyi-that-day/generated/"
+                        "liuyi_frame_15_stage2a_xiaoqi_crop_formal_v1.png"
+                    ).resolve()
                 ),
                 "bbox": {"x": 1360, "y": 32, "width": 640, "height": 1088},
             },
@@ -948,16 +1010,18 @@ def test_compose_frame_crops_backend_entry_updates_rendered_variant():
                     "generation_prompts/frame_15/"
                     "02c_father_crop_edit_prompt.txt"
                 ),
-                "reference_images": [
-                    "output/uploads/fixtures/liuyi_char_boy_father_full_body.png"
-                ],
+                "reference_images": ["output/uploads/fixtures/liuyi_char_boy_father_full_body.png"],
                 "base_crop": str(
-                    Path("output/codex_image_audit/liuyi-that-day/generated/"
-                         "liuyi_frame_15_stage1_base_v3_crop_father.png").resolve()
+                    Path(
+                        "output/codex_image_audit/liuyi-that-day/generated/"
+                        "liuyi_frame_15_stage1_base_v3_crop_father.png"
+                    ).resolve()
                 ),
                 "edited_crop": str(
-                    Path("output/codex_image_audit/liuyi-that-day/generated/"
-                         "liuyi_frame_15_stage2c_father_crop_formal_v1.png").resolve()
+                    Path(
+                        "output/codex_image_audit/liuyi-that-day/generated/"
+                        "liuyi_frame_15_stage2c_father_crop_formal_v1.png"
+                    ).resolve()
                 ),
                 "bbox": {"x": 0, "y": 256, "width": 1024, "height": 768},
             },
@@ -1005,7 +1069,10 @@ def test_import_liuyi_fixture_project_builds_openable_storyboard_project():
     assert script.frames[0].composition_data["scene"]["name"] == "2008 年六一小学操场"
     assert script.frames[0].composition_data["style"]["lock"] is True
     assert any(prop.name == "白色毛绒小熊" for prop in script.props)
-    assert all(frame.composition_data["fixture_role"] == "golden_storyboard_frame" for frame in script.frames)
+    assert all(
+        frame.composition_data["fixture_role"] == "golden_storyboard_frame"
+        for frame in script.frames
+    )
 
 
 def test_import_liuyi_fixture_project_maps_final_storyboard_assets_per_frame():
@@ -1192,6 +1259,152 @@ def test_import_fixture_endpoint_returns_normal_project_payload(monkeypatch):
     payload = response.json()
     assert payload["title"] == "六一那天"
     assert len(payload["frames"]) == 18
+    assert payload["codex_imagegen_policy"]["enabled"] is True
+    assert payload["codex_imagegen_policy"]["mode"] == "safe_refs_only"
+
+
+def test_project_api_response_includes_backend_codex_recommendations(monkeypatch):
+    pipeline = _make_pipeline(None)
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+    client = TestClient(api_module.app)
+
+    response = client.post("/projects/fixtures/liuyi-that-day/import")
+
+    assert response.status_code == 200
+    payload = response.json()
+    frame_17 = next(frame for frame in payload["frames"] if frame["id"] == "liuyi_frame_17")
+    composition = frame_17["composition_data"]
+
+    assert "codex_imagegen_reference_preview" in composition
+    assert composition["codex_imagegen_recommendation"]["mode"] in {
+        "safe_refs_only",
+        "two_stage_high_consistency",
+    }
+    assert composition["codex_imagegen_recommendation"]["metrics"]["ready_count"] >= 5
+    assert composition["codex_imagegen_handoff_plan"]["mode"] == "safe_refs_only"
+    assert (
+        composition["codex_imagegen_handoff_plan"]["recommendation"]["mode"]
+        == composition["codex_imagegen_recommendation"]["mode"]
+    )
+    assert (
+        payload["generation_metadata"]["codex_imagegen_recommendations"]["liuyi_frame_17"]["mode"]
+        == composition["codex_imagegen_recommendation"]["mode"]
+    )
+
+
+def test_update_codex_imagegen_policy_endpoint_persists_project_setting(monkeypatch):
+    pipeline = _make_pipeline(None)
+    script = pipeline.import_fixture_story_project("liuyi-that-day")
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+    client = TestClient(api_module.app)
+
+    response = client.put(
+        f"/projects/{script.id}/codex_imagegen_policy",
+        json={
+            "enabled": False,
+            "max_total_bytes": 700000,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["codex_imagegen_policy"]["enabled"] is False
+    assert payload["codex_imagegen_policy"]["max_total_bytes"] == 700000
+    assert pipeline.get_script(script.id).codex_imagegen_policy.enabled is False
+
+
+def test_update_codex_imagegen_policy_endpoint_persists_two_stage_mode(monkeypatch):
+    pipeline = _make_pipeline(None)
+    script = pipeline.import_fixture_story_project("liuyi-that-day")
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+    client = TestClient(api_module.app)
+
+    response = client.put(
+        f"/projects/{script.id}/codex_imagegen_policy",
+        json={
+            "enabled": True,
+            "mode": "two_stage",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["codex_imagegen_policy"]["enabled"] is True
+    assert payload["codex_imagegen_policy"]["mode"] == "two_stage_high_consistency"
+    assert (
+        pipeline.get_script(script.id).codex_imagegen_policy.mode
+        == "two_stage_high_consistency"
+    )
+
+
+def test_update_codex_imagegen_policy_merges_recommendation_thresholds(monkeypatch):
+    pipeline = _make_pipeline(None)
+    script = pipeline.import_fixture_story_project("liuyi-that-day")
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+    client = TestClient(api_module.app)
+
+    first_response = client.put(
+        f"/projects/{script.id}/codex_imagegen_policy",
+        json={
+            "recommendation": {
+                "auto_apply": False,
+                "two_stage_min_ready_refs": 7,
+                "shot_type_overrides": {
+                    "closeup": {
+                        "two_stage_min_ready_refs": 3,
+                    },
+                },
+            },
+        },
+    )
+    assert first_response.status_code == 200
+
+    second_response = client.put(
+        f"/projects/{script.id}/codex_imagegen_policy",
+        json={
+            "recommendation": {
+                "auto_apply": True,
+            },
+        },
+    )
+
+    assert second_response.status_code == 200
+    recommendation = second_response.json()["codex_imagegen_policy"]["recommendation"]
+    assert recommendation["auto_apply"] is True
+    assert recommendation["two_stage_min_ready_refs"] == 7
+    assert recommendation["shot_type_overrides"]["closeup"]["two_stage_min_ready_refs"] == 3
+
+
+def test_update_codex_imagegen_policy_rejects_unsafe_budget(monkeypatch):
+    pipeline = _make_pipeline(None)
+    script = pipeline.import_fixture_story_project("liuyi-that-day")
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+    client = TestClient(api_module.app)
+
+    response = client.put(
+        f"/projects/{script.id}/codex_imagegen_policy",
+        json={"max_total_bytes": 1_048_577},
+    )
+
+    assert response.status_code == 400
+    assert "cannot exceed" in response.json()["detail"]
+    assert pipeline.get_script(script.id).codex_imagegen_policy.max_total_bytes == 1_048_576
+
+
+def test_codex_imagegen_policy_normalization_keeps_string_false_and_clamps_budget():
+    policy = _normalize_codex_imagegen_policy(
+        {
+            "enabled": "false",
+            "never_attach_raw_references": "false",
+            "max_total_bytes": 9_999_999,
+            "mode": "two_stage",
+        }
+    )
+
+    assert policy.enabled is False
+    assert policy.never_attach_raw_references is False
+    assert policy.max_total_bytes == 1_048_576
+    assert policy.mode == "two_stage_high_consistency"
 
 
 def test_compose_frame_crops_endpoint_forwards_request_payload(monkeypatch):
@@ -1315,13 +1528,17 @@ def test_import_liuyi_fixture_project_binds_locked_master_references():
     paper_bag = next(item for item in script.props if item.id == "liuyi_prop_paper_bag")
     child_drawing = next(item for item in script.props if item.id == "liuyi_prop_child_drawing")
     balloons = next(item for item in script.props if item.id == "liuyi_prop_childrens_day_balloons")
-    medical_textbooks = next(item for item in script.props if item.id == "liuyi_prop_medical_textbooks")
+    medical_textbooks = next(
+        item for item in script.props if item.id == "liuyi_prop_medical_textbooks"
+    )
     father_memorial_portrait = next(
         item for item in script.props if item.id == "liuyi_prop_father_memorial_portrait"
     )
     family_photo = next(item for item in script.props if item.id == "liuyi_prop_family_photo")
     notebook_pencil = next(item for item in script.props if item.id == "liuyi_prop_notebook_pencil")
-    admission_notice = next(item for item in script.props if item.id == "liuyi_prop_admission_notice")
+    admission_notice = next(
+        item for item in script.props if item.id == "liuyi_prop_admission_notice"
+    )
     young_xiaoqi = next(item for item in script.characters if item.id == "liuyi_char_xiaoqi_young")
 
     assert xiaoqi.locked is True
@@ -1374,7 +1591,10 @@ def test_import_liuyi_fixture_project_binds_locked_master_references():
     assert child_drawing.image_asset.selected_id == "liuyi_prop_child_drawing_image_fixture"
     assert balloons.image_asset.selected_id == "liuyi_prop_childrens_day_balloons_image_fixture"
     assert medical_textbooks.image_asset.selected_id == "liuyi_prop_medical_textbooks_image_fixture"
-    assert father_memorial_portrait.image_asset.selected_id == "liuyi_prop_father_memorial_portrait_image_fixture"
+    assert (
+        father_memorial_portrait.image_asset.selected_id
+        == "liuyi_prop_father_memorial_portrait_image_fixture"
+    )
     assert family_photo.image_asset.selected_id == "liuyi_prop_family_photo_image_fixture"
     assert notebook_pencil.image_asset.selected_id == "liuyi_prop_notebook_pencil_image_fixture"
     assert admission_notice.image_asset.selected_id == "liuyi_prop_admission_notice_image_fixture"
@@ -1404,7 +1624,8 @@ def test_storyboard_render_includes_frame_locked_asset_references():
     )
 
     ref_paths = captured["ref_image_paths"]
-    normalized_paths = _normalize_ref_paths(ref_paths)
+    frame_03 = next(frame for frame in script.frames if frame.id == "liuyi_frame_03")
+    normalized_paths = _normalize_preflight_source_paths(frame_03)
 
     assert ref_paths == list(dict.fromkeys(ref_paths))
     assert any(
@@ -1447,7 +1668,8 @@ def test_storyboard_render_uses_only_the_current_frame_asset_references():
         "测试小琪等待爸爸静帧提示词",
     )
 
-    normalized_paths = _normalize_ref_paths(captured["ref_image_paths"])
+    frame_02 = next(frame for frame in script.frames if frame.id == "liuyi_frame_02")
+    normalized_paths = _normalize_preflight_source_paths(frame_02)
 
     assert any(
         path.endswith("output/uploads/fixtures/liuyi_scene_school_playground.png")
@@ -1527,7 +1749,8 @@ def test_storyboard_render_includes_frame_18_generated_reference_assets():
         "测试 2026 医院走廊收束静帧提示词",
     )
 
-    normalized_paths = _normalize_ref_paths(captured["ref_image_paths"])
+    frame_18 = next(frame for frame in script.frames if frame.id == "liuyi_frame_18")
+    normalized_paths = _normalize_preflight_source_paths(frame_18)
 
     expected_suffixes = [
         "output/uploads/fixtures/liuyi_scene_hospital_corridor.png",
@@ -1537,6 +1760,70 @@ def test_storyboard_render_includes_frame_18_generated_reference_assets():
     ]
     for suffix in expected_suffixes:
         assert any(path.endswith(suffix) for path in normalized_paths)
+
+
+def test_storyboard_render_prepares_references_when_payload_exceeds_budget(
+    monkeypatch,
+    tmp_path,
+):
+    pipeline = _make_pipeline(tmp_path / "state")
+    refs = []
+    for index in range(3):
+        ref_path = tmp_path / f"large-ref-{index}.png"
+        Image.effect_noise((1200, 1200), 96).convert("RGB").save(ref_path, format="PNG")
+        refs.append(ref_path)
+
+    script = Script(
+        id="script-budget",
+        title="Budget Demo",
+        original_text="",
+        scenes=[
+            Scene(
+                id="scene-budget",
+                name="测试场景",
+                description="用于预算测试的安静房间。",
+                image_url=str(refs[0]),
+            )
+        ],
+        frames=[
+            StoryboardFrame(
+                id="frame-budget",
+                scene_id="scene-budget",
+                action_description="人物在房间里整理物品。",
+            )
+        ],
+        created_at=1.0,
+        updated_at=1.0,
+    )
+    pipeline.scripts[script.id] = script
+    captured = {}
+
+    def fake_generate_frame(frame, characters, scene, **kwargs):
+        captured["ref_image_paths"] = kwargs.get("ref_image_paths") or []
+        return frame
+
+    monkeypatch.setenv("LUMENX_STORYBOARD_REFERENCE_MAX_BYTES", "700000")
+    pipeline.storyboard_generator.generate_frame = fake_generate_frame
+
+    pipeline.generate_storyboard_render(
+        script.id,
+        "frame-budget",
+        {
+            "reference_image_urls": [str(path) for path in refs],
+            "continuity_lock": False,
+        },
+        "测试预算压缩静帧提示词",
+    )
+
+    preflight = script.frames[0].composition_data["reference_payload_preflight"]
+
+    assert preflight["status"] == "prepared_safe_references"
+    assert preflight["prepared"] is True
+    assert preflight["fits_budget"] is True
+    assert preflight["total_source_bytes"] > preflight["max_total_bytes"]
+    assert preflight["total_prepared_bytes"] <= 700000
+    assert all(path.endswith("_codex_safe.jpg") for path in captured["ref_image_paths"])
+    assert not any(str(path) in captured["ref_image_paths"] for path in refs)
 
 
 def test_list_fixture_endpoint_returns_template_library(monkeypatch):

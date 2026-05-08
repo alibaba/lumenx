@@ -425,6 +425,34 @@ export interface PromptConfig {
     r2v_polish: string;
 }
 
+export type CodexImagegenMode = "safe_refs_only" | "two_stage_high_consistency";
+
+export interface CodexImagegenPolicy {
+    enabled: boolean;
+    mode: CodexImagegenMode | string;
+    max_total_bytes: number;
+    max_side: number;
+    min_side: number;
+    jpeg_quality: number;
+    min_jpeg_quality: number;
+    never_attach_raw_references: boolean;
+    recommendation?: CodexImagegenRecommendationPolicy;
+}
+
+export interface CodexImagegenRecommendationPolicy {
+    enabled: boolean;
+    auto_apply: boolean;
+    safe_direct_max_ready_refs: number;
+    two_stage_min_ready_refs: number;
+    two_stage_min_identity_refs: number;
+    two_stage_min_character_refs: number;
+    two_stage_min_prop_refs: number;
+    two_stage_min_scene_refs: number;
+    direct_when_required_refs_missing: boolean;
+    shot_type_overrides: Record<string, Record<string, number>>;
+    genre_overrides: Record<string, Record<string, number>>;
+}
+
 export interface Series {
     id: string;
     title: string;
@@ -458,6 +486,7 @@ export interface Project {
     art_direction?: ArtDirection;
     model_settings?: ModelSettings;
     prompt_config?: PromptConfig;
+    codex_imagegen_policy?: CodexImagegenPolicy;
     merged_video_url?: string;
     series_id?: string;
     episode_number?: number;

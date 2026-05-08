@@ -883,6 +883,16 @@
     "prop_aspect_ratio": "1:1",
     "storyboard_aspect_ratio": "16:9"
   },
+  "codex_imagegen_policy": {
+    "enabled": true,
+    "mode": "safe_refs_only",
+    "max_total_bytes": 1048576,
+    "max_side": 1920,
+    "min_side": 640,
+    "jpeg_quality": 92,
+    "min_jpeg_quality": 45,
+    "never_attach_raw_references": true
+  },
   "render_policy": {
     "product_output_root": "output/codex_image_audit/liuyi-that-day-v2/generated",
     "final_frame_pattern": "liuyi_v2_frame_NN_stage3_full_formal_v1.png",

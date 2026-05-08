@@ -106,6 +106,7 @@ static/
 GITHUB_RELEASE_CHECKLIST.md
 CLAUDE.md
 AGENTS.md
+!AGENTS.md
 demand/
 
 # Local docs scratchpads

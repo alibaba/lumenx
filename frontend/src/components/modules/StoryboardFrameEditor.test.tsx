@@ -10,6 +10,16 @@ const { mockState, mockApi } = vi.hoisted(() => ({
   mockState: {
     currentProject: {
       id: "project-1",
+      codex_imagegen_policy: {
+        enabled: true,
+        mode: "safe_refs_only",
+        max_total_bytes: 1048576,
+        max_side: 1920,
+        min_side: 640,
+        jpeg_quality: 92,
+        min_jpeg_quality: 45,
+        never_attach_raw_references: true,
+      },
       scenes: [{ id: "scene-1", name: "夜巷", image_url: "https://example.com/scene.png", locked: true }],
       characters: [
         {
@@ -21,8 +31,25 @@ const { mockState, mockApi } = vi.hoisted(() => ({
             variants: [{ id: "char-ref", url: "https://example.com/linxia.png", created_at: 0 }],
           },
         },
+        {
+          id: "char-2",
+          name: "周沉",
+          locked: true,
+          three_view_asset: {
+            selected_id: "char-2-ref",
+            variants: [{ id: "char-2-ref", url: "https://example.com/zhoucheng.png", created_at: 0 }],
+          },
+        },
       ],
-      props: [{ id: "prop-1", name: "红色纸鹤", locked: true }],
+      props: [
+        { id: "prop-1", name: "红色纸鹤", locked: true },
+        {
+          id: "prop-2",
+          name: "气球",
+          locked: true,
+          image_url: "https://example.com/balloon.png",
+        },
+      ],
       frames: [
         {
           id: "frame-1",
@@ -44,6 +71,15 @@ const { mockState, mockApi } = vi.hoisted(() => ({
           rendered_image_asset: { selected_id: null, variants: [] },
           composition_data: null,
         },
+        {
+          id: "frame-3",
+          scene_id: "scene-1",
+          action_description: "林夏和周沉同时盯住门口的动静，手里的道具都没有放下。",
+          character_ids: ["char-1", "char-2"],
+          prop_ids: ["prop-2"],
+          rendered_image_asset: { selected_id: null, variants: [] },
+          composition_data: null,
+        },
       ],
     },
     updateProject: vi.fn(),
@@ -52,6 +88,7 @@ const { mockState, mockApi } = vi.hoisted(() => ({
     renderFrame: vi.fn(),
     selectAssetVariant: vi.fn(),
     deleteAssetVariant: vi.fn(),
+    updateCodexImagegenPolicy: vi.fn(),
   },
 }));
 
@@ -90,6 +127,13 @@ describe("StoryboardFrameEditor", () => {
     vi.clearAllMocks();
     vi.spyOn(window, "alert").mockImplementation(() => undefined);
     mockApi.renderFrame.mockResolvedValue(mockState.currentProject);
+    mockApi.updateCodexImagegenPolicy.mockResolvedValue({
+      ...mockState.currentProject,
+      codex_imagegen_policy: {
+        ...mockState.currentProject.codex_imagegen_policy,
+        enabled: false,
+      },
+    });
   });
 
   it("可视化上一帧默认参考，并把连续性参数透传给渲染接口", async () => {
@@ -142,5 +186,116 @@ describe("StoryboardFrameEditor", () => {
 
     expect(window.alert).toHaveBeenCalled();
     expect(mockApi.renderFrame).not.toHaveBeenCalled();
+  });
+
+  it("可以持久化切换 Codex 内置生图启用状态", async () => {
+    render(
+      <StoryboardFrameEditor
+        frame={mockState.currentProject.frames[1]}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Codex 内置生图安全模式")).toBeInTheDocument();
+    expect(screen.getByText("安全直连")).toBeInTheDocument();
+    expect(screen.getByText("高一致性两段式")).toBeInTheDocument();
+    expect(screen.getByText("Handoff 预算")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "切换 Codex 内置生图启用状态" }));
+
+    await waitFor(() => {
+      expect(mockApi.updateCodexImagegenPolicy).toHaveBeenCalledWith("project-1", {
+        enabled: false,
+      });
+    });
+    expect(mockState.updateProject).toHaveBeenCalled();
+  });
+
+  it("可以持久化切换到高一致性两段式模式", async () => {
+    mockApi.updateCodexImagegenPolicy.mockResolvedValueOnce({
+      ...mockState.currentProject,
+      codex_imagegen_policy: {
+        ...mockState.currentProject.codex_imagegen_policy,
+        mode: "two_stage_high_consistency",
+      },
+    });
+
+    render(
+      <StoryboardFrameEditor
+        frame={mockState.currentProject.frames[1]}
+        onClose={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /高一致性两段式/ }));
+
+    await waitFor(() => {
+      expect(mockApi.updateCodexImagegenPolicy).toHaveBeenCalledWith("project-1", {
+        enabled: true,
+        mode: "two_stage_high_consistency",
+      });
+    });
+    expect(mockState.updateProject).toHaveBeenCalled();
+  });
+
+  it("可以持久化开启后端推荐自动采纳", async () => {
+    mockApi.updateCodexImagegenPolicy.mockResolvedValueOnce({
+      ...mockState.currentProject,
+      codex_imagegen_policy: {
+        ...mockState.currentProject.codex_imagegen_policy,
+        recommendation: {
+          auto_apply: true,
+        },
+      },
+    });
+
+    render(
+      <StoryboardFrameEditor
+        frame={mockState.currentProject.frames[1]}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("自动采纳未开启")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "自动采纳建议" }));
+
+    await waitFor(() => {
+      expect(mockApi.updateCodexImagegenPolicy).toHaveBeenCalledWith("project-1", {
+        recommendation: {
+          auto_apply: true,
+        },
+      });
+    });
+    expect(mockState.updateProject).toHaveBeenCalled();
+  });
+
+  it("会根据复杂镜头给出两段式建议并可一键应用", async () => {
+    mockApi.updateCodexImagegenPolicy.mockResolvedValueOnce({
+      ...mockState.currentProject,
+      codex_imagegen_policy: {
+        ...mockState.currentProject.codex_imagegen_policy,
+        mode: "two_stage_high_consistency",
+      },
+    });
+
+    render(
+      <StoryboardFrameEditor
+        frame={mockState.currentProject.frames[2]}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("自动建议")).toBeInTheDocument();
+    expect(screen.getByText("应用建议")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "应用建议" }));
+
+    await waitFor(() => {
+      expect(mockApi.updateCodexImagegenPolicy).toHaveBeenCalledWith("project-1", {
+        enabled: true,
+        mode: "two_stage_high_consistency",
+      });
+    });
+    expect(mockState.updateProject).toHaveBeenCalled();
   });
 });

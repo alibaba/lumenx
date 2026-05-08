@@ -18,6 +18,7 @@ from .pipeline import ComicGenPipeline
 from .models import (
     Character,
     DEFAULT_I2V_MODEL,
+    CodexImagegenPolicy,
     ModelSettings,
     PromptConfig,
     Prop,
@@ -46,6 +47,7 @@ from ...utils.oss_utils import (
 )
 from ...utils.runtime_config import get_output_root
 from ...utils import setup_logging
+from ...utils.codex_imagegen_handoff import enrich_project_payload_with_codex_imagegen_insights
 from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv, set_key
 
@@ -611,6 +613,8 @@ def signed_response(data):
         processed_data = [item.model_dump() if hasattr(item, "model_dump") else item for item in data]
     else:
         processed_data = data
+
+    processed_data = enrich_project_payload_with_codex_imagegen_insights(processed_data)
     
     # Check if object storage is configured
     uploader = OSSImageUploader()
@@ -992,6 +996,18 @@ class UpdateModelSettingsRequest(BaseModel):
     scene_aspect_ratio: Optional[str] = None
     prop_aspect_ratio: Optional[str] = None
     storyboard_aspect_ratio: Optional[str] = None
+
+
+class UpdateCodexImagegenPolicyRequest(BaseModel):
+    enabled: Optional[bool] = None
+    mode: Optional[str] = None
+    max_total_bytes: Optional[int] = None
+    max_side: Optional[int] = None
+    min_side: Optional[int] = None
+    jpeg_quality: Optional[int] = None
+    min_jpeg_quality: Optional[int] = None
+    never_attach_raw_references: Optional[bool] = None
+    recommendation: Optional[Dict[str, Any]] = None
 
 
 @app.get("/series/{series_id}/model_settings", response_model=ModelSettings)
@@ -2278,6 +2294,35 @@ async def update_model_settings(script_id: str, request: UpdateModelSettingsRequ
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/projects/{script_id}/codex_imagegen_policy", response_model=CodexImagegenPolicy)
+async def get_codex_imagegen_policy(script_id: str):
+    """Returns the Codex built-in imagegen safety policy for a project."""
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return script.codex_imagegen_policy or CodexImagegenPolicy()
+
+
+@app.put("/projects/{script_id}/codex_imagegen_policy", response_model=Script)
+async def update_codex_imagegen_policy(
+    script_id: str,
+    request: UpdateCodexImagegenPolicyRequest,
+):
+    """Updates the Codex built-in imagegen safety policy for a project."""
+    try:
+        updated_script = await _run_blocking(
+            pipeline.update_codex_imagegen_policy,
+            script_id,
+            **request.model_dump(exclude_unset=True),
+        )
+        return signed_response(updated_script)
+    except ValueError as e:
+        status_code = 404 if str(e) == "Script not found" else 400
+        raise HTTPException(status_code=status_code, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
