@@ -105,9 +105,22 @@ export function stripAssetApiPrefix(path: string | null | undefined): string {
     return path;
 }
 
-export function extractErrorDetail(error: any, fallback: string = messages.common.messages.unknownError): string {
-    return error?.response?.data?.detail
-        || error?.response?.data?.message
-        || error?.message
+interface ApiErrorLike {
+    response?: {
+        data?: {
+            detail?: string;
+            message?: string;
+        };
+    };
+    message?: string;
+}
+
+export function extractErrorDetail(error: unknown, fallback: string = messages.common.messages.unknownError): string {
+    if (typeof error !== "object" || error === null) return fallback;
+
+    const typedError = error as ApiErrorLike;
+    return typedError.response?.data?.detail
+        || typedError.response?.data?.message
+        || typedError.message
         || fallback;
 }

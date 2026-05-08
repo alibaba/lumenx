@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode }
 import { AnimatePresence, motion } from "framer-motion";
 import { Box, ChevronDown, ChevronLeft, ChevronRight, Clapperboard, FileText, Layers3, ListTodo, MapPin, Plus, Save, Sparkles, Trash2, User, Users2, Wand2 } from "lucide-react";
 
-import { api, crudApi } from "@/lib/api";
+import { api, crudApi, type AssetAttributesPayload, type UpdateStoryBeatPayload } from "@/lib/api";
 import { assetTypeTerms, messages } from "@/lib/i18n";
 import { useProjectStore, type CharacterPresenceEntry, type CharacterRelationshipEdge, type Project, type StoryAnalysis, type StoryBeat } from "@/store/projectStore";
 
@@ -29,6 +29,21 @@ interface BeatEditorState {
   action_summary: string;
   dialogue_excerpt: string;
   storyboard_goal: string;
+}
+
+interface CreateEntityPayload {
+  type: EntityType;
+  name: string;
+  description: string;
+}
+
+interface ApiErrorShape {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+  message?: string;
 }
 
 interface BeatChapterGroup {
@@ -115,6 +130,12 @@ function getEntityIcon(type: EntityType) {
   return <Box size={14} className="text-yellow-400" />;
 }
 
+function extractErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error !== "object" || error === null) return fallback;
+  const typedError = error as ApiErrorShape;
+  return typedError.response?.data?.detail || typedError.message || fallback;
+}
+
 export default function ScriptProcessor() {
   const currentProject = useProjectStore((state) => state.currentProject);
   const updateProject = useProjectStore((state) => state.updateProject);
@@ -136,11 +157,11 @@ export default function ScriptProcessor() {
     setNodes(buildScriptNodes(currentProject));
   }, [currentProject]);
 
-  const storyAnalysis = currentProject?.story_analysis || EMPTY_ANALYSIS;
-  const sceneBeats = storyAnalysis.scene_beats || [];
-  const plotPoints = storyAnalysis.plot_points || [];
-  const characterPresence = storyAnalysis.character_presence || [];
-  const characterRelationships = storyAnalysis.character_relationships || [];
+  const storyAnalysis = currentProject?.story_analysis ?? EMPTY_ANALYSIS;
+  const sceneBeats = useMemo(() => storyAnalysis.scene_beats ?? EMPTY_ANALYSIS.scene_beats, [storyAnalysis.scene_beats]);
+  const plotPoints = storyAnalysis.plot_points ?? EMPTY_ANALYSIS.plot_points;
+  const characterPresence = storyAnalysis.character_presence ?? EMPTY_ANALYSIS.character_presence;
+  const characterRelationships = storyAnalysis.character_relationships ?? EMPTY_ANALYSIS.character_relationships;
 
   useEffect(() => {
     if (!sceneBeats.length) {
@@ -155,7 +176,7 @@ export default function ScriptProcessor() {
   const selectedBeat = useMemo(() => sceneBeats.find((beat) => beat.id === selectedBeatId) || sceneBeats[0] || null, [sceneBeats, selectedBeatId]);
   const selectedBeatFrameCount = useMemo(() => {
     if (!currentProject || !selectedBeat) return 0;
-    return (currentProject.frames || []).filter((frame: any) => frame.story_beat_id === selectedBeat.id).length;
+    return (currentProject.frames || []).filter((frame) => frame.story_beat_id === selectedBeat.id).length;
   }, [currentProject, selectedBeat]);
   const beatDraftDirty = useMemo(() => {
     if (!selectedBeat) return false;
@@ -178,8 +199,8 @@ export default function ScriptProcessor() {
     if (!script) return;
     try {
       await analyzeProject(script);
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.detail || error?.message || copy.unknownError;
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error, copy.unknownError);
       alert(copy.analyzeFailed(errorMessage));
     }
   };
@@ -198,12 +219,13 @@ export default function ScriptProcessor() {
     }
   };
 
-  const handleCreateNode = async (data: any) => {
+  const handleCreateNode = async (data: CreateEntityPayload) => {
     if (!currentProject) return;
+    const { type, ...payload } = data;
     try {
-      if (data.type === "character") await crudApi.createCharacter(currentProject.id, data);
-      if (data.type === "scene") await crudApi.createScene(currentProject.id, data);
-      if (data.type === "prop") await crudApi.createProp(currentProject.id, data);
+      if (type === "character") await crudApi.createCharacter(currentProject.id, payload);
+      if (type === "scene") await crudApi.createScene(currentProject.id, payload);
+      if (type === "prop") await crudApi.createProp(currentProject.id, payload);
       updateProject(currentProject.id, await api.getProject(currentProject.id));
       setIsCreateDialogOpen(false);
     } catch {
@@ -222,11 +244,16 @@ export default function ScriptProcessor() {
 
     setIsSavingBeat(true);
     try {
-      const updatedProject = await api.updateStoryBeat(currentProject.id, selectedBeat.id, beatDraft);
+      const payload: UpdateStoryBeatPayload = {
+        actionSummary: beatDraft.action_summary,
+        dialogueExcerpt: beatDraft.dialogue_excerpt,
+        storyboardGoal: beatDraft.storyboard_goal,
+      };
+      const updatedProject = await api.updateStoryBeat(currentProject.id, selectedBeat.id, payload);
       updateProject(currentProject.id, updatedProject);
       return updatedProject;
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.detail || error?.message || copy.unknownError;
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error, copy.unknownError);
       alert(copy.saveBeatFailed(errorMessage));
       return null;
     } finally {
@@ -248,8 +275,8 @@ export default function ScriptProcessor() {
     try {
       const updatedProject = await api.analyzeStoryboardBeat(currentProject.id, selectedBeat.id);
       updateProject(currentProject.id, updatedProject);
-    } catch (error: any) {
-      const errorMessage = error?.response?.data?.detail || error?.message || copy.unknownError;
+    } catch (error: unknown) {
+      const errorMessage = extractErrorMessage(error, copy.unknownError);
       alert(copy.reanalyzeBeatFailed(errorMessage));
     } finally {
       setIsReanalyzingBeat(false);
@@ -830,7 +857,7 @@ function NodeDetailModal({ currentProject, selectedNode, setSelectedNode, handle
           <button onClick={async () => {
             if (currentProject && selectedNode.id) {
               try {
-                const attributes: any = { description: selectedNode.desc, visual_weight: selectedNode.visual_weight };
+                const attributes: AssetAttributesPayload = { description: selectedNode.desc, visual_weight: selectedNode.visual_weight };
                 if (selectedNode.type === "character") { attributes.age = selectedNode.age; attributes.gender = selectedNode.gender; attributes.clothing = selectedNode.clothing; }
                 updateProject(currentProject.id, await api.updateAssetAttributes(currentProject.id, selectedNode.id, selectedNode.type, attributes));
                 setSelectedNode(null);
@@ -843,7 +870,7 @@ function NodeDetailModal({ currentProject, selectedNode, setSelectedNode, handle
   );
 }
 
-function CreateEntityDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (data: any) => void }) {
+function CreateEntityDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (data: CreateEntityPayload) => void }) {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [type, setType] = useState<EntityType>("character");

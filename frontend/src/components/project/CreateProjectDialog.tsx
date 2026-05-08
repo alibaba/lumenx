@@ -37,8 +37,8 @@ export default function CreateProjectDialog({ isOpen, onClose }: CreateProjectDi
                 window.location.hash = `#/project/${currentProject.id}`;
             }
             onClose();
-        } catch (error: any) {
-            const errorMessage = error?.response?.data?.detail || error?.message || copy.backendConnectionHint;
+        } catch (error: unknown) {
+            const errorMessage = extractErrorMessage(error, copy.backendConnectionHint);
             alert(copy.createFailed(errorMessage));
         } finally {
             setIsCreating(false);
@@ -54,6 +54,7 @@ export default function CreateProjectDialog({ isOpen, onClose }: CreateProjectDi
                     exit={{ opacity: 0 }}
                     className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
                     onClick={onClose}
+                    data-testid="create-project-dialog"
                 >
                     <motion.div
                         initial={{ scale: 0.9, opacity: 0 }}
@@ -83,6 +84,7 @@ export default function CreateProjectDialog({ isOpen, onClose }: CreateProjectDi
                                     onChange={(e) => setTitle(e.target.value)}
                                     placeholder={copy.titlePlaceholder}
                                     className="glass-input w-full"
+                                    data-testid="create-project-title-input"
                                 />
                             </div>
 
@@ -96,6 +98,7 @@ export default function CreateProjectDialog({ isOpen, onClose }: CreateProjectDi
                                     placeholder={copy.scriptPlaceholder}
                                     rows={10}
                                     className="glass-input w-full resize-none font-mono text-sm"
+                                    data-testid="create-project-script-input"
                                 />
                             </div>
 
@@ -110,6 +113,7 @@ export default function CreateProjectDialog({ isOpen, onClose }: CreateProjectDi
                                     onClick={handleCreate}
                                     disabled={isCreating || !title}
                                     className="flex-1 bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    data-testid="create-project-submit"
                                 >
                                     {isCreating ? copy.creating : copy.create}
                                 </button>
@@ -120,4 +124,19 @@ export default function CreateProjectDialog({ isOpen, onClose }: CreateProjectDi
             )}
         </AnimatePresence>
     );
+}
+
+interface ApiErrorShape {
+    response?: {
+        data?: {
+            detail?: string;
+        };
+    };
+    message?: string;
+}
+
+function extractErrorMessage(error: unknown, fallback: string): string {
+    if (typeof error !== "object" || error === null) return fallback;
+    const typedError = error as ApiErrorShape;
+    return typedError.response?.data?.detail || typedError.message || fallback;
 }

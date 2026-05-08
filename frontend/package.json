@@ -3,15 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node ../scripts/start-frontend.js",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "lint:errors": "next lint --quiet",
+    "lint:budget": "node ./scripts/check-lint-budget.mjs",
+    "typecheck": "tsc --noEmit",
     "audit:copy": "node ./scripts/audit-hardcoded-copy.mjs",
     "audit:copy:strict": "node ./scripts/audit-hardcoded-copy.mjs --strict",
+    "generate:api-types": "node ./scripts/generate-openapi-types.mjs",
+    "e2e:smoke": "node ./scripts/browser-smoke.mjs",
     "test": "node ./scripts/run-vitest.mjs",
     "test:ui": "node ./scripts/run-vitest.mjs --config vitest.ui.config.mts",
-    "test:all": "npm run test && npm run test:ui"
+    "test:all": "npm run test && npm run test:ui",
+    "quality": "npm run lint:errors && npm run lint:budget && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@react-three/drei": "^9.108.0",
@@ -38,6 +44,7 @@
     "eslint-config-next": "14.2.33",
     "happy-dom": "^20.8.9",
     "jsdom": "^27.0.1",
+    "playwright": "^1.59.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",

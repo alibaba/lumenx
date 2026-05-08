@@ -629,6 +629,7 @@ export const zhCN = {
       addEpisode: "添加集数",
       openSeries: "打开系列",
       deleteConfirm: (title: string) => `确定要删除系列“${title}”吗？这不会删除其中的项目。`,
+      deleteFailed: "删除系列失败，请重试。",
       fallbackSeries: "系列",
       fallbackEpisode: "集数",
     },
@@ -666,6 +667,7 @@ export const zhCN = {
     },
     projectCard: {
       deleteConfirm: (title: string) => `确定要删除项目“${title}”吗？`,
+      deleteFailed: "删除项目失败，请重试。",
       characters: "角色",
       scenes: "场景",
       storyboards: "分镜",

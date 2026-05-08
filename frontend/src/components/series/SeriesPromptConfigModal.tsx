@@ -57,7 +57,7 @@ export default function SeriesPromptConfigModal({ isOpen, onClose, seriesId, onS
             api.getSeriesPromptConfig(seriesId)
                 .then((data) => {
                     setConfig(data.prompt_config);
-                    setDefaults(data.defaults);
+                    setDefaults(data.defaults ?? null);
                 })
                 .catch((err) => {
                     console.error("Failed to load series prompt config:", err);
@@ -65,7 +65,7 @@ export default function SeriesPromptConfigModal({ isOpen, onClose, seriesId, onS
                 })
                 .finally(() => setIsLoading(false));
         }
-    }, [isOpen, seriesId]);
+    }, [isOpen, seriesId, copy.loadError]);
 
     const handleSave = async () => {
         setIsSaving(true);

@@ -2,13 +2,16 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
+import NextImage from "next/image";
 import { Image as ImageIcon, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { VariantSelector } from "../common/VariantSelector";
 import PromptQualityPanel from "../common/PromptQualityPanel";
 import { useProjectStore } from "@/store/projectStore";
+import type { StoryboardFrame, StoryBeat } from "@/store/projectStore";
 import { messages } from "@/lib/i18n";
 import { getAssetUrl } from "@/lib/utils";
+import { getGenerationBadgeText, getGenerationTooltip, isGenerationDegraded } from "@/lib/generation-provenance";
 import {
     buildStoryboardCompositionData,
     buildStoryboardReferencePreview,
@@ -40,36 +43,43 @@ function formatBeatLabel(order?: number | null, title?: string | null) {
     return `场次 ${order} · ${title || "未归属场次"}`;
 }
 
+function getContinuityLock(frame: StoryboardFrame, fallback: boolean): boolean {
+    const lock = frame.composition_data?.continuity_lock;
+    return typeof lock === "boolean" ? lock : fallback;
+}
+
 interface StoryboardFrameEditorProps {
-    frame: any;
+    frame: StoryboardFrame;
     onClose: () => void;
 }
 
 export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: StoryboardFrameEditorProps) {
     const currentProject = useProjectStore(state => state.currentProject);
     const updateProject = useProjectStore(state => state.updateProject);
+    const sceneBeats = useMemo(() => currentProject?.story_analysis?.scene_beats ?? [], [currentProject?.story_analysis?.scene_beats]);
 
     // Get the latest frame data from the store (instead of using stale prop)
     const frame = useMemo(() => {
         if (!currentProject?.frames) return initialFrame;
-        return currentProject.frames.find((f: any) => f.id === initialFrame.id) || initialFrame;
-    }, [currentProject?.frames, initialFrame.id, initialFrame]);
+        return currentProject.frames.find((f: StoryboardFrame) => f.id === initialFrame.id) || initialFrame;
+    }, [currentProject?.frames, initialFrame]);
 
     const [prompt, setPrompt] = useState(frame.image_prompt || frame.action_description || "");
     const [isGenerating, setIsGenerating] = useState(false);
     const previousFrame = getPreviousSameSceneFrame(currentProject, frame);
     const nextFrame = getNextSameSceneFrame(currentProject, frame);
     const frameBeatMeta = useMemo(
-        () => currentProject?.story_analysis?.scene_beats?.find((beat: any) => beat.id === frame.story_beat_id) || null,
-        [currentProject?.story_analysis?.scene_beats, frame.story_beat_id],
+        () => sceneBeats.find((beat: StoryBeat) => beat.id === frame.story_beat_id) || null,
+        [sceneBeats, frame.story_beat_id],
     );
-    const [continuityLock, setContinuityLock] = useState<boolean>(
-        frame.composition_data?.continuity_lock ?? Boolean(previousFrame || nextFrame),
-    );
+    const continuityLockValue = getContinuityLock(frame, Boolean(previousFrame || nextFrame));
+    const [continuityLock, setContinuityLock] = useState<boolean>(continuityLockValue);
     const previousFrameReference = getSelectedFrameReference(previousFrame);
     const sameSceneContinuity = Boolean(previousFrame || nextFrame);
     const beatLabel = formatBeatLabel(frame.story_beat_order ?? frameBeatMeta?.order, frame.story_beat_title || frameBeatMeta?.title);
     const chapterLabel = formatChapterLabel(frame.chapter_order ?? frameBeatMeta?.chapter_order, frame.chapter_title || frameBeatMeta?.chapter_title);
+    const generationBadge = getGenerationBadgeText(frame);
+    const generationBadgeDegraded = isGenerationDegraded(frame);
     const referencePreviewItems = useMemo(
         () => buildStoryboardReferencePreview(currentProject, frame, {
             continuityLock,
@@ -90,8 +100,8 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
     }, [frame.id, frame.image_prompt, frame.action_description]);
 
     useEffect(() => {
-        setContinuityLock(frame.composition_data?.continuity_lock ?? Boolean(previousFrame || nextFrame));
-    }, [frame.id, frame.composition_data?.continuity_lock, previousFrame, nextFrame]);
+        setContinuityLock(continuityLockValue);
+    }, [continuityLockValue]);
 
     const handleGenerate = async (batchSize: number) => {
         if (!currentProject) return;
@@ -189,7 +199,7 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                             </p>
                             {frame.dialogue && (
                                 <p className="text-xs text-gray-300 italic">
-                                    <span className="font-bold text-gray-500 not-italic">{copy.dialogue}:</span> "{frame.dialogue}"
+                                    <span className="font-bold text-gray-500 not-italic">{copy.dialogue}:</span> &ldquo;{frame.dialogue}&rdquo;
                                 </p>
                             )}
                             <div className="mt-3 flex flex-wrap gap-2">
@@ -199,6 +209,17 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                 <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2.5 py-1 text-[11px] text-cyan-200">
                                     {chapterLabel}
                                 </span>
+                                {generationBadge && (
+                                    <span
+                                        className={`rounded-full border px-2.5 py-1 text-[11px] ${generationBadgeDegraded
+                                            ? "border-amber-400/20 bg-amber-400/10 text-amber-200"
+                                            : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                                            }`}
+                                        title={getGenerationTooltip(frame)}
+                                    >
+                                        {generationBadge}
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -231,9 +252,12 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                             {copy.previousReferenceHint(previousFrame?.id?.slice(0, 8) || "")}
                                         </p>
                                         <div className="mt-3 flex items-center gap-3">
-                                            <img
+                                            <NextImage
                                                 src={getAssetUrl(previousFrameReference)}
                                                 alt={copy.previousReferenceAlt}
+                                                width={64}
+                                                height={64}
+                                                unoptimized
                                                 className="h-16 w-16 rounded-lg object-cover border border-white/10"
                                             />
                                             <div className="text-[11px] leading-relaxed text-gray-400">
@@ -269,9 +293,12 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                                             className={`flex items-center gap-3 rounded-lg border px-2.5 py-2 ${item.status === "ready" ? "border-white/10 bg-black/20" : "border-red-400/20 bg-red-500/10"}`}
                                         >
                                             {item.url ? (
-                                                <img
+                                                <NextImage
                                                     src={getAssetUrl(item.url)}
                                                     alt={item.name}
+                                                    width={36}
+                                                    height={36}
+                                                    unoptimized
                                                     className="h-9 w-9 rounded-md object-cover border border-white/10"
                                                 />
                                             ) : (

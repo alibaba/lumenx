@@ -6,10 +6,15 @@ import { X, Upload, FileText, Loader2, ChevronLeft, ChevronRight, Check, BookOpe
 import { api } from "@/lib/api";
 import { messages } from "@/lib/i18n";
 
+interface ImportFileDialogResult {
+    series_id: string;
+    episode_count: number;
+}
+
 interface ImportFileDialogProps {
     isOpen: boolean;
     onClose: () => void;
-    onSuccess?: (result: any) => void;
+    onSuccess?: (result: ImportFileDialogResult) => void;
 }
 
 interface EpisodePreview {
@@ -30,6 +35,7 @@ type Step = 1 | 2 | 3;
 export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportFileDialogProps) {
     const copy = messages.seriesPage.importFileDialog;
     const commonActions = messages.common.actions;
+    const invalidFileType = copy.invalidFileType;
     // Step state
     const [step, setStep] = useState<Step>(1);
 
@@ -76,7 +82,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
     const handleFileSelect = useCallback((selectedFile: File) => {
         const ext = selectedFile.name.split('.').pop()?.toLowerCase();
         if (ext !== 'txt' && ext !== 'md') {
-            setError(copy.invalidFileType);
+            setError(invalidFileType);
             return;
         }
         setFile(selectedFile);
@@ -88,7 +94,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
             }
             return prev;
         });
-    }, []);
+    }, [invalidFileType]);
 
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -118,8 +124,8 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
             const result = await api.importFilePreview(file, suggestedEpisodes);
             setPreviewResult(result);
             setStep(2);
-        } catch (err: any) {
-            const msg = err?.response?.data?.detail || err?.message || copy.analyzeFailed;
+        } catch (error: unknown) {
+            const msg = getErrorMessage(error, copy.analyzeFailed);
             setError(msg);
         } finally {
             setIsAnalyzing(false);
@@ -144,8 +150,8 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                 episode_count: result.episodes?.length ?? previewResult.episodes.length,
             });
             setStep(3);
-        } catch (err: any) {
-            const msg = err?.response?.data?.detail || err?.message || copy.createFailed;
+        } catch (error: unknown) {
+            const msg = getErrorMessage(error, copy.createFailed);
             setError(msg);
         } finally {
             setIsCreating(false);
@@ -429,4 +435,21 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
             )}
         </AnimatePresence>
     );
+}
+
+interface ApiErrorShape {
+    response?: {
+        data?: {
+            detail?: string;
+        };
+    };
+    message?: string;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+    if (typeof error === "object" && error !== null) {
+        const typedError = error as ApiErrorShape;
+        return typedError.response?.data?.detail || typedError.message || fallback;
+    }
+    return fallback;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Save, ChevronDown, ChevronRight, Loader2, Key } from "lucide-react";
 import { api } from "@/lib/api";
@@ -30,13 +30,7 @@ export default function EnvConfigDialog({ isOpen, onClose }: EnvConfigDialogProp
   const [endpointsOpen, setEndpointsOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (isOpen) {
-      loadConfig();
-    }
-  }, [isOpen]);
-
-  const loadConfig = async () => {
+  const loadConfig = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
@@ -48,7 +42,13 @@ export default function EnvConfigDialog({ isOpen, onClose }: EnvConfigDialogProp
     } finally {
       setLoading(false);
     }
-  };
+  }, [copy.loadError]);
+
+  useEffect(() => {
+    if (isOpen) {
+      loadConfig();
+    }
+  }, [isOpen, loadConfig]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -90,13 +90,13 @@ export default function EnvConfigDialog({ isOpen, onClose }: EnvConfigDialogProp
   const objectStorageEndpointPlaceholder = isTosStorage
     ? "https://tos-cn-beijing.volces.com"
     : "https://oss-cn-beijing.aliyuncs.com";
-  const showBananaKeyWarning =
+  const showImage2KeyWarning =
     config.IMAGE_PROVIDER === "openai" &&
     config.OPENAI_IMAGE_BASE_URL.includes("api.bltcy.ai") &&
     !config.OPENAI_IMAGE_API_KEY.trim() &&
     !config.OPENAI_IMAGE_EDIT_API_KEY.trim() &&
     !!config.OPENAI_API_KEY.trim();
-  const showBananaEditKeyWarning =
+  const showImage2EditKeyWarning =
     config.IMAGE_EDIT_PROVIDER === "openai" &&
     config.OPENAI_IMAGE_EDIT_BASE_URL.includes("api.bltcy.ai") &&
     !config.OPENAI_IMAGE_EDIT_API_KEY.trim() &&
@@ -256,15 +256,15 @@ export default function EnvConfigDialog({ isOpen, onClose }: EnvConfigDialogProp
                     </button>
                   </div>
 
-                  {config.IMAGE_PROVIDER === "openai" ? (
-                    <>
-                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-xs text-emerald-200">
-                        截图里的 `gpt-image-2` 同时支持 `/v1/images/generations` 和 `/v1/images/edits`。当前建议把 `gpt-image-2` 作为主用模型，`gpt-image-2-all` 只保留为备用测试，不要覆盖主配置。
-                      </div>
-                      {showBananaKeyWarning ? (
-                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-200">
+                {config.IMAGE_PROVIDER === "openai" ? (
+                  <>
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-xs text-emerald-200">
+                        Image2 首选（`gpt-image2`）同时支持 `/v1/images/generations` 和 `/v1/images/edits`。当前建议把 `gpt-image2` 作为首选模型，备用测试别名不要覆盖主配置。
+                    </div>
+                    {showImage2KeyWarning ? (
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-200">
                           当前主用和备用图像 Key 都是空的，后端会暂时沿用上面的 `OPENAI_API_KEY`。如果那把 key 不是 `api.bltcy.ai` 的专用 key，就会出现“无效令牌”。请至少保留一把图像专用 key。
-                        </div>
+                      </div>
                       ) : null}
                       <div>
                         <label className="flex items-center justify-between text-sm font-medium text-gray-300 mb-2">
@@ -295,7 +295,7 @@ export default function EnvConfigDialog({ isOpen, onClose }: EnvConfigDialogProp
                       <div>
                         <label className="flex items-center justify-between text-sm font-medium text-gray-300 mb-2">
                           <span>生图模型</span>
-                          <span className="text-gray-600 font-normal text-xs">主用建议 gpt-image-2；gpt-image-2-all 仅备用测试</span>
+                          <span className="text-gray-600 font-normal text-xs">首选 gpt-image2；备用测试别名不要覆盖主配置</span>
                         </label>
                         <input
                           type="text"
@@ -347,11 +347,11 @@ export default function EnvConfigDialog({ isOpen, onClose }: EnvConfigDialogProp
                     {config.IMAGE_EDIT_PROVIDER === "openai" ? (
                       <>
                         <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-xs text-emerald-200">
-                          默认图编也会走 Banana，但你现在可以把图编单独切到另一家更稳的 OpenAI-compatible `/images/edits` 接口，不影响文生图。
+                          默认图编也首选 Image2（`gpt-image2`），但你现在可以把图编单独切到另一家更稳的 OpenAI-compatible `/images/edits` 接口，不影响文生图。
                         </div>
-                        {showBananaEditKeyWarning ? (
+                        {showImage2EditKeyWarning ? (
                           <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-200">
-                            当前主用和备用图像 Key 都是空的，后端会回退 `OPENAI_API_KEY`。如果 Banana 图编链路仍然不稳，请在这里保留一把图编专用 key，作为重绘优先 key。
+                            当前主用和备用图像 Key 都是空的，后端会回退 `OPENAI_API_KEY`。如果 Image2 图编链路仍然不稳，请在这里保留一把图编专用 key，作为重绘优先 key。
                           </div>
                         ) : null}
                         <div>
@@ -383,7 +383,7 @@ export default function EnvConfigDialog({ isOpen, onClose }: EnvConfigDialogProp
                         <div>
                           <label className="flex items-center justify-between text-sm font-medium text-gray-300 mb-2">
                             <span>图编模型（可选）</span>
-                            <span className="text-gray-600 font-normal text-xs">截图里的 gpt-image-2 支持 `/images/edits`</span>
+                            <span className="text-gray-600 font-normal text-xs">首选 gpt-image2；支持 `/images/edits`</span>
                           </label>
                           <input
                             type="text"

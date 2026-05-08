@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ImageAsset, ImageVariant } from '@/store/projectStore';
-import { Trash2, Check, ChevronLeft, ChevronRight, Layers, X, Maximize2, Star } from 'lucide-react';
-import { API_URL } from '@/lib/api';
+import NextImage from 'next/image';
+import type { ImageAsset, ImageVariant } from '@/store/projectStore';
+import { Trash2, Check, Layers, X, Maximize2, Star } from 'lucide-react';
 import { getAssetUrl } from '@/lib/utils';
 import { zhCN } from '@/lib/i18n';
+
+interface FavoritableImageVariant extends ImageVariant {
+    is_favorited?: boolean;
+}
 
 interface VariantSelectorProps {
     asset: ImageAsset | undefined;
@@ -17,9 +21,6 @@ interface VariantSelectorProps {
     className?: string;
     aspectRatio?: string; // e.g., "9:16", "16:9", "1:1"
 }
-
-// Use the API_URL constant for consistent behavior
-const getApiBaseUrl = () => API_URL;
 
 export const VariantSelector: React.FC<VariantSelectorProps> = ({
     asset,
@@ -53,12 +54,11 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
 
     // Determine the image to display
     const selectedVariant = asset?.variants?.find(v => v.id === asset.selected_id);
-    const apiBase = getApiBaseUrl();
     const displayUrl = selectedVariant ?
         getAssetUrl(selectedVariant.url) :
         getAssetUrl(currentImageUrl);
 
-    const variants = asset?.variants || [];
+    const variants = (asset?.variants || []) as FavoritableImageVariant[];
 
     // Helper to calculate aspect ratio class
     const getAspectRatioClass = () => {
@@ -79,9 +79,12 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
             >
                 {displayUrl ? (
                     <>
-                        <img
+                        <NextImage
                             src={displayUrl}
                             alt={copy.selectedVariantAlt}
+                            fill
+                            sizes="(max-width: 768px) 100vw, 33vw"
+                            unoptimized
                             className="w-full h-full object-contain"
                         />
                         {/* Zoom hint */}
@@ -159,7 +162,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent snap-x">
                             {variants.map((variant) => {
                                 const isSelected = variant.id === asset?.selected_id;
-                                const isFavorited = (variant as any).is_favorited || false;
+                                const isFavorited = variant.is_favorited || false;
                                 const url = getAssetUrl(variant.url);
 
                                 return (
@@ -171,10 +174,12 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                                         `}
                                     >
                                         {/* Clickable image area */}
-                                        <img
+                                        <NextImage
                                             src={url}
                                             alt={copy.variantAlt}
-                                            loading="lazy"
+                                            fill
+                                            sizes="80px"
+                                            unoptimized
                                             className="w-full h-full object-cover cursor-pointer"
                                             onClick={() => onSelect(variant.id)}
                                         />
@@ -245,9 +250,12 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                     >
                         <X size={24} />
                     </button>
-                    <img
+                    <NextImage
                         src={zoomedImage}
                         alt={copy.zoomedViewAlt}
+                        width={1600}
+                        height={1000}
+                        unoptimized
                         className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                         onClick={(e) => e.stopPropagation()}
                     />

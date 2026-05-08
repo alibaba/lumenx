@@ -193,9 +193,9 @@ describe("ScriptProcessor", () => {
 
     await waitFor(() => {
       expect(mockApi.updateStoryBeat).toHaveBeenCalledWith("project-1", "story_beat_001", {
-        action_summary: "林夏沿着水痕继续向仓库深处推进。",
-        dialogue_excerpt: "林夏：这里不对劲，先别出声。",
-        storyboard_goal: "锁定纸鹤线索与林夏的警觉状态，保持仓库空间连续。",
+        actionSummary: "林夏沿着水痕继续向仓库深处推进。",
+        dialogueExcerpt: "林夏：这里不对劲，先别出声。",
+        storyboardGoal: "锁定纸鹤线索与林夏的警觉状态，保持仓库空间连续。",
       });
     });
 

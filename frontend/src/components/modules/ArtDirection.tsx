@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import NextImage from "next/image";
 import { Sparkles, Palette, Wand2, Plus, Check, Loader2, ChevronRight, Upload, X } from "lucide-react";
 import { useProjectStore, type StyleConfig, type StylePreset } from "@/store/projectStore"; // Combined imports
 import { api } from "@/lib/api";
 import { getStylePresetCopy, getStyleTerm, messages } from "@/lib/i18n";
 import { getAssetUrl } from "@/lib/utils";
+import { getGenerationBadgeText, getGenerationTooltip, isGenerationDegraded } from "@/lib/generation-provenance";
 
 const copy = messages.modules.artDirection;
 
@@ -393,11 +395,36 @@ export default function ArtDirection() {
     );
 }
 
+interface StyleCardProps<TStyle extends StyleConfig | StylePreset> {
+    style: TStyle;
+    isSelected: boolean;
+    onSelect: () => void;
+}
+
+interface StyleEditorProps {
+    name: string;
+    positivePrompt: string;
+    negativePrompt: string;
+    referenceImages: string[];
+    moodboardNotes: string;
+    isUploadingReference: boolean;
+    onNameChange: (value: string) => void;
+    onPositiveChange: (value: string) => void;
+    onNegativeChange: (value: string) => void;
+    onMoodboardNotesChange: (value: string) => void;
+    onUploadReferenceImage: (file: File | null) => void | Promise<void>;
+    onRemoveReferenceImage: (url: string) => void;
+    onSaveCustom: () => void;
+    selectedStyle: StyleConfig | null;
+}
+
 // Sub-components
-function StyleRecommendationCard({ style, isSelected, onSelect }: any) {
+function StyleRecommendationCard({ style, isSelected, onSelect }: StyleCardProps<StyleConfig>) {
     const displayName = getDisplayStyleLabel(style);
     const displayDescription = getDisplayStyleDescription(style);
     const promptText = getStylePositivePrompt(style);
+    const generationBadge = getGenerationBadgeText(style);
+    const generationBadgeDegraded = isGenerationDegraded(style);
 
     return (
         <motion.div
@@ -413,7 +440,20 @@ function StyleRecommendationCard({ style, isSelected, onSelect }: any) {
                     {isSelected ? <Check size={16} className="text-white" /> : <Sparkles size={16} className="text-gray-400" />}
                 </div>
                 <div className="flex-1">
-                    <h4 className="font-bold text-white mb-1">{displayName}</h4>
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <h4 className="font-bold text-white">{displayName}</h4>
+                        {generationBadge && (
+                            <span
+                                className={`rounded-full border px-2 py-0.5 text-[10px] ${generationBadgeDegraded
+                                    ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                                    : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                                    }`}
+                                title={getGenerationTooltip(style)}
+                            >
+                                {generationBadge}
+                            </span>
+                        )}
+                    </div>
                     {displayDescription && <p className="text-xs text-gray-400 mb-3">{displayDescription}</p>}
                     {style.reason && (
                         <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 mb-3">
@@ -436,7 +476,7 @@ function StyleRecommendationCard({ style, isSelected, onSelect }: any) {
     );
 }
 
-function StylePresetCard({ style, isSelected, onSelect }: any) {
+function StylePresetCard({ style, isSelected, onSelect }: StyleCardProps<StyleConfig | StylePreset>) {
     const displayName = getDisplayStyleLabel(style);
     const displayDescription = getDisplayStyleDescription(style);
     const promptText = getStylePositivePrompt(style);
@@ -481,7 +521,7 @@ function StyleEditor({
     onRemoveReferenceImage,
     onSaveCustom,
     selectedStyle,
-}: any) {
+}: StyleEditorProps) {
     return (
         <div className="space-y-6">
             <div>
@@ -567,9 +607,12 @@ function StyleEditor({
                         {referenceImages.map((url: string) => (
                             <div key={url} className="rounded-xl border border-white/10 bg-black/20 p-2">
                                 <div className="relative">
-                                    <img
+                                    <NextImage
                                         src={getAssetUrl(url)}
                                         alt={copy.editor.referenceAlt}
+                                        width={224}
+                                        height={112}
+                                        unoptimized
                                         className="h-28 w-full rounded-lg object-cover"
                                     />
                                     <button

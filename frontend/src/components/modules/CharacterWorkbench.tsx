@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import NextImage from "next/image";
 import { X, RefreshCw, Check, Image as ImageIcon, Lock, ChevronRight, Video } from "lucide-react";
 import { api } from "@/lib/api";
 
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
+import type { Character, ImageAsset, ImageVariant, VideoTask } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
 import { messages } from "@/lib/i18n";
@@ -23,14 +25,93 @@ import {
     formatPromptIssues,
     hasBlockingPromptIssues,
     inspectImagePrompt,
+    type PromptQualityIssue,
 } from "@/lib/prompt-quality";
 
 const copy = messages.modules.characterWorkbench;
 
 type CharacterPromptType = "full_body" | "three_view" | "headshot";
+type MotionPromptType = "full_body" | "headshot";
+type CharacterMotionAssetType = "full_body" | "head_shot";
+type WorkbenchMode = "static" | "motion";
 
-function getCharacterPromptTarget(type: CharacterPromptType) {
-    return type;
+interface UploadedImageVariant extends ImageVariant {
+    is_uploaded_source?: boolean;
+}
+
+interface CharacterImageAsset extends Omit<ImageAsset, "variants"> {
+    variants: UploadedImageVariant[];
+}
+
+interface MotionReferenceVideo {
+    id?: string;
+    url: string;
+    thumbnail?: string;
+    created_at?: number;
+}
+
+interface LegacyMotionContainer {
+    video_variants?: MotionReferenceVideo[];
+}
+
+interface CharacterWorkbenchAsset extends Omit<Character, "full_body_asset" | "three_view_asset" | "headshot_asset" | "full_body" | "head_shot"> {
+    full_body_asset?: CharacterImageAsset;
+    three_view_asset?: CharacterImageAsset;
+    headshot_asset?: CharacterImageAsset;
+    full_body?: LegacyMotionContainer;
+    head_shot?: LegacyMotionContainer;
+    full_body_prompt?: string;
+    three_view_prompt?: string;
+    headshot_prompt?: string;
+}
+
+interface GeneratingType {
+    type: string;
+    batchSize: number;
+}
+
+interface WorkbenchPanelProps {
+    title: string;
+    isActive: boolean;
+    onClick: () => void;
+    asset?: ImageAsset;
+    currentImageUrl?: string;
+    onSelect: (variantId: string) => void;
+    onDelete: (variantId: string) => void;
+    onFavorite?: (variantId: string, isFavorited: boolean) => void;
+    prompt: string;
+    setPrompt: (value: string) => void;
+    onGenerate: (batchSize: number) => void;
+    scaffolds?: ImagePromptBlock[];
+    templates?: ImagePromptBlock[];
+    promptIssues?: PromptQualityIssue[];
+    isGenerating: boolean;
+    generatingBatchSize?: number;
+    status?: string;
+    isLocked?: boolean;
+    description: string;
+    aspectRatio?: string;
+    isVideo?: boolean;
+    videos?: VideoTask[];
+    onDeleteVideo?: (videoId: string) => void;
+    onGenerateVideo?: (duration: number) => void;
+    supportsMotion?: boolean;
+    mode?: WorkbenchMode;
+    onModeChange?: (mode: WorkbenchMode) => void;
+    hasStaticImage?: boolean;
+    motionRefVideos?: MotionReferenceVideo[];
+    onGenerateMotionRef?: (prompt: string, audioUrl?: string) => void;
+    isGeneratingMotion?: boolean;
+    motionPrompt?: string;
+    setMotionPrompt?: (value: string) => void;
+    audioUrl?: string;
+    onAudioUpload?: (file: File) => void;
+    isUploadingAudio?: boolean;
+    isVideoLoading?: boolean;
+    setIsVideoLoading?: (value: boolean) => void;
+    onResetPrompt?: () => void;
+    reverseGenerationMode?: boolean;
+    reverseReferenceUrl?: string | null;
 }
 
 function applyPromptTemplate(
@@ -47,20 +128,32 @@ function hasReferenceLock(prompt: string) {
     return normalized.includes("strictly preserve") || normalized.includes("reference image");
 }
 
+function buildMotionReferencePrompt(type: MotionPromptType, description: string, hasAudio: boolean) {
+    if (type === "full_body") {
+        return hasAudio
+            ? `Full-body character reference video.\n${description}.\nStanding pose, shifting weight slightly, natural hand gestures, turning body 30 degrees left and right. The character is speaking naturally matching the audio, with accurate lip-sync and facial expressions.\nHead to toe shot, stable camera, flat lighting.`
+            : `Full-body character reference video.\n${description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right. The character is speaking naturally, counting numbers from one to five in English.\nHead to toe shot, stable camera, flat lighting.`;
+    }
+
+    return hasAudio
+        ? `High-fidelity portrait video reference.\n${description}.\nFacing camera, speaking naturally matching the audio, with accurate lip-sync and facial expressions, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`
+        : `High-fidelity portrait video reference.\n${description}.\nFacing camera, speaking naturally, counting numbers from one to five in English, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
+}
+
 interface CharacterWorkbenchProps {
-    asset: any;
+    asset: CharacterWorkbenchAsset;
     onClose: () => void;
     onUpdateDescription: (desc: string) => void;
     onGenerate: (type: string, prompt: string, applyStyle: boolean, negativePrompt: string, batchSize: number) => void;
-    generatingTypes: { type: string; batchSize: number }[];
+    generatingTypes: GeneratingType[];
     stylePrompt?: string;
     styleNegativePrompt?: string;
-    onGenerateVideo?: (prompt: string, duration: number, subType?: string) => void;
+    onGenerateVideo?: (prompt: string, duration: number, subType?: string, audioUrl?: string) => void;
     onDeleteVideo?: (videoId: string) => void;
     isGeneratingVideo?: boolean;
 }
 
-export default function CharacterWorkbench({ asset, onClose, onUpdateDescription, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: CharacterWorkbenchProps) {
+export default function CharacterWorkbench({ asset, onClose, onGenerate, generatingTypes = [], stylePrompt = "", styleNegativePrompt = "", onGenerateVideo }: CharacterWorkbenchProps) {
     const [activePanel, setActivePanel] = useState<"full_body" | "three_view" | "headshot" | "video">("full_body");
     const updateProject = useProjectStore(state => state.updateProject);
     const currentProject = useProjectStore(state => state.currentProject);
@@ -83,39 +176,50 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
 
     // === Reverse Generation: Detect uploaded images ===
-    const hasUploadedThreeViews = asset.three_view_asset?.variants?.some((v: any) => v.is_uploaded_source) || false;
-    const hasUploadedHeadshot = asset.headshot_asset?.variants?.some((v: any) => v.is_uploaded_source) || false;
-    const hasUploadedFullBody = asset.full_body_asset?.variants?.some((v: any) => v.is_uploaded_source) || false;
+    const hasUploadedThreeViews = asset.three_view_asset?.variants?.some((variant) => variant.is_uploaded_source) || false;
+    const hasUploadedHeadshot = asset.headshot_asset?.variants?.some((variant) => variant.is_uploaded_source) || false;
+    const hasUploadedFullBody = asset.full_body_asset?.variants?.some((variant) => variant.is_uploaded_source) || false;
     const hasAnyUpload = hasUploadedThreeViews || hasUploadedHeadshot || hasUploadedFullBody;
     const hasNonFullBodyUpload = hasUploadedThreeViews || hasUploadedHeadshot;
-    const hasFullBodyImage = !!(asset.full_body_image_url || (asset.full_body_asset?.variants?.length > 0));
-    const hasThreeViewImage = !!(asset.three_view_image_url || (asset.three_view_asset?.variants?.length > 0));
-    const hasHeadshotImage = !!(asset.headshot_image_url || asset.avatar_url || (asset.headshot_asset?.variants?.length > 0));
+    const hasFullBodyImage = !!(asset.full_body_image_url || ((asset.full_body_asset?.variants?.length ?? 0) > 0));
+    const hasThreeViewImage = !!(asset.three_view_image_url || ((asset.three_view_asset?.variants?.length ?? 0) > 0));
+    const hasHeadshotImage = !!(asset.headshot_image_url || asset.avatar_url || ((asset.headshot_asset?.variants?.length ?? 0) > 0));
     const generatedCoreCount = [hasFullBodyImage, hasThreeViewImage, hasHeadshotImage].filter(Boolean).length;
     const isGeneratingCoreSet = generatingTypes.some((task) =>
         ["all", "full_body", "three_view", "headshot"].includes(task?.type)
     );
 
+    const characterName = asset.name || "Character";
+    const characterDescription = asset.description || "";
+
+    const fullBodyDefaultPrompt = useMemo(() => buildDefaultImagePrompt({
+        target: "full_body",
+        name: characterName,
+        description: characterDescription,
+        strictReference: hasNonFullBodyUpload,
+        stylePrompt,
+    }), [characterName, characterDescription, hasNonFullBodyUpload, stylePrompt]);
+
+    const threeViewDefaultPrompt = useMemo(() => buildDefaultImagePrompt({
+        target: "three_view",
+        name: characterName,
+        description: characterDescription,
+        strictReference: Boolean(hasFullBodyImage || hasAnyUpload),
+        stylePrompt,
+    }), [characterName, characterDescription, hasFullBodyImage, hasAnyUpload, stylePrompt]);
+
+    const headshotDefaultPrompt = useMemo(() => buildDefaultImagePrompt({
+        target: "headshot",
+        name: characterName,
+        description: characterDescription,
+        strictReference: Boolean(hasFullBodyImage || hasAnyUpload),
+        stylePrompt,
+    }), [characterName, characterDescription, hasFullBodyImage, hasAnyUpload, stylePrompt]);
+
     // Local state for prompts
-    const getInitialPrompt = (type: CharacterPromptType, existingPrompt: string) => {
-        if (existingPrompt) return existingPrompt;
-
-        return buildDefaultImagePrompt({
-            target: getCharacterPromptTarget(type),
-            name: asset.name || "Character",
-            description: asset.description || "",
-            strictReference:
-                type === "full_body"
-                    ? hasNonFullBodyUpload
-                    : Boolean(hasFullBodyImage || hasAnyUpload),
-            stylePrompt,
-        });
-    };
-
-    const [fullBodyPrompt, setFullBodyPrompt] = useState(getInitialPrompt("full_body", asset.full_body_prompt));
-    const [threeViewPrompt, setThreeViewPrompt] = useState(getInitialPrompt("three_view", asset.three_view_prompt));
-    const [headshotPrompt, setHeadshotPrompt] = useState(getInitialPrompt("headshot", asset.headshot_prompt));
-    const [videoPrompt, setVideoPrompt] = useState(asset.video_prompt || "");
+    const [fullBodyPrompt, setFullBodyPrompt] = useState(asset.full_body_prompt || fullBodyDefaultPrompt);
+    const [threeViewPrompt, setThreeViewPrompt] = useState(asset.three_view_prompt || threeViewDefaultPrompt);
+    const [headshotPrompt, setHeadshotPrompt] = useState(asset.headshot_prompt || headshotDefaultPrompt);
 
     // New State for Style Control
     const [applyStyle, setApplyStyle] = useState(true);
@@ -172,24 +276,24 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
     // Get the uploaded image URL for reverse generation reference
     const getUploadedReferenceUrl = () => {
         if (hasUploadedThreeViews) {
-            const uploadedVariant = asset.three_view_asset?.variants?.find((v: any) => v.is_uploaded_source);
+            const uploadedVariant = asset.three_view_asset?.variants?.find((variant) => variant.is_uploaded_source);
             return uploadedVariant?.url || asset.three_view_image_url;
         }
         if (hasUploadedHeadshot) {
-            const uploadedVariant = asset.headshot_asset?.variants?.find((v: any) => v.is_uploaded_source);
+            const uploadedVariant = asset.headshot_asset?.variants?.find((variant) => variant.is_uploaded_source);
             return uploadedVariant?.url || asset.headshot_image_url;
         }
         return null;
     };
 
     // Motion Ref generation handler with validation
-    const handleGenerateMotionRef = async (assetType: 'full_body' | 'head_shot', prompt: string, audioUrl?: string) => {
+    const handleGenerateMotionRef = async (assetType: CharacterMotionAssetType, prompt: string, audioUrl?: string) => {
         if (!onGenerateVideo) return;
 
         // Check if source image exists
         const hasSourceImage = assetType === 'full_body'
-            ? (asset.full_body_image_url || asset.full_body_asset?.variants?.length > 0)
-            : (asset.headshot_image_url || asset.headshot_asset?.variants?.length > 0);
+            ? (asset.full_body_image_url || ((asset.full_body_asset?.variants?.length ?? 0) > 0))
+            : (asset.headshot_image_url || ((asset.headshot_asset?.variants?.length ?? 0) > 0));
 
         if (!hasSourceImage) {
             const typeLabel = assetType === "full_body" ? copy.sourceImageTypes.fullBody : copy.sourceImageTypes.headshot;
@@ -198,7 +302,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
         }
 
         setIsVideoLoading(true); // Start loading state (will be reset by onCanPlay or if no video)
-        onGenerateVideo(prompt, 5, assetType);
+        onGenerateVideo(prompt, 5, assetType, audioUrl);
     };
 
 
@@ -227,69 +331,40 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
             if (assetType === 'full_body') {
                 setFullBodyAudioUrl(url);
                 // Automatically update prompt if it's the default "counting" one
-                const currentDefault = `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right. The character is speaking naturally, counting numbers from one to five in English.\nHead to toe shot, stable camera, flat lighting.`;
-                const oldDefault = `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right to show costume details. No walking away.\nHead to toe shot, stable camera, flat lighting.`;
+                const currentDefault = buildMotionReferencePrompt("full_body", characterDescription, false);
+                const oldDefault = `Full-body character reference video.\n${characterDescription}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right to show costume details. No walking away.\nHead to toe shot, stable camera, flat lighting.`;
 
                 if (fullBodyMotionPrompt === currentDefault || fullBodyMotionPrompt === oldDefault || !fullBodyMotionPrompt) {
-                    setFullBodyMotionPrompt(`Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures, turning body 30 degrees left and right. The character is speaking naturally matching the audio, with accurate lip-sync and facial expressions.\nHead to toe shot, stable camera, flat lighting.`);
+                    setFullBodyMotionPrompt(buildMotionReferencePrompt("full_body", characterDescription, true));
                 }
             } else {
                 setHeadshotAudioUrl(url);
                 // Automatically update prompt if it's the default "counting" one
-                const currentDefault = `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally, counting numbers from one to five in English, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
-                const oldDefault = `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
+                const currentDefault = buildMotionReferencePrompt("headshot", characterDescription, false);
+                const oldDefault = `High-fidelity portrait video reference.\n${characterDescription}.\nFacing camera, speaking naturally matching the audio, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
 
                 if (headshotMotionPrompt === currentDefault || headshotMotionPrompt === oldDefault || !headshotMotionPrompt) {
-                    setHeadshotMotionPrompt(`High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, with accurate lip-sync and facial expressions, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`);
+                    setHeadshotMotionPrompt(buildMotionReferencePrompt("headshot", characterDescription, true));
                 }
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Failed to upload audio:', error);
-            alert(copy.audioUploadFailed(error.message));
+            const message = error instanceof Error ? error.message : String(error);
+            alert(copy.audioUploadFailed(message));
         } finally {
             setIsUploadingAudio(false);
         }
     };
 
-    // PRD Motion Prompt Templates
-    const getMotionDefault = (type: 'full_body' | 'headshot', hasAudio: boolean) => {
-        if (type === 'full_body') {
-            return hasAudio
-                ? `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures, turning body 30 degrees left and right. The character is speaking naturally matching the audio, with accurate lip-sync and facial expressions.\nHead to toe shot, stable camera, flat lighting.`
-                : `Full-body character reference video.\n${asset.description}.\nStanding pose, shifting weight slightly, natural hand gestures while talking, turning body 30 degrees left and right. The character is speaking naturally, counting numbers from one to five in English.\nHead to toe shot, stable camera, flat lighting.`;
-        } else {
-            return hasAudio
-                ? `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally matching the audio, with accurate lip-sync and facial expressions, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`
-                : `High-fidelity portrait video reference.\n${asset.description}.\nFacing camera, speaking naturally, counting numbers from one to five in English, subtle head movements, blinking, rich micro-expressions.\n4k, studio lighting, stable camera.`;
-        }
-    };
-
-    // Initialize prompts if empty (first time load)
+    // Initialize motion prompts if empty (first time load)
     useEffect(() => {
-        if (!fullBodyPrompt) {
-            setFullBodyPrompt(getInitialPrompt("full_body", ""));
-        }
-        if (!threeViewPrompt) {
-            setThreeViewPrompt(getInitialPrompt("three_view", ""));
-        }
-        if (!headshotPrompt) {
-            setHeadshotPrompt(getInitialPrompt("headshot", ""));
-        }
-        if (!videoPrompt) {
-            setVideoPrompt(`Cinematic shot of ${asset.name}, ${asset.description}, looking around, breathing, slight movement, high quality, 4k`);
-        }
+        setFullBodyMotionPrompt((current) => current || buildMotionReferencePrompt("full_body", characterDescription, Boolean(fullBodyAudioUrl)));
+        setHeadshotMotionPrompt((current) => current || buildMotionReferencePrompt("headshot", characterDescription, Boolean(headshotAudioUrl)));
+    }, [characterDescription, fullBodyAudioUrl, headshotAudioUrl]);
 
-        if (!fullBodyMotionPrompt) {
-            setFullBodyMotionPrompt(getMotionDefault('full_body', !!fullBodyAudioUrl));
-        }
-        if (!headshotMotionPrompt) {
-            setHeadshotMotionPrompt(getMotionDefault('headshot', !!headshotAudioUrl));
-        }
-    }, [asset.name, asset.description, stylePrompt, hasAnyUpload, hasFullBodyImage, hasNonFullBodyUpload]);
-
-    const handleResetMotionPrompt = (type: 'full_body' | 'headshot') => {
+    const handleResetMotionPrompt = (type: MotionPromptType) => {
         const hasAudio = type === 'full_body' ? !!fullBodyAudioUrl : !!headshotAudioUrl;
-        const defaultPrompt = getMotionDefault(type, hasAudio);
+        const defaultPrompt = buildMotionReferencePrompt(type, characterDescription, hasAudio);
         if (type === 'full_body') {
             setFullBodyMotionPrompt(defaultPrompt);
         } else {
@@ -300,23 +375,34 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
 
     // Update local state when asset updates (e.g. after generation)
     useEffect(() => {
-        if (asset.full_body_prompt) setFullBodyPrompt(asset.full_body_prompt);
-        else if (hasNonFullBodyUpload && !hasReferenceLock(fullBodyPrompt)) {
-            setFullBodyPrompt(getInitialPrompt("full_body", ""));
-        }
+        setFullBodyPrompt((current) => {
+            if (asset.full_body_prompt) return asset.full_body_prompt;
+            if (hasNonFullBodyUpload && !hasReferenceLock(current)) return fullBodyDefaultPrompt;
+            return current || fullBodyDefaultPrompt;
+        });
 
-        if (asset.three_view_prompt) setThreeViewPrompt(asset.three_view_prompt);
-        else if (hasAnyUpload && !hasReferenceLock(threeViewPrompt)) {
-            setThreeViewPrompt(getInitialPrompt("three_view", ""));
-        }
+        setThreeViewPrompt((current) => {
+            if (asset.three_view_prompt) return asset.three_view_prompt;
+            if (hasAnyUpload && !hasReferenceLock(current)) return threeViewDefaultPrompt;
+            return current || threeViewDefaultPrompt;
+        });
 
-        if (asset.headshot_prompt) setHeadshotPrompt(asset.headshot_prompt);
-        else if (hasAnyUpload && !hasReferenceLock(headshotPrompt)) {
-            setHeadshotPrompt(getInitialPrompt("headshot", ""));
-        }
+        setHeadshotPrompt((current) => {
+            if (asset.headshot_prompt) return asset.headshot_prompt;
+            if (hasAnyUpload && !hasReferenceLock(current)) return headshotDefaultPrompt;
+            return current || headshotDefaultPrompt;
+        });
 
-        if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
-    }, [asset, hasAnyUpload, hasNonFullBodyUpload]);
+    }, [
+        asset.full_body_prompt,
+        asset.three_view_prompt,
+        asset.headshot_prompt,
+        fullBodyDefaultPrompt,
+        threeViewDefaultPrompt,
+        headshotDefaultPrompt,
+        hasAnyUpload,
+        hasNonFullBodyUpload,
+    ]);
 
     const handleGenerateClick = (type: CharacterPromptType, batchSize: number) => {
         let prompt = "";
@@ -458,7 +544,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         supportsMotion={true}
                         mode={fullBodyMode}
                         onModeChange={setFullBodyMode}
-                        hasStaticImage={!!asset.full_body_image_url || (asset.full_body_asset?.variants?.length > 0)}
+                        hasStaticImage={!!asset.full_body_image_url || ((asset.full_body_asset?.variants?.length ?? 0) > 0)}
                         motionRefVideos={asset.full_body?.video_variants || []}
                         onGenerateMotionRef={(prompt: string, audioUrl?: string) => handleGenerateMotionRef('full_body', prompt, audioUrl)}
                         isGeneratingMotion={generatingTypes.some(t => t.type === "video_full_body")}
@@ -535,7 +621,7 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                         supportsMotion={true}
                         mode={headshotMode}
                         onModeChange={setHeadshotMode}
-                        hasStaticImage={!!asset.headshot_image_url || (asset.headshot_asset?.variants?.length > 0)}
+                        hasStaticImage={!!asset.headshot_image_url || ((asset.headshot_asset?.variants?.length ?? 0) > 0)}
                         motionRefVideos={asset.head_shot?.video_variants || []}
                         onGenerateMotionRef={(prompt: string, audioUrl?: string) => handleGenerateMotionRef('head_shot', prompt, audioUrl)}
                         isGeneratingMotion={generatingTypes.some(t => t.type === "video_head_shot")}
@@ -687,7 +773,7 @@ function WorkbenchPanel({
     // Reverse Generation Props
     reverseGenerationMode = false,
     reverseReferenceUrl = null
-}: any) {
+}: WorkbenchPanelProps) {
 
     return (
         <div
@@ -762,9 +848,12 @@ function WorkbenchPanel({
                                 {copy.uploadDetectedHint}
                             </p>
                             {reverseReferenceUrl && (
-                                <img
+                                <NextImage
                                     src={getAssetUrl(reverseReferenceUrl)}
                                     alt={copy.reverseReferenceAlt}
+                                    width={64}
+                                    height={64}
+                                    unoptimized
                                     className="w-16 h-16 rounded-lg object-cover border border-white/20"
                                 />
                             )}
@@ -807,8 +896,8 @@ function WorkbenchPanel({
                                     <video
                                         key={motionRefVideos[motionRefVideos.length - 1]?.url}
                                         src={getAssetUrl(motionRefVideos[motionRefVideos.length - 1]?.url)}
-                                        onCanPlay={() => setIsVideoLoading(false)}
-                                        onLoadStart={() => setIsVideoLoading(true)}
+                                        onCanPlay={() => setIsVideoLoading?.(false)}
+                                        onLoadStart={() => setIsVideoLoading?.(true)}
                                         className="w-full h-full object-contain"
                                         controls
                                         loop
@@ -900,9 +989,9 @@ function WorkbenchPanel({
                         </div>
                     ) : isVideo ? (
                         <VideoVariantSelector
-                            videos={videos}
-                            onDelete={onDeleteVideo}
-                            onGenerate={onGenerateVideo}
+                            videos={videos || []}
+                            onDelete={onDeleteVideo || (() => undefined)}
+                            onGenerate={onGenerateVideo || (() => undefined)}
                             isGenerating={isGenerating}
                             aspectRatio={aspectRatio}
                             className="h-full"

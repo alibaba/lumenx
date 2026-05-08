@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Save, Loader2, Key, ChevronDown, ChevronRight, Settings, MessageSquareCode } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Save, Loader2, Key, ChevronDown, ChevronRight, Settings, MessageSquareCode, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   DEFAULT_ENV_CONFIG,
@@ -12,7 +12,7 @@ import {
   type EnvConfigState,
 } from "@/lib/env-config";
 import { DEFAULT_I2I_MODEL, DEFAULT_I2V_MODEL, DEFAULT_T2I_MODEL, T2I_MODELS, I2I_MODELS, I2V_MODELS, ASPECT_RATIOS } from "@/store/projectStore";
-import { Image, Video, Layout, Check, User, Building, Box } from "lucide-react";
+import { Image as ImageIcon, Video, Layout, Check, User, Building, Box } from "lucide-react";
 import { zhCN } from "@/lib/i18n";
 
 const LS_KEY_MODEL = "lumenx_default_model_settings";
@@ -55,6 +55,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [endpointsOpen, setEndpointsOpen] = useState(false);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
 
   // ── Default Model Settings ──
   const [modelSettings, setModelSettings] = useState<DefaultModelSettings>(() =>
@@ -74,22 +75,23 @@ export default function SettingsPage() {
     loadFromLS(LS_KEY_PROMPT, { storyboard_polish: "", video_polish: "", r2v_polish: "" })
   );
 
-  useEffect(() => {
-    loadConfig();
-  }, []);
-
-  const loadConfig = async () => {
+  const loadConfig = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const data = await api.getEnvConfig();
       setConfig((prev) => normalizeEnvConfig(prev, data));
+      setLastSyncAt(new Date().toLocaleTimeString("zh-CN", { hour12: false }));
     } catch {
       setLoadError(copy.apiConfig.loadError);
     } finally {
       setLoading(false);
     }
-  };
+  }, [copy.apiConfig.loadError]);
+
+  useEffect(() => {
+    loadConfig();
+  }, [loadConfig]);
 
   const handleSaveApiConfig = async () => {
     setSaving(true);
@@ -130,13 +132,13 @@ export default function SettingsPage() {
     `px-3 py-1.5 text-xs rounded-md border transition-colors ${active ? "border-amber-500/60 bg-amber-500/15 text-amber-200" : "border-white/10 bg-white/5 text-gray-400 hover:text-gray-200"}`;
   const presetButtonClass =
     "px-2.5 py-1 text-[11px] rounded-md border border-white/10 bg-white/5 text-gray-300 hover:text-white hover:border-white/20 transition-colors";
-  const showBananaKeyWarning =
+  const showImage2KeyWarning =
     config.IMAGE_PROVIDER === "openai" &&
     config.OPENAI_IMAGE_BASE_URL.includes("api.bltcy.ai") &&
     !config.OPENAI_IMAGE_API_KEY.trim() &&
     !config.OPENAI_IMAGE_EDIT_API_KEY.trim() &&
     !!config.OPENAI_API_KEY.trim();
-  const showBananaEditKeyWarning =
+  const showImage2EditKeyWarning =
     config.IMAGE_EDIT_PROVIDER === "openai" &&
     config.OPENAI_IMAGE_EDIT_BASE_URL.includes("api.bltcy.ai") &&
     !config.OPENAI_IMAGE_EDIT_API_KEY.trim() &&
@@ -149,14 +151,25 @@ export default function SettingsPage() {
 
       {/* ── Section 1: API Configuration ── */}
       <section className="glass-panel rounded-xl p-6 space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-lg">
-            <Key size={20} className="text-amber-400" />
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-lg">
+              <Key size={20} className="text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">{copy.apiConfig.title}</h2>
+              <p className="text-xs text-gray-500">{copy.apiConfig.subtitle}</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-white">{copy.apiConfig.title}</h2>
-            <p className="text-xs text-gray-500">{copy.apiConfig.subtitle}</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => loadConfig()}
+            disabled={loading || saving}
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-gray-200 transition-colors hover:border-white/20 hover:bg-white/10 disabled:opacity-50"
+          >
+            {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            从后端同步
+          </button>
         </div>
 
         {loading ? (
@@ -170,6 +183,32 @@ export default function SettingsPage() {
           </div>
         ) : (
           <>
+            {config.image_model_startup_check ? (
+              <div
+                className={`rounded-lg border p-4 text-sm ${
+                  config.image_model_startup_check.status === "ok"
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-100"
+                    : "border-amber-500/20 bg-amber-500/10 text-amber-100"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div className="font-medium">
+                    {config.image_model_startup_check.status === "ok"
+                      ? "后端 Image2 自检通过"
+                      : "后端 Image2 自检发现漂移"}
+                  </div>
+                  {lastSyncAt ? (
+                    <div className="text-[11px] text-gray-400">同步于 {lastSyncAt}</div>
+                  ) : null}
+                </div>
+                <div className="mt-2 text-xs text-gray-200">
+                  生图模型 {config.image_model_startup_check.image_model} · 图编模型 {config.image_model_startup_check.image_edit_model}
+                </div>
+                <div className="mt-1 text-[11px] text-gray-400">
+                  {config.image_model_startup_check.message}
+                </div>
+              </div>
+            ) : null}
             <div className="bg-white/5 border border-white/10 rounded-lg p-4 space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-white mb-2">{copy.apiConfig.llmProviderTitle}</h3>
@@ -235,9 +274,9 @@ export default function SettingsPage() {
               {config.IMAGE_PROVIDER === "openai" ? (
                 <>
                   <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-xs text-emerald-200">
-                    截图里的 `gpt-image-2` 同时支持 `/v1/images/generations` 和 `/v1/images/edits`。当前建议把 `gpt-image-2` 作为主用模型，`gpt-image-2-all` 只保留为备用测试，不要覆盖主配置。
+                    Image2 首选（`gpt-image2`）同时支持 `/v1/images/generations` 和 `/v1/images/edits`。当前建议把 `gpt-image2` 作为首选模型，备用测试别名不要覆盖主配置。
                   </div>
-                  {showBananaKeyWarning ? (
+                  {showImage2KeyWarning ? (
                     <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-200">
                       当前主用和备用图像 Key 都是空的，后端会暂时沿用上面的 `OPENAI_API_KEY`。如果那把 key 不是 `api.bltcy.ai` 的专用 key，就会出现“无效令牌”。请至少保留一把图像专用 key。
                     </div>
@@ -259,7 +298,7 @@ export default function SettingsPage() {
                   <div>
                     <label className="flex items-center justify-between text-sm font-medium text-gray-300 mb-2">
                       <span>生图模型</span>
-                      <span className="text-gray-600 font-normal text-xs">主用建议 gpt-image-2；gpt-image-2-all 仅备用测试</span>
+                      <span className="text-gray-600 font-normal text-xs">首选 gpt-image2；备用测试别名不要覆盖主配置</span>
                     </label>
                     <input type="text" value={config.OPENAI_IMAGE_MODEL} onChange={(e) => handleChange("OPENAI_IMAGE_MODEL", e.target.value)} placeholder={DEFAULT_ENV_CONFIG.OPENAI_IMAGE_MODEL} className={inputClass} />
                   </div>
@@ -276,10 +315,10 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <div className="border-t border-white/10 pt-4 space-y-4">
-                <div>
-                  <h4 className="text-sm font-bold text-white mb-2">图编 Provider</h4>
-                  <p className="text-xs text-gray-500">分镜重绘、首帧重绘和参考图编辑可单独指定接口，不会影响文生图链路。</p>
+                <div className="border-t border-white/10 pt-4 space-y-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-white mb-2">图编 Provider</h4>
+                    <p className="text-xs text-gray-500">分镜重绘、首帧重绘和参考图编辑可单独指定接口，不会影响文生图链路。</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => handleChange("IMAGE_EDIT_PROVIDER", "openai")} className={modeButtonClass(config.IMAGE_EDIT_PROVIDER === "openai")}>
@@ -293,11 +332,11 @@ export default function SettingsPage() {
                 {config.IMAGE_EDIT_PROVIDER === "openai" ? (
                   <>
                     <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 text-xs text-emerald-200">
-                      默认图编也会走 Banana，但你现在可以把图编单独切到另一家更稳的 OpenAI-compatible `/images/edits` 接口，不影响文生图。
+                      默认图编也首选 Image2（`gpt-image2`），但你现在可以把图编单独切到另一家更稳的 OpenAI-compatible `/images/edits` 接口，不影响文生图。
                     </div>
-                    {showBananaEditKeyWarning ? (
+                    {showImage2EditKeyWarning ? (
                       <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-200">
-                        当前主用和备用图像 Key 都是空的，后端会回退 `OPENAI_API_KEY`。如果 Banana 图编链路仍然不稳，请在这里保留一把图编专用 key，作为重绘优先 key。
+                        当前主用和备用图像 Key 都是空的，后端会回退 `OPENAI_API_KEY`。如果 Image2 图编链路仍然不稳，请在这里保留一把图编专用 key，作为重绘优先 key。
                       </div>
                     ) : null}
                     <div>
@@ -317,7 +356,7 @@ export default function SettingsPage() {
                     <div>
                       <label className="flex items-center justify-between text-sm font-medium text-gray-300 mb-2">
                         <span>图编模型（可选）</span>
-                        <span className="text-gray-600 font-normal text-xs">截图里的 gpt-image-2 支持 `/images/edits`</span>
+                        <span className="text-gray-600 font-normal text-xs">首选 gpt-image2；支持 `/images/edits`</span>
                       </label>
                       <input type="text" value={config.OPENAI_IMAGE_EDIT_MODEL} onChange={(e) => handleChange("OPENAI_IMAGE_EDIT_MODEL", e.target.value)} placeholder={DEFAULT_ENV_CONFIG.OPENAI_IMAGE_EDIT_MODEL} className={inputClass} />
                     </div>
@@ -693,7 +732,7 @@ export default function SettingsPage() {
 
         <div className="space-y-5">
           <div className="flex items-center gap-2 text-sm font-bold text-white">
-            <Image size={16} className="text-green-400" />
+            <ImageIcon size={16} className="text-green-400" />
             <span>{copy.defaultModelSettings.textToImage}</span>
           </div>
           <div className="grid grid-cols-2 gap-2">

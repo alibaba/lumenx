@@ -62,11 +62,11 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
         : null;
     const seedanceWorkflowPanel = isSeedanceModel ? getSeedanceWorkflowPanelCopy(params) : null;
 
-    const updateParam = (key: string, value: any) => {
-        const newParams = { ...params, [key]: value };
+    const updateParam = <K extends keyof VideoParams>(key: K, value: VideoParams[K]) => {
+        const newParams: VideoParams = { ...params, [key]: value };
         // When model changes, clamp duration and reset model-specific params
         if (key === "model") {
-            const newModelConfig = I2V_MODELS.find(m => m.id === value);
+            const newModelConfig = I2V_MODELS.find(m => m.id === String(value));
             if (newModelConfig?.duration) {
                 const dc = newModelConfig.duration;
                 if (dc.type === 'fixed') {

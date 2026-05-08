@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LumenX Studio Frontend
 
-## Getting Started
+This is the Next.js 14 frontend for LumenX Studio. It is normally run together with the FastAPI backend from the repository root.
 
-First, run the development server:
+## Daily Development
+
+From the repository root:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This starts the backend, frontend, and browser helper together. For frontend-only work:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cd frontend
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The frontend expects the backend at `http://127.0.0.1:18177` by default. Override it with `NEXT_PUBLIC_LUMENX_API_PORT` or `NEXT_PUBLIC_API_URL` when needed.
 
-## Learn More
+Dev startup writes ephemeral `tmp/lumenx-*.json` runtime manifests after port
+conflict resolution. Treat them as launch hints only; see
+[`docs/runtime-files.md`](../docs/runtime-files.md).
 
-To learn more about Next.js, take a look at the following resources:
+Smoke and dev launchers can also redirect runtime output with
+`LUMENX_OUTPUT_DIR`. CI smoke jobs default to an isolated `tmp/e2e-output-*`
+directory so failures do not collide with normal `output/` data.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Quality Gates
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Run this before sending frontend changes for review:
 
-## Deploy on Vercel
+```bash
+npm run quality
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+It performs:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run lint:errors`: fails only on ESLint errors.
+- `npm run lint:budget`: fails if the warning count grows beyond `lint-warning-budget.json` (currently `0`).
+- `npm run typecheck`: runs TypeScript with `noEmit`.
+- `npm run test`: runs the Vitest unit/component suite.
+- `npm run build`: runs the production Next build with lint and type checks enabled.
+
+Use `npm run lint` during cleanup work to see any new warning backlog. New `any`, unused symbol, image, or Hook dependency warnings should be fixed before review instead of expanding the budget.
+
+## Copy And I18n Audit
+
+Run the copy scanner when touching user-facing text:
+
+```bash
+npm run audit:copy
+```
+
+`npm run audit:copy:strict` is intentionally stricter and may flag prompt dictionaries or domain vocabularies. Treat strict failures as review signals until the copy allowlist is fully curated.
+
+## Frontend Structure
+
+- `src/app`: Next app entry and global styles.
+- `src/components`: feature modules, layout, settings, series, and shared UI.
+- `src/lib`: API client, i18n, prompt helpers, and utility code.
+- `src/store`: Zustand project state.
+- `src/__tests__` and component `*.test.tsx`: Vitest coverage.
+
+## Maintainability Policy
+
+- Keep feature behavior changes covered by focused Vitest tests.
+- Prefer typed API/domain helpers in `src/lib` over repeating ad hoc `any` handling inside components.
+- Keep ESLint errors and warnings at zero.
+- Do not raise `lint-warning-budget.json` without an explicit review note.
+- Do not reintroduce `typescript.ignoreBuildErrors` or `eslint.ignoreDuringBuilds` in `next.config.mjs`.

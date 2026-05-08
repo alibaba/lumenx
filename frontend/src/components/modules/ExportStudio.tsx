@@ -5,6 +5,7 @@ import { messages } from "@/lib/i18n";
 import { useProjectStore } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { getGenerationBadgeText, getGenerationTooltip, getProjectGenerationProvenance, isGenerationDegraded } from "@/lib/generation-provenance";
 
 export default function ExportStudio() {
     const copy = messages.modules.exportStudio;
@@ -27,6 +28,9 @@ export default function ExportStudio() {
 
     // If project already has a merged video, show it immediately
     const effectiveUrl = exportUrl || currentProject?.merged_video_url || null;
+    const generationSummary = getProjectGenerationProvenance(currentProject);
+    const generationBadge = getGenerationBadgeText(generationSummary);
+    const generationBadgeDegraded = isGenerationDegraded(generationSummary);
 
     const handleExport = async () => {
         if (!currentProject) return;
@@ -39,9 +43,9 @@ export default function ExportStudio() {
             const result = await api.exportProject(currentProject.id, { resolution, format, subtitles });
             setExportUrl(result.url);
             setSubtitleUrl(result.subtitle_url || null);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Export failed:", error);
-            setExportError(error?.message || copy.exportFailedHint);
+            setExportError(error instanceof Error ? error.message : copy.exportFailedHint);
         } finally {
             setIsExporting(false);
         }
@@ -65,6 +69,23 @@ export default function ExportStudio() {
                     </div>
                     <p className="mt-2 text-emerald-100/80">{copy.exportNotice}</p>
                 </div>
+
+                {generationBadge && (
+                    <div
+                        className={clsx(
+                            "mb-6 rounded-xl border px-4 py-3 text-sm",
+                            generationBadgeDegraded
+                                ? "border-amber-500/30 bg-amber-500/10 text-amber-100"
+                                : "border-emerald-500/20 bg-emerald-500/10 text-emerald-100"
+                        )}
+                        title={getGenerationTooltip(generationSummary)}
+                    >
+                        <div className="font-semibold">{generationBadge}</div>
+                        {generationSummary?.generation_reason && (
+                            <p className="mt-1 text-xs opacity-80">{generationSummary.generation_reason}</p>
+                        )}
+                    </div>
+                )}
 
                 <div className="space-y-8 flex-1">
                     {/* Resolution */}
@@ -184,6 +205,20 @@ export default function ExportStudio() {
                             <h3 className="text-2xl font-bold mb-2 text-white">{copy.exportComplete}</h3>
                             <p className="text-gray-400 mb-8">{copy.successHint}</p>
                             <p className="text-xs text-emerald-300/90 mb-6">{copy.successNote}</p>
+                            {generationBadge && (
+                                <div
+                                    className={clsx(
+                                        "mx-auto mb-6 inline-flex max-w-md flex-col rounded-lg border px-3 py-2 text-xs",
+                                        generationBadgeDegraded
+                                            ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                                            : "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                    )}
+                                    title={getGenerationTooltip(generationSummary)}
+                                >
+                                    <span className="font-semibold">{generationBadge}</span>
+                                    {generationSummary?.generation_reason && <span className="mt-1 opacity-80">{generationSummary.generation_reason}</span>}
+                                </div>
+                            )}
 
                             <a
                                 href={getAssetUrl(effectiveUrl)}

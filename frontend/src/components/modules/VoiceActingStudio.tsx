@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import NextImage from "next/image";
 import { Mic, Play, Pause, Wand2, Users, Volume2, Check, Settings2, AlertCircle } from "lucide-react";
 import clsx from "clsx";
 import { useProjectStore } from "@/store/projectStore";
+import type { Character, StoryboardFrame } from "@/store/projectStore";
 import { api } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 import { messages } from "@/lib/i18n";
@@ -20,6 +22,16 @@ type VoiceOption = {
 type VoiceDraft = {
     voiceId: string;
     voiceName: string;
+};
+
+type VoiceCharacter = Character & {
+    voice_speed?: number;
+    voice_pitch?: number;
+    voice_volume?: number;
+};
+
+type VoiceFrame = StoryboardFrame & {
+    audio_error?: string;
 };
 
 export default function VoiceActingStudio() {
@@ -48,7 +60,7 @@ export default function VoiceActingStudio() {
         if (currentProject?.characters) {
             const params: Record<string, { speed: number; pitch: number; volume: number }> = {};
             const drafts: Record<string, VoiceDraft> = {};
-            currentProject.characters.forEach((char: any) => {
+            (currentProject.characters as VoiceCharacter[]).forEach((char) => {
                 params[char.id] = {
                     speed: char.voice_speed ?? 1.0,
                     pitch: char.voice_pitch ?? 1.0,
@@ -158,6 +170,9 @@ export default function VoiceActingStudio() {
         }
     };
 
+    const voiceCharacters = (currentProject?.characters ?? []) as VoiceCharacter[];
+    const dialogueFrames = (currentProject?.frames ?? []) as VoiceFrame[];
+
     return (
         <div className="flex h-full text-white">
             <audio ref={audioRef} onEnded={() => setPlayingAudio(null)} className="hidden" />
@@ -170,14 +185,17 @@ export default function VoiceActingStudio() {
                     </h3>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {currentProject?.characters?.map((char: any) => (
+                    {voiceCharacters.map((char) => (
                         <div key={char.id} className="bg-white/5 rounded-lg p-3 border border-white/5 hover:border-white/10 transition-colors">
                             <div className="flex items-center gap-3 mb-3">
                                 <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden">
                                     {(char?.avatar_url || char?.image_url) ? (
-                                        <img
+                                        <NextImage
                                             src={getAssetUrl(char?.avatar_url || char?.image_url)}
                                             alt={char.name}
+                                            width={40}
+                                            height={40}
+                                            unoptimized
                                             className="w-full h-full object-cover"
                                         />
                                     ) : (
@@ -316,11 +334,12 @@ export default function VoiceActingStudio() {
 
                 {/* Dialogue List */}
                 <div className="flex-1 overflow-y-auto p-8 space-y-6">
-                    {currentProject?.frames?.map((frame: any, index: number) => {
+                    {dialogueFrames.map((frame, index) => {
                         if (!frame.dialogue) return null;
 
                         const speakerId = frame.character_ids?.[0];
-                        const speaker = currentProject.characters.find((c: any) => c.id === speakerId);
+                        const speaker = voiceCharacters.find((character) => character.id === speakerId);
+                        const audioUrl = frame.audio_url;
                         const isSettingsOpen = activeSettingsId === frame.id;
                         const settings = lineSettings[frame.id] || { speed: 1.0, pitch: 1.0, volume: 50 };
 
@@ -330,8 +349,12 @@ export default function VoiceActingStudio() {
                                 <div className="w-12 flex-shrink-0 flex flex-col items-center gap-1 pt-1">
                                     <div className="w-10 h-10 rounded-full bg-gray-800 overflow-hidden border border-white/10">
                                         {(speaker?.avatar_url || speaker?.image_url) ? (
-                                            <img
+                                            <NextImage
                                                 src={getAssetUrl(speaker?.avatar_url || speaker?.image_url)}
+                                                alt={speaker?.name || copy.unknown}
+                                                width={40}
+                                                height={40}
+                                                unoptimized
                                                 className="w-full h-full object-cover"
                                             />
                                         ) : (
@@ -430,15 +453,15 @@ export default function VoiceActingStudio() {
                                                     <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center">
                                                         <Wand2 className="animate-spin text-primary" size={14} />
                                                     </div>
-                                                ) : frame.audio_url ? (
+                                                ) : audioUrl ? (
                                                     <button
-                                                        onClick={() => handlePlay(frame.audio_url)}
+                                                        onClick={() => handlePlay(audioUrl)}
                                                         className={clsx(
                                                             "w-8 h-8 rounded-full flex items-center justify-center transition-colors",
-                                                            playingAudio === frame.audio_url ? "bg-primary text-white" : "bg-white/10 hover:bg-white/20 text-gray-300"
+                                                            playingAudio === audioUrl ? "bg-primary text-white" : "bg-white/10 hover:bg-white/20 text-gray-300"
                                                         )}
                                                     >
-                                                        {playingAudio === frame.audio_url ? <Pause size={14} /> : <Play size={14} />}
+                                                        {playingAudio === audioUrl ? <Pause size={14} /> : <Play size={14} />}
                                                     </button>
                                                 ) : (
                                                     <button
@@ -470,7 +493,7 @@ export default function VoiceActingStudio() {
                         );
                     })}
 
-                    {(!currentProject?.frames?.some((f: any) => f.dialogue)) && (
+                    {(!dialogueFrames.some((frame) => frame.dialogue)) && (
                         <div className="text-center text-gray-500 py-20">
                             <Volume2 size={48} className="mx-auto mb-4 opacity-20" />
                             <p>{copy.noDialogue}</p>

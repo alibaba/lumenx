@@ -1,4 +1,9 @@
-import type { EnvConfigPayload, ProviderMode, StorageProvider } from "@/lib/api";
+import type {
+  EnvConfigPayload,
+  ImageModelStartupCheck,
+  ProviderMode,
+  StorageProvider,
+} from "@/lib/api";
 
 export type EnvConfigState = EnvConfigPayload & {
   IMAGE_PROVIDER: "openai" | "dashscope";
@@ -40,6 +45,7 @@ export type EnvConfigState = EnvConfigPayload & {
   KLING_ACCESS_KEY: string;
   KLING_SECRET_KEY: string;
   VIDU_API_KEY: string;
+  image_model_startup_check?: ImageModelStartupCheck;
   endpoint_overrides: Record<string, string>;
 };
 
@@ -75,8 +81,8 @@ export const DEFAULT_ENV_CONFIG: EnvConfigState = {
   OPENAI_IMAGE_EDIT_API_KEY: "",
   OPENAI_IMAGE_BASE_URL: "https://api.bltcy.ai/v1",
   OPENAI_IMAGE_EDIT_BASE_URL: "https://api.bltcy.ai/v1",
-  OPENAI_IMAGE_MODEL: "nano-banana",
-  OPENAI_IMAGE_EDIT_MODEL: "nano-banana",
+  OPENAI_IMAGE_MODEL: "gpt-image2",
+  OPENAI_IMAGE_EDIT_MODEL: "gpt-image2",
   OPENAI_TTS_API_KEY: "",
   OPENAI_TTS_BASE_URL: "https://yunwu.ai/v1",
   OPENAI_TTS_MODEL: "qwen3-tts-flash",

@@ -121,7 +121,7 @@ export default function ProjectClient({ id, breadcrumbSegments }: { id: string; 
     );
 
     return (
-        <main className="flex h-screen w-screen bg-background overflow-hidden relative">
+        <main className="flex h-screen w-screen bg-background overflow-hidden relative" data-testid="project-client">
             {/* Background Canvas */}
             <div className="absolute inset-0 z-0 pointer-events-auto">
                 <CreativeCanvas />

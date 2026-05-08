@@ -2,17 +2,19 @@
 
 import { Fragment, useMemo, useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import NextImage from "next/image";
 import {
-    Layout, Image as ImageIcon, Box, Type, Move,
-    ZoomIn, ZoomOut, Layers, Settings, Play,
-    ChevronRight, ChevronLeft, Trash2, Copy, Wand2, Users, FileText, RefreshCw, Loader2, X, Lock, Unlock,
+    Layout, Image as ImageIcon,
+    Trash2, Copy, Wand2, FileText, RefreshCw, Loader2, X, Lock, Unlock,
     Plus, ArrowUp, ArrowDown, Zap, Upload, Film
 } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { api, API_URL, crudApi } from "@/lib/api";
-import { appendAssetQueryParam, getAssetUrl, getAssetUrlWithTimestamp, extractErrorDetail } from "@/lib/utils";
+import type { Scene, StoryboardFrame } from "@/store/projectStore";
+import { api, crudApi } from "@/lib/api";
+import { appendAssetQueryParam, getAssetUrlWithTimestamp, extractErrorDetail } from "@/lib/utils";
 import { getCameraTerm, messages, shotTerms } from "@/lib/i18n";
 import { buildStoryboardCompositionData, getArtDirectionPromptPrefix } from "@/lib/storyboard-references";
+import { getGenerationBadgeText, getGenerationTooltip, isGenerationDegraded } from "@/lib/generation-provenance";
 
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
 
@@ -22,8 +24,19 @@ const commonLabels = messages.common.labels;
 
 type FrameViewMode = "sequence" | "beat";
 
+interface CreateFrameInput {
+    scene_id: string;
+    action_description: string;
+    character_ids?: string[];
+    prop_ids?: string[];
+    dialogue?: string;
+    speaker?: string;
+    camera_angle?: string;
+    insert_at?: number;
+}
+
 interface FrameEntry {
-    frame: any;
+    frame: StoryboardFrame;
     index: number;
 }
 
@@ -128,7 +141,7 @@ export default function StoryboardComposer() {
             } else {
                 alert(copy.analyzeEmpty);
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error("Analyze to storyboard failed:", error);
             const detail = extractErrorDetail(error, "");
             if (detail.includes("JSON") || /格式/.test(detail)) {
@@ -175,7 +188,7 @@ export default function StoryboardComposer() {
         }
     };
 
-    const handleCreateFrame = async (data: any) => {
+    const handleCreateFrame = async (data: CreateFrameInput) => {
         if (!currentProject) return;
 
         try {
@@ -205,7 +218,7 @@ export default function StoryboardComposer() {
         const [movedFrame] = newFrames.splice(index, 1);
         newFrames.splice(newIndex, 0, movedFrame);
 
-        const newOrderIds = newFrames.map((f: any) => f.id);
+        const newOrderIds = newFrames.map((frame) => frame.id);
 
         try {
             // Optimistic update
@@ -226,7 +239,7 @@ export default function StoryboardComposer() {
         e.stopPropagation();
         if (!currentProject?.frames) return;
 
-        const frameIndex = currentProject.frames.findIndex((f: any) => f.id === frameId);
+        const frameIndex = currentProject.frames.findIndex((frame) => frame.id === frameId);
         if (frameIndex <= 0) return;
 
         // Find the previous frame's selected video
@@ -237,7 +250,7 @@ export default function StoryboardComposer() {
         }
 
         const prevVideo = currentProject.video_tasks?.find(
-            (t: any) => t.id === prevFrame.selected_video_id && t.status === "completed"
+            (task) => task.id === prevFrame.selected_video_id && task.status === "completed"
         );
         if (!prevVideo) {
             alert(copy.previousFrameVideoIncomplete);
@@ -248,9 +261,9 @@ export default function StoryboardComposer() {
         try {
             const updatedProject = await api.extractLastFrame(currentProject.id, frameId, prevVideo.id);
             updateProject(currentProject.id, updatedProject);
-        } catch (error: any) {
+        } catch (error) {
             console.error("Failed to extract last frame:", error);
-            alert(error?.response?.data?.detail || copy.failedToExtractLastFrame);
+            alert(extractErrorDetail(error, "") || copy.failedToExtractLastFrame);
         } finally {
             setExtractingFrameId(null);
         }
@@ -269,16 +282,16 @@ export default function StoryboardComposer() {
         try {
             const updatedProject = await api.uploadFrameImage(currentProject.id, uploadTargetFrameId, file);
             updateProject(currentProject.id, updatedProject);
-        } catch (error: any) {
+        } catch (error) {
             console.error("Failed to upload frame image:", error);
-            alert(error?.message || copy.failedToUploadFrameImage);
+            alert(extractErrorDetail(error, "") || copy.failedToUploadFrameImage);
         } finally {
             setUploadTargetFrameId(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
 
-    const handleRenderFrame = async (frame: any, batchSize: number = 1, e?: React.MouseEvent) => {
+    const handleRenderFrame = async (frame: StoryboardFrame, batchSize: number = 1, e?: React.MouseEvent) => {
         e?.stopPropagation();
         if (!currentProject) return;
 
@@ -328,13 +341,13 @@ export default function StoryboardComposer() {
     };
 
     const frameEntries = useMemo<FrameEntry[]>(
-        () => (currentProject?.frames || []).map((frame: any, index: number) => ({ frame, index })),
+        () => (currentProject?.frames || []).map((frame, index) => ({ frame, index })),
         [currentProject?.frames],
     );
 
     const sceneLookup = useMemo(() => {
         const lookup = new Map<string, string>();
-        currentProject?.scenes?.forEach((scene: any) => {
+        currentProject?.scenes?.forEach((scene) => {
             if (scene?.id && scene?.name) {
                 lookup.set(scene.id, scene.name);
             }
@@ -345,7 +358,7 @@ export default function StoryboardComposer() {
     const storyBeatLookup = useMemo(() => {
         const lookup = new Map<string, StoryBeatMeta>();
 
-        currentProject?.story_analysis?.scene_beats?.forEach((beat: any) => {
+        currentProject?.story_analysis?.scene_beats?.forEach((beat) => {
             lookup.set(beat.id, {
                 order: beat.order,
                 title: beat.title,
@@ -365,7 +378,7 @@ export default function StoryboardComposer() {
                 summary: "",
                 chapterOrder: frame.chapter_order,
                 chapterTitle: frame.chapter_title,
-                sceneName: sceneLookup.get(frame.scene_id),
+                sceneName: sceneLookup.get(frame.scene_id || ""),
                 qualityFlags: [],
             });
         });
@@ -398,7 +411,7 @@ export default function StoryboardComposer() {
                     isUnassigned: !entry.frame.story_beat_id,
                     chapterOrder: entry.frame.chapter_order ?? beatMeta?.chapterOrder,
                     chapterTitle: entry.frame.chapter_title || beatMeta?.chapterTitle,
-                    sceneName: beatMeta?.sceneName || sceneLookup.get(entry.frame.scene_id),
+                    sceneName: beatMeta?.sceneName || sceneLookup.get(entry.frame.scene_id || ""),
                     qualityFlags: beatMeta?.qualityFlags || [],
                     entries: [],
                 });
@@ -420,8 +433,10 @@ export default function StoryboardComposer() {
         const beatFrameCount = beatFrameCounts.get(beatKey) || 0;
         const chapterOrder = frame.chapter_order ?? beatMeta?.chapterOrder;
         const chapterTitle = frame.chapter_title || beatMeta?.chapterTitle;
-        const sceneName = beatMeta?.sceneName || sceneLookup.get(frame.scene_id);
+        const sceneName = beatMeta?.sceneName || sceneLookup.get(frame.scene_id || "");
         const qualityFlags = beatMeta?.qualityFlags || [];
+        const generationBadge = getGenerationBadgeText(frame);
+        const generationBadgeDegraded = isGenerationDegraded(frame);
 
         return (
             <Fragment key={frame.id}>
@@ -432,6 +447,8 @@ export default function StoryboardComposer() {
                         ? "bg-white/5 border-primary ring-1 ring-primary"
                         : "bg-[#161616] border-white/5 hover:border-white/20"
                         }`}
+                    data-testid="storyboard-frame-card"
+                    data-frame-id={frame.id}
                 >
                     <div className="absolute -left-3 -top-3 w-8 h-8 rounded-full bg-[#222] border border-white/10 flex items-center justify-center text-xs font-bold text-gray-400 shadow-lg z-10">
                         {index + 1}
@@ -526,6 +543,17 @@ export default function StoryboardComposer() {
                                     <span className="text-[10px] px-2 py-0.5 rounded-full border border-white/10 bg-white/5 text-gray-300">
                                         {copy.storyBeatFrameCount(beatFrameCount)}
                                     </span>
+                                    {generationBadge && (
+                                        <span
+                                            className={`text-[10px] px-2 py-0.5 rounded-full border ${generationBadgeDegraded
+                                                ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                                                : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                                                }`}
+                                            title={getGenerationTooltip(frame)}
+                                        >
+                                            {generationBadge}
+                                        </span>
+                                    )}
                                 </div>
                                 {(chapterOrder != null || chapterTitle || sceneName || qualityFlags.length > 0) && (
                                     <div
@@ -561,7 +589,7 @@ export default function StoryboardComposer() {
                         {frame.dialogue && (
                             <div className="mt-auto pt-3 border-t border-white/5">
                                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider block mb-1">{commonLabels.dialogue}</span>
-                                <p className="text-sm text-gray-400 italic">"{frame.dialogue}"</p>
+                                <p className="text-sm text-gray-400 italic">&ldquo;{frame.dialogue}&rdquo;</p>
                             </div>
                         )}
 
@@ -601,8 +629,8 @@ export default function StoryboardComposer() {
                             </button>
                             {index > 0 && (() => {
                                 const prevFrame = currentProject?.frames?.[index - 1];
-                                const prevVideoCompleted = prevFrame?.selected_video_id && currentProject?.video_tasks?.find(
-                                    (t: any) => t.id === prevFrame.selected_video_id && t.status === "completed"
+                const prevVideoCompleted = prevFrame?.selected_video_id && currentProject?.video_tasks?.find(
+                                    (task) => task.id === prevFrame.selected_video_id && task.status === "completed"
                                 );
                                 return prevVideoCompleted ? (
                                     <button
@@ -639,8 +667,12 @@ export default function StoryboardComposer() {
         );
     };
 
+    const editingFrame = editingFrameId
+        ? currentProject?.frames?.find((frame) => frame.id === editingFrameId) ?? null
+        : null;
+
     return (
-        <div className="flex flex-col h-full text-white overflow-hidden">
+        <div className="flex flex-col h-full text-white overflow-hidden" data-testid="storyboard-composer">
             {/* Top Toolbar */}
             <div className="flex-shrink-0 p-4 border-b border-white/10 flex items-center justify-between bg-black/20">
                 <h3 className="font-bold text-sm flex items-center gap-2">
@@ -800,9 +832,9 @@ export default function StoryboardComposer() {
 
             {/* Storyboard Frame Editor Modal */}
             <AnimatePresence>
-                {editingFrameId && currentProject?.frames?.find((f: any) => f.id === editingFrameId) && (
+                {editingFrame && (
                     <StoryboardFrameEditor
-                        frame={currentProject.frames.find((f: any) => f.id === editingFrameId)}
+                        frame={editingFrame}
                         onClose={() => setEditingFrameId(null)}
                     />
                 )}
@@ -831,7 +863,7 @@ export default function StoryboardComposer() {
     );
 }
 
-function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void; onCreate: (data: any) => void; scenes: any[] }) {
+function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void; onCreate: (data: CreateFrameInput) => void; scenes: Scene[] }) {
     const [action, setAction] = useState("");
     const [dialogue, setDialogue] = useState("");
     const [sceneId, setSceneId] = useState(scenes[0]?.id || "");
@@ -887,9 +919,9 @@ function CreateFrameDialog({ onClose, onCreate, scenes }: { onClose: () => void;
                             className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-lg text-white focus:border-primary/50 focus:outline-none appearance-none"
                         >
                             <option value="" disabled>{copy.createDialog.selectScene}</option>
-                            {scenes.map((s: any) => (
-                                <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
+                                {scenes.map((scene) => (
+                                    <option key={scene.id} value={scene.id}>{scene.name}</option>
+                                ))}
                         </select>
                     </div>
                     <div>
@@ -975,12 +1007,15 @@ function ImageWithRetry({ src, alt, className, onClick }: { src: string, alt: st
                     <RefreshCw className="animate-spin text-white/50" size={24} />
                 </div>
             )}
-            <img
+            <NextImage
                 key={`${displaySrc}-${retryCount}`}
-                ref={imgRef}
+                ref={imgRef as React.RefObject<HTMLImageElement>}
                 src={displaySrc}
                 alt={alt}
-                className={`${className} ${isLoading ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300`}
+                fill
+                sizes="100vw"
+                unoptimized
+                className={`${className} ${isLoading ? 'opacity-50' : 'opacity-100'} transition-opacity duration-300 object-cover`}
                 onLoad={() => {
                     setError(false);
                     setIsLoading(false);

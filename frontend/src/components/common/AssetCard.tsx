@@ -1,5 +1,6 @@
 "use client";
 
+import NextImage from "next/image";
 import { Image as ImageIcon } from "lucide-react";
 import type { Character, Scene, Prop } from "@/store/projectStore";
 import { getAssetUrl } from "@/lib/utils";
@@ -50,7 +51,16 @@ export default function AssetCard({ asset, type }: AssetCardProps) {
     <div className="glass-panel rounded-xl overflow-hidden">
       <div className="aspect-square bg-gray-800/50 flex items-center justify-center overflow-hidden">
         {displayUrl ? (
-          <img src={displayUrl} alt={asset.name} className="w-full h-full object-cover" />
+          <div className="relative h-full w-full">
+            <NextImage
+              src={displayUrl}
+              alt={asset.name}
+              fill
+              sizes="(max-width: 768px) 50vw, 20vw"
+              unoptimized
+              className="object-cover"
+            />
+          </div>
         ) : (
           <ImageIcon size={32} className="text-gray-600" />
         )}

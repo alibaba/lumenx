@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Image, Video, Film, Check, Layout, User, Building, Box } from 'lucide-react';
+import { Settings, X, Image as ImageIcon, Video, Check, Layout, User, Building, Box } from 'lucide-react';
 import { useProjectStore, DEFAULT_I2V_MODEL, DEFAULT_I2I_MODEL, DEFAULT_T2I_MODEL, T2I_MODELS, I2I_MODELS, I2V_MODELS, ASPECT_RATIOS } from '@/store/projectStore';
-import { api } from '@/lib/api';
+import { api, type UpdateModelSettingsPayload } from '@/lib/api';
 import { messages } from '@/lib/i18n';
 
 interface ModelSettingsModalProps {
@@ -42,16 +42,16 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
         if (!currentProject) return;
         setIsSaving(true);
         try {
-            const updated = await api.updateModelSettings(
-                currentProject.id,
+            const payload: UpdateModelSettingsPayload = {
                 t2iModel,
                 i2iModel,
                 i2vModel,
                 characterAspectRatio,
                 sceneAspectRatio,
                 propAspectRatio,
-                storyboardAspectRatio
-            );
+                storyboardAspectRatio,
+            };
+            const updated = await api.updateModelSettings(currentProject.id, payload);
             updateProject(currentProject.id, updated);
             onClose();
         } catch (error) {
@@ -104,7 +104,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                         {/* Assets Section */}
                         <div className="space-y-5">
                             <div className="flex items-center gap-2 text-sm font-bold text-white">
-                                <Image size={16} className="text-green-400" />
+                                <ImageIcon size={16} className="text-green-400" />
                                 <span>Assets (Text-to-Image)</span>
                             </div>
 

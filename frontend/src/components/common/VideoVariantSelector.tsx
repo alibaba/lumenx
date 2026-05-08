@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { VideoTask } from '@/store/projectStore';
-import { Trash2, Check, Layers, X, Maximize2, Play, Pause, RefreshCw } from 'lucide-react';
-import { API_URL } from '@/lib/api';
+import NextImage from 'next/image';
+import type { VideoTask } from '@/store/projectStore';
+import { Trash2, Check, Layers, X, Play, RefreshCw } from 'lucide-react';
 import { getAssetUrl } from '@/lib/utils';
 import { zhCN } from '@/lib/i18n';
 
@@ -14,8 +14,6 @@ interface VideoVariantSelectorProps {
     className?: string;
     aspectRatio?: string;
 }
-
-const getApiBaseUrl = () => API_URL;
 
 export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
     videos = [],
@@ -49,7 +47,6 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
     }, [videos, selectedVideoId]);
 
     const selectedVideo = videos.find(v => v.id === selectedVideoId);
-    const apiBase = getApiBaseUrl();
 
     const getFullUrl = (url: string) => {
         return getAssetUrl(url);
@@ -157,14 +154,24 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
                                             relative flex-shrink-0 w-24 h-16 rounded-md overflow-hidden border-2 transition-all snap-start group/variant cursor-pointer
                                             ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/30' : 'border-transparent hover:border-gray-500'}
                                         `}
-                                        onClick={() => setSelectedVideoId(video.id)}
+                                        onClick={() => {
+                                            setSelectedVideoId(video.id);
+                                            onSelect?.(video.id);
+                                        }}
                                     >
                                         {/* Thumbnail */}
-                                        <img
-                                            src={thumbUrl}
-                                            alt={copy.thumbnailAlt}
-                                            className="w-full h-full object-cover opacity-70 group-hover/variant:opacity-100 transition-opacity"
-                                        />
+                                        {thumbUrl ? (
+                                            <NextImage
+                                                src={thumbUrl}
+                                                alt={copy.thumbnailAlt}
+                                                fill
+                                                sizes="96px"
+                                                unoptimized
+                                                className="w-full h-full object-cover opacity-70 group-hover/variant:opacity-100 transition-opacity"
+                                            />
+                                        ) : (
+                                            <div className="h-full w-full bg-white/5" />
+                                        )}
 
                                         {/* Status Indicator */}
                                         <div className="absolute inset-0 flex items-center justify-center">

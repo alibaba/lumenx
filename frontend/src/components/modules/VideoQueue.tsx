@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import NextImage from "next/image";
 import { Loader2, RefreshCw, Copy, Download, Trash2, AlertCircle } from "lucide-react";
 
 import { VideoTask } from "@/lib/api";
@@ -13,7 +14,8 @@ import {
     getSeedanceWorkflowLabel,
 } from "@/lib/seedance";
 import { getAssetUrl } from "@/lib/utils";
-import { isSeedanceI2VModel } from "@/store/projectStore";
+import { isSeedanceI2VModel, useProjectStore, type StoryboardFrame } from "@/store/projectStore";
+import { getGenerationBadgeText, getGenerationTooltip, isGenerationDegraded } from "@/lib/generation-provenance";
 
 interface VideoQueueProps {
     tasks: VideoTask[];
@@ -125,10 +127,15 @@ function getSeedanceTaskTags(task: VideoTask) {
 }
 
 function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) => void }) {
+    const sourceFrame = useProjectStore((state) =>
+        state.currentProject?.frames?.find((frame: StoryboardFrame) => frame.id === task.frame_id)
+    );
     const isCompleted = task.status === "completed";
     const isProcessing = task.status === "processing" || task.status === "pending";
     const isFailed = task.status === "failed";
     const seedanceTags = getSeedanceTaskTags(task);
+    const generationBadge = getGenerationBadgeText(sourceFrame);
+    const generationBadgeDegraded = isGenerationDegraded(sourceFrame);
 
     const getDisplayUrl = (url: string) => getAssetUrl(url);
 
@@ -160,9 +167,12 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                 <div className="p-3 flex gap-3 items-center">
                     <div className="w-12 h-12 rounded bg-black/50 relative overflow-hidden flex-shrink-0">
                         {task.image_url ? (
-                            <img
+                            <NextImage
                                 src={getDisplayUrl(task.image_url)}
                                 alt={copy.inputAlt}
+                                fill
+                                sizes="48px"
+                                unoptimized
                                 className="w-full h-full object-cover opacity-60"
                             />
                         ) : (
@@ -205,7 +215,14 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                     <div className="flex h-32 relative group">
                         <div className="w-1/2 relative border-r border-white/10">
                             {task.image_url ? (
-                                <img src={getDisplayUrl(task.image_url)} alt={copy.inputAlt} className="w-full h-full object-cover" />
+                                <NextImage
+                                    src={getDisplayUrl(task.image_url)}
+                                    alt={copy.inputAlt}
+                                    fill
+                                    sizes="(max-width: 768px) 50vw, 16rem"
+                                    unoptimized
+                                    className="object-cover"
+                                />
                             ) : task.reference_video_urls && task.reference_video_urls.length > 0 ? (
                                 <div className="w-full h-full grid grid-cols-2 gap-0.5 bg-purple-900/20">
                                     {task.reference_video_urls.slice(0, 4).map((url, idx) => (
@@ -242,7 +259,20 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                                     {copy.error}
                                 </div>
                             )}
-                            <div className="absolute top-2 right-2 bg-primary/80 px-1.5 py-0.5 rounded text-[10px] text-white">{copy.result}</div>
+                            <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                                <div className="bg-primary/80 px-1.5 py-0.5 rounded text-[10px] text-white">{copy.result}</div>
+                                {generationBadge && (
+                                    <div
+                                        className={`rounded border px-1.5 py-0.5 text-[10px] ${generationBadgeDegraded
+                                            ? "border-amber-400/30 bg-black/70 text-amber-200"
+                                            : "border-emerald-400/30 bg-black/70 text-emerald-200"
+                                            }`}
+                                        title={getGenerationTooltip(sourceFrame)}
+                                    >
+                                        {generationBadge}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 

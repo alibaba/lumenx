@@ -4,10 +4,11 @@ import { motion } from "framer-motion";
 import { Calendar, Trash2, Play } from "lucide-react";
 import { Project } from "@/store/projectStore";
 import { defaultLocale, messages } from "@/lib/i18n";
+import { getGenerationBadgeText, getGenerationTooltip, getProjectGenerationProvenance, isGenerationDegraded } from "@/lib/generation-provenance";
 
 interface ProjectCardProps {
     project: Project;
-    onDelete: (id: string) => void;
+    onDelete: (id: string) => Promise<void> | void;
 }
 
 export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
@@ -20,7 +21,10 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (confirm(copy.deleteConfirm(project.title))) {
-            onDelete(project.id);
+            Promise.resolve(onDelete(project.id)).catch((error) => {
+                console.error("Failed to delete project:", error);
+                alert(copy.deleteFailed);
+            });
         }
     };
 
@@ -32,6 +36,9 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
     };
 
     const statusCopy = copy.statuses[project.status as keyof typeof copy.statuses] || copy.statuses.pending;
+    const generationSummary = getProjectGenerationProvenance(project);
+    const generationBadge = getGenerationBadgeText(generationSummary);
+    const generationBadgeDegraded = isGenerationDegraded(generationSummary);
 
     return (
         <motion.div
@@ -71,9 +78,22 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
             </div>
 
             <div className="flex items-center justify-between">
-                <span className={`text-xs px-2 py-1 rounded ${statusColors[project.status as keyof typeof statusColors] || statusColors.pending}`}>
-                    {statusCopy}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className={`text-xs px-2 py-1 rounded ${statusColors[project.status as keyof typeof statusColors] || statusColors.pending}`}>
+                        {statusCopy}
+                    </span>
+                    {generationBadge && (
+                        <span
+                            className={`text-xs px-2 py-1 rounded border ${generationBadgeDegraded
+                                ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                                : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                                }`}
+                            title={getGenerationTooltip(generationSummary)}
+                        >
+                            {generationBadge}
+                        </span>
+                    )}
+                </div>
 
                 <div className="flex items-center gap-1 text-primary text-xs font-medium">
                     <Play size={14} />

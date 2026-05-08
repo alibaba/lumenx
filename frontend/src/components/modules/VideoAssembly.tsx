@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Check, ChevronRight, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download } from "lucide-react";
+import NextImage from "next/image";
+import { Check, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { api, API_URL } from "@/lib/api";
+import type { VideoTask } from "@/store/projectStore";
+import { api } from "@/lib/api";
 import { getAssetFetchUrl, getAssetUrl, isDirectAssetPath, extractErrorDetail } from "@/lib/utils";
 import { messages } from "@/lib/i18n";
+import { getGenerationBadgeText, getGenerationTooltip, getProjectGenerationProvenance, isGenerationDegraded } from "@/lib/generation-provenance";
 
 const copy = messages.modules.videoAssembly;
 
@@ -23,8 +26,8 @@ export default function VideoAssembly() {
     const videosByFrame = useMemo(() => {
         if (!currentProject?.video_tasks) return {};
 
-        const grouped: Record<string, any[]> = {};
-        currentProject.video_tasks.forEach((task: any) => {
+        const grouped: Record<string, VideoTask[]> = {};
+        currentProject.video_tasks.forEach((task) => {
             if (task.status === "completed" && task.video_url) {
                 if (task.frame_id) {
                     if (!grouped[task.frame_id]) grouped[task.frame_id] = [];
@@ -55,7 +58,7 @@ export default function VideoAssembly() {
             const updatedProject = await api.mergeVideos(currentProject.id);
             updateProject(currentProject.id, updatedProject);
             // Success - error will be null, merged video will show below
-        } catch (error: any) {
+        } catch (error) {
             console.error("Failed to merge videos:", error);
 
             // Extract detailed error message from backend
@@ -106,10 +109,13 @@ export default function VideoAssembly() {
     };
 
     const selectedFrame = useMemo(() => {
-        return currentProject?.frames?.find((f: any) => f.id === selectedFrameId);
+        return currentProject?.frames?.find((frame) => frame.id === selectedFrameId);
     }, [currentProject?.frames, selectedFrameId]);
 
     const variants = selectedFrameId ? videosByFrame[selectedFrameId] || [] : [];
+    const generationSummary = getProjectGenerationProvenance(currentProject);
+    const generationBadge = getGenerationBadgeText(generationSummary);
+    const generationBadgeDegraded = isGenerationDegraded(generationSummary);
 
     return (
         <div className="h-full flex flex-col bg-black/20 overflow-hidden">
@@ -125,19 +131,33 @@ export default function VideoAssembly() {
                         </h2>
                         <div className="text-sm text-gray-400">
                             {copy.framesReady(
-                                currentProject?.frames?.filter((f: any) => f.selected_video_id).length || 0,
+                                currentProject?.frames?.filter((frame) => frame.selected_video_id).length || 0,
                                 currentProject?.frames?.length || 0
                             )}
                         </div>
                     </div>
+                    {generationBadge && (
+                        <div
+                            className={`mx-6 mt-4 rounded-lg border px-3 py-2 text-xs ${generationBadgeDegraded
+                                ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                                : "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                }`}
+                            title={getGenerationTooltip(generationSummary)}
+                        >
+                            <span className="font-semibold">{generationBadge}</span>
+                            {generationSummary?.generation_reason && <span className="ml-2 opacity-80">{generationSummary.generation_reason}</span>}
+                        </div>
+                    )}
 
                     {/* Vertical List */}
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
-                        {currentProject?.frames?.map((frame: any, index: number) => {
+                        {currentProject?.frames?.map((frame, index) => {
                             const hasVideos = videosByFrame[frame.id]?.length > 0;
                             const isSelected = frame.id === selectedFrameId;
                             const selectedVideoId = frame.selected_video_id;
-                            const selectedVideo = currentProject.video_tasks?.find((v: any) => v.id === selectedVideoId);
+                            const selectedVideo = currentProject.video_tasks?.find((video) => video.id === selectedVideoId);
+                            const frameGenerationBadge = getGenerationBadgeText(frame);
+                            const frameGenerationDegraded = isGenerationDegraded(frame);
 
                             return (
                                 <motion.div
@@ -152,7 +172,7 @@ export default function VideoAssembly() {
                                     <div className="w-48 aspect-video relative flex-shrink-0 border-r border-white/10 bg-black">
                                         {selectedVideo ? (
                                             <video
-                                                src={getAssetUrl(selectedVideo.video_url)}
+                                                src={getAssetUrl(selectedVideo.video_url || "")}
                                                 className="w-full h-full object-cover"
                                                 muted
                                                 onMouseOver={(e) => e.currentTarget.play()}
@@ -164,9 +184,13 @@ export default function VideoAssembly() {
                                         ) : (
                                             <div className="w-full h-full relative">
                                                 {frame.image_url ? (
-                                                    <img
+                                                    <NextImage
                                                         src={getAssetUrl(frame.image_url)}
-                                                        className="w-full h-full object-cover opacity-50 grayscale"
+                                                        alt={copy.frameNumber(index + 1)}
+                                                        fill
+                                                        sizes="192px"
+                                                        unoptimized
+                                                        className="object-cover opacity-50 grayscale"
                                                     />
                                                 ) : (
                                                     <div className="w-full h-full bg-white/5" />
@@ -187,6 +211,17 @@ export default function VideoAssembly() {
                                         <div className="absolute top-2 left-2 bg-black/60 backdrop-blur px-2 py-0.5 rounded text-[10px] font-mono text-white">
                                             #{index + 1}
                                         </div>
+                                        {frameGenerationBadge && (
+                                            <div
+                                                className={`absolute top-2 right-2 rounded border px-2 py-0.5 text-[10px] backdrop-blur ${frameGenerationDegraded
+                                                    ? "border-amber-400/30 bg-black/70 text-amber-200"
+                                                    : "border-emerald-400/30 bg-black/70 text-emerald-200"
+                                                    }`}
+                                                title={getGenerationTooltip(frame)}
+                                            >
+                                                {frameGenerationBadge}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Right: Details */}
@@ -200,7 +235,7 @@ export default function VideoAssembly() {
                                             </div>
                                             {frame.dialogue && (
                                                 <div className="flex items-start gap-2 pl-6 border-l-2 border-white/10 ml-1">
-                                                    <p className="text-xs text-gray-400 italic">"{frame.dialogue}"</p>
+                                                    <p className="text-xs text-gray-400 italic">&ldquo;{frame.dialogue}&rdquo;</p>
                                                 </div>
                                             )}
                                         </div>
@@ -282,7 +317,7 @@ export default function VideoAssembly() {
                     <div className="h-14 border-b border-white/10 flex items-center justify-between px-4 bg-black/20">
                         <h3 className="font-bold text-sm">{copy.variantList}</h3>
                         {selectedFrameId && (
-                            <span className="text-xs text-gray-500">{copy.frameNumber((currentProject?.frames?.findIndex((f: any) => f.id === selectedFrameId) ?? -1) + 1)}</span>
+                            <span className="text-xs text-gray-500">{copy.frameNumber((currentProject?.frames?.findIndex((frame) => frame.id === selectedFrameId) ?? -1) + 1)}</span>
                         )}
                     </div>
 
@@ -290,7 +325,7 @@ export default function VideoAssembly() {
                         {selectedFrameId ? (
                             <div className="space-y-4">
                                 {variants.length > 0 ? (
-                                    variants.map((video: any, idx: number) => {
+                                    variants.map((video, idx) => {
                                         const isSelected = selectedFrame?.selected_video_id === video.id;
                                         return (
                                             <div
@@ -300,7 +335,7 @@ export default function VideoAssembly() {
                                             >
                                                 <div className="aspect-video relative bg-black">
                                                     <video
-                                                        src={getAssetUrl(video.video_url)}
+                                                        src={getAssetUrl(video.video_url || "")}
                                                         className="w-full h-full object-contain"
                                                         controls
                                                     />
@@ -382,6 +417,18 @@ export default function VideoAssembly() {
                                     <p className="text-gray-400 mt-1">
                                         {copy.mergedVideoHint}
                                     </p>
+                                    {generationBadge && (
+                                        <div
+                                            className={`mt-3 inline-flex max-w-xl flex-col rounded-lg border px-3 py-2 text-xs ${generationBadgeDegraded
+                                                ? "border-amber-400/30 bg-amber-400/10 text-amber-100"
+                                                : "border-emerald-400/20 bg-emerald-400/10 text-emerald-100"
+                                                }`}
+                                            title={getGenerationTooltip(generationSummary)}
+                                        >
+                                            <span className="font-semibold">{generationBadge}</span>
+                                            {generationSummary?.generation_reason && <span className="mt-1 opacity-80">{generationSummary.generation_reason}</span>}
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex gap-4">

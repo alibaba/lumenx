@@ -1,5 +1,7 @@
 "use client";
 
+import NextImage from "next/image";
+
 interface LumenXBrandingProps {
   size?: "sm" | "md";
   showSlogan?: boolean;
@@ -13,14 +15,17 @@ export default function LumenXBranding({ size = "md", showSlogan = true }: Lumen
 
   return (
     <div>
-      <div className="flex gap-4 items-center">
-        <div className="flex-shrink-0">
-          <img
-            src={typeof window !== "undefined" && process.env.NODE_ENV === "production" ? "/static/LumenX.png" : "/LumenX.png"}
-            alt="LumenX"
-            className={`${logoSize} object-contain`}
-          />
-        </div>
+        <div className="flex gap-4 items-center">
+          <div className="flex-shrink-0">
+            <NextImage
+              src={typeof window !== "undefined" && process.env.NODE_ENV === "production" ? "/static/LumenX.png" : "/LumenX.png"}
+              alt="LumenX"
+              width={64}
+              height={64}
+              priority={size !== "sm"}
+              className={`${logoSize} object-contain`}
+            />
+          </div>
         <div className="flex flex-col flex-1 justify-center h-full gap-1">
           <div className="flex items-center justify-start -mb-1">
             <span className={`font-display ${titleSize} font-bold tracking-tight text-primary`}>

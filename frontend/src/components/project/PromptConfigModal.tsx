@@ -58,7 +58,7 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
             api.getPromptConfig(currentProject.id)
                 .then((data) => {
                     setConfig(data.prompt_config);
-                    setDefaults(data.defaults);
+                    setDefaults(data.defaults ?? null);
                 })
                 .catch((err) => {
                     console.error(copy.console.loadFailed, err);
@@ -66,7 +66,7 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                 })
                 .finally(() => setIsLoading(false));
         }
-    }, [isOpen, currentProject?.id]);
+    }, [isOpen, currentProject]);
 
     const handleSave = async () => {
         if (!currentProject) return;

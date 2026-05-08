@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
+import NextImage from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Image as ImageIcon, Play, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
@@ -199,7 +200,6 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
             <EpisodeContentPanel
               key={`episode-${selectedEpisode.id}`}
               episode={selectedEpisode}
-              seriesId={seriesId}
               onOpenEditor={() => handleOpenEpisode(selectedEpisode.id)}
             />
           ) : null}
@@ -320,11 +320,9 @@ function AssetContentPanel({
 
 function EpisodeContentPanel({
   episode,
-  seriesId,
   onOpenEditor,
 }: {
   episode: Project;
-  seriesId: string;
   onOpenEditor: () => void;
 }) {
   const copy = messages.seriesPage.detail;
@@ -406,9 +404,12 @@ function EpisodeContentPanel({
               >
                 <div className="aspect-video bg-gray-800/50 flex items-center justify-center overflow-hidden relative">
                   {frame.rendered_image_url ? (
-                    <img
+                    <NextImage
                       src={getAssetUrl(frame.rendered_image_url)}
                       alt={copy.frameAlt(i + 1)}
+                      width={480}
+                      height={270}
+                      unoptimized
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
                   ) : (

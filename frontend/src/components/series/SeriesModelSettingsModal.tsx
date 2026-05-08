@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, X, Image, Video, Layout, Check, User, Building, Box, Loader2 } from 'lucide-react';
+import { Settings, X, Image as ImageIcon, Video, Layout, Check, User, Building, Box, Loader2 } from 'lucide-react';
 import { DEFAULT_I2V_MODEL, DEFAULT_I2I_MODEL, DEFAULT_T2I_MODEL, T2I_MODELS, I2I_MODELS, I2V_MODELS, ASPECT_RATIOS } from '@/store/projectStore';
 import { api } from '@/lib/api';
 import { messages } from '@/lib/i18n';
@@ -51,7 +51,7 @@ export default function SeriesModelSettingsModal({ isOpen, onClose, seriesId, on
                 })
                 .finally(() => setIsLoading(false));
         }
-    }, [isOpen, seriesId]);
+    }, [isOpen, seriesId, copy.loadError]);
 
     const handleSave = async () => {
         setIsSaving(true);
@@ -125,7 +125,7 @@ export default function SeriesModelSettingsModal({ isOpen, onClose, seriesId, on
                                 {/* Assets Section */}
                                 <div className="space-y-5">
                                     <div className="flex items-center gap-2 text-sm font-bold text-white">
-                                        <Image size={16} className="text-green-400" />
+                                        <ImageIcon size={16} className="text-green-400" />
                                         <span>{defaultCopy.textToImage}</span>
                                     </div>
 

@@ -1,16 +1,14 @@
-import { enUS } from "./en-US";
 import { zhCN } from "./zh-CN";
 
-export type Locale = "zh-CN" | "en-US";
+export type Locale = "zh-CN";
 
 export const defaultLocale: Locale = "zh-CN";
 export const messagesByLocale = {
   "zh-CN": zhCN,
-  "en-US": enUS,
 } as const;
 
 export const messages = messagesByLocale[defaultLocale];
-export { zhCN, enUS };
+export { zhCN };
 
 export function getMessages(locale: Locale = defaultLocale) {
   return messagesByLocale[locale] ?? messagesByLocale[defaultLocale];

@@ -5,12 +5,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Palette, Info } from "lucide-react";
 import { api } from "@/lib/api";
 import { messages } from "@/lib/i18n";
+import { extractErrorDetail } from "@/lib/utils";
+import type { Project } from "@/store/projectStore";
 
 interface ProjectSettingsProps {
-    project: any;
+    project: Project | null;
     isOpen: boolean;
     onClose: () => void;
-    onUpdate: (updatedProject: any) => void;
+    onUpdate: (updatedProject: Project) => void;
 }
 
 const copy = messages.projectSettings;
@@ -39,18 +41,18 @@ export default function ProjectSettings({ project, isOpen, onClose, onUpdate }: 
         setIsSaving(true);
         try {
             // Add timeout protection
-            const timeoutPromise = new Promise((_, reject) =>
+            const timeoutPromise = new Promise<never>((_, reject) =>
                 setTimeout(() => reject(new Error(copy.errors.requestTimeout)), 10000)
             );
 
             const updatePromise = api.updateProjectStyle(project.id, stylePreset, stylePrompt || undefined);
 
-            const updated = await Promise.race([updatePromise, timeoutPromise]) as any;
+            const updated = await Promise.race([updatePromise, timeoutPromise]);
             onUpdate(updated);
             onClose();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(copy.errors.updateStyleConsole, error);
-            const errorMessage = error?.response?.data?.detail || error?.message || copy.errors.updateStyle;
+            const errorMessage = extractErrorDetail(error, copy.errors.updateStyle);
             alert(`${copy.errors.updateStyle}: ${errorMessage}`);
         } finally {
             setIsSaving(false);

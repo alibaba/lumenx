@@ -18,7 +18,7 @@ const { mockState, mockApi } = vi.hoisted(() => ({
           locked: true,
           three_view_asset: {
             selected_id: "char-ref",
-            variants: [{ id: "char-ref", url: "https://example.com/linxia.png" }],
+            variants: [{ id: "char-ref", url: "https://example.com/linxia.png", created_at: 0 }],
           },
         },
       ],
@@ -30,7 +30,7 @@ const { mockState, mockApi } = vi.hoisted(() => ({
           action_description: "上一帧镜头",
           rendered_image_asset: {
             selected_id: "prev-variant",
-            variants: [{ id: "prev-variant", url: "https://example.com/prev-frame.png" }],
+            variants: [{ id: "prev-variant", url: "https://example.com/prev-frame.png", created_at: 0 }],
           },
           rendered_image_url: "https://example.com/prev-frame.png",
         },

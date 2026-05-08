@@ -15,6 +15,17 @@ export interface ImageAsset {
     variants: ImageVariant[];
 }
 
+interface LegacyVisualAsset {
+    selected_image_id?: string;
+    image_variants?: ImageVariant[];
+    video_variants?: Array<{
+        id?: string;
+        url: string;
+        thumbnail?: string;
+        created_at?: number;
+    }>;
+}
+
 export interface VideoTask {
     id: string;
     project_id: string;
@@ -22,9 +33,15 @@ export interface VideoTask {
     frame_id?: string;
     image_url: string;
     prompt: string;
-    status: string;
+    status: "pending" | "processing" | "completed" | "failed";
     video_url?: string;
-    duration?: number;
+    duration: number;
+    seed?: number;
+    resolution: string;
+    generate_audio: boolean;
+    audio_url?: string;
+    prompt_extend: boolean;
+    negative_prompt?: string;
     created_at: number;
     model?: string;
     aspect_ratio?: string;
@@ -60,6 +77,8 @@ export interface Character {
     full_body_asset?: ImageAsset;
     three_view_asset?: ImageAsset;
     headshot_asset?: ImageAsset;
+    full_body?: LegacyVisualAsset;
+    head_shot?: LegacyVisualAsset;
 
     // Video Assets
     video_assets?: VideoTask[];
@@ -156,7 +175,20 @@ export interface StoryAnalysis {
 
 export interface StoryboardFrame {
     id: string;
-    scene_id: string;
+    scene_id?: string;
+    action_description?: string;
+    dialogue?: string;
+    speaker?: string;
+    image_prompt?: string;
+    image_prompt_cn?: string;
+    image_prompt_en?: string;
+    camera_angle?: string;
+    camera_movement?: string;
+    composition?: string;
+    facial_expression?: string;
+    atmosphere?: string;
+    character_ids?: string[];
+    prop_ids?: string[];
     story_beat_id?: string;
     story_beat_title?: string;
     story_beat_order?: number;
@@ -166,9 +198,17 @@ export interface StoryboardFrame {
     image_asset?: ImageAsset;
     rendered_image_url?: string;
     rendered_image_asset?: ImageAsset;
+    audio_url?: string;
+    sfx_url?: string;
+    scene_description?: string;
     status?: string;
     locked?: boolean;
-    // ... other fields
+    selected_video_id?: string;
+    composition_data?: Record<string, unknown> | null;
+    updated_at?: number;
+    generation_source?: string | null;
+    generation_degraded?: boolean;
+    generation_reason?: string | null;
 }
 
 export interface StylePreset {
@@ -190,6 +230,9 @@ export interface StyleConfig {
     moodboard_notes?: string;
     is_custom: boolean;
     reason?: string; // For AI recommendations
+    generation_source?: string | null;
+    generation_degraded?: boolean;
+    generation_reason?: string | null;
 }
 
 export interface ArtDirection {
@@ -404,13 +447,14 @@ export interface Project {
     characters: Character[];
     scenes: Scene[];
     props: Prop[];
-    frames: any[]; // Keeping as any for now to avoid breaking too much, but ideally StoryboardFrame[]
-    video_tasks?: any[];
+    frames: StoryboardFrame[];
+    video_tasks?: VideoTask[];
     status: string;
     createdAt: string;
     updatedAt: string;
     aspectRatio?: string;
     style_preset?: string;
+    style_prompt?: string;
     art_direction?: ArtDirection;
     model_settings?: ModelSettings;
     prompt_config?: PromptConfig;
@@ -418,6 +462,7 @@ export interface Project {
     series_id?: string;
     episode_number?: number;
     story_analysis?: StoryAnalysis;
+    generation_metadata?: Record<string, unknown>;
 }
 
 interface ProjectStore {
@@ -502,7 +547,7 @@ export const useProjectStore = create<ProjectStore>()(
             },
 
             analyzeProject: async (script: string) => {
-                const { currentProject, updateProject, createProject } = get();
+                const { currentProject, createProject } = get();
                 set({ isAnalyzing: true });
 
                 try {
@@ -588,11 +633,7 @@ export const useProjectStore = create<ProjectStore>()(
                     }));
                 } catch (error) {
                     console.error(storeCopy.console.failedToDeleteProject, error);
-                    // Still remove from local state for UX, but warn user
-                    set((state) => ({
-                        projects: state.projects.filter((p) => p.id !== id),
-                        currentProject: state.currentProject?.id === id ? null : state.currentProject
-                    }));
+                    throw error;
                 }
             },
 

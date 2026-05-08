@@ -119,7 +119,7 @@ const PromptBuilder = forwardRef<PromptBuilderRef, PromptBuilderProps>(({ segmen
         if (!value && textFromProps) {
             setValue(textFromProps);
         }
-    }, [segments]);
+    }, [segments, value]);
 
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         const newValue = e.target.value;
@@ -179,7 +179,7 @@ const PromptBuilder = forwardRef<PromptBuilderRef, PromptBuilderProps>(({ segmen
         insertText: (text: string) => {
             insertTextAtCursor(text);
         },
-        insertCharacter: (characterIndex: number, name: string, thumbnail?: string) => {
+        insertCharacter: (characterIndex: number, name: string, _thumbnail?: string) => {
             const id = `character${characterIndex + 1}`;
             insertTextAtCursor(`[${id}:${name}]`);
         }
@@ -189,6 +189,7 @@ const PromptBuilder = forwardRef<PromptBuilderRef, PromptBuilderProps>(({ segmen
         <div className="relative group w-full h-full">
             <textarea
                 ref={textareaRef}
+                data-testid="prompt-builder-textarea"
                 className="glass-input w-full min-h-[8rem] h-full p-4 text-base leading-relaxed outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-none bg-transparent text-white placeholder-gray-500 font-mono"
                 value={value}
                 onChange={handleChange}

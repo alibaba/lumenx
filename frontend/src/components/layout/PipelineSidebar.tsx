@@ -3,7 +3,8 @@
 import { motion } from "framer-motion";
 import {
     ChevronRight,
-    ChevronLeft
+    ChevronLeft,
+    type LucideIcon,
 } from "lucide-react";
 import clsx from "clsx";
 import { messages } from "@/lib/i18n";
@@ -13,7 +14,7 @@ import type { BreadcrumbSegment } from "./BreadcrumbBar";
 interface Step {
     id: string;
     label: string;
-    icon: any;
+    icon: LucideIcon;
     comingSoon?: boolean;
 }
 
@@ -109,6 +110,7 @@ export default function PipelineSidebar({ activeStep, onStepChange, steps, bread
                                     ? "bg-primary/10 text-primary border border-primary/20"
                                     : "text-gray-400 hover:text-white hover:bg-white/5"
                             )}
+                            data-testid={`pipeline-step-${step.id}`}
                         >
                             {isActive && (
                                 <motion.div

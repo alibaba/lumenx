@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { DEFAULT_I2V_MODEL, VideoParams, useProjectStore } from "@/store/projectStore";
+import { DEFAULT_I2V_MODEL, VideoParams, useProjectStore, type Project, type VideoTask } from "@/store/projectStore";
 import VideoCreator from "./VideoCreator";
 import VideoSidebar from "./VideoSidebar";
-import { api, VideoTask } from "@/lib/api";
+import { api } from "@/lib/api";
 
 export default function VideoGenerator() {
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -14,8 +14,12 @@ export default function VideoGenerator() {
     // Shared state for Remix functionality
     const [remixData, setRemixData] = useState<Partial<VideoTask> | null>(null);
 
+    const currentProjectId = currentProject?.id;
+    const currentI2vModel = currentProject?.model_settings?.i2v_model;
+    const currentVideoTasks = currentProject?.video_tasks;
+
     // Get default model from project settings
-    const defaultI2vModel = currentProject?.model_settings?.i2v_model || DEFAULT_I2V_MODEL;
+    const defaultI2vModel = currentI2vModel || DEFAULT_I2V_MODEL;
 
     // Generation Params (Lifted State)
     const [params, setParams] = useState<VideoParams>({
@@ -53,29 +57,29 @@ export default function VideoGenerator() {
 
     // Sync model from project settings when project changes
     useEffect(() => {
-        if (currentProject?.model_settings?.i2v_model) {
-            setParams(p => ({ ...p, model: currentProject.model_settings!.i2v_model }));
+        if (currentI2vModel) {
+            setParams(p => ({ ...p, model: currentI2vModel }));
         }
-    }, [currentProject?.model_settings?.i2v_model]);
+    }, [currentI2vModel]);
 
     // Sync tasks from project
     useEffect(() => {
-        if (currentProject?.video_tasks) {
-            setTasks(currentProject.video_tasks);
+        if (currentVideoTasks) {
+            setTasks(currentVideoTasks);
         }
-    }, [currentProject?.video_tasks]);
+    }, [currentVideoTasks]);
 
     // Poll for updates
     useEffect(() => {
         const hasActiveTasks = tasks.some(t => t.status === "pending" || t.status === "processing");
-        if (!hasActiveTasks || !currentProject) return;
+        if (!hasActiveTasks || !currentProjectId) return;
 
         const interval = setInterval(async () => {
             try {
-                const project = await api.getProject(currentProject.id);
+                const project = await api.getProject(currentProjectId);
                 if (project.video_tasks) {
                     setTasks(project.video_tasks);
-                    updateProject(currentProject.id, { video_tasks: project.video_tasks });
+                    updateProject(currentProjectId, { video_tasks: project.video_tasks });
                 }
             } catch (error) {
                 console.error("Failed to poll project status:", error);
@@ -83,12 +87,14 @@ export default function VideoGenerator() {
         }, 3000);
 
         return () => clearInterval(interval);
-    }, [tasks, currentProject?.id]);
+    }, [tasks, currentProjectId, updateProject]);
 
-    const handleTaskCreated = (updatedProject: any) => {
+    const handleTaskCreated = (updatedProject: Project) => {
         if (updatedProject.video_tasks) {
             setTasks(updatedProject.video_tasks);
-            updateProject(currentProject!.id, { video_tasks: updatedProject.video_tasks });
+            if (currentProjectId) {
+                updateProject(currentProjectId, { video_tasks: updatedProject.video_tasks });
+            }
         }
     };
 

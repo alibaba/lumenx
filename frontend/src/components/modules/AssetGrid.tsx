@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import NextImage from "next/image";
 import { RefreshCw, Download, Plus } from "lucide-react";
 
 import { api } from "@/lib/api";
 import { messages } from "@/lib/i18n";
 import { useProjectStore } from "@/store/projectStore";
+import type { Project } from "@/store/projectStore";
 import { getAssetUrl } from "@/lib/utils";
 
 interface Asset {
@@ -20,6 +22,23 @@ interface AssetGridProps {
     projectId: string | null;
 }
 
+function buildAssetsFromProject(project: Project): Asset[] {
+    return [
+        ...project.characters.map((character) => ({
+            id: character.id,
+            type: "char" as const,
+            url: getAssetUrl(character.image_url),
+            title: character.name
+        })),
+        ...project.scenes.map((scene) => ({
+            id: scene.id,
+            type: "bg" as const,
+            url: getAssetUrl(scene.image_url),
+            title: scene.name
+        }))
+    ];
+}
+
 export default function AssetGrid({ projectId }: AssetGridProps) {
     const copy = messages.modules.assetGrid;
     const commonLabels = messages.common.labels;
@@ -31,42 +50,15 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
     // Initialize assets from current project
     const [assets, setAssets] = useState<Asset[]>(() => {
         if (!currentProject) return [];
-        return [
-            ...currentProject.characters.map((c: any) => ({
-                id: c.id,
-                type: "char" as const,
-                url: getAssetUrl(c.image_url),
-                title: c.name
-            })),
-            ...currentProject.scenes.map((s: any) => ({
-                id: s.id,
-                type: "bg" as const,
-                url: getAssetUrl(s.image_url),
-                title: s.name
-            }))
-        ];
+        return buildAssetsFromProject(currentProject);
     });
 
     // Update assets when project changes
     useEffect(() => {
         if (currentProject) {
-            const newAssets: Asset[] = [
-                ...currentProject.characters.map((c: any) => ({
-                    id: c.id,
-                    type: "char" as const,
-                    url: getAssetUrl(c.image_url),
-                    title: c.name
-                })),
-                ...currentProject.scenes.map((s: any) => ({
-                    id: s.id,
-                    type: "bg" as const,
-                    url: getAssetUrl(s.image_url),
-                    title: s.name
-                }))
-            ];
-            setAssets(newAssets);
+            setAssets(buildAssetsFromProject(currentProject));
         }
-    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes]);
+    }, [currentProject]);
 
     const handleGenerate = async () => {
         if (!projectId) {
@@ -78,21 +70,7 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
         try {
             const project = await api.generateAssets(projectId);
             // Transform backend data
-            const newAssets: Asset[] = [
-                ...project.characters.map((c: any) => ({
-                    id: c.id,
-                    type: "char" as const,
-                    url: getAssetUrl(c.image_url),
-                    title: c.name
-                })),
-                ...project.scenes.map((s: any) => ({
-                    id: s.id,
-                    type: "bg" as const,
-                    url: getAssetUrl(s.image_url),
-                    title: s.name
-                }))
-            ];
-            setAssets(newAssets);
+            setAssets(buildAssetsFromProject(project));
 
             // Update project in store
             if (currentProject) {
@@ -137,9 +115,12 @@ export default function AssetGrid({ projectId }: AssetGridProps) {
                         className="break-inside-avoid group relative rounded-xl overflow-hidden bg-white/5 border border-white/5 hover:border-primary/50 transition-all duration-300"
                     >
                         {asset.url ? (
-                            <img
+                            <NextImage
                                 src={getAssetUrl(asset.url)}
                                 alt={asset.title}
+                                width={480}
+                                height={640}
+                                unoptimized
                                 className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-105"
                             />
                         ) : (

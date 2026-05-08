@@ -1,12 +1,15 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Settings, Sliders, Image as ImageIcon, Type, FileText, Users, Layout, Video, Mic, Music, Film, Info, StickyNote, Paintbrush, Wand2, Sparkles } from "lucide-react";
+import NextImage from "next/image";
+import { FileText, Users, Layout, Video, Mic, Music, Film, Info, StickyNote, Paintbrush, Wand2, Sparkles } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { useState, useEffect } from "react";
-import { api, API_URL } from "@/lib/api";
+import type { Project, StoryboardFrame } from "@/store/projectStore";
+import { useState } from "react";
+import { api, type UpdateFramePayload, type UpdateModelSettingsPayload } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 import { messages, shotTermList } from "@/lib/i18n";
+import { getGenerationBadgeText, getGenerationTooltip, isGenerationDegraded } from "@/lib/generation-provenance";
 
 interface PropertiesPanelProps {
     activeStep: string;
@@ -27,7 +30,7 @@ export default function PropertiesPanel({ activeStep }: PropertiesPanelProps) {
             case "script":
                 return <ScriptInspector project={currentProject} />;
             case "assets":
-                return <AssetsInspector project={currentProject} />;
+                return <AssetsInspector />;
             case "storyboard":
                 return <StoryboardInspector />;
             case "motion":
@@ -65,7 +68,7 @@ export default function PropertiesPanel({ activeStep }: PropertiesPanelProps) {
 
 // --- Sub-Inspectors ---
 
-function ScriptInspector({ project }: { project: any }) {
+function ScriptInspector({ project }: { project: Project | null }) {
     if (!project) return null;
     const wordCount = project.originalText?.length || 0;
     const charCount = project.characters?.length || 0;
@@ -102,12 +105,9 @@ function ScriptInspector({ project }: { project: any }) {
     );
 }
 
-function AssetsInspector({ project }: { project: any }) {
+function AssetsInspector() {
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
-
-    // Get art direction style from Step 2
-    const artDirectionStyle = currentProject?.art_direction?.style_config;
 
     // Get aspect ratios from model settings
     const characterAspectRatio = currentProject?.model_settings?.character_aspect_ratio || '9:16';
@@ -118,19 +118,12 @@ function AssetsInspector({ project }: { project: any }) {
         if (!currentProject) return;
 
         try {
-            const updatePayload: any = {};
-            if (type === 'character') updatePayload.character_aspect_ratio = ratio;
-            else if (type === 'scene') updatePayload.scene_aspect_ratio = ratio;
-            else if (type === 'prop') updatePayload.prop_aspect_ratio = ratio;
-
-            const updated = await api.updateModelSettings(
-                currentProject.id,
-                undefined, undefined, undefined,
-                type === 'character' ? ratio : undefined,
-                type === 'scene' ? ratio : undefined,
-                type === 'prop' ? ratio : undefined,
-                undefined
-            );
+            const payload: UpdateModelSettingsPayload = {
+                characterAspectRatio: type === 'character' ? ratio : undefined,
+                sceneAspectRatio: type === 'scene' ? ratio : undefined,
+                propAspectRatio: type === 'prop' ? ratio : undefined,
+            };
+            const updated = await api.updateModelSettings(currentProject.id, payload);
             updateProject(currentProject.id, updated);
         } catch (error) {
             console.error('Failed to update aspect ratio:', error);
@@ -221,7 +214,7 @@ function AssetsInspector({ project }: { project: any }) {
     );
 }
 
-function ArtDirectionStyleDisplay({ project }: { project: any }) {
+function ArtDirectionStyleDisplay({ project }: { project: Project | null }) {
     const artDirectionStyle = project?.art_direction?.style_config;
 
     return (
@@ -278,23 +271,34 @@ function StoryboardInspector() {
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
     const selectedFrameId = useProjectStore((state) => state.selectedFrameId);
+    const [polishedPrompts, setPolishedPrompts] = useState<Record<string, { cn: string; en: string }>>({});
+    const [isPolishing, setIsPolishing] = useState(false);
+    const [feedbackText, setFeedbackText] = useState("");
 
     if (!currentProject) return null;
 
-    const selectedFrame = currentProject?.frames?.find((f: any) => f.id === selectedFrameId);
+    const selectedFrame = currentProject.frames.find((frame) => frame.id === selectedFrameId);
 
-    const updateFrame = async (data: any) => {
+    const updateFrame = async (data: Partial<StoryboardFrame>) => {
         if (!currentProject || !selectedFrame) return;
 
         // Optimistically update local state first
-        const updatedFrames = currentProject.frames.map((f: any) =>
-            f.id === selectedFrameId ? { ...f, ...data } : f
+        const updatedFrames = currentProject.frames.map((frame) =>
+            frame.id === selectedFrameId ? { ...frame, ...data } : frame
         );
         updateProject(currentProject.id, { frames: updatedFrames });
 
         // Sync to backend (fire and forget for speed, but log errors)
         try {
-            await api.updateFrame(currentProject.id, selectedFrame.id, data);
+            const payload: UpdateFramePayload = {
+                imagePrompt: data.image_prompt,
+                actionDescription: data.action_description,
+                dialogue: data.dialogue,
+                cameraAngle: data.camera_angle,
+                sceneId: data.scene_id,
+                characterIds: data.character_ids,
+            };
+            await api.updateFrame(currentProject.id, selectedFrame.id, payload);
         } catch (error) {
             console.error("Failed to sync frame to backend:", error);
             // Note: We don't revert optimistic update to keep UI responsive
@@ -304,8 +308,8 @@ function StoryboardInspector() {
     const handleComposePrompt = () => {
         if (!selectedFrame || !currentProject) return;
 
-        const scene = currentProject.scenes?.find((s: any) => s.id === selectedFrame.scene_id);
-        const characters = currentProject.characters?.filter((c: any) => selectedFrame.character_ids?.includes(c.id));
+        const scene = currentProject.scenes.find((item) => item.id === selectedFrame.scene_id);
+        const characters = currentProject.characters.filter((character) => selectedFrame.character_ids?.includes(character.id));
 
         // Construct prompt based on User Guide: Motion + Camera (+ Context)
         const promptParts = [];
@@ -313,9 +317,9 @@ function StoryboardInspector() {
         // 1. Motion / Action (Subject + Action)
         let motionPart = "";
         if (characters && characters.length > 0) {
-            const charDescriptions = characters.map((c: any) => {
-                let desc = `${c.name} (${c.description}`;
-                if (c.clothing) desc += `, wearing ${c.clothing}`;
+            const charDescriptions = characters.map((character) => {
+                let desc = `${character.name} (${character.description}`;
+                if (character.clothing) desc += `, wearing ${character.clothing}`;
                 desc += `)`;
                 return desc;
             }).join(", ");
@@ -357,17 +361,12 @@ function StoryboardInspector() {
     };
 
     const toggleCharacter = (charId: string) => {
-        const currentIds = selectedFrame.character_ids || [];
+        const currentIds = selectedFrame?.character_ids || [];
         const newIds = currentIds.includes(charId)
-            ? currentIds.filter((id: string) => id !== charId)
+            ? currentIds.filter((id) => id !== charId)
             : [...currentIds, charId];
         updateFrame({ character_ids: newIds });
     };
-
-    // State for bilingual polish results
-    const [polishedPrompts, setPolishedPrompts] = useState<Record<string, { cn: string; en: string }>>({});
-    const [isPolishing, setIsPolishing] = useState(false);
-    const [feedbackText, setFeedbackText] = useState("");
 
     const polishedPrompt = selectedFrame ? polishedPrompts[selectedFrame.id] : null;
 
@@ -376,36 +375,38 @@ function StoryboardInspector() {
         setIsPolishing(true);
 
         // Construct assets list for context
-        const assets = [];
+        const assets: Array<{ type: "Scene" | "Character" | "Prop"; name: string; description?: string }> = [];
         if (selectedFrame.scene_id) {
-            const scene = currentProject.scenes?.find((s: any) => s.id === selectedFrame.scene_id);
+            const scene = currentProject.scenes.find((item) => item.id === selectedFrame.scene_id);
             if (scene) assets.push({ type: 'Scene', name: scene.name, description: scene.description });
         }
         if (selectedFrame.character_ids) {
             selectedFrame.character_ids.forEach((cid: string) => {
-                const char = currentProject.characters?.find((c: any) => c.id === cid);
+                const char = currentProject.characters.find((character) => character.id === cid);
                 if (char) assets.push({ type: 'Character', name: char.name, description: char.description });
             });
         }
         if (selectedFrame.prop_ids) {
             selectedFrame.prop_ids.forEach((pid: string) => {
-                const prop = currentProject.props?.find((p: any) => p.id === pid);
+                const prop = currentProject.props.find((item) => item.id === pid);
                 if (prop) assets.push({ type: 'Prop', name: prop.name, description: prop.description });
             });
         }
 
         // Use current polished result as draft when refining with feedback
-        const draft = feedback
+        const draft = (feedback
             ? (polishedPrompt?.en || selectedFrame.image_prompt || selectedFrame.action_description)
-            : (selectedFrame.image_prompt || selectedFrame.action_description);
+            : (selectedFrame.image_prompt || selectedFrame.action_description)) || "";
 
         try {
             // Use new bilingual refine API
             const res = await api.refineFramePrompt(currentProject.id, selectedFrame.id, draft, assets, feedback);
-            if (res.prompt_cn && res.prompt_en) {
+            const promptCn = res.prompt_cn;
+            const promptEn = res.prompt_en;
+            if (promptCn && promptEn) {
                 setPolishedPrompts(prev => ({
                     ...prev,
-                    [selectedFrame.id]: { cn: res.prompt_cn, en: res.prompt_en }
+                    [selectedFrame.id]: { cn: promptCn, en: promptEn }
                 }));
                 setFeedbackText("");
             }
@@ -430,6 +431,9 @@ function StoryboardInspector() {
         );
     }
 
+    const generationBadge = getGenerationBadgeText(selectedFrame);
+    const generationBadgeDegraded = isGenerationDegraded(selectedFrame);
+
     return (
         <div className="space-y-6">
             <div className="space-y-3">
@@ -437,8 +441,19 @@ function StoryboardInspector() {
                     <Layout size={14} /> {copy.frameEditor}
                 </h3>
                 <div className="text-xs text-gray-400">
-                    {copy.editingFrame((currentProject?.frames?.findIndex((f: any) => f.id === selectedFrameId) ?? -1) + 1)}
+                    {copy.editingFrame((currentProject.frames.findIndex((frame) => frame.id === selectedFrameId) ?? -1) + 1)}
                 </div>
+                {generationBadge && (
+                    <span
+                        className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[11px] ${generationBadgeDegraded
+                            ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                            : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                            }`}
+                        title={getGenerationTooltip(selectedFrame)}
+                    >
+                        {generationBadge}
+                    </span>
+                )}
             </div>
 
             {/* Action Description */}
@@ -467,14 +482,14 @@ function StoryboardInspector() {
             <div className="space-y-2">
                 {(() => {
                     // Calculate current reference count
-                    const selectedScene = currentProject?.scenes?.find((s: any) => s.id === selectedFrame.scene_id);
+                    const selectedScene = currentProject.scenes.find((scene) => scene.id === selectedFrame.scene_id);
                     const sceneHasImage = selectedScene?.image_url;
 
-                    const selectedChars = currentProject?.characters?.filter((c: any) => selectedFrame.character_ids?.includes(c.id));
-                    const charImageCount = selectedChars?.filter((c: any) => c.image_url || c.avatar_url).length || 0;
+                    const selectedChars = currentProject.characters.filter((character) => selectedFrame.character_ids?.includes(character.id));
+                    const charImageCount = selectedChars.filter((character) => character.image_url || character.avatar_url).length || 0;
 
-                    const selectedProps = currentProject?.props?.filter((p: any) => selectedFrame.prop_ids?.includes(p.id));
-                    const propImageCount = selectedProps?.filter((p: any) => p.image_url).length || 0;
+                    const selectedProps = currentProject.props.filter((prop) => selectedFrame.prop_ids?.includes(prop.id));
+                    const propImageCount = selectedProps.filter((prop) => prop.image_url).length || 0;
 
                     const referenceCount = (sceneHasImage ? 1 : 0) + charImageCount + propImageCount;
 
@@ -504,7 +519,7 @@ function StoryboardInspector() {
                                         // Here it's a dropdown, so we always have 0 or 1 scene. 
                                         // If we switch to a scene with image from one without, we might exceed limit.
                                         const newSceneId = e.target.value;
-                                        const newScene = currentProject?.scenes?.find((s: any) => s.id === newSceneId);
+                                        const newScene = currentProject.scenes.find((scene) => scene.id === newSceneId);
                                         const newSceneHasImage = newScene?.image_url;
 
                                         // Predicted count: (newScene ? 1 : 0) + charCount + propCount
@@ -520,7 +535,7 @@ function StoryboardInspector() {
                                     }}
                                 >
                                     <option value="">{copy.selectScene}</option>
-                                    {currentProject?.scenes?.map((scene: any) => (
+                                    {currentProject.scenes.map((scene) => (
                                         <option key={scene.id} value={scene.id}>{scene.name}</option>
                                     ))}
                                 </select>
@@ -538,9 +553,9 @@ function StoryboardInspector() {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-bold text-gray-500 uppercase">{commonLabels.character}</label>
                                 <div className="grid grid-cols-2 gap-2">
-                                    {currentProject?.characters?.map((char: any) => {
+                                    {currentProject.characters.map((char) => {
                                         const isSelected = selectedFrame.character_ids?.includes(char.id);
-                                        const hasImage = char.image_url || char.avatar_url;
+                                        const hasImage = Boolean(char.image_url || char.avatar_url);
                                         // Disable if not selected, has image, and limit reached
                                         const isDisabled = !isSelected && hasImage && isLimitReached;
 
@@ -559,8 +574,17 @@ function StoryboardInspector() {
                                                         : "bg-black/20 border-white/10 text-gray-400 hover:bg-white/5"
                                                     }`}
                                             >
-                                                <div className="w-4 h-4 rounded-full bg-gray-700 overflow-hidden">
-                                                    {char.avatar_url && <img src={getAssetUrl(char.avatar_url)} className="w-full h-full object-cover" />}
+                                                <div className="relative w-4 h-4 rounded-full bg-gray-700 overflow-hidden">
+                                                    {char.avatar_url && (
+                                                        <NextImage
+                                                            src={getAssetUrl(char.avatar_url)}
+                                                            alt={char.name}
+                                                            fill
+                                                            sizes="16px"
+                                                            unoptimized
+                                                            className="object-cover"
+                                                        />
+                                                    )}
                                                 </div>
                                                 <span className="truncate">{char.name}</span>
                                             </button>
@@ -571,7 +595,7 @@ function StoryboardInspector() {
                                 {/* Show Selected Characters Descriptions */}
                                 {selectedChars && selectedChars.length > 0 && (
                                     <div className="space-y-1">
-                                        {selectedChars.map((char: any) => (
+                                        {selectedChars.map((char) => (
                                             <div key={char.id} className="bg-white/5 p-2 rounded text-[10px] text-gray-400 italic border border-white/5">
                                                 <span className="font-bold not-italic text-gray-500">{char.name}: </span>
                                                 {char.description}
@@ -586,9 +610,9 @@ function StoryboardInspector() {
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-bold text-gray-500 uppercase">{commonLabels.prop}</label>
                                     <div className="grid grid-cols-2 gap-2">
-                                        {currentProject.props.map((prop: any) => {
+                                        {currentProject.props.map((prop) => {
                                             const isSelected = selectedFrame.prop_ids?.includes(prop.id);
-                                            const hasImage = prop.image_url;
+                                            const hasImage = Boolean(prop.image_url);
                                             const isDisabled = !isSelected && hasImage && isLimitReached;
 
                                             return (
@@ -611,8 +635,17 @@ function StoryboardInspector() {
                                                             : "bg-black/20 border-white/10 text-gray-400 hover:bg-white/5"
                                                         }`}
                                                 >
-                                                    <div className="w-4 h-4 rounded bg-gray-700 overflow-hidden flex-shrink-0">
-                                                        {prop.image_url && <img src={getAssetUrl(prop.image_url)} className="w-full h-full object-cover" />}
+                                                    <div className="relative w-4 h-4 rounded bg-gray-700 overflow-hidden flex-shrink-0">
+                                                        {prop.image_url && (
+                                                            <NextImage
+                                                                src={getAssetUrl(prop.image_url)}
+                                                                alt={prop.name}
+                                                                fill
+                                                                sizes="16px"
+                                                                unoptimized
+                                                                className="object-cover"
+                                                            />
+                                                        )}
                                                     </div>
 
                                                     <span className="truncate">{prop.name}</span>
@@ -623,11 +656,11 @@ function StoryboardInspector() {
 
                                     {/* Show Selected Props Descriptions */}
                                     {(() => {
-                                        const selectedProps = currentProject.props.filter((p: any) => selectedFrame.prop_ids?.includes(p.id));
+                                        const selectedProps = currentProject.props.filter((prop) => selectedFrame.prop_ids?.includes(prop.id));
                                         if (selectedProps && selectedProps.length > 0) {
                                             return (
                                                 <div className="space-y-1">
-                                                    {selectedProps.map((prop: any) => (
+                                                    {selectedProps.map((prop) => (
                                                         <div key={prop.id} className="bg-white/5 p-2 rounded text-[10px] text-gray-400 italic border border-white/5">
                                                             <span className="font-bold not-italic text-gray-500">{prop.name}: </span>
                                                             {prop.description}
@@ -835,8 +868,8 @@ function MotionInspector() {
     );
 }
 
-function AudioInspector({ project }: { project: any }) {
-    const assignedCount = project?.characters?.filter((c: any) => c.voice_id).length || 0;
+function AudioInspector({ project }: { project: Project | null }) {
+    const assignedCount = project?.characters?.filter((character) => character.voice_id).length || 0;
     const totalCount = project?.characters?.length || 0;
     const ratio = totalCount > 0 ? (assignedCount / totalCount) * 100 : 0;
 

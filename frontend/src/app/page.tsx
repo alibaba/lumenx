@@ -114,7 +114,7 @@ function SeriesCard({
   onEpisodesChange,
 }: {
   series: Series;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<void> | void;
   episodes: Project[] | undefined;
   episodesLoading: boolean;
   onEpisodesChange: (seriesId: string) => void;
@@ -130,7 +130,10 @@ function SeriesCard({
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm(homeCopy.seriesCard.deleteConfirm(series.title))) {
-      onDelete(series.id);
+      Promise.resolve(onDelete(series.id)).catch((error) => {
+        console.error("Failed to delete series:", error);
+        alert(homeCopy.seriesCard.deleteFailed);
+      });
     }
   };
 
@@ -362,6 +365,7 @@ function FixtureProjectLibrary({
             onClick={() => onImport(fixture.slug)}
             disabled={Boolean(importingSlug)}
             className="group rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-5 text-left transition-all hover:border-amber-400/60 hover:bg-amber-500/[0.08] disabled:cursor-wait disabled:opacity-60"
+            data-testid={`fixture-project-card-${fixture.slug}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -477,8 +481,13 @@ export default function Home() {
     setIsSyncing(true);
     try {
       const backendProjects = await api.getProjects();
-      if (backendProjects && backendProjects.length > 0) {
-        setProjects(backendProjects);
+      const nextProjects = Array.isArray(backendProjects) ? backendProjects : [];
+      setProjects(nextProjects);
+
+      const currentProject = useProjectStore.getState().currentProject;
+      if (currentProject) {
+        const matchedProject = nextProjects.find((project) => project.id === currentProject.id) ?? null;
+        useProjectStore.setState({ currentProject: matchedProject });
       }
     } catch (error) {
       console.error("Failed to sync projects from backend:", error);
@@ -640,6 +649,7 @@ export default function Home() {
             <p className="text-gray-500 mb-8">{homeCopy.workspace.emptySubtitle}</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl w-full">
               <button
+                type="button"
                 onClick={() => setIsSeriesDialogOpen(true)}
                 className="glass-panel p-6 rounded-xl border border-blue-500/30 hover:border-blue-500/60 transition-all group text-left"
               >
@@ -648,8 +658,10 @@ export default function Home() {
                 <p className="text-sm text-gray-400">{homeCopy.workspace.createSeriesDescription}</p>
               </button>
               <button
+                type="button"
                 onClick={() => setIsDialogOpen(true)}
                 className="glass-panel p-6 rounded-xl border border-gray-600/30 hover:border-gray-500/60 transition-all group text-left"
+                data-testid="home-empty-create-project-card"
               >
                 <FileText size={32} className="text-gray-400 mb-3" />
                 <h4 className="text-lg font-display font-bold text-white mb-1 group-hover:text-primary transition-colors">{homeCopy.workspace.createProjectTitle}</h4>
@@ -663,6 +675,7 @@ export default function Home() {
                   <p className="mt-1 text-sm text-gray-500">{homeCopy.fixtureLibrary.subtitle}</p>
                 </div>
                 <button
+                  type="button"
                   onClick={loadFixtureLibrary}
                   disabled={isLoadingFixtures}
                   className="rounded-lg bg-white/10 px-3 py-2 text-xs font-medium text-gray-200 transition-colors hover:bg-white/20 disabled:opacity-50"
@@ -679,6 +692,7 @@ export default function Home() {
             </div>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
+                type="button"
                 onClick={setIsEnvDialogOpen.bind(null, true)}
                 className="bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
               >
@@ -686,6 +700,7 @@ export default function Home() {
                 {homeCopy.workspace.homeSettings}
               </button>
               <button
+                type="button"
                 onClick={syncAll}
                 disabled={isSyncing}
                 className="bg-white/10 hover:bg-white/20 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-colors disabled:opacity-50 text-sm"
@@ -729,6 +744,7 @@ export default function Home() {
                   <button
                     onClick={(e) => { e.stopPropagation(); setShowCreateDropdown((v) => !v); }}
                     className="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors text-sm"
+                    data-testid="home-create-dropdown-toggle"
                   >
                     <Plus size={16} />
                     {homeCopy.workspace.create}
@@ -750,6 +766,7 @@ export default function Home() {
                       <button
                         onClick={() => { setIsDialogOpen(true); setShowCreateDropdown(false); }}
                         className="w-full px-4 py-2.5 text-sm text-left text-white hover:bg-white/10 transition-colors flex items-center gap-2"
+                        data-testid="home-create-project-option"
                       >
                         <FileText size={16} className="text-gray-400" />
                         {homeCopy.workspace.createProject}
@@ -812,7 +829,7 @@ export default function Home() {
   };
 
   return (
-    <main className="relative h-screen w-screen bg-background flex flex-col">
+    <main className="relative h-screen w-screen bg-background flex flex-col" data-testid="lumenx-home">
       {/* Background Canvas */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <CreativeCanvas />

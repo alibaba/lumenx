@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import NextImage from "next/image";
 import {
-    Upload, X, Wand2, Plus, ChevronDown, ChevronUp, Loader2, Layout,
+    Upload, X, Wand2, Plus, Loader2, Layout,
     Video,
     Eraser,
     Check,
     Image as ImageIcon,
-    Users,
     Film
 } from "lucide-react";
 
@@ -17,8 +17,9 @@ import {
 
 
 import { useProjectStore } from "@/store/projectStore";
-import { api, API_URL, VideoTask } from "@/lib/api";
-import { getAssetUrl, getAssetUrlWithTimestamp, stripAssetApiPrefix } from "@/lib/utils";
+import type { Project, StoryboardFrame } from "@/store/projectStore";
+import { api, type CreateVideoTaskPayload, type VideoTask } from "@/lib/api";
+import { extractErrorDetail, getAssetUrl, getAssetUrlWithTimestamp, stripAssetApiPrefix } from "@/lib/utils";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
 import { isSeedanceI2VModel, type VideoParams } from "@/store/projectStore";
 import { cameraTerms, getReferenceVideoTypeLabel, messages, seedanceTerms, subjectMotionTerms } from "@/lib/i18n";
@@ -44,9 +45,10 @@ import {
     hasBlockingPromptIssues,
     inspectVideoPrompt,
 } from "@/lib/prompt-quality";
+import { getGenerationBadgeText, getGenerationTooltip, isGenerationDegraded } from "@/lib/generation-provenance";
 
 interface VideoCreatorProps {
-    onTaskCreated: (project: any) => void;
+    onTaskCreated: (project: Project) => void;
     remixData: Partial<VideoTask> | null;
     onRemixClear: () => void;
     params: VideoParams;
@@ -57,6 +59,9 @@ const copy = messages.modules.videoCreator;
 const commonActions = messages.common.actions;
 const commonMessages = messages.common.messages;
 const seedanceSummaryCopy = seedanceTerms.summary;
+
+type AssetCardItem = { url: string; title: string };
+type ReferenceVideoItem = { url: string; thumbnail?: string; title: string; assetName: string; type: string };
 
 export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, params, onParamsChange }: VideoCreatorProps) {
     const currentProject = useProjectStore((state) => state.currentProject);
@@ -110,14 +115,14 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         e.stopPropagation();
         if (!currentProject?.frames) return;
 
-        const frameIndex = currentProject.frames.findIndex((f: any) => f.id === frameId);
+        const frameIndex = currentProject.frames.findIndex((frame) => frame.id === frameId);
         if (frameIndex <= 0) return;
 
         const prevFrame = currentProject.frames[frameIndex - 1];
         if (!prevFrame.selected_video_id) return;
 
         const prevVideo = currentProject.video_tasks?.find(
-            (t: any) => t.id === prevFrame.selected_video_id && t.status === "completed"
+            (task) => task.id === prevFrame.selected_video_id && task.status === "completed"
         );
         if (!prevVideo) return;
 
@@ -125,15 +130,15 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         try {
             const updatedProject = await api.extractLastFrame(currentProject.id, frameId, prevVideo.id);
             updateProject(currentProject.id, updatedProject);
-        } catch (error: any) {
+        } catch (error) {
             console.error("Failed to extract last frame:", error);
-            alert(error?.response?.data?.detail || copy.extractLastFrameFailed);
+            alert(extractErrorDetail(error, "") || copy.extractLastFrameFailed);
         } finally {
             setExtractingFrameId(null);
         }
     };
 
-    const handleFrameSelect = (frame: any) => {
+    const handleFrameSelect = (frame: StoryboardFrame) => {
         // Prefer rendered_image_url (from extracted last frame / uploaded image), fallback to image_url
         const url = frame.rendered_image_url || frame.image_url;
         if (!url) return;
@@ -163,7 +168,6 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     // negativePrompt moved to params
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
-    const [showCameraDropdown, setShowCameraDropdown] = useState(false);
     const [polishedPrompt, setPolishedPrompt] = useState<{ cn: string; en: string } | null>(null);
     const [isPolishing, setIsPolishing] = useState(false);
     const [feedbackText, setFeedbackText] = useState("");
@@ -357,7 +361,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     };
 
     // R2V: Handle Frame Selection (for description)
-    const handleR2VFrameSelect = (frame: any) => {
+    const handleR2VFrameSelect = (frame: StoryboardFrame) => {
         setSelectedFrameId(frame.id);
         // Auto-fill prompt with frame description
         let newPrompt = frame.action_description || frame.image_prompt || "";
@@ -430,7 +434,10 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const resolvedReferenceVideoUrls = seedanceEffectiveMedia.referenceVideoUrls;
     const resolvedReferenceAudioUrl = seedanceEffectiveMedia.referenceAudioUrl || "";
     const usesSeedanceImageInput = params.seedanceReferenceMode === "image" || params.seedanceReferenceMode === "combo";
-    const seedanceImageInputs = usesSeedanceImageInput ? selectedImages : [];
+    const seedanceImageInputs = useMemo(
+        () => (usesSeedanceImageInput ? selectedImages : []),
+        [selectedImages, usesSeedanceImageInput],
+    );
     const selectedCastCount = castSlots.filter((slot) => slot.url).length;
     const seedanceSubmissionState = getSeedanceSubmissionState({
         previewOnly: params.seedancePreviewOnly,
@@ -536,7 +543,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         return selectedImages.length > 0;
     })();
 
-    const handleSubmit = async () => {
+    const handleSubmit = useCallback(async () => {
         if (!currentProject) return;
 
         if (generationMode === "r2v") {
@@ -648,9 +655,9 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                 if (generationMode === "r2v") {
                     frameId = selectedFrameId || undefined;
                 } else {
-                    const frame = currentProject?.frames?.find((f: any) =>
-                        (f.rendered_image_url || f.image_url) === img ||
-                        getAssetUrl(f.rendered_image_url || f.image_url) === img
+                    const frame = currentProject?.frames?.find((candidate) =>
+                        (candidate.rendered_image_url || candidate.image_url) === img ||
+                        getAssetUrl(candidate.rendered_image_url || candidate.image_url || "") === img
                     );
                     frameId = frame ? frame.id : undefined;
                 }
@@ -660,37 +667,38 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     ? castSlots.filter((slot) => slot.url).map((slot) => slot.url)
                     : resolvedReferenceVideoUrls;
 
-                await api.createVideoTask(
-                    currentProject.id,
-                    finalImageUrl,
-                    finalPrompt,
-                    params.duration,
-                    params.seed,
-                    params.resolution,
-                    params.generateAudio,
-                    params.audioUrl,
-                    params.promptExtend,
-                    params.negativePrompt,
-                    params.batchSize,
-                    actualModel,
+                const videoTaskPayload: CreateVideoTaskPayload = {
+                    imageUrl: finalImageUrl,
+                    prompt: finalPrompt,
+                    duration: params.duration,
+                    seed: params.seed,
+                    resolution: params.resolution,
+                    generateAudio: params.generateAudio,
+                    audioUrl: params.audioUrl,
+                    promptExtend: params.promptExtend,
+                    negativePrompt: params.negativePrompt,
+                    batchSize: params.batchSize,
+                    model: actualModel,
                     frameId,
-                    params.shotType,
+                    shotType: params.shotType,
                     generationMode,
-                    referenceVideos,
-                    params.aspectRatio,
-                    params.watermark,
-                    params.cameraFixed,
-                    params.mode,
-                    params.sound,
-                    params.cfgScale,
-                    params.viduAudio,
-                    params.movementAmplitude,
-                    resolvedReferenceAudioUrl || undefined,
-                    params.seedanceReferenceMode,
-                    params.seedanceWorkflow,
-                    params.seedanceExtendMode,
-                    params.seedanceEditMode,
-                );
+                    referenceVideoUrls: referenceVideos,
+                    aspectRatio: params.aspectRatio,
+                    watermark: params.watermark,
+                    cameraFixed: params.cameraFixed,
+                    mode: params.mode,
+                    sound: params.sound,
+                    cfgScale: params.cfgScale,
+                    viduAudio: params.viduAudio,
+                    movementAmplitude: params.movementAmplitude,
+                    referenceAudioUrl: resolvedReferenceAudioUrl || undefined,
+                    seedanceReferenceMode: params.seedanceReferenceMode,
+                    seedanceWorkflow: params.seedanceWorkflow,
+                    seedanceExtendMode: params.seedanceExtendMode,
+                    seedanceEditMode: params.seedanceEditMode,
+                };
+
+                await api.createVideoTask(currentProject.id, videoTaskPayload);
             }
 
             const updatedProject = await api.getProject(currentProject.id);
@@ -706,7 +714,26 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         } finally {
             setIsSubmitting(false);
         }
-    };
+    }, [
+        castSlots,
+        currentProject,
+        finalPrompt,
+        generationMode,
+        isSeedanceModel,
+        isSeedancePreviewSubmit,
+        onTaskCreated,
+        params,
+        promptQualityIssues,
+        resolvedReferenceAudioUrl,
+        resolvedReferenceVideoUrls,
+        resolvedSeedanceImages,
+        seedanceImageInputs,
+        seedanceSubmissionState,
+        selectedCastCount,
+        selectedFrameId,
+        selectedImages,
+        uploadingPaths,
+    ]);
 
     // Keyboard shortcut
     useEffect(() => {
@@ -717,85 +744,87 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [selectedImages, prompt, currentProject, params, selectedReferenceVideos]); // Added selectedReferenceVideos dependency
+    }, [selectedImages, prompt, currentProject, params, selectedReferenceVideos, handleSubmit]);
 
     // Available assets for drag/drop or selection
-    const availableAssets = currentProject ? [
-        ...currentProject.characters.map((c: any) => ({
-            url: getAssetUrl(c.image_url),
-            title: c.name
+    const availableAssets: AssetCardItem[] = currentProject ? [
+        ...currentProject.characters.map((character) => ({
+            url: getAssetUrl(character.image_url),
+            title: character.name,
         })),
-        ...currentProject.scenes.map((s: any) => ({
-            url: getAssetUrl(s.image_url),
-            title: s.name
-        }))
-    ].filter(a => a.url) : [];
+        ...currentProject.scenes.map((scene) => ({
+            url: getAssetUrl(scene.image_url),
+            title: scene.name,
+        })),
+    ].filter((asset): asset is AssetCardItem => Boolean(asset.url)) : [];
 
     // Available Reference Videos (for R2V)
-    const availableReferenceVideos = currentProject ? [
+    const availableReferenceVideos: ReferenceVideoItem[] = currentProject ? [
         // Character asset video variants (full_body and headshot)
-        ...currentProject.characters.flatMap((c: any) => {
-            const variants = [];
+        ...currentProject.characters.flatMap((character) => {
+            const variants: ReferenceVideoItem[] = [];
+            const fullBody = character.full_body;
+            const headShot = character.head_shot;
             // Full body video variants
-            if (c.full_body?.video_variants?.length) {
-                variants.push(...c.full_body.video_variants.map((v: any) => ({
-                    url: v.url,
-                    thumbnail: c.full_body?.selected_image_id
-                        ? (c.full_body.image_variants?.find((img: any) => img.id === c.full_body.selected_image_id)?.url || c.full_body_image_url)
-                        : c.full_body_image_url,
-                    title: `${c.name} - Full Body Motion Reference`,
-                    assetName: c.name,
-                    type: 'character_full_body'
+            if (fullBody?.video_variants?.length) {
+                variants.push(...fullBody.video_variants.map((variant) => ({
+                    url: variant.url,
+                    thumbnail: fullBody.selected_image_id
+                        ? (fullBody.image_variants?.find((image) => image.id === fullBody.selected_image_id)?.url || character.full_body_image_url)
+                        : character.full_body_image_url,
+                    title: `${character.name} - Full Body Motion Reference`,
+                    assetName: character.name,
+                    type: "character_full_body",
                 })));
             }
             // Headshot video variants
-            if (c.head_shot?.video_variants?.length) {
-                variants.push(...c.head_shot.video_variants.map((v: any) => ({
-                    url: v.url,
-                    thumbnail: c.head_shot?.selected_image_id
-                        ? (c.head_shot.image_variants?.find((img: any) => img.id === c.head_shot.selected_image_id)?.url || c.headshot_image_url)
-                        : c.headshot_image_url,
-                    title: `${c.name} - Headshot Motion Reference`,
-                    assetName: c.name,
-                    type: 'character_headshot'
+            if (headShot?.video_variants?.length) {
+                variants.push(...headShot.video_variants.map((variant) => ({
+                    url: variant.url,
+                    thumbnail: headShot.selected_image_id
+                        ? (headShot.image_variants?.find((image) => image.id === headShot.selected_image_id)?.url || character.headshot_image_url)
+                        : character.headshot_image_url,
+                    title: `${character.name} - Headshot Motion Reference`,
+                    assetName: character.name,
+                    type: "character_headshot",
                 })));
             }
             return variants;
         }),
         // Character legacy video assets
-        ...currentProject.characters.flatMap((c: any) =>
-            (c.video_assets || []).map((v: any) => ({
-                url: v.video_url,
-                thumbnail: v.image_url,
-                title: `${c.name} - Video`,
-                assetName: c.name,
-                type: 'character_legacy'
+        ...currentProject.characters.flatMap((character) =>
+            (character.video_assets || []).map((video) => ({
+                url: video.video_url,
+                thumbnail: video.image_url,
+                title: `${character.name} - Video`,
+                assetName: character.name,
+                type: "character_legacy",
             }))
         ),
         // Scene video assets
-        ...currentProject.scenes.flatMap((s: any) =>
-            (s.video_assets || []).map((v: any) => ({
-                url: v.video_url,
-                thumbnail: v.image_url,
-                title: `${s.name} - Video`,
-                assetName: s.name,
-                type: 'scene'
+        ...currentProject.scenes.flatMap((scene) =>
+            (scene.video_assets || []).map((video) => ({
+                url: video.video_url,
+                thumbnail: video.image_url,
+                title: `${scene.name} - Video`,
+                assetName: scene.name,
+                type: "scene",
             }))
         ),
         // Prop video assets
-        ...currentProject.props.flatMap((p: any) =>
-            (p.video_assets || []).map((v: any) => ({
-                url: v.video_url,
-                thumbnail: v.image_url,
-                title: `${p.name} - Video`,
-                assetName: p.name,
-                type: 'prop'
+        ...currentProject.props.flatMap((prop) =>
+            (prop.video_assets || []).map((video) => ({
+                url: video.video_url,
+                thumbnail: video.image_url,
+                title: `${prop.name} - Video`,
+                assetName: prop.name,
+                type: "prop",
             }))
         )
-    ].filter(v => v.url && v.url !== 'null' && v.url !== 'undefined') : [];
+    ].filter((video): video is ReferenceVideoItem => Boolean(video.url && video.url !== "null" && video.url !== "undefined")) : [];
 
     return (
-        <div className="h-full flex flex-col relative min-h-0">
+        <div className="h-full flex flex-col relative min-h-0" data-testid="video-creator">
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar min-h-0">
                 <h2 className="text-2xl font-display font-bold text-white mb-6 flex items-center gap-3">
@@ -873,31 +902,38 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                         {currentProject?.frames && currentProject.frames.length > 0 ? (() => {
                                             const completedVideoIds = new Set(
                                                 currentProject.video_tasks
-                                                    ?.filter((t: any) => t.status === "completed")
-                                                    .map((t: any) => t.id) ?? []
+                                                    ?.filter((task) => task.status === "completed")
+                                                    .map((task) => task.id) ?? []
                                             );
                                             return (
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-h-[500px] overflow-y-auto custom-scrollbar pr-2 p-2">
-                                                {currentProject.frames.map((frame: any, index: number) => {
+                                                {currentProject.frames.map((frame, index) => {
                                                     const prevFrame = index > 0 ? currentProject.frames![index - 1] : null;
                                                     const prevVideoCompleted = prevFrame?.selected_video_id && completedVideoIds.has(prevFrame.selected_video_id);
                                                     const isExtracting = extractingFrameId === frame.id;
                                                     const hasExtracted = !!frame.rendered_image_url;
+                                                    const generationBadge = getGenerationBadgeText(frame);
+                                                    const generationBadgeDegraded = isGenerationDegraded(frame);
 
                                                     return (
                                                     <div
                                                         key={frame.id}
                                                         onClick={() => handleFrameSelect(frame)}
-                                                        className={`group relative aspect-video rounded-lg overflow-hidden border cursor-pointer transition-all ${selectedImages.includes(frame.rendered_image_url || frame.image_url)
+                                                        data-testid="video-storyboard-frame-card"
+                                                        data-frame-id={frame.id}
+                                                        className={`group relative aspect-video rounded-lg overflow-hidden border cursor-pointer transition-all ${selectedImages.includes(frame.rendered_image_url || frame.image_url || "")
                                                             ? "border-primary ring-2 ring-primary/50"
                                                             : "border-white/10 hover:border-white/30"
                                                             }`}
                                                     >
                                                         {(frame.rendered_image_url || frame.image_url) ? (
-                                                                <img
-                                                                    src={getAssetUrlWithTimestamp(frame.rendered_image_url || frame.image_url, frame.updated_at)}
+                                                                <NextImage
+                                                                    src={getAssetUrlWithTimestamp(frame.rendered_image_url || frame.image_url || "", frame.updated_at)}
                                                                     alt={copy.frameAlt(frame.id)}
-                                                                    className="w-full h-full object-cover"
+                                                                    fill
+                                                                    sizes="(max-width: 640px) 100vw, 33vw"
+                                                                    unoptimized
+                                                                    className="object-cover"
                                                                 />
                                                         ) : (
                                                             <div className="w-full h-full bg-white/5 flex items-center justify-center text-xs text-gray-500">
@@ -911,6 +947,17 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                         <div className="absolute top-1 left-1 bg-black/60 px-1.5 rounded text-[10px] text-gray-300 backdrop-blur-sm">
                                                             #{frame.id.slice(0, 4)}
                                                         </div>
+                                                        {generationBadge && (
+                                                            <div
+                                                                className={`absolute top-1 right-1 rounded border px-1.5 text-[10px] backdrop-blur-sm ${generationBadgeDegraded
+                                                                    ? "border-amber-400/30 bg-black/70 text-amber-200"
+                                                                    : "border-emerald-400/30 bg-black/70 text-emerald-200"
+                                                                    }`}
+                                                                title={getGenerationTooltip(frame)}
+                                                            >
+                                                                {generationBadge}
+                                                            </div>
+                                                        )}
                                                         {/* Extract Last Frame Button */}
                                                         {prevVideoCompleted && (
                                                             <button
@@ -951,14 +998,17 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                 <div className="flex gap-2 flex-wrap">
                                                     {selectedImages.map((img, idx) => {
                                                         // Find frame to get updated_at for cache busting
-                                                        const frame = currentProject?.frames?.find((f: any) => (f.rendered_image_url || f.image_url) === img);
+                                                        const frame = currentProject?.frames?.find((candidate) => (candidate.rendered_image_url || candidate.image_url) === img);
                                                         const timestamp = frame?.updated_at || 0;
                                                         return (
                                                             <div key={idx} className="relative w-24 aspect-video rounded-lg overflow-hidden border border-white/20">
-                                                                <img
+                                                                <NextImage
                                                                     src={timestamp ? getAssetUrlWithTimestamp(img, timestamp) : getAssetUrl(img)}
                                                                     alt={copy.selectedImageAlt}
-                                                                    className="w-full h-full object-cover"
+                                                                    fill
+                                                                    sizes="96px"
+                                                                    unoptimized
+                                                                    className="object-cover"
                                                                 />
                                                                 <button
                                                                     onClick={() => removeImage(idx)}
@@ -979,10 +1029,13 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                         <div className="grid grid-cols-3 gap-4">
                                             {selectedImages.map((img, idx) => (
                                                 <div key={idx} className="relative aspect-video bg-black/40 rounded-xl overflow-hidden border border-white/10 group">
-                                                    <img
+                                                    <NextImage
                                                         src={getAssetUrl(img)}
                                                         alt={copy.inputImageAlt(idx)}
-                                                        className="w-full h-full object-contain"
+                                                        fill
+                                                        sizes="(max-width: 768px) 100vw, 33vw"
+                                                        unoptimized
+                                                        className="object-contain"
                                                     />
                                                     <button
                                                         onClick={() => removeImage(idx)}
@@ -1027,7 +1080,14 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                             onClick={() => handleAssetSelect(asset.url)}
                                                             className="w-16 h-16 relative rounded-lg overflow-hidden flex-shrink-0 border border-white/10 hover:border-primary cursor-pointer"
                                                         >
-                                                            <img src={getAssetUrl(asset.url)} alt={asset.title} className="w-full h-full object-cover" />
+                                                            <NextImage
+                                                                src={getAssetUrl(asset.url)}
+                                                                alt={asset.title}
+                                                                fill
+                                                                sizes="64px"
+                                                                unoptimized
+                                                                className="object-cover"
+                                                            />
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1047,51 +1107,72 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 <label className="text-sm font-medium text-gray-300">{copy.selectFrame}</label>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[200px] overflow-y-auto custom-scrollbar pr-2">
                                     {currentProject?.frames && currentProject.frames.length > 0 ? (
-                                        currentProject.frames.map((frame: any) => (
-                                            <div
-                                                key={frame.id}
-                                                onClick={() => handleR2VFrameSelect(frame)}
-                                                className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedFrameId === frame.id
-                                                    ? "border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/30"
-                                                    : "border-white/10 bg-black/20 hover:border-white/30"
-                                                    }`}
-                                            >
-                                                <div className="flex items-start gap-3">
-                                                    {/* Frame thumbnail */}
-                                                    <div className="w-16 h-10 rounded overflow-hidden flex-shrink-0 bg-black/40">
-                                                        {frame.image_url ? (
-                                                            <img
-                                                                src={getAssetUrlWithTimestamp(frame.image_url, frame.updated_at)}
-                                                                alt=""
-                                                                className="w-full h-full object-cover"
-                                                            />
-                                                        ) : (
-                                                            <div className="w-full h-full flex items-center justify-center text-gray-600">
-                                                                <Layout size={14} />
+                                        currentProject.frames.map((frame) => {
+                                            const generationBadge = getGenerationBadgeText(frame);
+                                            const generationBadgeDegraded = isGenerationDegraded(frame);
+
+                                            return (
+                                                <div
+                                                    key={frame.id}
+                                                    onClick={() => handleR2VFrameSelect(frame)}
+                                                    className={`p-3 rounded-lg border cursor-pointer transition-all ${selectedFrameId === frame.id
+                                                        ? "border-purple-500 bg-purple-500/10 ring-2 ring-purple-500/30"
+                                                        : "border-white/10 bg-black/20 hover:border-white/30"
+                                                        }`}
+                                                >
+                                                    <div className="flex items-start gap-3">
+                                                        {/* Frame thumbnail */}
+                                                        <div className="relative w-16 h-10 rounded overflow-hidden flex-shrink-0 bg-black/40">
+                                                            {frame.image_url ? (
+                                                                <NextImage
+                                                                    src={getAssetUrlWithTimestamp(frame.image_url, frame.updated_at)}
+                                                                    alt={copy.frameAlt(frame.id)}
+                                                                    fill
+                                                                    sizes="64px"
+                                                                    unoptimized
+                                                                    className="object-cover"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-full h-full flex items-center justify-center text-gray-600">
+                                                                    <Layout size={14} />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {/* Frame description */}
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                                                                <p className="text-xs text-gray-400">#{frame.id.slice(0, 6)}</p>
+                                                                {generationBadge && (
+                                                                    <span
+                                                                        className={`rounded-full border px-1.5 py-0.5 text-[10px] ${generationBadgeDegraded
+                                                                            ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                                                                            : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"
+                                                                            }`}
+                                                                        title={getGenerationTooltip(frame)}
+                                                                    >
+                                                                        {generationBadge}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-xs text-gray-300 line-clamp-2">
+                                                                {frame.action_description || frame.image_prompt || commonMessages.noDescription}
+                                                            </p>
+                                                            {frame.dialogue && (
+                                                                <p className="text-[10px] text-purple-400 mt-1 italic line-clamp-1">
+                                                                    “{frame.dialogue}”
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        {/* Selected indicator */}
+                                                        {selectedFrameId === frame.id && (
+                                                            <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">
+                                                                <Check size={12} className="text-white" />
                                                             </div>
                                                         )}
                                                     </div>
-                                                    {/* Frame description */}
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-xs text-gray-400 mb-1">#{frame.id.slice(0, 6)}</p>
-                                                        <p className="text-xs text-gray-300 line-clamp-2">
-                                                            {frame.action_description || frame.image_prompt || commonMessages.noDescription}
-                                                        </p>
-                                                        {frame.dialogue && (
-                                                            <p className="text-[10px] text-purple-400 mt-1 italic line-clamp-1">
-                                                                “{frame.dialogue}”
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    {/* Selected indicator */}
-                                                    {selectedFrameId === frame.id && (
-                                                        <div className="w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center flex-shrink-0">
-                                                            <Check size={12} className="text-white" />
-                                                        </div>
-                                                    )}
                                                 </div>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     ) : (
                                         <div className="col-span-2 flex flex-col items-center justify-center h-[100px] text-gray-500 gap-2">
                                             <Layout size={24} className="opacity-20" />
@@ -1107,7 +1188,6 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                 <div className="grid grid-cols-3 gap-4">
                                     {[0, 1, 2].map((slotIndex) => {
                                         const slot = castSlots[slotIndex];
-                                        const slotLabel = `@Ref_${String.fromCharCode(65 + slotIndex)}`; // @Ref_A, @Ref_B, @Ref_C
                                         const slotTitle = slotIndex === 0 ? copy.leadRole : copy.supportingRole;
                                         const video = slot?.url ? availableReferenceVideos.find(v => v.url === slot.url) : null;
 
@@ -1129,10 +1209,13 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                 {slot?.url ? (
                                                     /* Filled Slot */
                                                     <div className="aspect-video relative">
-                                                        <img
-                                                            src={getAssetUrl(video?.thumbnail || '')}
+                                                        <NextImage
+                                                            src={getAssetUrl(video?.thumbnail || "")}
                                                             alt={slot.name}
-                                                            className="w-full h-full object-cover rounded-xl"
+                                                            fill
+                                                            sizes="(max-width: 768px) 100vw, 16rem"
+                                                            unoptimized
+                                                            className="object-cover rounded-xl"
                                                         />
                                                         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2 rounded-b-xl">
                                                             <p className="text-xs text-white font-medium truncate">{slot.name}</p>
@@ -1243,10 +1326,13 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                     >
                                                         <div className="relative aspect-video overflow-hidden bg-black/40">
                                                             {video.thumbnail ? (
-                                                                <img
+                                                                <NextImage
                                                                     src={getAssetUrl(video.thumbnail)}
                                                                     alt={video.assetName}
-                                                                    className="w-full h-full object-cover"
+                                                                    fill
+                                                                    sizes="(max-width: 640px) 100vw, 50vw"
+                                                                    unoptimized
+                                                                    className="object-cover"
                                                                 />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center text-xs text-gray-500">
@@ -1485,7 +1571,14 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                                                 }`}
                                         >
                                             {video?.thumbnail ? (
-                                                <img src={getAssetUrl(video.thumbnail)} alt="" className="w-4 h-4 rounded-full object-cover" />
+                                                <NextImage
+                                                    src={getAssetUrl(video.thumbnail)}
+                                                    alt={video.title}
+                                                    width={16}
+                                                    height={16}
+                                                    unoptimized
+                                                    className="w-4 h-4 rounded-full object-cover"
+                                                />
                                             ) : (
                                                 <span className="w-4 h-4 rounded-full bg-purple-500/30 flex items-center justify-center text-[10px]">+</span>
                                             )}
@@ -1783,6 +1876,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                         <button
                             onClick={handleSubmit}
                             disabled={!canRunPrimaryAction}
+                            data-testid="video-submit"
                             className={`flex-1 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all transform active:scale-[0.99] ${submitSuccess
                                 ? "bg-green-500 text-white"
                                 : isSeedancePreviewSubmit

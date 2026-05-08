@@ -2,8 +2,10 @@
 
 import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import NextImage from "next/image";
 import { X, Upload, Image as ImageIcon, User, Layout, Eye } from "lucide-react";
 import { messages } from "@/lib/i18n";
+import type { Project } from "@/store/projectStore";
 
 interface UploadAssetModalProps {
     isOpen: boolean;
@@ -13,7 +15,7 @@ interface UploadAssetModalProps {
     assetName: string;
     defaultDescription: string;
     scriptId: string;
-    onUploadComplete: (updatedScript: any) => void;
+    onUploadComplete: (updatedScript: Project) => void;
 }
 
 const uploadCopy = messages.uploadAssetModal;
@@ -130,8 +132,8 @@ export default function UploadAssetModal({
             );
             onUploadComplete(updatedScript);
             handleClose();
-        } catch (err: any) {
-            setError(err.message || uploadCopy.uploadFailed);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : uploadCopy.uploadFailed);
         } finally {
             setIsUploading(false);
         }
@@ -235,9 +237,12 @@ export default function UploadAssetModal({
                             />
                             {previewUrl ? (
                                 <div className="relative">
-                                    <img
+                                    <NextImage
                                         src={previewUrl}
                                         alt={uploadCopy.imagePreviewAlt}
+                                        width={384}
+                                        height={192}
+                                        unoptimized
                                         className="max-h-48 mx-auto rounded-lg object-contain"
                                     />
                                     <div className="mt-3 text-sm text-gray-400">

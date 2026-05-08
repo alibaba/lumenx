@@ -97,17 +97,17 @@ describe("applyChange", () => {
   it("updates a single field immutably", () => {
     const updated = applyChange("OPENAI_IMAGE_MODEL", "image-model-x");
     expect(updated.OPENAI_IMAGE_MODEL).toBe("image-model-x");
-    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_MODEL).toBe("nano-banana");
+    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_MODEL).toBe("gpt-image2");
   });
 });
 
 describe("DEFAULT_ENV_CONFIG", () => {
-  it("uses Banana defaults for both image generation and image edit", () => {
+  it("uses gpt-image2 defaults for both image generation and image edit", () => {
     expect(DEFAULT_ENV_CONFIG.IMAGE_EDIT_PROVIDER).toBe("openai");
     expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_BASE_URL).toBe("https://api.bltcy.ai/v1");
-    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_MODEL).toBe("nano-banana");
+    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_MODEL).toBe("gpt-image2");
     expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_EDIT_BASE_URL).toBe("https://api.bltcy.ai/v1");
-    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_EDIT_MODEL).toBe("nano-banana");
+    expect(DEFAULT_ENV_CONFIG.OPENAI_IMAGE_EDIT_MODEL).toBe("gpt-image2");
   });
 });
 
@@ -177,6 +177,23 @@ describe("normalizeEnvConfig", () => {
     expect(result.OPENAI_IMAGE_EDIT_BASE_URL).toBe("https://edit.example.com/v1");
     expect(result.OPENAI_IMAGE_MODEL).toBe("image-model-x");
     expect(result.OPENAI_IMAGE_EDIT_MODEL).toBe("image-model-edit");
+  });
+
+  it("preserves the backend Image2 startup check from API response", () => {
+    const result = normalizeEnvConfig(DEFAULT_ENV_CONFIG, {
+      image_model_startup_check: {
+        status: "ok",
+        expected_image_model: "gpt-image2",
+        expected_image_edit_model: "gpt-image2",
+        image_model: "gpt-image2",
+        image_edit_model: "gpt-image2",
+        message: "Image2 startup check passed",
+      },
+    });
+
+    expect(result.image_model_startup_check?.status).toBe("ok");
+    expect(result.image_model_startup_check?.image_model).toBe("gpt-image2");
+    expect(result.image_model_startup_check?.image_edit_model).toBe("gpt-image2");
   });
 
   it("preserves tts and multimodal fields from API response", () => {

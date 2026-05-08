@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import NextImage from "next/image";
 import { X, Download, Users, MapPin, Package, Check, Loader2, ArrowRight, ArrowLeft, Image as ImageIcon } from 'lucide-react';
 import { api } from '@/lib/api';
 import { assetTypeTerms, messages } from '@/lib/i18n';
@@ -335,7 +336,14 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                                 {/* Thumbnail */}
                                                 <div className="aspect-square bg-gray-800/50 flex items-center justify-center overflow-hidden">
                                                     {asset.imageUrl ? (
-                                                        <img src={asset.imageUrl} alt={asset.name} className="w-full h-full object-cover" />
+                                                        <NextImage
+                                                            src={asset.imageUrl}
+                                                            alt={asset.name}
+                                                            width={160}
+                                                            height={160}
+                                                            unoptimized
+                                                            className="h-full w-full object-cover"
+                                                        />
                                                     ) : (
                                                         <ImageIcon size={24} className="text-gray-600" />
                                                     )}
@@ -373,7 +381,14 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                                     <div key={a.id} className="flex items-center gap-2 py-1.5 px-2 bg-white/5 rounded-lg">
                                                         <div className="w-8 h-8 rounded bg-gray-800 overflow-hidden flex-shrink-0">
                                                             {a.imageUrl ? (
-                                                                <img src={a.imageUrl} alt={a.name} className="w-full h-full object-cover" />
+                                                                <NextImage
+                                                                    src={a.imageUrl}
+                                                                    alt={a.name}
+                                                                    width={32}
+                                                                    height={32}
+                                                                    unoptimized
+                                                                    className="h-full w-full object-cover"
+                                                                />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center">
                                                                     <Users size={12} className="text-gray-600" />
@@ -396,7 +411,14 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                                     <div key={a.id} className="flex items-center gap-2 py-1.5 px-2 bg-white/5 rounded-lg">
                                                         <div className="w-8 h-8 rounded bg-gray-800 overflow-hidden flex-shrink-0">
                                                             {a.imageUrl ? (
-                                                                <img src={a.imageUrl} alt={a.name} className="w-full h-full object-cover" />
+                                                                <NextImage
+                                                                    src={a.imageUrl}
+                                                                    alt={a.name}
+                                                                    width={32}
+                                                                    height={32}
+                                                                    unoptimized
+                                                                    className="h-full w-full object-cover"
+                                                                />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center">
                                                                     <MapPin size={12} className="text-gray-600" />
@@ -419,7 +441,14 @@ export default function ImportAssetsDialog({ isOpen, onClose, seriesId, onImport
                                                     <div key={a.id} className="flex items-center gap-2 py-1.5 px-2 bg-white/5 rounded-lg">
                                                         <div className="w-8 h-8 rounded bg-gray-800 overflow-hidden flex-shrink-0">
                                                             {a.imageUrl ? (
-                                                                <img src={a.imageUrl} alt={a.name} className="w-full h-full object-cover" />
+                                                                <NextImage
+                                                                    src={a.imageUrl}
+                                                                    alt={a.name}
+                                                                    width={32}
+                                                                    height={32}
+                                                                    unoptimized
+                                                                    className="h-full w-full object-cover"
+                                                                />
                                                             ) : (
                                                                 <div className="w-full h-full flex items-center justify-center">
                                                                     <Package size={12} className="text-gray-600" />
