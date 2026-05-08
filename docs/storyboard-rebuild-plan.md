@@ -175,6 +175,23 @@ source 不复用旧 prompt 文本，只保留故事骨架和 parser 友好的 ma
 - 产物门禁能区分主板、派生图和最终分镜图。
 - 旧项目保留，只作参考，不混入新流水线。
 
+## 6.1 当前完成度（2026-05-09）
+
+- 18 张分镜结果图已齐，`output/codex_image_audit/liuyi-that-day-v2/generated/` 中 `liuyi_frame_01` 到 `liuyi_frame_18` 都已存在。
+- `source/01_story_bible.md` 到 `source/05_storyboard_script.md` 已齐，V2 已明确为 canonical。
+- 角色必需资产已齐；当前只缺 4 个角色的可选 `head_shot`，不影响基础导入。
+- 场景与道具还没补满：当前还缺 42 个 required 资产，主要集中在场景 `board_4k / key_view` 和道具 `board_4k / detail / usage_view`。
+- `references/style/liuyi_style_board_v2.png` 与 `references/style/liuyi_storyboard_reference_collage_v2.png` 仍是 planned。
+- `liuyi_frame_15` 到 `liuyi_frame_18` 还保留 smoke 产物，可用于对照，不作为正式命名目标。
+
+## 6.2 下一阶段规划
+
+1. 先补当前 18 镜直接用到的一线素材，优先顺序是 `school_playground`、`hospital_room`、`school_gate`、`funeral_hall`、`home_desk`、`exam_admission`、`medical_school`、`doctor_office`、`2026_ward`、`hospital_corridor` 及其对应道具。
+2. 再补 `style_board` 和 `storyboard_reference_collage`，把整项目的光线、节奏、人物气质统一到作者级参考层。
+3. 保持 `source/05_storyboard_script.md` 为剧情 canonical，只做 cinematic polish，不回写旧版剧情骨架。
+4. 补齐素材后，重跑 frame 03 / 17 / 18 的回归，再跑 01-18 全帧，确认直连与 two-stage 两条链路都稳定。
+5. 等资产、回归、命名全部稳定后，再把 `project_manifest.draft.json` 升级为正式 `project_manifest.json`。
+
 ## 7. 当前落地文件
 
 - [tests/fixtures/story_projects/六一那天_v2/README.md](../tests/fixtures/story_projects/六一那天_v2/README.md)
