@@ -51,6 +51,8 @@ venv/
 *.db
 *.sqlite3
 .pytest_cache/
+pytest-cache-files-*/
+tmp-pytest-*/
 .coverage
 htmlcov/
 
