@@ -1,6 +1,6 @@
 # 05 Storyboard Script
 
-本文件为 v2 重写稿，保持 parser 友好的 18 镜结构，不复用旧项目 prompt 文本。
+本文件为 v2 canonical 分镜稿，保持 parser 友好的 18 镜结构；旧项目 prompt 只作为 cinematic polish 参考，不作为剧情标准。
 
 ### 镜头 01 | 00:00-00:04 | 操场边缘的座位
 

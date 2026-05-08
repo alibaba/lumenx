@@ -6,6 +6,17 @@
 资产草案见 [project_manifest.draft.json](../project_manifest.draft.json) 和 [references/ASSET_INVENTORY.md](../references/ASSET_INVENTORY.md)。
 正式版最终设计见 [docs/storyboard-consistency-final-design.md](../../../../../docs/storyboard-consistency-final-design.md)。
 
+## Canonical 与 cinematic polish
+
+- V2 的 canonical 口径以 `source/05_storyboard_script.md` 和 `source/02_visual_bible.md` 为准。
+- 旧项目的 `08_seedance2_storyboard_prompts.md` 只可作为 cinematic polish 参考，不回写剧情骨架和镜头顺序。
+- 回填优先级：
+  - 前 1/3 强化校园暖光 vs 病房冷光的交叉剪辑感。
+  - 03-05 保留“纸袋、小熊、父亲托付”的物件链清晰度。
+  - 声音设计继续沿用外部版的短片节奏。
+  - 全局负面提示词和“文字后期叠加”规则保留。
+  - 每镜仍保持“剧情功能 + 画面内容 + 静帧 prompt + 视频 prompt + 声音设计”的结构。
+
 当前还不放 `project_manifest.json`，避免它被当成正式 fixture discovery。
 
 ## Codex imagegen 引用预算
