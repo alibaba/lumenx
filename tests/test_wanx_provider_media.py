@@ -147,7 +147,7 @@ class TestWanxProviderMediaIntegration:
             lambda self, local_path, model_name: "oss://dashscope-temp/ref-video-001",
         )
 
-        ref_video_path = _write_output_file("video/wanx_r2v_ref.mp4", b"fake-video")
+        ref_video_path = _write_output_file("uploads/wanx_r2v_ref_local.bin", b"fake-video")
 
         model = WanxModel({"params": {}})
         model.generate(

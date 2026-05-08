@@ -51,6 +51,14 @@
     },
     {
       "asset_type": "scene",
+      "asset_id": "liuyi_scene_school_gate",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_school_gate.png",
+      "label": "小学校门口主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
       "asset_id": "liuyi_scene_hospital_room",
       "upload_type": "image",
       "path": "references/liuyi_scene_hospital_room.png",
@@ -63,6 +71,22 @@
       "upload_type": "image",
       "path": "references/liuyi_prop_white_bear.png",
       "label": "白色小熊主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_paper_bag",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_paper_bag.png",
+      "label": "纸袋主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_child_drawing",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_child_drawing.png",
+      "label": "儿童画主参考图",
       "locked": true
     },
     {
@@ -120,6 +144,86 @@
       "path": "references/liuyi_prop_medical_textbooks.png",
       "label": "医学教材和病历夹主参考图",
       "locked": true
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_xiaoqi_young",
+      "upload_type": "full_body",
+      "path": "references/liuyi_char_xiaoqi_young_full_body.png",
+      "label": "青年小琪主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_funeral_hall",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_funeral_hall.png",
+      "label": "灵堂主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_home_desk",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_home_desk.png",
+      "label": "家中书桌主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_exam_admission",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_exam_admission.png",
+      "label": "录取通知书场景主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_medical_school",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_medical_school.png",
+      "label": "医学院走廊主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_doctor_office",
+      "upload_type": "image",
+      "path": "references/liuyi_scene_doctor_office.png",
+      "label": "医生办公室主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_father_memorial_portrait",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_father_memorial_portrait.png",
+      "label": "父亲遗像主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_family_photo",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_family_photo.png",
+      "label": "父女合照主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_notebook_pencil",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_notebook_pencil.png",
+      "label": "笔记本和铅笔主参考图",
+      "locked": true
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_admission_notice",
+      "upload_type": "image",
+      "path": "references/liuyi_prop_admission_notice.png",
+      "label": "录取通知书主参考图",
+      "locked": true
     }
   ],
   "model_settings": {
@@ -137,6 +241,10 @@
   "notes": [
     "独立测试项目，供六一那天分镜脚本、参考图与后续素材一致性测试使用。",
     "本项目生图和图编测试统一使用 OpenAI-compatible 别名，运行模型固定为 gpt-image2。",
+    "已补齐 18 镜脚本实际使用的全部角色、场景与道具参考图，并在 manifest 中锁定。",
+    "第 01-18 镜正式分镜静帧统一落在 output/codex_image_audit/liuyi-that-day/generated/，导出清单见 generation_prompts/static_frame_exports.json；这里只能证明文件完成，视觉门禁仍以对应 pytest 用例为准。",
+    "第 02/06/08/09/10 镜的小七儿童身份一致性必须绑定 liuyi_char_xiaoqi_child_full_body.png，并通过像素级参考 patch 与 compose 回写门禁。",
+    "第 15/16/17/18 镜的正式 crop workflow 必须通过 base-vs-edited 像素差与 Stage3 compose 回写门禁。",
     "所有文字类内容以后期叠加为准，避免模型生成可读错误文字。"
   ]
 }

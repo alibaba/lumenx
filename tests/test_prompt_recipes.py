@@ -38,6 +38,23 @@ def test_build_three_view_prompt_enforces_reference_consistency():
     assert "Consistent wardrobe details across every angle" in prompt
 
 
+def test_build_expression_sheet_prompt_requires_board_level_consistency():
+    character = Character(
+        id="char-3",
+        name="Mina",
+        description="Straight black hair, calm eyes, slim build",
+        clothing="Soft white shirt and dark trousers",
+    )
+
+    prompt = build_character_prompt(character, "expression_sheet", strict_reference=True)
+
+    assert "Character expression reference sheet for Mina." in prompt
+    assert "One 4K authoring board" in prompt
+    assert "front/side/back mini views" in prompt
+    assert "row of facial expressions" in prompt
+    assert "Strictly preserve the same face" in prompt
+
+
 def test_build_scene_prompt_includes_time_and_lighting():
     scene = Scene(
         id="scene-1",

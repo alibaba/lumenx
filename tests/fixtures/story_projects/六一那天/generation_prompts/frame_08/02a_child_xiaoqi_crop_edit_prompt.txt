@@ -1,0 +1,19 @@
+Use case: identity-preserve
+Asset type: frame 08 crop edit, Xiaoqi consistency
+Execution mode: deterministic local identity-preserve compose from the locked child full-body reference and the frame base crop.
+
+Input visual sources:
+Image 1: a cropped region from frame 08 containing the girl at the school gate; this is the edit target.
+Image 2: the locked project reference `liuyi_char_xiaoqi_child_full_body.png`; use it as the identity reference.
+
+Primary request:
+Refine only the girl in Image 1 so she matches Image 2 more closely. Keep the edit localized to her face, straight black hair, pale blue and white stage outfit, solemn expression, and natural proportions.
+
+Invariants:
+Keep the crop size, camera angle, gate background, bouquet bag, and adult handoff interaction unchanged. Do not add or remove people. Do not introduce readable text, logos, watermarks, cartoon styling, or anime styling.
+
+Avoid:
+changing the crop framing, changing the standing profile pose, changing the costume into a different costume, adding extra people, adding signage, or over-beautifying the face.
+
+Visual gate:
+Use `crop_composition_manifest.json` `reference_source_bbox` from Image 2 and `identity_patch_bbox` in Image 1. The edited crop must show a measurable reference-derived patch, not merely an existing output file.

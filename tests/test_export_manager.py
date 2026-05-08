@@ -29,6 +29,21 @@ def _make_script() -> Script:
     )
 
 
+class RecordingExportManager(ExportManager):
+    def __init__(self, config=None):
+        super().__init__(config)
+        self.ffmpeg_calls = []
+
+    def _run_ffmpeg(self, args, *, cwd=None, timeout=600):
+        self.ffmpeg_calls.append(list(args))
+        output_path = (self.project_root / Path(args[-1])).resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"fake transcoded video")
+
+    def _build_audio_mix(self, script, input_video, work_dir):
+        return None
+
+
 def test_build_srt_uses_frame_durations(tmp_path):
     manager = ExportManager({"output_dir": str(tmp_path / "export")})
     script = _make_script()
@@ -41,3 +56,34 @@ def test_build_srt_uses_frame_durations(tmp_path):
     assert "00:00:04,000 --> 00:00:10,000" in content
     assert "第一句台词" in content
     assert "第二句台词" in content
+
+
+def test_smoke_render_project_transcodes_video_and_returns_subtitle(tmp_path):
+    manager = RecordingExportManager({"output_dir": "export"})
+    manager.project_root = tmp_path
+    manager.output_dir = manager._resolve_workspace_path("export")
+    manager.output_dir.mkdir(parents=True, exist_ok=True)
+    input_video = tmp_path / "merged" / "input.mp4"
+    input_video.parent.mkdir(parents=True, exist_ok=True)
+    input_video.write_bytes(b"fake merged video")
+
+    script = _make_script()
+    script.merged_video_url = str(input_video)
+
+    result = manager.render_project(
+        script,
+        {"resolution": "720p", "format": "mp4", "subtitles": "srt"},
+    )
+
+    assert manager.ffmpeg_calls
+    render_args = manager.ffmpeg_calls[-1]
+    assert "-vf" in render_args
+    video_filter = render_args[render_args.index("-vf") + 1]
+    assert "scale=1280:720" in video_filter
+    assert "pad=1280:720" in video_filter
+    assert result["format"] == "mp4"
+    assert result["resolution"] == "720p"
+    assert result["url"].endswith(".mp4")
+    assert result["subtitle_url"].endswith(".srt")
+    assert list(manager.output_dir.glob("project-1_*.mp4"))
+    assert list((manager.output_dir / script.id).glob("*/project-1_*.srt"))

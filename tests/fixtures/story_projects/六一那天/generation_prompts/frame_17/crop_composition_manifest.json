@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "project_slug": "liuyi-that-day",
+  "frame_id": "liuyi_frame_17",
+  "description": "Frame 17 formal crop composition for the adult Xiaoqi identity edit.",
+  "base_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_17_stage1_base.png",
+  "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_17_stage3_full_formal_v1.png",
+  "composition_method": "paste edited crops onto the exact base-image bounding boxes after verifying original crop coordinates",
+  "crops": [
+    {
+      "id": "adult_xiaoqi",
+      "role": "adult Xiaoqi identity edit",
+      "prompt": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_17/02a_adult_xiaoqi_crop_edit_prompt.txt",
+      "reference_images": [
+        "output/uploads/fixtures/liuyi_char_xiaoqi_adult_full_body.png"
+      ],
+      "base_crop": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_17_stage1_base_crop_adult_xiaoqi.png",
+      "edited_crop": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_17_stage2_adult_xiaoqi_formal_v1.png",
+      "bbox": {
+        "x": 1280,
+        "y": 256,
+        "width": 768,
+        "height": 896
+      },
+      "visual_gate": {
+        "gate_id": "formal_crop_identity_vs_base_and_compose",
+        "min_changed_mean_delta": 1.0
+      }
+    }
+  ],
+  "notes": [
+    "Base and crop assets were generated from the frame prompt package with the Image2 CLI model alias.",
+    "Run scripts/compose_fixture_frame_crops.ps1 with ProjectSlug=liuyi-that-day, FrameId=liuyi_frame_17, and -DetectOnly before formal composition when base or crop assets change.",
+    "Stage2 must visibly diverge from the base crop, and Stage3 must preserve the edited crop exactly at the declared bbox.",
+    "Formal edits must enter through scripts/run_fixture_frame_script.ps1 and keep the project model default at gpt-image2."
+  ]
+}

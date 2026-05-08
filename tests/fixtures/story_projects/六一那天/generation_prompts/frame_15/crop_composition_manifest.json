@@ -21,6 +21,10 @@
         "y": 32,
         "width": 640,
         "height": 1088
+      },
+      "visual_gate": {
+        "gate_id": "formal_crop_identity_vs_base_and_compose",
+        "min_changed_mean_delta": 1.0
       }
     },
     {
@@ -37,11 +41,16 @@
         "y": 256,
         "width": 1024,
         "height": 768
+      },
+      "visual_gate": {
+        "gate_id": "formal_crop_identity_vs_base_and_compose",
+        "min_changed_mean_delta": 1.0
       }
     }
   ],
   "notes": [
     "The boy crop remains diagnostic only; the stable formal replay currently composites adult Xiaoqi and the father.",
+    "Stage2 crops must differ from their base crops, and Stage3 must be a pixel-faithful compose of the edited crops at the declared bboxes.",
     "Run scripts/compose_fixture_frame_crops.ps1 with ProjectSlug=liuyi-that-day and FrameId=liuyi_frame_15 to reproduce the full formal frame locally.",
     "Use -DetectOnly to re-check crop coordinates when the base or crop assets change."
   ]

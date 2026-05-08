@@ -395,3 +395,31 @@ class TestImportAssetsFromSeries:
         assert len(result.scenes) == 1
         assert len(result.props) == 1
         assert len(imported_ids) == 3
+
+    def test_smoke_import_assets_from_series_deep_copies_selected_assets(self, pipeline):
+        source = pipeline.create_series("Smoke Source")
+        char = _make_character(name="Smoke Hero")
+        scene = _make_scene(name="Smoke Alley")
+        prop = _make_prop(name="Smoke Lantern")
+        source.characters = [char]
+        source.scenes = [scene]
+        source.props = [prop]
+
+        target = pipeline.create_series("Smoke Target")
+        result, imported_ids, skipped_ids = pipeline.import_assets_from_series(
+            target.id,
+            source.id,
+            [char.id, scene.id, prop.id],
+        )
+
+        assert imported_ids == [char.id, scene.id, prop.id]
+        assert skipped_ids == []
+        assert [item.name for item in result.characters] == ["Smoke Hero"]
+        assert [item.name for item in result.scenes] == ["Smoke Alley"]
+        assert [item.name for item in result.props] == ["Smoke Lantern"]
+        assert result.characters[0].id != char.id
+        assert result.scenes[0].id != scene.id
+        assert result.props[0].id != prop.id
+        assert source.characters[0].id == char.id
+        assert source.scenes[0].id == scene.id
+        assert source.props[0].id == prop.id

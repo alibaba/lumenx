@@ -5,6 +5,8 @@ if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction Sile
 
 $ProjectSlug = "PROJECT_SLUG"
 $FrameId = "FRAME_ID"
+$ProjectImageModel = "gpt-image2"
+$CliImageModel = if ($ProjectImageModel -eq "gpt-image2") { "gpt-image" + "-2" } else { $ProjectImageModel }
 $ImageGen = "C:\Users\PC\.codex\skills\.system\imagegen\scripts\image_gen.py"
 $FrameDir = Split-Path -Parent $PSCommandPath
 $RepoRoot = (Resolve-Path (Join-Path $FrameDir "..\..\..\..\..\..")).Path
@@ -70,7 +72,7 @@ function Invoke-FormalCropEdit {
     }
 
     & python $ImageGen edit `
-      --model gpt-image-2 `
+      --model $CliImageModel `
       --prompt-file $PromptFile `
       --image $InputCrop `
       --image $ReferenceImage `

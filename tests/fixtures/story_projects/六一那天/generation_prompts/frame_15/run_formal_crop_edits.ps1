@@ -68,7 +68,7 @@ function Invoke-FormalCropEdit {
     }
 
     & python $ImageGen edit `
-      --model gpt-image-2 `
+      --model gpt-image2 `
       --prompt-file $PromptFile `
       --image $InputCrop `
       --image $ReferenceImage `

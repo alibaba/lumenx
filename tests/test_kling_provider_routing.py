@@ -157,8 +157,13 @@ def test_vendor_kling_local_image_uses_base64_payload(monkeypatch, tmp_path):
             )
         return _FakeResponse(200, content=b"video")
 
+    def fake_download(url, output_path, timeout=None):
+        captured["download_url"] = url
+        Path(output_path).write_bytes(b"video")
+
     monkeypatch.setattr("src.models.kling.requests.post", fake_post)
     monkeypatch.setattr("src.models.kling.requests.get", fake_get)
+    monkeypatch.setattr("src.models.kling.download_url_to_file", fake_download)
     monkeypatch.setattr("src.models.kling.time.sleep", lambda _: None)
 
     model = KlingModel({"access_key": "test-ak", "secret_key": "test-sk"})
@@ -173,3 +178,4 @@ def test_vendor_kling_local_image_uses_base64_payload(monkeypatch, tmp_path):
     assert captured["submit_url"].endswith("/videos/image2video")
     assert captured["headers"]["Authorization"].startswith("Bearer ")
     assert captured["body"]["image"] == PNG_1X1_BASE64
+    assert captured["download_url"] == "https://example.com/out.mp4"

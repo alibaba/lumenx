@@ -2,6 +2,7 @@ import base64
 from io import BytesIO
 import os
 
+import pytest
 import requests
 from PIL import Image
 
@@ -24,6 +25,9 @@ PNG_1X1_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+"
     "X2VINQAAAABJRU5ErkJggg=="
 )
+
+# Legacy compatibility coverage only.
+LEGACY_OPENAI_IMAGE_MODEL_ALIAS = "gpt-image-2"
 
 
 class FakeResponse:
@@ -113,7 +117,8 @@ def test_openai_t2i_alias_uses_gpt_image2_when_configured(monkeypatch, tmp_path)
     assert captured["json"]["model"] == "gpt-image2"
 
 
-def test_openai_t2i_alias_uses_edit_key_as_backup(monkeypatch, tmp_path):
+@pytest.mark.legacy_compat
+def test_openai_t2i_alias_legacy_gpt_image_2_uses_edit_key_as_backup(monkeypatch, tmp_path):
     captured = {}
 
     def fake_post(url, headers=None, json=None, timeout=None):
@@ -128,7 +133,7 @@ def test_openai_t2i_alias_uses_edit_key_as_backup(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENAI_IMAGE_EDIT_API_KEY", "edit-backup-key")
     monkeypatch.setenv("OPENAI_API_KEY", "general-openai-key")
     monkeypatch.setenv("OPENAI_IMAGE_BASE_URL", "https://image.example.com/v1")
-    monkeypatch.setenv("OPENAI_IMAGE_MODEL", "gpt-image-2")
+    monkeypatch.setenv("OPENAI_IMAGE_MODEL", LEGACY_OPENAI_IMAGE_MODEL_ALIAS)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
 
     output_path = tmp_path / "generated-with-backup-key.png"
@@ -141,7 +146,7 @@ def test_openai_t2i_alias_uses_edit_key_as_backup(monkeypatch, tmp_path):
     assert output_path.exists()
     assert captured["url"] == "https://image.example.com/v1/images/generations"
     assert captured["headers"]["Authorization"] == "Bearer edit-backup-key"
-    assert captured["json"]["model"] == "gpt-image-2"
+    assert captured["json"]["model"] == LEGACY_OPENAI_IMAGE_MODEL_ALIAS
 
 
 def test_openai_i2i_alias_uses_edit_endpoint_and_first_reference_only(monkeypatch, tmp_path):
@@ -300,7 +305,7 @@ def test_openai_i2i_alias_limits_gpt_image_references_to_16(monkeypatch, tmp_pat
     assert captured["files"][-1][1][0] == os.path.basename(refs[15])
 
 
-def test_openai_t2i_alias_uses_recommended_banana_defaults_when_not_overridden(monkeypatch, tmp_path):
+def test_openai_t2i_alias_uses_recommended_gpt_image2_defaults_when_not_overridden(monkeypatch, tmp_path):
     captured = {}
 
     def fake_post(url, headers=None, json=None, timeout=None):
@@ -314,7 +319,7 @@ def test_openai_t2i_alias_uses_recommended_banana_defaults_when_not_overridden(m
     monkeypatch.delenv("OPENAI_IMAGE_MODEL", raising=False)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
 
-    output_path = tmp_path / "banana-default.png"
+    output_path = tmp_path / "gpt-image2-default.png"
     model = WanxImageModel({"params": {"model_name": OPENAI_T2I_MODEL_ALIAS}})
 
     model.generate("a neon train station in the rain", str(output_path))
@@ -453,7 +458,9 @@ def test_openai_edit_reference_image_keeps_shrinking_until_under_size_cap(monkey
     assert max(prepared.size) <= OPENAI_EDIT_REFERENCE_MAX_SIDE
 
 
-def test_banana_generation_retries_with_nano_banana_when_distributor_unavailable(monkeypatch, tmp_path):
+def test_openai_generation_retries_with_default_model_when_distributor_unavailable(
+    monkeypatch, tmp_path
+):
     calls = []
     unavailable_body = {
         "error": {
@@ -473,7 +480,7 @@ def test_banana_generation_retries_with_nano_banana_when_distributor_unavailable
     monkeypatch.setenv("OPENAI_IMAGE_MODEL", "gemini-3.1-flash-image-preview-2k")
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
 
-    output_path = tmp_path / "banana-fallback.png"
+    output_path = tmp_path / "image-fallback.png"
     model = WanxImageModel({"params": {"model_name": OPENAI_T2I_MODEL_ALIAS}})
 
     generated_path, duration = model.generate("a studio portrait of a ceramic mug", str(output_path))
@@ -486,7 +493,7 @@ def test_banana_generation_retries_with_nano_banana_when_distributor_unavailable
     assert calls[1]["json"]["model"] == DEFAULT_OPENAI_IMAGE_MODEL
 
 
-def test_banana_generation_reports_missing_dedicated_image_key_clearly(monkeypatch, tmp_path):
+def test_openai_generation_reports_missing_dedicated_image_key_clearly(monkeypatch, tmp_path):
     def fake_post(url, headers=None, json=None, timeout=None):
         return FakeResponse(
             {
@@ -506,7 +513,7 @@ def test_banana_generation_reports_missing_dedicated_image_key_clearly(monkeypat
     monkeypatch.setenv("OPENAI_IMAGE_MODEL", DEFAULT_OPENAI_IMAGE_MODEL)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
 
-    output_path = tmp_path / "banana-invalid-token.png"
+    output_path = tmp_path / "image-invalid-token.png"
     model = WanxImageModel({"params": {"model_name": OPENAI_T2I_MODEL_ALIAS}})
 
     try:
@@ -515,10 +522,10 @@ def test_banana_generation_reports_missing_dedicated_image_key_clearly(monkeypat
         assert "主用图像 API Key" in str(exc)
         assert "备用图编 Key" in str(exc)
     else:
-        raise AssertionError("Expected RuntimeError for missing dedicated Banana image key")
+        raise AssertionError("Expected RuntimeError for missing dedicated image key")
 
 
-def test_banana_edit_reports_missing_dedicated_edit_key_clearly(monkeypatch, tmp_path):
+def test_openai_edit_reports_missing_dedicated_edit_key_clearly(monkeypatch, tmp_path):
     ref = tmp_path / "reference.png"
     ref.write_bytes(base64.b64decode(PNG_1X1_BASE64))
 
@@ -542,7 +549,7 @@ def test_banana_edit_reports_missing_dedicated_edit_key_clearly(monkeypatch, tmp
     monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", DEFAULT_OPENAI_IMAGE_EDIT_MODEL)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
 
-    output_path = tmp_path / "banana-invalid-edit-token.png"
+    output_path = tmp_path / "image-invalid-edit-token.png"
     model = WanxImageModel({"params": {"i2i_model_name": OPENAI_I2I_MODEL_ALIAS}})
 
     try:
@@ -555,10 +562,12 @@ def test_banana_edit_reports_missing_dedicated_edit_key_clearly(monkeypatch, tmp
     except RuntimeError as exc:
         assert "图像编辑 API Key" in str(exc)
     else:
-        raise AssertionError("Expected RuntimeError for missing dedicated Banana edit key")
+        raise AssertionError("Expected RuntimeError for missing dedicated edit key")
 
 
-def test_openai_edit_uses_image_key_as_backup_before_general_key(monkeypatch, tmp_path):
+def test_openai_edit_uses_dedicated_image_key_as_backup_before_general_key(
+    monkeypatch, tmp_path
+):
     captured = {}
     ref = tmp_path / "reference.png"
     ref.write_bytes(base64.b64decode(PNG_1X1_BASE64))
@@ -570,12 +579,12 @@ def test_openai_edit_uses_image_key_as_backup_before_general_key(monkeypatch, tm
         return FakeResponse({"data": [{"b64_json": PNG_1X1_BASE64}]})
 
     monkeypatch.setenv("IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "banana-image-key")
+    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "dedicated-image-key")
     monkeypatch.delenv("OPENAI_IMAGE_EDIT_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "general-openai-key")
     monkeypatch.setenv("OPENAI_IMAGE_BASE_URL", "https://api.bltcy.ai/v1")
     monkeypatch.setenv("OPENAI_IMAGE_EDIT_BASE_URL", "https://yunwu.ai/v1")
-    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", "gpt-image-1-all")
+    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", DEFAULT_OPENAI_IMAGE_EDIT_MODEL)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
 
     output_path = tmp_path / "edit-prefers-general-key.png"
@@ -592,7 +601,7 @@ def test_openai_edit_uses_image_key_as_backup_before_general_key(monkeypatch, tm
     assert duration >= 0
     assert output_path.exists()
     assert captured["url"] == "https://yunwu.ai/v1/images/edits"
-    assert captured["headers"]["Authorization"] == "Bearer banana-image-key"
+    assert captured["headers"]["Authorization"] == "Bearer dedicated-image-key"
 
 
 def test_openai_edit_retries_on_transient_chunked_response(monkeypatch, tmp_path):
@@ -607,11 +616,11 @@ def test_openai_edit_retries_on_transient_chunked_response(monkeypatch, tmp_path
         return FakeResponse({"data": [{"b64_json": PNG_1X1_BASE64}]})
 
     monkeypatch.setenv("IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "banana-image-key")
+    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "dedicated-image-key")
     monkeypatch.setenv("OPENAI_API_KEY", "general-openai-key")
     monkeypatch.setenv("OPENAI_IMAGE_BASE_URL", "https://api.bltcy.ai/v1")
     monkeypatch.setenv("OPENAI_IMAGE_EDIT_BASE_URL", "https://yunwu.ai/v1")
-    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", "gpt-image-1-all")
+    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", DEFAULT_OPENAI_IMAGE_EDIT_MODEL)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
     monkeypatch.setattr("src.models.image.time.sleep", lambda _: None)
 
@@ -643,11 +652,11 @@ def test_openai_edit_retries_on_transient_ssl_eof(monkeypatch, tmp_path):
         return FakeResponse({"data": [{"b64_json": PNG_1X1_BASE64}]})
 
     monkeypatch.setenv("IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "banana-image-key")
+    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "dedicated-image-key")
     monkeypatch.setenv("OPENAI_API_KEY", "general-openai-key")
     monkeypatch.setenv("OPENAI_IMAGE_BASE_URL", "https://api.bltcy.ai/v1")
     monkeypatch.setenv("OPENAI_IMAGE_EDIT_BASE_URL", "https://api.bltcy.ai/v1")
-    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", "nano-banana")
+    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", DEFAULT_OPENAI_IMAGE_EDIT_MODEL)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
     monkeypatch.setattr("src.models.image.time.sleep", lambda _: None)
 
@@ -688,9 +697,9 @@ def test_openai_edit_retries_on_transient_429_response(monkeypatch, tmp_path):
         return FakeResponse({"data": [{"b64_json": PNG_1X1_BASE64}]})
 
     monkeypatch.setenv("IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "banana-image-key")
+    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "dedicated-image-key")
     monkeypatch.setenv("OPENAI_IMAGE_EDIT_BASE_URL", "https://api.bltcy.ai/v1")
-    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", "nano-banana")
+    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", DEFAULT_OPENAI_IMAGE_EDIT_MODEL)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
     monkeypatch.setattr("src.models.image.time.sleep", lambda seconds: sleeps.append(seconds))
 
@@ -733,9 +742,9 @@ def test_openai_edit_respects_retry_after_header_for_429(monkeypatch, tmp_path):
         return FakeResponse({"data": [{"b64_json": PNG_1X1_BASE64}]})
 
     monkeypatch.setenv("IMAGE_PROVIDER", "openai")
-    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "banana-image-key")
+    monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "dedicated-image-key")
     monkeypatch.setenv("OPENAI_IMAGE_EDIT_BASE_URL", "https://api.bltcy.ai/v1")
-    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", "nano-banana")
+    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", DEFAULT_OPENAI_IMAGE_EDIT_MODEL)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
     monkeypatch.setattr("src.models.image.time.sleep", lambda seconds: sleeps.append(seconds))
 
@@ -756,7 +765,10 @@ def test_openai_edit_respects_retry_after_header_for_429(monkeypatch, tmp_path):
     assert sleeps[0] == 9
 
 
-def test_openai_generation_does_not_retry_safety_moderation_blocks(monkeypatch, tmp_path):
+@pytest.mark.legacy_compat
+def test_openai_generation_legacy_gpt_image_2_does_not_retry_safety_moderation_blocks(
+    monkeypatch, tmp_path
+):
     calls = {"count": 0}
 
     def fake_post(url, headers=None, json=None, timeout=None):
@@ -775,7 +787,7 @@ def test_openai_generation_does_not_retry_safety_moderation_blocks(monkeypatch, 
     monkeypatch.setenv("IMAGE_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_IMAGE_API_KEY", "img-key")
     monkeypatch.setenv("OPENAI_IMAGE_BASE_URL", "https://image.example.com/v1")
-    monkeypatch.setenv("OPENAI_IMAGE_MODEL", "gpt-image-2")
+    monkeypatch.setenv("OPENAI_IMAGE_MODEL", LEGACY_OPENAI_IMAGE_MODEL_ALIAS)
     monkeypatch.setattr("src.models.image.requests.post", fake_post)
     monkeypatch.setattr("src.models.image.time.sleep", lambda _: None)
 
@@ -793,7 +805,7 @@ def test_openai_generation_does_not_retry_safety_moderation_blocks(monkeypatch, 
 
 
 def test_download_image_retries_on_transient_timeout(monkeypatch, tmp_path):
-    calls = {"count": 0}
+    calls = {"count": 0, "verify": [], "stream": []}
 
     class FakeSession:
         def mount(self, *_args, **_kwargs):
@@ -801,12 +813,14 @@ def test_download_image_retries_on_transient_timeout(monkeypatch, tmp_path):
 
         def get(self, url, stream=None, timeout=None, verify=None):
             calls["count"] += 1
+            calls["verify"].append(verify)
+            calls["stream"].append(stream)
             if calls["count"] < 3:
                 raise requests.exceptions.Timeout("download timed out")
             return FakeDownloadResponse(base64.b64decode(PNG_1X1_BASE64))
 
-    monkeypatch.setattr("src.models.image.requests.Session", lambda: FakeSession())
-    monkeypatch.setattr("src.models.image.time.sleep", lambda _: None)
+    monkeypatch.setattr("src.utils.http_downloads.requests.Session", lambda: FakeSession())
+    monkeypatch.setattr("src.utils.http_downloads.time.sleep", lambda _: None)
 
     output_path = tmp_path / "download-retry.png"
     model = WanxImageModel({"params": {"model_name": OPENAI_T2I_MODEL_ALIAS}})
@@ -816,3 +830,5 @@ def test_download_image_retries_on_transient_timeout(monkeypatch, tmp_path):
     assert output_path.exists()
     assert output_path.read_bytes() == base64.b64decode(PNG_1X1_BASE64)
     assert calls["count"] == 3
+    assert calls["verify"] == [True, True, True]
+    assert calls["stream"] == [True, True, True]

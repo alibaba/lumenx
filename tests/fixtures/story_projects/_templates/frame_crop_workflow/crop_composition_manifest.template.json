@@ -21,11 +21,16 @@
         "y": 0,
         "width": 1024,
         "height": 768
+      },
+      "visual_gate": {
+        "gate_id": "formal_crop_identity_vs_base_and_compose",
+        "min_changed_mean_delta": 1.0
       }
     }
   ],
   "notes": [
     "Run scripts/compose_fixture_frame_crops.ps1 with ProjectSlug and FrameId to reproduce the full formal frame locally.",
-    "Use -DetectOnly to re-check crop coordinates when the base or crop assets change."
+    "Use -DetectOnly to re-check crop coordinates when the base or crop assets change.",
+    "Stage2 crops must differ from their base crops, and Stage3 must be a pixel-faithful compose of the edited crops at the declared bboxes."
   ]
 }

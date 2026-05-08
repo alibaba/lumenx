@@ -1,0 +1,24 @@
+Use case: photorealistic-natural
+Asset type: frame 17 stage 1 base image, 16:9 storyboard still
+Execution mode: text-to-image only; do not attach reference images in this pass.
+
+Primary request:
+Generate the base room and full composition for frame 17 before any identity matching. This pass is for stable structure only.
+
+Scene/backdrop:
+2026 年清晨的中国医院普通病房，白墙，蓝白床单，窗边晨光，床头柜，轻薄窗帘，安静而克制，整体比上一镜更温暖一点。
+
+Subjects:
+Three generic placeholders are present for later identity editing. A Chinese adult man rests calmly on the bed on the left side and gently reaches toward the boy. A 7-9-year-old Chinese boy in a light celebration outfit stands near the bedside holding red, yellow, and blue balloons in the center. A Chinese female doctor in a white coat crouches on the right side, close to the boy and facing him. Do not attempt exact likeness in this stage.
+
+Composition/framing:
+16:9 horizontal cinematic medium-wide shot. Keep the bed and resting adult man on the left side, the boy in the middle, and the female doctor on the right side. Leave clean visible space around each person so later local edits can refine one subject at a time. Make it a natural single-frame movie still, not a collage, not a poster.
+
+Lighting/mood:
+Soft early morning daylight mixed with clean indoor light. Restrained contemporary Chinese drama tone, quiet hope, realistic skin tones, realistic fabric and room materials.
+
+Stage 1 constraints:
+Prioritize room geometry, clean sightlines, readable three-person placement, stable balloon placement, and a clear doctor silhouette on the right side. Keep the scene ordinary and calm. No medical procedure, no surgery, no blood, no injury, no critical-care equipment, no visible diagnosis, no readable charts.
+
+Avoid:
+cartoon, anime, glossy advertising look, exaggerated emotion, readable text, logos, watermarks, extra people, duplicated people, distorted hands, extra fingers, distorted balloons, cluttered equipment, emergency treatment, operating room.

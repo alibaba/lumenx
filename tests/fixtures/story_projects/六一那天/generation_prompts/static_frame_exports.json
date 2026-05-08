@@ -1,0 +1,205 @@
+{
+  "project_slug": "liuyi-that-day",
+  "status": "formal_static_frame_files_complete_visual_gate_required",
+  "completion_scope": {
+    "file_exports": "18/18 stage3 output files are declared and openable; file completion only, not visual consistency",
+    "visual_identity": "identity-sensitive frames require pytest visual gates before claiming visual consistency",
+    "formal_crop_workflows": "frame_15/16/17/18 must pass base-vs-edited pixel checks and Stage3 compose equality before visual consistency is claimed",
+    "not_a_visual_claim": "file completion is not treated as character/scene visual consistency"
+  },
+  "output_dir": "output/codex_image_audit/liuyi-that-day/generated",
+  "output_size": {
+    "width": 2048,
+    "height": 1152
+  },
+  "frame_exports": [
+    {
+      "frame_id": "liuyi_frame_01",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 0, "y": 0, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_01_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_school_playground"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_02",
+      "source_type": "child_identity_preserve_workflow",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "source_collage_bbox": { "x": 448, "y": 0, "width": 448, "height": 252 },
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_02/crop_composition_manifest.json",
+      "identity_reference_asset": "liuyi_char_xiaoqi_child",
+      "identity_reference_image": "output/uploads/fixtures/liuyi_char_xiaoqi_child_full_body.png",
+      "identity_reference_source_bbox": { "x": 300, "y": 80, "width": 420, "height": 420 },
+      "identity_crop_bbox": { "x": 640, "y": 0, "width": 768, "height": 1152 },
+      "identity_patch_bbox": { "x": 0, "y": 70, "width": 360, "height": 360 },
+      "visual_gate": "test_liuyi_child_identity_visual_gate_embeds_locked_reference",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_02_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_school_playground", "liuyi_char_xiaoqi_child", "liuyi_prop_child_drawing"]
+    },
+    {
+      "frame_id": "liuyi_frame_03",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 896, "y": 0, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_03_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_hospital_room", "liuyi_char_father", "liuyi_prop_white_bear", "liuyi_prop_paper_bag"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_04",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 0, "y": 286, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_04_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_hospital_room", "liuyi_char_father", "liuyi_char_mother", "liuyi_prop_white_bear", "liuyi_prop_paper_bag"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_05",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 448, "y": 286, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_05_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_hospital_room", "liuyi_char_father", "liuyi_char_mother", "liuyi_prop_white_bear", "liuyi_prop_paper_bag"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_06",
+      "source_type": "child_identity_preserve_workflow",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "source_collage_bbox": { "x": 896, "y": 286, "width": 448, "height": 252 },
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_06/crop_composition_manifest.json",
+      "identity_reference_asset": "liuyi_char_xiaoqi_child",
+      "identity_reference_image": "output/uploads/fixtures/liuyi_char_xiaoqi_child_full_body.png",
+      "identity_reference_source_bbox": { "x": 300, "y": 80, "width": 420, "height": 420 },
+      "identity_crop_bbox": { "x": 512, "y": 0, "width": 768, "height": 1152 },
+      "identity_patch_bbox": { "x": 240, "y": 150, "width": 360, "height": 360 },
+      "visual_gate": "test_liuyi_child_identity_visual_gate_embeds_locked_reference",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_06_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_school_playground", "liuyi_char_xiaoqi_child"]
+    },
+    {
+      "frame_id": "liuyi_frame_07",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 0, "y": 572, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_07_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_hospital_room", "liuyi_char_mother", "liuyi_prop_paper_bag"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_08",
+      "source_type": "child_identity_preserve_workflow",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "source_collage_bbox": { "x": 448, "y": 572, "width": 448, "height": 252 },
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_08/crop_composition_manifest.json",
+      "identity_reference_asset": "liuyi_char_xiaoqi_child",
+      "identity_reference_image": "output/uploads/fixtures/liuyi_char_xiaoqi_child_full_body.png",
+      "identity_reference_source_bbox": { "x": 300, "y": 80, "width": 420, "height": 420 },
+      "identity_crop_bbox": { "x": 208, "y": 0, "width": 832, "height": 1152 },
+      "identity_patch_bbox": { "x": 0, "y": 110, "width": 360, "height": 360 },
+      "visual_gate": "test_liuyi_child_identity_visual_gate_embeds_locked_reference",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_08_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_school_gate", "liuyi_char_xiaoqi_child", "liuyi_char_mother", "liuyi_prop_white_bear", "liuyi_prop_paper_bag"]
+    },
+    {
+      "frame_id": "liuyi_frame_09",
+      "source_type": "child_identity_preserve_workflow",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "source_collage_bbox": { "x": 896, "y": 572, "width": 448, "height": 252 },
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_09/crop_composition_manifest.json",
+      "identity_reference_asset": "liuyi_char_xiaoqi_child",
+      "identity_reference_image": "output/uploads/fixtures/liuyi_char_xiaoqi_child_full_body.png",
+      "identity_reference_source_bbox": { "x": 300, "y": 80, "width": 420, "height": 420 },
+      "identity_crop_bbox": { "x": 160, "y": 0, "width": 832, "height": 1152 },
+      "identity_patch_bbox": { "x": 250, "y": 100, "width": 360, "height": 360 },
+      "visual_gate": "test_liuyi_child_identity_visual_gate_embeds_locked_reference",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_09_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_funeral_hall", "liuyi_char_xiaoqi_child", "liuyi_char_father", "liuyi_prop_white_bear", "liuyi_prop_father_memorial_portrait"]
+    },
+    {
+      "frame_id": "liuyi_frame_10",
+      "source_type": "child_identity_preserve_workflow",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "source_collage_bbox": { "x": 0, "y": 858, "width": 448, "height": 252 },
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_10/crop_composition_manifest.json",
+      "identity_reference_asset": "liuyi_char_xiaoqi_child",
+      "identity_reference_image": "output/uploads/fixtures/liuyi_char_xiaoqi_child_full_body.png",
+      "identity_reference_source_bbox": { "x": 300, "y": 80, "width": 420, "height": 420 },
+      "identity_crop_bbox": { "x": 0, "y": 0, "width": 896, "height": 1152 },
+      "identity_patch_bbox": { "x": 550, "y": 60, "width": 330, "height": 330 },
+      "visual_gate": "test_liuyi_child_identity_visual_gate_embeds_locked_reference",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_10_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_home_desk", "liuyi_char_xiaoqi_child", "liuyi_char_father", "liuyi_prop_white_bear", "liuyi_prop_family_photo", "liuyi_prop_notebook_pencil"]
+    },
+    {
+      "frame_id": "liuyi_frame_11",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 448, "y": 858, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_11_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_home_desk", "liuyi_char_xiaoqi_young", "liuyi_prop_white_bear", "liuyi_prop_notebook_pencil"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_12",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 896, "y": 858, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_12_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_exam_admission", "liuyi_char_xiaoqi_young", "liuyi_prop_white_bear", "liuyi_prop_admission_notice"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_13",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 0, "y": 1144, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_13_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_medical_school", "liuyi_char_xiaoqi_young", "liuyi_prop_medical_textbooks"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_14",
+      "source_type": "collage_static_export",
+      "source_collage": "tests/fixtures/story_projects/六一那天/references/storyboard_reference_collage.png",
+      "collage_bbox": { "x": 448, "y": 1144, "width": 448, "height": 252 },
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_14_stage3_full_formal_v1.png",
+      "reference_assets": ["liuyi_scene_doctor_office", "liuyi_char_xiaoqi_adult", "liuyi_prop_white_bear", "liuyi_prop_medical_textbooks"],
+      "visual_gate": "test_liuyi_static_frame_exports_are_complete_and_openable"
+    },
+    {
+      "frame_id": "liuyi_frame_15",
+      "source_type": "formal_crop_workflow",
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_15/crop_composition_manifest.json",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_15_stage3_full_formal_v1.png",
+      "visual_gate": "test_liuyi_formal_crop_workflows_change_pixels_and_compose_outputs",
+      "reference_assets": ["liuyi_scene_2026_ward", "liuyi_char_xiaoqi_adult", "liuyi_char_boy", "liuyi_char_boy_father", "liuyi_prop_childrens_day_balloons"]
+    },
+    {
+      "frame_id": "liuyi_frame_16",
+      "source_type": "formal_crop_workflow",
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_16/crop_composition_manifest.json",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_16_stage3_full_formal_v1.png",
+      "visual_gate": "test_liuyi_formal_crop_workflows_change_pixels_and_compose_outputs",
+      "reference_assets": ["liuyi_scene_2026_ward", "liuyi_char_xiaoqi_adult", "liuyi_char_boy", "liuyi_char_boy_father", "liuyi_prop_childrens_day_balloons"]
+    },
+    {
+      "frame_id": "liuyi_frame_17",
+      "source_type": "formal_crop_workflow",
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_17/crop_composition_manifest.json",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_17_stage3_full_formal_v1.png",
+      "visual_gate": "test_liuyi_formal_crop_workflows_change_pixels_and_compose_outputs",
+      "reference_assets": ["liuyi_scene_2026_ward", "liuyi_char_xiaoqi_adult", "liuyi_char_boy", "liuyi_char_boy_father", "liuyi_prop_childrens_day_balloons"]
+    },
+    {
+      "frame_id": "liuyi_frame_18",
+      "source_type": "formal_crop_workflow",
+      "workflow_manifest": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_18/crop_composition_manifest.json",
+      "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_18_stage3_full_formal_v1.png",
+      "visual_gate": "test_liuyi_formal_crop_workflows_change_pixels_and_compose_outputs",
+      "reference_assets": ["liuyi_scene_hospital_corridor", "liuyi_char_xiaoqi_adult", "liuyi_prop_white_bear", "liuyi_prop_medical_textbooks"]
+    }
+  ]
+}

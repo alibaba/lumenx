@@ -5,6 +5,8 @@ Covers:
 - CreateVideoTaskRequest new fields (api.py)
 - Pipeline routing of new params to Kling/Vidu adapters
 """
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -160,6 +162,10 @@ class TestKlingModelParams:
             return FakeVideoContent()
 
         monkeypatch.setattr(requests, "get", mock_get)
+        monkeypatch.setattr(
+            "src.models.kling.download_url_to_file",
+            lambda url, output_path, timeout=None: Path(output_path).write_bytes(b"video"),
+        )
         monkeypatch.setattr("time.sleep", lambda x: None)
 
         import tempfile, os
@@ -200,6 +206,10 @@ class TestKlingModelParams:
         import requests
         monkeypatch.setattr(requests, "post", lambda *a, **kw: (captured_body.update(kw.get("json", {})), FakeResponse())[1])
         monkeypatch.setattr(requests, "get", lambda *a, **kw: FakePoll() if "image2video" in a[0] else FakeDL())
+        monkeypatch.setattr(
+            "src.models.kling.download_url_to_file",
+            lambda url, output_path, timeout=None: Path(output_path).write_bytes(b"video"),
+        )
         monkeypatch.setattr("time.sleep", lambda x: None)
 
         import tempfile, os
@@ -253,6 +263,10 @@ class TestViduModelParams:
 
         monkeypatch.setattr(requests, "post", mock_post)
         monkeypatch.setattr(requests, "get", mock_get)
+        monkeypatch.setattr(
+            "src.models.vidu.download_url_to_file",
+            lambda url, output_path, timeout=None: Path(output_path).write_bytes(b"video"),
+        )
         monkeypatch.setattr("time.sleep", lambda x: None)
 
         import tempfile, os

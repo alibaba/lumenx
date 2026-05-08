@@ -30,6 +30,11 @@
    - Final output: `output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_15_stage3_full_formal_v1.png`
    - 这一步不调用图像 API，只做本地像素合成。
 
+## Visual Gate
+
+- `adult_xiaoqi` 与 `boy_father` 的 Stage2 crop 必须相对各自 base crop 发生真实像素变化。
+- Stage3 的对应 bbox 必须与 edited crop 像素一致，而不是只保证文件存在。
+
 男孩相关的 `02b_boy_local_edit_prompt.txt` 仍只作为受控诊断 prompt，不进入默认正式路径。
 
 ## Project Wrapper Inputs
@@ -58,7 +63,7 @@ powershell -File scripts\run_fixture_frame_script.ps1 `
 powershell -File scripts\run_liuyi_frame15_formal_crop_edits.ps1
 ```
 
-这套模板复制到别的 frame 时，直接复用本目录里的 `crop_composition_manifest.json` 和 `run_formal_crop_edits.ps1`，只改 bbox、输出文件名和对应 prompt 路径就行。通用模板也放在 `tests/fixtures/story_projects/_templates/frame_crop_workflow/`。
+这套模板只作为 `liuyi_frame_15` 的现成示例。后续新 frame 直接复制 `tests/fixtures/story_projects/_templates/frame_crop_workflow/`，再替换 bbox、输出文件名、prompt 路径和参考图即可。
 
 只做本地合回或 bbox 检测时，也走 ASCII compose-only wrapper：
 

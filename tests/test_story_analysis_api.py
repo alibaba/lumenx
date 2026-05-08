@@ -136,6 +136,9 @@ def test_analyze_story_beat_endpoint_replaces_target_frames(client_with_pipeline
             "camera_movement": "缓慢推进",
             "dialogue": "有人比我们先到。",
             "speaker": "林夏",
+            "generation_source": "mock",
+            "generation_degraded": True,
+            "generation_reason": "测试用 mock 分镜",
         }
     ]
 
@@ -149,3 +152,9 @@ def test_analyze_story_beat_endpoint_replaces_target_frames(client_with_pipeline
     assert payload["frames"][0]["story_beat_id"] == "story_beat_001"
     assert payload["frames"][0]["story_beat_title"] == "第1场 · 废弃仓库"
     assert payload["frames"][0]["action_description"] == "林夏沿着纸鹤留下的水痕继续向前。"
+    assert payload["frames"][0]["generation_source"] == "mock"
+    assert payload["frames"][0]["generation_degraded"] is True
+    assert payload["frames"][0]["generation_reason"] == "测试用 mock 分镜"
+    assert payload["generation_metadata"]["storyboard_analysis"]["source"] == "mock"
+    assert payload["generation_metadata"]["storyboard_analysis"]["degraded"] is True
+    assert payload["generation_metadata"]["storyboard_analysis"]["target_beat_id"] == "story_beat_001"

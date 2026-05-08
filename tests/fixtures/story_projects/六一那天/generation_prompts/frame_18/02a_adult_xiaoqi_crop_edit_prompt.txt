@@ -1,0 +1,16 @@
+Use case: identity-preserve
+Asset type: frame 18 crop edit, adult Xiaoqi consistency
+Execution mode: image edit with exactly two input images.
+
+Input images:
+Image 1: a cropped region from the latest approved frame 18 base, containing only the adult woman doctor and nearby background; this is the edit target.
+Image 2: adult Xiaoqi full-body reference.
+
+Primary request:
+Refine only the adult woman doctor in Image 1 so she matches Image 2 more closely. Keep the edit localized to her face, black low ponytail, white coat, walking posture, and calm professional temperament.
+
+Invariants:
+Keep the crop size, camera angle, corridor background, lighting, and body placement unchanged. Do not add new people or objects. Do not introduce readable text, badges, logos, or signage.
+
+Avoid:
+changing the crop framing, adding extra people, adding medical procedure details, adding readable text, logos, watermarks, cartoon styling, anime styling, over-beautifying the face, changing the lighting direction.

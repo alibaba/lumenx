@@ -179,9 +179,14 @@ def test_vendor_vidu_local_image_with_oss_uses_signed_url(monkeypatch, tmp_path)
             )
         return _FakeResponse(200, content=b"video")
 
+    def fake_download(url, output_path, timeout=None, **kwargs):
+        captured["download_url"] = url
+        Path(output_path).write_bytes(b"video")
+
     monkeypatch.setattr("src.models.vidu.OSSImageUploader", FakeUploader)
     monkeypatch.setattr("src.models.vidu.requests.post", fake_post)
     monkeypatch.setattr("src.models.vidu.requests.get", fake_get)
+    monkeypatch.setattr("src.models.vidu.download_url_to_file", fake_download)
     monkeypatch.setattr("src.models.vidu.time.sleep", lambda _: None)
 
     model = ViduModel({"api_key": "test-key"})
@@ -195,3 +200,4 @@ def test_vendor_vidu_local_image_with_oss_uses_signed_url(monkeypatch, tmp_path)
     assert captured["submit_url"].endswith("/img2video")
     assert captured["headers"]["Authorization"] == "Token test-key"
     assert captured["body"]["images"][0].startswith("https://oss.example/lumenx/")
+    assert captured["download_url"] == "https://example.com/out.mp4"

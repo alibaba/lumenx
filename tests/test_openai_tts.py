@@ -15,15 +15,20 @@ class FakeResponse:
     def json(self):
         return {"error": "unexpected"}
 
+    def iter_content(self, chunk_size=8192):
+        for index in range(0, len(self.content), chunk_size):
+            yield self.content[index : index + chunk_size]
+
 
 def test_openai_tts_uses_audio_speech_endpoint(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_post(url, headers=None, json=None, timeout=None):
+    def fake_post(url, headers=None, json=None, timeout=None, stream=None):
         captured["url"] = url
         captured["headers"] = headers
         captured["json"] = json
         captured["timeout"] = timeout
+        captured["stream"] = stream
         return FakeResponse(
             b"fake-mp3-bytes",
             headers={"x-request-id": "req_openai_tts_123"},
@@ -57,6 +62,7 @@ def test_openai_tts_uses_audio_speech_endpoint(monkeypatch, tmp_path):
     assert captured["json"]["input"] == "你好，世界"
     assert captured["json"]["response_format"] == "mp3"
     assert captured["json"]["speed"] == 1.25
+    assert captured["stream"] is True
 
 
 def test_openai_tts_lists_openai_compatible_voices(monkeypatch):

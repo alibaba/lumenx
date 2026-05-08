@@ -1,0 +1,905 @@
+{
+  "schema_version": 2,
+  "slug": "liuyi-that-day-v2",
+  "project_name": "六一那天·重制版",
+  "project_type": "seedance_storyboard_rebuild",
+  "project_stage": "draft",
+  "description": "从基础素材到 18 镜分镜重新建立的产品级样板草案；当前不进入正式 fixture discovery。",
+  "parser": "seedance_storyboard_markdown",
+  "source_files": [
+    {
+      "role": "story_bible",
+      "path": "source/01_story_bible.md",
+      "required": true
+    },
+    {
+      "role": "visual_bible",
+      "path": "source/02_visual_bible.md",
+      "required": true
+    },
+    {
+      "role": "character_bible",
+      "path": "source/03_character_bible.md",
+      "required": true
+    },
+    {
+      "role": "scene_prop_bible",
+      "path": "source/04_scene_prop_bible.md",
+      "required": true
+    },
+    {
+      "role": "storyboard_prompt_doc",
+      "path": "source/05_storyboard_script.md",
+      "parser": "seedance_storyboard_markdown",
+      "frame_count": 18,
+      "required": true
+    }
+  ],
+  "reference_images": [
+    {
+      "role": "style_board",
+      "path": "references/style/liuyi_style_board_v2.png",
+      "status": "planned"
+    },
+    {
+      "role": "storyboard_reference_collage",
+      "path": "references/style/liuyi_storyboard_reference_collage_v2.png",
+      "status": "planned"
+    }
+  ],
+  "asset_policy": {
+    "status": "planned",
+    "character_board": {
+      "minimum_resolution": "3840x2160",
+      "required_parts": [
+        "full_body",
+        "three_view",
+        "expression_sheet"
+      ],
+      "optional_parts": [
+        "head_shot"
+      ]
+    },
+    "scene_board": {
+      "minimum_resolution": "3840x2160",
+      "required_parts": [
+        "board_4k",
+        "key_view"
+      ],
+      "optional_parts": [
+        "lighting_variant",
+        "time_variant"
+      ]
+    },
+    "prop_board": {
+      "minimum_resolution": "2048x2048",
+      "required_parts": [
+        "board_4k",
+        "detail",
+        "usage_view"
+      ],
+      "optional_parts": []
+    },
+    "naming_rule": "references/<category>/<asset_id>/<asset_id>_<role>.png"
+  },
+  "asset_packages": [
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_xiaoqi_child_v2",
+      "name": "小琪（儿童）",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/characters/liuyi_char_xiaoqi_child_v2/liuyi_char_xiaoqi_child_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "full_body",
+          "upload_type": "full_body",
+          "path": "references/characters/liuyi_char_xiaoqi_child_v2/liuyi_char_xiaoqi_child_v2_full_body.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "three_view",
+          "upload_type": "three_views",
+          "path": "references/characters/liuyi_char_xiaoqi_child_v2/liuyi_char_xiaoqi_child_v2_three_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "expression_sheet",
+          "upload_type": "expression_sheet",
+          "path": "references/characters/liuyi_char_xiaoqi_child_v2/liuyi_char_xiaoqi_child_v2_expression_sheet.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_mother_v2",
+      "name": "母亲",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/characters/liuyi_char_mother_v2/liuyi_char_mother_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "full_body",
+          "upload_type": "full_body",
+          "path": "references/characters/liuyi_char_mother_v2/liuyi_char_mother_v2_full_body.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "three_view",
+          "upload_type": "three_views",
+          "path": "references/characters/liuyi_char_mother_v2/liuyi_char_mother_v2_three_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "expression_sheet",
+          "upload_type": "expression_sheet",
+          "path": "references/characters/liuyi_char_mother_v2/liuyi_char_mother_v2_expression_sheet.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "head_shot",
+          "upload_type": "head_shot",
+          "path": "references/characters/liuyi_char_mother_v2/liuyi_char_mother_v2_head_shot.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_father_v2",
+      "name": "父亲",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/characters/liuyi_char_father_v2/liuyi_char_father_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "full_body",
+          "upload_type": "full_body",
+          "path": "references/characters/liuyi_char_father_v2/liuyi_char_father_v2_full_body.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "three_view",
+          "upload_type": "three_views",
+          "path": "references/characters/liuyi_char_father_v2/liuyi_char_father_v2_three_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "expression_sheet",
+          "upload_type": "expression_sheet",
+          "path": "references/characters/liuyi_char_father_v2/liuyi_char_father_v2_expression_sheet.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "head_shot",
+          "upload_type": "head_shot",
+          "path": "references/characters/liuyi_char_father_v2/liuyi_char_father_v2_head_shot.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_xiaoqi_young_v2",
+      "name": "小琪（少年）",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/characters/liuyi_char_xiaoqi_young_v2/liuyi_char_xiaoqi_young_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "full_body",
+          "upload_type": "full_body",
+          "path": "references/characters/liuyi_char_xiaoqi_young_v2/liuyi_char_xiaoqi_young_v2_full_body.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "three_view",
+          "upload_type": "three_views",
+          "path": "references/characters/liuyi_char_xiaoqi_young_v2/liuyi_char_xiaoqi_young_v2_three_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "expression_sheet",
+          "upload_type": "expression_sheet",
+          "path": "references/characters/liuyi_char_xiaoqi_young_v2/liuyi_char_xiaoqi_young_v2_expression_sheet.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_xiaoqi_adult_v2",
+      "name": "小琪（成年医生）",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/characters/liuyi_char_xiaoqi_adult_v2/liuyi_char_xiaoqi_adult_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "full_body",
+          "upload_type": "full_body",
+          "path": "references/characters/liuyi_char_xiaoqi_adult_v2/liuyi_char_xiaoqi_adult_v2_full_body.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "three_view",
+          "upload_type": "three_views",
+          "path": "references/characters/liuyi_char_xiaoqi_adult_v2/liuyi_char_xiaoqi_adult_v2_three_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "expression_sheet",
+          "upload_type": "expression_sheet",
+          "path": "references/characters/liuyi_char_xiaoqi_adult_v2/liuyi_char_xiaoqi_adult_v2_expression_sheet.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "head_shot",
+          "upload_type": "head_shot",
+          "path": "references/characters/liuyi_char_xiaoqi_adult_v2/liuyi_char_xiaoqi_adult_v2_head_shot.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_boy_v2",
+      "name": "2026 小男孩",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/characters/liuyi_char_boy_v2/liuyi_char_boy_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "full_body",
+          "upload_type": "full_body",
+          "path": "references/characters/liuyi_char_boy_v2/liuyi_char_boy_v2_full_body.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "three_view",
+          "upload_type": "three_views",
+          "path": "references/characters/liuyi_char_boy_v2/liuyi_char_boy_v2_three_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "expression_sheet",
+          "upload_type": "expression_sheet",
+          "path": "references/characters/liuyi_char_boy_v2/liuyi_char_boy_v2_expression_sheet.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "character",
+      "asset_id": "liuyi_char_boy_father_v2",
+      "name": "2026 小男孩父亲",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/characters/liuyi_char_boy_father_v2/liuyi_char_boy_father_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "full_body",
+          "upload_type": "full_body",
+          "path": "references/characters/liuyi_char_boy_father_v2/liuyi_char_boy_father_v2_full_body.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "three_view",
+          "upload_type": "three_views",
+          "path": "references/characters/liuyi_char_boy_father_v2/liuyi_char_boy_father_v2_three_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "expression_sheet",
+          "upload_type": "expression_sheet",
+          "path": "references/characters/liuyi_char_boy_father_v2/liuyi_char_boy_father_v2_expression_sheet.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "head_shot",
+          "upload_type": "head_shot",
+          "path": "references/characters/liuyi_char_boy_father_v2/liuyi_char_boy_father_v2_head_shot.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_school_playground_v2",
+      "name": "2008 小学操场",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_school_playground_v2/liuyi_scene_school_playground_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_school_playground_v2/liuyi_scene_school_playground_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "lighting_variant",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_school_playground_v2/liuyi_scene_school_playground_v2_morning_warm.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_hospital_room_v2",
+      "name": "2008 普通病房",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_hospital_room_v2/liuyi_scene_hospital_room_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_hospital_room_v2/liuyi_scene_hospital_room_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "lighting_variant",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_hospital_room_v2/liuyi_scene_hospital_room_v2_cool_day.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_school_gate_v2",
+      "name": "2008 演出后校门",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_school_gate_v2/liuyi_scene_school_gate_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_school_gate_v2/liuyi_scene_school_gate_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "time_variant",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_school_gate_v2/liuyi_scene_school_gate_v2_after_show.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_2026_ward_v2",
+      "name": "2026 肝病科病房",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_2026_ward_v2/liuyi_scene_2026_ward_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_2026_ward_v2/liuyi_scene_2026_ward_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "time_variant",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_2026_ward_v2/liuyi_scene_2026_ward_v2_childrens_day_daylight.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_hospital_corridor_v2",
+      "name": "医院走廊",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_hospital_corridor_v2/liuyi_scene_hospital_corridor_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_hospital_corridor_v2/liuyi_scene_hospital_corridor_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "lighting_variant",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_hospital_corridor_v2/liuyi_scene_hospital_corridor_v2_quiet_morning.png",
+          "required": false,
+          "runtime_binding": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_funeral_hall_v2",
+      "name": "克制灵堂",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_funeral_hall_v2/liuyi_scene_funeral_hall_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_funeral_hall_v2/liuyi_scene_funeral_hall_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_home_desk_v2",
+      "name": "家中夜晚书桌",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_home_desk_v2/liuyi_scene_home_desk_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_home_desk_v2/liuyi_scene_home_desk_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "lighting_variant",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_home_desk_v2/liuyi_scene_home_desk_v2_night_lamp.png",
+          "required": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_exam_admission_v2",
+      "name": "录取通知书桌面",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_exam_admission_v2/liuyi_scene_exam_admission_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_exam_admission_v2/liuyi_scene_exam_admission_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_medical_school_v2",
+      "name": "医学院走廊",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_medical_school_v2/liuyi_scene_medical_school_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_medical_school_v2/liuyi_scene_medical_school_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "scene",
+      "asset_id": "liuyi_scene_doctor_office_v2",
+      "name": "成年小琪医生办公室",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/scenes/liuyi_scene_doctor_office_v2/liuyi_scene_doctor_office_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "key_view",
+          "upload_type": "image",
+          "path": "references/scenes/liuyi_scene_doctor_office_v2/liuyi_scene_doctor_office_v2_key_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_white_bear_v2",
+      "name": "白色毛绒小熊",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_white_bear_v2/liuyi_prop_white_bear_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_white_bear_v2/liuyi_prop_white_bear_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_white_bear_v2/liuyi_prop_white_bear_v2_usage_view.png",
+          "required": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_paper_bag_v2",
+      "name": "父亲礼物纸袋",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_paper_bag_v2/liuyi_prop_paper_bag_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_paper_bag_v2/liuyi_prop_paper_bag_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_paper_bag_v2/liuyi_prop_paper_bag_v2_usage_view.png",
+          "required": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_child_drawing_v2",
+      "name": "小琪儿童画",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_child_drawing_v2/liuyi_prop_child_drawing_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_child_drawing_v2/liuyi_prop_child_drawing_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_child_drawing_v2/liuyi_prop_child_drawing_v2_usage_view.png",
+          "required": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_childrens_day_balloons_v2",
+      "name": "2026 儿童节气球",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_childrens_day_balloons_v2/liuyi_prop_childrens_day_balloons_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_childrens_day_balloons_v2/liuyi_prop_childrens_day_balloons_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_childrens_day_balloons_v2/liuyi_prop_childrens_day_balloons_v2_usage_view.png",
+          "required": false,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_medical_textbooks_v2",
+      "name": "医学教材与病历夹",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_medical_textbooks_v2/liuyi_prop_medical_textbooks_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_medical_textbooks_v2/liuyi_prop_medical_textbooks_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_medical_textbooks_v2/liuyi_prop_medical_textbooks_v2_usage_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_father_memorial_portrait_v2",
+      "name": "父亲遗像",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_father_memorial_portrait_v2/liuyi_prop_father_memorial_portrait_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_father_memorial_portrait_v2/liuyi_prop_father_memorial_portrait_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_father_memorial_portrait_v2/liuyi_prop_father_memorial_portrait_v2_usage_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_family_photo_v2",
+      "name": "父女旧合照",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_family_photo_v2/liuyi_prop_family_photo_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_family_photo_v2/liuyi_prop_family_photo_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_family_photo_v2/liuyi_prop_family_photo_v2_usage_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_notebook_pencil_v2",
+      "name": "复习笔记和铅笔",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_notebook_pencil_v2/liuyi_prop_notebook_pencil_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_notebook_pencil_v2/liuyi_prop_notebook_pencil_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_notebook_pencil_v2/liuyi_prop_notebook_pencil_v2_usage_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "asset_type": "prop",
+      "asset_id": "liuyi_prop_admission_notice_v2",
+      "name": "录取通知书",
+      "locked": true,
+      "board": {
+        "role": "board_4k",
+        "path": "references/props/liuyi_prop_admission_notice_v2/liuyi_prop_admission_notice_v2_board_4k.png",
+        "runtime_binding": false,
+        "status": "planned"
+      },
+      "derivatives": [
+        {
+          "role": "detail",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_admission_notice_v2/liuyi_prop_admission_notice_v2_detail.png",
+          "required": true,
+          "status": "planned"
+        },
+        {
+          "role": "usage_view",
+          "upload_type": "image",
+          "path": "references/props/liuyi_prop_admission_notice_v2/liuyi_prop_admission_notice_v2_usage_view.png",
+          "required": true,
+          "status": "planned"
+        }
+      ]
+    }
+  ],
+  "reference_assets": [],
+  "model_settings": {
+    "image_provider": "openai",
+    "image_edit_provider": "openai",
+    "t2i_model": "openai-image",
+    "i2i_model": "openai-image-edit",
+    "openai_image_model": "gpt-image2",
+    "openai_image_edit_model": "gpt-image2",
+    "character_aspect_ratio": "16:9",
+    "scene_aspect_ratio": "16:9",
+    "prop_aspect_ratio": "1:1",
+    "storyboard_aspect_ratio": "16:9"
+  },
+  "render_policy": {
+    "product_output_root": "output/codex_image_audit/liuyi-that-day-v2/generated",
+    "final_frame_pattern": "liuyi_v2_frame_NN_stage3_full_formal_v1.png",
+    "uploads_fixture_root": "output/uploads/fixtures",
+    "allow_intermediates": true,
+    "final_delivery_rule": "Only frame.rendered_image_asset selected variants are delivery outputs."
+  },
+  "quality_gates": [
+    "liuyi_v2_asset_packages_have_board_and_required_derivatives",
+    "liuyi_v2_source_does_not_reuse_v1_prompt_text",
+    "liuyi_v2_storyboard_script_has_18_parseable_shots",
+    "liuyi_v2_final_outputs_stay_under_single_delivery_root"
+  ],
+  "notes": [
+    "这是 draft manifest，不要改名为 project_manifest.json，直到真实 v2 PNG 资产全部落位。",
+    "asset_packages 是作者级资产包；reference_assets 是运行时兼容层，可由 asset_packages 扁平化生成。",
+    "新项目不复用旧 prompt 文本；旧 fixture 只作为排查参照。",
+    "人物一致性必须依赖主参考与图生图，不允许把局部贴图当成产品输出。"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "project_slug": "liuyi-that-day",
+  "frame_id": "liuyi_frame_10",
+  "description": "Frame 10 child Xiaoqi identity-preserve crop workflow using the locked child full-body reference.",
+  "base_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_10_stage1_collage_base.png",
+  "output_image": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_10_stage3_full_formal_v1.png",
+  "composition_method": "paste edited child Xiaoqi crop onto the exact collage-base bounding box after verifying original crop coordinates",
+  "crops": [
+    {
+      "id": "child_xiaoqi",
+      "role": "child Xiaoqi identity edit",
+      "prompt": "tests/fixtures/story_projects/六一那天/generation_prompts/frame_10/02a_child_xiaoqi_crop_edit_prompt.txt",
+      "reference_images": [
+        "output/uploads/fixtures/liuyi_char_xiaoqi_child_full_body.png"
+      ],
+      "reference_source_bbox": {
+        "x": 300,
+        "y": 80,
+        "width": 420,
+        "height": 420
+      },
+      "identity_patch_bbox": {
+        "x": 550,
+        "y": 60,
+        "width": 330,
+        "height": 330
+      },
+      "visual_gate": {
+        "gate_id": "child_xiaoqi_reference_patch_similarity",
+        "min_changed_mean_delta": 1.0,
+        "max_reference_patch_mean_delta": 18.0,
+        "min_reference_mask_coverage": 0.18
+      },
+      "base_crop": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_10_stage1_collage_base_crop_child_xiaoqi.png",
+      "edited_crop": "output/codex_image_audit/liuyi-that-day/generated/liuyi_frame_10_stage2_child_xiaoqi_formal_v1.png",
+      "bbox": {
+        "x": 0,
+        "y": 0,
+        "width": 896,
+        "height": 1152
+      }
+    }
+  ],
+  "notes": [
+    "This frame is not accepted as a plain collage export; it must pass through the child Xiaoqi identity edit.",
+    "Stage2 is produced locally by scripts/compose_liuyi_child_identity_crop.py from liuyi_char_xiaoqi_child_full_body.png.",
+    "Run scripts/compose_fixture_frame_crops.ps1 with ProjectSlug=liuyi-that-day and FrameId=liuyi_frame_10 to reproduce the full formal frame locally."
+  ]
+}

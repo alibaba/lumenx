@@ -38,3 +38,7 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+markers = [
+    "legacy_compat: legacy compatibility coverage for historical model aliases",
+    "e2e: browser-level smoke tests that start dev services",
+]

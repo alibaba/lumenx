@@ -109,6 +109,8 @@ def test_parse_novel_requests_json_object_and_structured_messages(monkeypatch):
     assert len(script.story_analysis.scene_beats) >= 1
     assert script.story_analysis.scene_beats[0].character_names == ["林夏"]
     assert script.story_analysis.character_presence[0].character_name == "林夏"
+    assert script.generation_metadata["novel_parse"]["source"] == "llm"
+    assert script.generation_metadata["novel_parse"]["degraded"] is False
 
 
 def test_parse_novel_falls_back_when_llm_returns_empty_entities(monkeypatch):
@@ -132,6 +134,12 @@ def test_parse_novel_falls_back_when_llm_returns_empty_entities(monkeypatch):
     assert len(script.story_analysis.scene_beats) >= 1
     assert any("林夏" in beat.character_names for beat in script.story_analysis.scene_beats)
     assert any(entry.character_name == "林夏" for entry in script.story_analysis.character_presence)
+    novel_meta = script.generation_metadata["novel_parse"]
+    assert novel_meta["source"] == "llm"
+    assert novel_meta["degraded"] is True
+    assert any(item.startswith("characters=") for item in novel_meta["filled_categories"])
+    assert any(item.startswith("scenes=") for item in novel_meta["filled_categories"])
+    assert any(item.startswith("props=") for item in novel_meta["filled_categories"])
 
 
 def test_parse_novel_keeps_llm_characters_and_backfills_missing_categories(monkeypatch):
@@ -149,6 +157,10 @@ def test_parse_novel_keeps_llm_characters_and_backfills_missing_categories(monke
     assert any("纸鹤" in prop.name for prop in script.props)
     assert len(script.story_analysis.scene_beats) >= 1
     assert any("纸鹤" in point for point in script.story_analysis.plot_points)
+    novel_meta = script.generation_metadata["novel_parse"]
+    assert novel_meta["source"] == "llm"
+    assert novel_meta["degraded"] is True
+    assert set(novel_meta["filled_categories"]) == {"scenes=1", "props=1"}
 
 
 def test_parse_novel_uses_fallback_on_invalid_json(monkeypatch):
@@ -164,6 +176,10 @@ def test_parse_novel_uses_fallback_on_invalid_json(monkeypatch):
     assert any("卧室" in scene.name for scene in script.scenes)
     assert any("手机" in prop.name for prop in script.props)
     assert any("卧室" in beat.title or "卧室" in (beat.scene_name or "") for beat in script.story_analysis.scene_beats)
+    novel_meta = script.generation_metadata["novel_parse"]
+    assert novel_meta["source"] == "heuristic_fallback"
+    assert novel_meta["degraded"] is True
+    assert "JSON" in novel_meta["reason"]
 
 
 def test_parse_novel_fallback_handles_dense_chapter_novel(monkeypatch):
@@ -320,6 +336,9 @@ def test_create_draft_script_uses_fallback_entities_for_long_form_text():
     assert {prop.name for prop in script.props} >= {"录音笔", "纸鹤"}
     assert len(script.story_analysis.scene_beats) == 2
     assert script.story_analysis.scene_beats[0].chapter_title == "第1章 便利店"
+    novel_meta = script.generation_metadata["novel_parse"]
+    assert novel_meta["source"] == "heuristic_draft"
+    assert novel_meta["degraded"] is True
 
 
 def test_build_story_analysis_keeps_line_dense_long_text_in_reasonable_beat_range():

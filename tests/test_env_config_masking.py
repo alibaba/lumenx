@@ -3,6 +3,8 @@ import os
 import sys
 import types
 
+import pytest
+
 dashscope_module = types.ModuleType("dashscope")
 dashscope_module.api_key = ""
 dashscope_module.VideoSynthesis = object()
@@ -17,6 +19,9 @@ sys.modules.setdefault("dashscope.audio", dashscope_audio_module)
 sys.modules.setdefault("dashscope.audio.tts_v2", dashscope_tts_module)
 
 from src.apps.comic_gen import api
+
+
+LEGACY_OPENAI_IMAGE_MODEL_ALIAS = "gpt-image-2"
 
 
 def test_get_env_config_masks_sensitive_values(monkeypatch):
@@ -95,6 +100,17 @@ def test_get_env_config_returns_recommended_tts_and_multimodal_defaults(monkeypa
     assert result["OPENAI_IMAGE_EDIT_BASE_URL"] == api.DEFAULT_OPENAI_IMAGE_EDIT_BASE_URL
     assert result["OPENAI_IMAGE_MODEL"] == api.DEFAULT_OPENAI_IMAGE_MODEL
     assert result["OPENAI_IMAGE_EDIT_MODEL"] == api.DEFAULT_OPENAI_IMAGE_EDIT_MODEL
+    assert result["image_model_startup_check"] == {
+        "status": "ok",
+        "expected_image_model": api.DEFAULT_OPENAI_IMAGE_MODEL,
+        "expected_image_edit_model": api.DEFAULT_OPENAI_IMAGE_EDIT_MODEL,
+        "image_model": api.DEFAULT_OPENAI_IMAGE_MODEL,
+        "image_edit_model": api.DEFAULT_OPENAI_IMAGE_EDIT_MODEL,
+        "message": (
+            "Image2 startup check passed: /config/env resolves to gpt-image2 "
+            "for image generation and image edit."
+        ),
+    }
     assert result["OPENAI_TTS_MODEL"] == api.DEFAULT_OPENAI_TTS_MODEL
     assert result["OPENAI_MULTIMODAL_MODEL"] == api.DEFAULT_OPENAI_MULTIMODAL_MODEL
 
@@ -111,6 +127,24 @@ def test_get_env_config_does_not_mask_generic_key_as_dedicated_image_key(monkeyp
     assert result["OPENAI_IMAGE_EDIT_API_KEY"] == ""
 
 
+@pytest.mark.legacy_compat
+def test_startup_image_model_check_tracks_default_and_legacy_alias(monkeypatch):
+    monkeypatch.delenv("OPENAI_IMAGE_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_IMAGE_EDIT_MODEL", raising=False)
+
+    assert api._check_startup_image_model_defaults() is True
+    default_check = api._build_env_config_payload()["image_model_startup_check"]
+    assert default_check["status"] == "ok"
+
+    monkeypatch.setenv("OPENAI_IMAGE_MODEL", LEGACY_OPENAI_IMAGE_MODEL_ALIAS)
+    monkeypatch.setenv("OPENAI_IMAGE_EDIT_MODEL", LEGACY_OPENAI_IMAGE_MODEL_ALIAS)
+
+    assert api._check_startup_image_model_defaults() is False
+    drift_check = api._build_env_config_payload()["image_model_startup_check"]
+    assert drift_check["status"] == "drift"
+    assert drift_check["image_model"] == LEGACY_OPENAI_IMAGE_MODEL_ALIAS
+
+
 def test_get_user_config_path_prefers_custom_dev_config_path(monkeypatch):
     monkeypatch.setenv(api.DEV_CONFIG_PATH_ENV_VAR, "output/config/runtime.env")
     monkeypatch.setattr(api.sys, "frozen", False, raising=False)
@@ -122,13 +156,24 @@ def test_get_user_config_path_prefers_custom_dev_config_path(monkeypatch):
     assert os.path.isabs(config_path)
 
 
+def test_get_user_config_path_defaults_to_user_data_runtime_env(monkeypatch, tmp_path):
+    monkeypatch.delenv(api.DEV_CONFIG_PATH_ENV_VAR, raising=False)
+    monkeypatch.setattr(api.sys, "frozen", False, raising=False)
+    monkeypatch.setenv("LUMEN_X_PACKAGED", "false")
+    monkeypatch.setattr("src.utils.get_user_data_dir", lambda: str(tmp_path / "user-data"))
+
+    config_path = api.get_user_config_path()
+
+    assert config_path == os.path.join(str(tmp_path / "user-data"), "config", "runtime.env")
+
+
 def test_save_user_config_creates_parent_dir_for_custom_dev_path(monkeypatch, tmp_path):
     custom_path = tmp_path / "nested" / "config" / "runtime.env"
     monkeypatch.setenv(api.DEV_CONFIG_PATH_ENV_VAR, str(custom_path))
     monkeypatch.setattr(api.sys, "frozen", False, raising=False)
     monkeypatch.setenv("LUMEN_X_PACKAGED", "false")
 
-    api.save_user_config({"OPENAI_IMAGE_MODEL": "nano-banana"})
+    api.save_user_config({"OPENAI_IMAGE_MODEL": "gpt-image2"})
 
     assert custom_path.exists()
-    assert "OPENAI_IMAGE_MODEL='nano-banana'" in custom_path.read_text(encoding="utf-8")
+    assert "OPENAI_IMAGE_MODEL='gpt-image2'" in custom_path.read_text(encoding="utf-8")
