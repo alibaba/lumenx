@@ -1,5 +1,6 @@
 import axios from "axios";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
+import type { Project, StyleConfig } from "@/store/projectStore";
 
 // Dynamic API URL detection:
 // 1. In packaged app (Electron): Frontend is served by backend, use same origin
@@ -68,22 +69,173 @@ export interface VideoTask {
     ratio?: string;
 }
 
+export type AtelierApprovalMode = "untrusted" | "on_failure" | "on_request" | "never";
+
+export interface AtelierAgentPolicy {
+    approval_mode: AtelierApprovalMode;
+    allowed_tools: string[];
+    max_nodes_per_action: number;
+    updated_at: number;
+}
+
+export type AtelierAgentToolStatus = "proposed" | "approval_required" | "completed" | "denied" | "failed";
+
+export interface AtelierAgentToolCall {
+    call_id: string;
+    tool_name: string;
+    arguments: Record<string, unknown>;
+    status: AtelierAgentToolStatus;
+    approval_required: boolean;
+    approval_granted: boolean;
+    error?: string | null;
+    result_snapshot?: Record<string, unknown> | null;
+    created_at: number;
+    completed_at?: number | null;
+}
+
+export interface AtelierAgentTurn {
+    id: string;
+    project_id: string;
+    user_message: string;
+    preview: boolean;
+    status: "pending" | "waiting_approval" | "completed" | "failed";
+    tool_calls: AtelierAgentToolCall[];
+    created_at: number;
+    completed_at?: number | null;
+}
+
+export interface AtelierAgentToolSpec {
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+    required_permission: "read" | "canvas_write" | "generation";
+    mutates_canvas: boolean;
+    max_count_cost: number;
+    requires_approval: boolean;
+}
+
+export interface AtelierAgentToolCallPayload {
+    tool_name: string;
+    arguments?: Record<string, unknown>;
+}
+
+export interface RunAtelierAgentTurnPayload {
+    user_message?: string;
+    tool_calls: AtelierAgentToolCallPayload[];
+    preview?: boolean;
+    approve?: boolean;
+    turn_id?: string;
+}
+
+export interface AtelierNode {
+    id: string;
+    project_id: string;
+    type: string;
+    title: string;
+    prompt: string;
+    status: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    source_project_id?: string | null;
+    frame_id?: string | null;
+    asset_id?: string | null;
+    video_task_id?: string | null;
+    media_urls: string[];
+    data: Record<string, unknown>;
+    created_by: string;
+    created_at: number;
+    updated_at: number;
+}
+
+export interface AtelierVideoCandidate {
+    id: string;
+    status: "pending" | "processing" | "completed" | "failed";
+    video_url?: string | null;
+    prompt: string;
+    model: string;
+    reference_image_urls: string[];
+    params: Record<string, unknown>;
+    error?: string | null;
+    created_at: number;
+    completed_at?: number;
+    failed_at?: number | null;
+    attempt_count?: number;
+    retry_count?: number;
+    attempt_started_at?: number;
+    retry_requested_at?: number;
+    attempts?: Array<Record<string, unknown>>;
+    generation_snapshot?: Record<string, unknown>;
+    runtime_snapshot?: Record<string, unknown>;
+    label?: string;
+}
+
+export interface AtelierGenerationConfig {
+    prompt: string;
+    model: string;
+    reference_image_urls: string[];
+    batch_size: number;
+    params: Record<string, unknown>;
+}
+
+export interface AtelierProject {
+    id: string;
+    title: string;
+    description: string;
+    source_project_id?: string | null;
+    nodes: AtelierNode[];
+    agent_policy: AtelierAgentPolicy;
+    agent_turns?: AtelierAgentTurn[];
+    created_at: number;
+    updated_at: number;
+}
+
+export interface AtelierNodePayload {
+    type?: string;
+    title?: string;
+    prompt?: string;
+    status?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    source_project_id?: string | null;
+    frame_id?: string | null;
+    asset_id?: string | null;
+    video_task_id?: string | null;
+    media_urls?: string[];
+    data?: Record<string, unknown>;
+    created_by?: string;
+}
+
+type JsonRecord = Record<string, unknown>;
+
+type ApiProjectResponse = Project & {
+    original_text?: string;
+};
+
+const normalizeProject = (project: ApiProjectResponse): Project => ({
+    ...project,
+    originalText: project.original_text ?? project.originalText ?? "",
+});
+
 export const api = {
     createProject: async (title: string, text: string, skipAnalysis: boolean = false, workflowMode: string = "r2v") => {
-        const res = await axios.post(`${API_URL}/projects`, { title, text, workflow_mode: workflowMode }, {
+        const res = await axios.post<ApiProjectResponse>(`${API_URL}/projects`, { title, text, workflow_mode: workflowMode }, {
             params: { skip_analysis: skipAnalysis }
         });
-        return { ...res.data, originalText: res.data.original_text };
+        return normalizeProject(res.data);
     },
 
     getProjects: async () => {
-        const res = await axios.get(`${API_URL}/projects/`);
-        return res.data.map((p: any) => ({ ...p, originalText: p.original_text }));
+        const res = await axios.get<ApiProjectResponse[]>(`${API_URL}/projects/`);
+        return res.data.map(normalizeProject);
     },
 
     getProject: async (scriptId: string) => {
-        const res = await axios.get(`${API_URL}/projects/${scriptId}`);
-        return { ...res.data, originalText: res.data.original_text };
+        const res = await axios.get<ApiProjectResponse>(`${API_URL}/projects/${scriptId}`);
+        return normalizeProject(res.data);
     },
 
     deleteProject: async (scriptId: string) => {
@@ -92,8 +244,8 @@ export const api = {
     },
 
     reparseProject: async (scriptId: string, text: string) => {
-        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text });
-        return { ...res.data, originalText: res.data.original_text };
+        const res = await axios.put<ApiProjectResponse>(`${API_URL}/projects/${scriptId}/reparse`, { text });
+        return normalizeProject(res.data);
     },
 
     syncDescriptions: async (scriptId: string) => {
@@ -253,7 +405,7 @@ export const api = {
         audioUrl?: string,
         duration: number = 5,
         batchSize: number = 1
-    ): Promise<any & { _task_id?: string }> => {
+    ): Promise<Partial<Project> & { _task_id?: string }> => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/generate_motion_ref`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -371,7 +523,13 @@ export const api = {
         return res.data;
     },
 
-    saveArtDirection: async (scriptId: string, selectedStyleId: string, styleConfig: any, customStyles: any[] = [], aiRecommendations: any[] = []) => {
+    saveArtDirection: async (
+        scriptId: string,
+        selectedStyleId: string,
+        styleConfig: StyleConfig,
+        customStyles: StyleConfig[] = [],
+        aiRecommendations: StyleConfig[] = []
+    ) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/art_direction/save`, {
             selected_style_id: selectedStyleId,
             style_config: styleConfig,
@@ -413,7 +571,7 @@ export const api = {
         return res.data;
     },
 
-    updateAssetAttributes: async (scriptId: string, assetId: string, assetType: string, attributes: any) => {
+    updateAssetAttributes: async (scriptId: string, assetId: string, assetType: string, attributes: unknown) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/assets/update_attributes`, {
             asset_id: assetId,
             asset_type: assetType,
@@ -452,7 +610,7 @@ export const api = {
         return res.data;
     },
 
-    renderFrame: async (scriptId: string, frameId: string, compositionData: any, prompt: string, batchSize: number = 1) => {
+    renderFrame: async (scriptId: string, frameId: string, compositionData: unknown, prompt: string, batchSize: number = 1) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/render`, {
             frame_id: frameId,
             composition_data: compositionData,
@@ -479,7 +637,7 @@ export const api = {
      * Refines a raw prompt into bilingual (CN/EN) prompts using AI.
      * Returns { prompt_cn, prompt_en, frame_updated }.
      */
-    refineFramePrompt: async (scriptId: string, frameId: string, rawPrompt: string, assets: any[] = [], feedback: string = "") => {
+    refineFramePrompt: async (scriptId: string, frameId: string, rawPrompt: string, assets: JsonRecord[] = [], feedback: string = "") => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/storyboard/refine_prompt`, {
             frame_id: frameId,
             raw_prompt: rawPrompt,
@@ -538,7 +696,7 @@ export const api = {
         return response.json();
     },
 
-    exportProject: async (scriptId: string, options: any) => {
+    exportProject: async (scriptId: string, options: unknown) => {
         const response = await fetch(`${API_URL}/projects/${scriptId}/export`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -679,8 +837,133 @@ export const api = {
         });
         return response.data;
     },
-    importFileConfirm: async (data: { title: string; description?: string; text: string; episodes: any[] }) => {
+    importFileConfirm: async (data: { title: string; description?: string; text: string; episodes: unknown[] }) => {
         const response = await axios.post(`${API_URL}/series/import/confirm`, data);
+        return response.data;
+    },
+
+    // ============================================
+    // Atelier Canvas Core APIs
+    // ============================================
+    createAtelierProject: async (
+        title: string,
+        description: string = "",
+        sourceProjectId?: string
+    ): Promise<AtelierProject> => {
+        const response = await axios.post(`${API_URL}/atelier/projects`, {
+            title,
+            description,
+            source_project_id: sourceProjectId,
+        });
+        return response.data;
+    },
+    listAtelierProjects: async (): Promise<AtelierProject[]> => {
+        const response = await axios.get(`${API_URL}/atelier/projects`);
+        return response.data;
+    },
+    getAtelierProject: async (projectId: string): Promise<AtelierProject> => {
+        const response = await axios.get(`${API_URL}/atelier/projects/${projectId}`);
+        return response.data;
+    },
+    updateAtelierProject: async (
+        projectId: string,
+        data: { title?: string; description?: string; source_project_id?: string | null }
+    ): Promise<AtelierProject> => {
+        const response = await axios.put(`${API_URL}/atelier/projects/${projectId}`, data);
+        return response.data;
+    },
+    deleteAtelierProject: async (projectId: string) => {
+        const response = await axios.delete(`${API_URL}/atelier/projects/${projectId}`);
+        return response.data;
+    },
+    updateAtelierAgentPolicy: async (
+        projectId: string,
+        policy: Partial<Pick<AtelierAgentPolicy, "approval_mode" | "allowed_tools" | "max_nodes_per_action">>
+    ): Promise<AtelierProject> => {
+        const response = await axios.put(`${API_URL}/atelier/projects/${projectId}/agent_policy`, policy);
+        return response.data;
+    },
+    listAtelierAgentTools: async (projectId: string): Promise<AtelierAgentToolSpec[]> => {
+        const response = await axios.get(`${API_URL}/atelier/projects/${projectId}/agent/tools`);
+        return response.data;
+    },
+    runAtelierAgentTurn: async (
+        projectId: string,
+        payload: RunAtelierAgentTurnPayload
+    ): Promise<AtelierAgentTurn> => {
+        const response = await axios.post(`${API_URL}/atelier/projects/${projectId}/agent/turns`, payload);
+        return response.data;
+    },
+    createAtelierNode: async (
+        projectId: string,
+        payload: AtelierNodePayload
+    ): Promise<AtelierNode> => {
+        const response = await axios.post(`${API_URL}/atelier/projects/${projectId}/nodes`, payload);
+        return response.data;
+    },
+    updateAtelierNode: async (
+        projectId: string,
+        nodeId: string,
+        payload: AtelierNodePayload
+    ): Promise<AtelierNode> => {
+        const response = await axios.put(`${API_URL}/atelier/projects/${projectId}/nodes/${nodeId}`, payload);
+        return response.data;
+    },
+    deleteAtelierNode: async (projectId: string, nodeId: string) => {
+        const response = await axios.delete(`${API_URL}/atelier/projects/${projectId}/nodes/${nodeId}`);
+        return response.data;
+    },
+    createAtelierVideoCandidates: async (
+        projectId: string,
+        nodeId: string,
+        payload: AtelierGenerationConfig
+    ): Promise<AtelierNode> => {
+        const response = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/nodes/${nodeId}/video_candidates`,
+            payload
+        );
+        return response.data;
+    },
+    regenerateAtelierVideoCandidates: async (
+        projectId: string,
+        nodeId: string,
+        payload?: Partial<AtelierGenerationConfig>
+    ): Promise<AtelierNode> => {
+        const response = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/nodes/${nodeId}/video_candidates/regenerate`,
+            payload ?? {}
+        );
+        return response.data;
+    },
+    retryAtelierVideoCandidate: async (
+        projectId: string,
+        nodeId: string,
+        candidateId: string
+    ): Promise<AtelierNode> => {
+        const response = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/nodes/${nodeId}/video_candidates/${candidateId}/retry`
+        );
+        return response.data;
+    },
+    selectAtelierVideoCandidate: async (
+        projectId: string,
+        nodeId: string,
+        candidateId: string
+    ): Promise<AtelierNode> => {
+        const response = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/nodes/${nodeId}/video_candidates/select`,
+            { candidate_id: candidateId }
+        );
+        return response.data;
+    },
+    deleteAtelierVideoCandidate: async (
+        projectId: string,
+        nodeId: string,
+        candidateId: string
+    ): Promise<AtelierNode> => {
+        const response = await axios.delete(
+            `${API_URL}/atelier/projects/${projectId}/nodes/${nodeId}/video_candidates/${candidateId}`
+        );
         return response.data;
     },
 };

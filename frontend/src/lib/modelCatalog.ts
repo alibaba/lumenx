@@ -73,6 +73,7 @@ interface CatalogModel {
     inputs?: {
         reference_images?: {
             max?: number;
+            reference_type?: 'image' | 'video';
         };
         [key: string]: unknown;
     };
@@ -339,12 +340,22 @@ export const normalizeModelSettings = resolveModelSettings;
 export const normalizeModelId = resolveModelId;
 
 export function getMaxReferenceImages(modelId?: string | null): number {
-    const resolvedModelId = resolveModelId('i2i', modelId, 'project_settings');
+    const normalizedModelId = normalizeRequestedModelId(modelId);
+    const resolvedModelId = normalizedModelId && MODEL_CATALOG.models[normalizedModelId]
+        ? normalizedModelId
+        : resolveModelId('image', modelId, 'project_settings');
     const maxReferenceImages =
         MODEL_CATALOG.models[resolvedModelId]?.inputs?.reference_images?.max;
 
     return typeof maxReferenceImages === 'number' ? maxReferenceImages : 3;
 }
+
+export type R2VReferenceInputType = 'image' | 'video';
+
+export type R2VReferenceInputConfig = {
+    type: R2VReferenceInputType;
+    max: number;
+};
 
 export const PROJECT_T2I_MODELS = getVisibleModels('t2i', 'project_settings').map(toSelectableModel);
 export const SERIES_T2I_MODELS = getVisibleModels('t2i', 'series_settings').map(toSelectableModel);
@@ -404,20 +415,49 @@ for (const model of SORTED_MODEL_ENTRIES) {
  * Each family has its own hidden R2V model (e.g. wan -> wan2.6-r2v, happyhorse -> happyhorse-1.0-r2v).
  */
 export function getR2vRouteModelId(selectedI2vModelId: string): string {
-    const selectedModel = MODEL_CATALOG.models[selectedI2vModelId];
+    const selectedFlatModelId = normalizeRequestedModelId(selectedI2vModelId) ?? selectedI2vModelId;
+    const selectedCanonicalModeId = getCanonicalModeId(selectedFlatModelId);
+    const selectedCanonicalMode = selectedCanonicalModeId
+        ? getCanonicalModeEntry(selectedCanonicalModeId)
+        : null;
+
+    if (selectedCanonicalMode?.model_line_id) {
+        const modelLine = getModelLineEntry(selectedCanonicalMode.model_line_id);
+        const routeCanonicalModeId = modelLine?.modes?.find((modeId) => {
+            const mode = getCanonicalModeEntry(modeId);
+            return mode?.mode === 'r2v' && (mode.capabilities ?? []).includes('r2v');
+        });
+        const routeLegacyModelId = routeCanonicalModeId
+            ? getLegacyModelId(routeCanonicalModeId)
+            : undefined;
+        if (routeLegacyModelId) {
+            return routeLegacyModelId;
+        }
+    }
+
+    const selectedModel = MODEL_CATALOG.models[selectedFlatModelId];
     if (!selectedModel) return R2V_ROUTE_MODEL_ID;
     return R2V_ROUTE_MAP[selectedModel.family] ?? R2V_ROUTE_MODEL_ID;
 }
 
 /**
- * Returns true if the given R2V model uses image references
- * instead of video references (Wan 2.5/2.6 legacy).
+ * Returns the concrete reference input contract for a routed R2V model.
+ * The odd `reference_images.reference_type` catalog key is kept for backward
+ * compatibility: reference_type decides whether those refs are image or video URLs.
  */
+export function getR2vReferenceInputConfig(modelId: string): R2VReferenceInputConfig {
+    const model = MODEL_CATALOG.models[normalizeRequestedModelId(modelId) ?? modelId];
+    const referenceImages = model?.inputs?.reference_images;
+    const type = referenceImages?.reference_type === 'video' ? 'video' : 'image';
+    const max = typeof referenceImages?.max === 'number'
+        ? referenceImages.max
+        : type === 'video'
+          ? 3
+          : 9;
+
+    return { type, max };
+}
+
 export function isR2vImageBased(modelId: string): boolean {
-    const model = MODEL_CATALOG.models[modelId];
-    const family = model?.family;
-    // All current R2V models use image references except wan2.6-r2v (legacy video refs)
-    if (family === 'wan' && modelId === 'wan2.6-r2v') return false;
-    return family === 'happyhorse' || family === 'wan' || family === 'kling'
-        || family === 'pixverse' || family === 'vidu';
+    return getR2vReferenceInputConfig(modelId).type === 'image';
 }

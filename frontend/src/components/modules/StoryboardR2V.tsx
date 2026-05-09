@@ -1,35 +1,117 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { Plus, Settings2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
-import { api } from "@/lib/api";
-import { getR2vRouteModelId, isR2vImageBased, VIDEO_I2V_MODELS, DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
+import { api, type VideoTask } from "@/lib/api";
+import { getR2vReferenceInputConfig, getR2vRouteModelId, VIDEO_I2V_MODELS, DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
+import {
+    insertStoryboardR2VTag,
+    resolveStoryboardR2VRefs,
+    stripStoryboardR2VTags,
+    validateStoryboardR2VRefs,
+} from "@/lib/storyboardR2VAssets";
 import ShotCard, { type ShotNode } from "./storyboard-r2v/ShotCard";
 import AssetDrawer from "./storyboard-r2v/AssetDrawer";
 import VideoConfigModal, { type VideoConfig, DEFAULT_VIDEO_CONFIG } from "./storyboard-r2v/VideoConfigModal";
+
+type ProjectFrame = {
+    id: string;
+    action_description?: string;
+    video_url?: string;
+    rendered_image_url?: string;
+    image_url?: string;
+};
+
+type StoryboardR2VProjectLike = {
+    id?: string;
+    frames?: ProjectFrame[];
+};
+
+const getDraftStorageKey = (projectId: string) => `storyboard-r2v-draft:${projectId}`;
+
+const createShotFromFrame = (frame: ProjectFrame): ShotNode => ({
+    id: frame.id,
+    prompt: frame.action_description || "",
+    tabMode: "direct_r2v",
+    videoUrl: frame.video_url || undefined,
+    videoStatus: frame.video_url ? "completed" : undefined,
+    imageUrl: frame.rendered_image_url || frame.image_url || undefined,
+});
+
+const createEmptyShot = (): ShotNode => ({
+    id: `shot_${Date.now()}`,
+    prompt: "",
+    tabMode: "direct_r2v",
+});
+
+const isDraftShot = (value: unknown): value is ShotNode => {
+    const candidate = value as Partial<ShotNode>;
+    return (
+        !!candidate &&
+        typeof candidate.id === "string" &&
+        typeof candidate.prompt === "string" &&
+        (candidate.tabMode === "direct_r2v" || candidate.tabMode === "t2i_i2v")
+    );
+};
+
+const readDraftShots = (projectId?: string): ShotNode[] | null => {
+    if (!projectId || typeof window === "undefined") return null;
+    try {
+        const rawDraft = window.localStorage.getItem(getDraftStorageKey(projectId));
+        if (!rawDraft) return null;
+        const parsed = JSON.parse(rawDraft) as unknown;
+        if (!Array.isArray(parsed)) return null;
+        const shots = parsed.filter(isDraftShot);
+        return shots.length > 0 ? shots : null;
+    } catch {
+        return null;
+    }
+};
+
+const toDraftShot = (shot: ShotNode): ShotNode => ({
+    id: shot.id,
+    prompt: shot.prompt,
+    tabMode: shot.tabMode,
+    t2iImageUrl: shot.t2iImageUrl,
+    t2iStatus: shot.t2iStatus === "completed" ? "completed" : undefined,
+    videoUrl: shot.videoUrl,
+    videoStatus: shot.videoStatus === "completed" ? "completed" : undefined,
+    imageUrl: shot.imageUrl,
+});
+
+const buildInitialShots = (project?: StoryboardR2VProjectLike | null): ShotNode[] => {
+    const draftShots = readDraftShots(project?.id);
+    if (draftShots) return draftShots;
+    if (project?.frames?.length) {
+        return project.frames.map(createShotFromFrame);
+    }
+    return [createEmptyShot()];
+};
 
 export default function StoryboardR2V() {
     const currentProject = useProjectStore((state) => state.currentProject);
     const updateProject = useProjectStore((state) => state.updateProject);
     const t = useTranslations("storyboardR2V");
+    const currentProjectId = currentProject?.id;
+    const currentProjectFrames = currentProject?.frames;
 
     // Derive shots from project frames or initialize empty
-    const [shots, setShots] = useState<ShotNode[]>(() => {
-        if (currentProject?.frames && currentProject.frames.length > 0) {
-            return currentProject.frames.map((frame: any) => ({
-                id: frame.id,
-                prompt: frame.action_description || "",
-                tabMode: "direct_r2v" as const,
-                videoUrl: frame.video_url || undefined,
-                videoStatus: frame.video_url ? ("completed" as const) : undefined,
-                imageUrl: frame.rendered_image_url || frame.image_url || undefined,
-            }));
-        }
-        return [{ id: `shot_${Date.now()}`, prompt: "", tabMode: "direct_r2v" }];
-    });
+    const [shots, setShots] = useState<ShotNode[]>(() => buildInitialShots(currentProject));
+
+    useEffect(() => {
+        setShots(buildInitialShots({ id: currentProjectId, frames: currentProjectFrames }));
+    }, [currentProjectId, currentProjectFrames]);
+
+    useEffect(() => {
+        if (!currentProjectId || typeof window === "undefined") return;
+        window.localStorage.setItem(
+            getDraftStorageKey(currentProjectId),
+            JSON.stringify(shots.map(toDraftShot))
+        );
+    }, [currentProjectId, shots]);
 
     // Global video config (with localStorage persistence for model selection)
     const [videoConfig, setVideoConfig] = useState<VideoConfig>(() => {
@@ -59,9 +141,17 @@ export default function StoryboardR2V() {
     // Refs map for textareas (for asset insertion from drawer)
     const textareaRefs = useRef<Map<number, HTMLTextAreaElement>>(new Map());
 
-    const characters = currentProject?.characters || [];
-    const scenes = currentProject?.scenes || [];
-    const props = currentProject?.props || [];
+    const registerTextarea = useCallback((index: number, element: HTMLTextAreaElement | null) => {
+        if (element) {
+            textareaRefs.current.set(index, element);
+        } else {
+            textareaRefs.current.delete(index);
+        }
+    }, []);
+
+    const characters = useMemo(() => currentProject?.characters || [], [currentProject?.characters]);
+    const scenes = useMemo(() => currentProject?.scenes || [], [currentProject?.scenes]);
+    const props = useMemo(() => currentProject?.props || [], [currentProject?.props]);
 
     // Add a new shot after the given index
     const addShot = useCallback((afterIndex: number) => {
@@ -123,43 +213,43 @@ export default function StoryboardR2V() {
         setShots(prev => prev.map((s, i) => i === index ? { ...s, tabMode: mode } : s));
     }, []);
 
-    // Parse asset tags from prompt and resolve to URLs
-    const parseAssetTags = useCallback((prompt: string): string[] => {
-        const urls: string[] = [];
-        const tagPattern = /\[(character\d+|scene|prop):([^\]]+)\]/g;
-        let match;
-        while ((match = tagPattern.exec(prompt)) !== null) {
-            const [, type, name] = match;
-            if (type.startsWith("character")) {
-                const char = characters.find((c: any) => c.name === name);
-                if (char) {
-                    const asset = char.full_body_asset;
-                    if (asset?.selected_id && asset.variants?.length) {
-                        const selected = asset.variants.find((v: any) => v.id === asset.selected_id);
-                        if (selected) urls.push(selected.url);
-                    } else if (asset?.variants?.[0]) {
-                        urls.push(asset.variants[0].url);
-                    }
-                }
-            } else if (type === "scene") {
-                const scene = scenes.find((s: any) => s.name === name);
-                if (scene?.image_asset?.variants?.[0]) {
-                    urls.push(scene.image_asset.variants[0].url);
-                }
-            } else if (type === "prop") {
-                const prop = props.find((p: any) => p.name === name);
-                if (prop?.image_asset?.variants?.[0]) {
-                    urls.push(prop.image_asset.variants[0].url);
-                }
-            }
-        }
-        return urls;
-    }, [characters, scenes, props]);
+    const resolveAssetRefs = useCallback(
+        (prompt: string) => resolveStoryboardR2VRefs(prompt, characters, scenes, props),
+        [characters, scenes, props]
+    );
 
-    // Strip tags from prompt for clean text
-    const cleanPrompt = (prompt: string): string => {
-        return prompt.replace(/\[(character\d+|scene|prop):[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
-    };
+    const r2vRouteModelId = useMemo(() => getR2vRouteModelId(videoConfig.model), [videoConfig.model]);
+    const r2vReferenceConfig = useMemo(() => getR2vReferenceInputConfig(r2vRouteModelId), [r2vRouteModelId]);
+    const r2vReferenceMode = r2vReferenceConfig.type;
+
+    const getReferenceValidation = useCallback(
+        (prompt: string) => validateStoryboardR2VRefs(resolveAssetRefs(prompt), r2vReferenceMode, r2vReferenceConfig.max),
+        [resolveAssetRefs, r2vReferenceMode, r2vReferenceConfig.max]
+    );
+
+    const syncCreatedTasks = useCallback(
+        (createdTasks: VideoTask[]) => {
+            const project = useProjectStore.getState().currentProject;
+            if (!project?.id || createdTasks.length === 0) return;
+            updateProject(project.id, {
+                video_tasks: [...(project.video_tasks || []), ...createdTasks],
+            });
+        },
+        [updateProject]
+    );
+
+    const syncTaskPatch = useCallback(
+        (taskId: string, patch: Partial<VideoTask>) => {
+            const project = useProjectStore.getState().currentProject;
+            if (!project?.id) return;
+            updateProject(project.id, {
+                video_tasks: (project.video_tasks || []).map((task: VideoTask) =>
+                    task.id === taskId ? { ...task, ...patch } : task
+                ),
+            });
+        },
+        [updateProject]
+    );
 
     // Generate T2I image for a shot (t2i_i2v mode stage 1)
     const generateT2I = useCallback(async (index: number) => {
@@ -175,7 +265,7 @@ export default function StoryboardR2V() {
                 currentProject.id,
                 shot.id,
                 {},  // compositionData (empty for now)
-                cleanPrompt(shot.prompt),
+                stripStoryboardR2VTags(shot.prompt),
                 1    // batchSize
             );
 
@@ -204,20 +294,28 @@ export default function StoryboardR2V() {
         const shot = shots[index];
         if (!currentProject || !shot.prompt.trim()) return;
 
-        const promptText = cleanPrompt(shot.prompt);
-
-        setShots(prev => prev.map((s, i) =>
-            i === index ? { ...s, videoStatus: "pending" } : s
-        ));
+        const promptText = stripStoryboardR2VTags(shot.prompt);
 
         try {
             if (shot.tabMode === "direct_r2v") {
                 // R2V mode: use reference assets
-                const referenceUrls = parseAssetTags(shot.prompt);
-                const routeModelId = getR2vRouteModelId(videoConfig.model);
-                const imageBased = isR2vImageBased(routeModelId);
+                const referenceRefs = resolveAssetRefs(shot.prompt);
+                const referenceValidation = validateStoryboardR2VRefs(
+                    referenceRefs,
+                    r2vReferenceMode,
+                    r2vReferenceConfig.max
+                );
+                const imageBased = r2vReferenceMode === "image";
 
-                const task = await api.createVideoTask(
+                if (!referenceValidation.canGenerate) {
+                    return;
+                }
+
+                setShots(prev => prev.map((s, i) =>
+                    i === index ? { ...s, videoStatus: "pending" } : s
+                ));
+
+                const created = await api.createVideoTask(
                     currentProject.id,
                     "",  // no image_url for R2V
                     promptText,
@@ -229,17 +327,21 @@ export default function StoryboardR2V() {
                     videoConfig.promptExtend,
                     videoConfig.negativePrompt,
                     1, // batchSize
-                    routeModelId,  // use routed R2V model
+                    r2vRouteModelId,  // use routed R2V model
                     shot.id, // frameId
                     "multi", // shotType
                     "r2v", // generationMode
-                    !imageBased ? referenceUrls : undefined, // referenceVideoUrls (Wan 2.6 legacy)
+                    !imageBased ? referenceRefs.videoUrls : undefined, // referenceVideoUrls (Wan 2.6 legacy)
                     undefined, undefined, undefined, // kling params
                     undefined, undefined, // vidu params
-                    imageBased ? referenceUrls : undefined, // referenceImageUrls
+                    imageBased ? referenceRefs.imageUrls : undefined, // referenceImageUrls
                 );
 
-                if (task && task.id) {
+                const createdTasks = Array.isArray(created) ? created : [created];
+                const task = createdTasks[0];
+                syncCreatedTasks(createdTasks);
+
+                if (task?.id) {
                     setShots(prev => prev.map((s, i) =>
                         i === index ? { ...s, videoTaskId: task.id, videoStatus: "processing" } : s
                     ));
@@ -248,7 +350,11 @@ export default function StoryboardR2V() {
                 // I2V mode: use T2I image as first frame
                 const imageUrl = shot.t2iImageUrl || shot.imageUrl || "";
 
-                const task = await api.createVideoTask(
+                setShots(prev => prev.map((s, i) =>
+                    i === index ? { ...s, videoStatus: "pending" } : s
+                ));
+
+                const created = await api.createVideoTask(
                     currentProject.id,
                     imageUrl,
                     promptText,
@@ -276,7 +382,11 @@ export default function StoryboardR2V() {
                     undefined,
                 );
 
-                if (task && task.id) {
+                const createdTasks = Array.isArray(created) ? created : [created];
+                const task = createdTasks[0];
+                syncCreatedTasks(createdTasks);
+
+                if (task?.id) {
                     setShots(prev => prev.map((s, i) =>
                         i === index ? { ...s, videoTaskId: task.id, videoStatus: "processing" } : s
                     ));
@@ -288,7 +398,7 @@ export default function StoryboardR2V() {
                 i === index ? { ...s, videoStatus: "failed" } : s
             ));
         }
-    }, [shots, currentProject, videoConfig, parseAssetTags]);
+    }, [shots, currentProject, videoConfig, resolveAssetRefs, r2vReferenceMode, r2vReferenceConfig.max, r2vRouteModelId, syncCreatedTasks]);
 
     // Poll for task completion (both T2I and video)
     useEffect(() => {
@@ -308,10 +418,15 @@ export default function StoryboardR2V() {
                             setShots(prev => prev.map(s =>
                                 s.id === shot.id ? { ...s, videoStatus: "completed", videoUrl: status.video_url } : s
                             ));
+                            syncTaskPatch(shot.videoTaskId, {
+                                status: "completed",
+                                video_url: status.video_url,
+                            });
                         } else if (status.status === "failed") {
                             setShots(prev => prev.map(s =>
                                 s.id === shot.id ? { ...s, videoStatus: "failed" } : s
                             ));
+                            syncTaskPatch(shot.videoTaskId, { status: "failed" });
                         }
                     } catch (error) {
                         console.error("Video poll failed for shot:", shot.id, error);
@@ -341,7 +456,7 @@ export default function StoryboardR2V() {
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [shots]);
+    }, [shots, syncTaskPatch]);
 
     // Insert asset tag from drawer into target shot
     const insertAssetFromDrawer = useCallback((type: string, name: string) => {
@@ -354,10 +469,10 @@ export default function StoryboardR2V() {
             const start = textarea.selectionStart;
             const end = textarea.selectionEnd;
             const currentPrompt = shots[shotIndex].prompt;
-            const newPrompt = currentPrompt.slice(0, start) + tag + currentPrompt.slice(end);
-            updatePrompt(shotIndex, newPrompt);
+            const insertion = insertStoryboardR2VTag(currentPrompt, tag, start, end);
+            updatePrompt(shotIndex, insertion.prompt);
             setTimeout(() => {
-                textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+                textarea.selectionStart = textarea.selectionEnd = insertion.cursor;
                 textarea.focus();
             }, 0);
         } else {
@@ -421,6 +536,11 @@ export default function StoryboardR2V() {
                             characters={characters}
                             scenes={scenes}
                             props={props}
+                            referenceValidation={
+                                shot.tabMode === "direct_r2v" && shot.prompt.trim()
+                                    ? getReferenceValidation(shot.prompt)
+                                    : undefined
+                            }
                             onUpdatePrompt={(prompt) => updatePrompt(index, prompt)}
                             onGenerateT2I={() => generateT2I(index)}
                             onGenerateVideo={() => generateVideo(index)}
@@ -430,11 +550,7 @@ export default function StoryboardR2V() {
                             onDuplicate={() => duplicateShot(index)}
                             onSetTabMode={(mode) => setTabMode(index, mode)}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
-                            onInsertAsset={(type, name) => {
-                                // Direct chip insert (same as chip bar logic, delegated to chip bar)
-                                const tag = `[${type}:${name}]`;
-                                updatePrompt(index, shots[index].prompt + " " + tag);
-                            }}
+                            onRegisterTextarea={(element) => registerTextarea(index, element)}
                         />
                     </motion.div>
                 ))}

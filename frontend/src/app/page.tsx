@@ -23,6 +23,7 @@ const SeriesDetailPage = dynamic(() => import("@/components/series/SeriesDetailP
 const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDialog"), { ssr: false });
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
+const AtelierShell = dynamic(() => import("@/components/atelier/AtelierShell"), { ssr: false });
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -374,7 +375,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'atelier'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
@@ -506,6 +507,14 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash === '#/atelier') {
+        setCurrentView('atelier');
+        setActiveTab('atelier');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       // Default: workspace
       setCurrentView('home');
       setActiveTab('workspace');
@@ -532,6 +541,10 @@ export default function Home() {
   // 系列详情页 — 全屏，自带 BreadcrumbBar
   if (currentView === 'series' && seriesId) {
     return <SeriesDetailPage seriesId={seriesId} />;
+  }
+
+  if (currentView === 'atelier') {
+    return <AtelierShell />;
   }
 
   // Filter standalone projects (not belonging to any series)

@@ -14,6 +14,9 @@ import logging
 import traceback
 from .pipeline import ComicGenPipeline
 from .models import (
+    AtelierAgentTurn,
+    AtelierNode,
+    AtelierProject,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -286,6 +289,322 @@ async def reparse_project(script_id: str, request: ReparseProjectRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# Atelier Canvas Core
+# ============================================================
+
+class CreateAtelierProjectRequest(BaseModel):
+    title: str
+    description: str = ""
+    source_project_id: Optional[str] = None
+
+
+class UpdateAtelierProjectRequest(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    source_project_id: Optional[str] = None
+
+
+class UpdateAtelierAgentPolicyRequest(BaseModel):
+    approval_mode: Optional[str] = None
+    allowed_tools: Optional[List[str]] = None
+    max_nodes_per_action: Optional[int] = None
+
+
+class CreateAtelierNodeRequest(BaseModel):
+    type: str = "idea"
+    title: str = ""
+    prompt: str = ""
+    status: str = "draft"
+    x: float = 0.0
+    y: float = 0.0
+    width: float = 320.0
+    height: float = 180.0
+    source_project_id: Optional[str] = None
+    frame_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    video_task_id: Optional[str] = None
+    media_urls: List[str] = Field(default_factory=list)
+    data: Dict[str, Any] = Field(default_factory=dict)
+    created_by: str = "user"
+
+
+class UpdateAtelierNodeRequest(BaseModel):
+    type: Optional[str] = None
+    title: Optional[str] = None
+    prompt: Optional[str] = None
+    status: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    width: Optional[float] = None
+    height: Optional[float] = None
+    source_project_id: Optional[str] = None
+    frame_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    video_task_id: Optional[str] = None
+    media_urls: Optional[List[str]] = None
+    data: Optional[Dict[str, Any]] = None
+    created_by: Optional[str] = None
+
+
+class CreateAtelierVideoCandidatesRequest(BaseModel):
+    prompt: str
+    model: str = "wan2.7-i2v"
+    reference_image_urls: List[str] = Field(default_factory=list)
+    batch_size: int = Field(3, ge=1, le=6)
+    params: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RegenerateAtelierVideoCandidatesRequest(BaseModel):
+    prompt: Optional[str] = None
+    model: Optional[str] = None
+    reference_image_urls: Optional[List[str]] = None
+    batch_size: Optional[int] = Field(None, ge=1, le=6)
+    params: Optional[Dict[str, Any]] = None
+
+
+class SelectAtelierVideoCandidateRequest(BaseModel):
+    candidate_id: str
+
+
+class AtelierAgentToolCallRequest(BaseModel):
+    tool_name: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RunAtelierAgentTurnRequest(BaseModel):
+    user_message: str = ""
+    tool_calls: List[AtelierAgentToolCallRequest] = Field(default_factory=list)
+    preview: bool = False
+    approve: bool = False
+    turn_id: Optional[str] = None
+
+
+@app.post("/atelier/projects", response_model=AtelierProject)
+async def create_atelier_project(request: CreateAtelierProjectRequest):
+    try:
+        project = pipeline.create_atelier_project(
+            title=request.title,
+            description=request.description,
+            source_project_id=request.source_project_id,
+        )
+        return signed_response(project)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/atelier/projects", response_model=List[AtelierProject])
+async def list_atelier_projects():
+    return signed_response(pipeline.list_atelier_projects())
+
+
+@app.get("/atelier/projects/{project_id}", response_model=AtelierProject)
+async def get_atelier_project(project_id: str):
+    project = pipeline.get_atelier_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Atelier project not found")
+    return signed_response(project)
+
+
+@app.put("/atelier/projects/{project_id}", response_model=AtelierProject)
+async def update_atelier_project(project_id: str, request: UpdateAtelierProjectRequest):
+    try:
+        updates = {k: v for k, v in request.model_dump().items() if v is not None}
+        project = pipeline.update_atelier_project(project_id, updates)
+        return signed_response(project)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+@app.delete("/atelier/projects/{project_id}")
+async def delete_atelier_project(project_id: str):
+    try:
+        pipeline.delete_atelier_project(project_id)
+        return {"status": "deleted"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.put("/atelier/projects/{project_id}/agent_policy", response_model=AtelierProject)
+async def update_atelier_agent_policy(project_id: str, request: UpdateAtelierAgentPolicyRequest):
+    try:
+        updates = {k: v for k, v in request.model_dump().items() if v is not None}
+        project = pipeline.update_atelier_agent_policy(project_id, updates)
+        return signed_response(project)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+@app.get("/atelier/projects/{project_id}/agent/tools")
+async def list_atelier_agent_tools(project_id: str):
+    if not pipeline.get_atelier_project(project_id):
+        raise HTTPException(status_code=404, detail="Atelier project not found")
+    return pipeline.list_atelier_agent_tools()
+
+
+@app.post("/atelier/projects/{project_id}/agent/turns", response_model=AtelierAgentTurn)
+async def run_atelier_agent_turn(
+    project_id: str,
+    request: RunAtelierAgentTurnRequest,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        turn = pipeline.run_atelier_agent_turn(
+            project_id=project_id,
+            tool_calls=[call.model_dump() for call in request.tool_calls],
+            user_message=request.user_message,
+            preview=request.preview,
+            approve=request.approve,
+            turn_id=request.turn_id,
+        )
+        if not request.preview:
+            for call in turn.tool_calls:
+                if call.tool_name != "generation.createVideoCandidates" or call.status != "completed":
+                    continue
+                node_id = call.arguments.get("node_id")
+                candidate_ids = (call.result_snapshot or {}).get("candidate_ids") or []
+                for candidate_id in candidate_ids:
+                    background_tasks.add_task(
+                        pipeline.process_atelier_video_candidate,
+                        project_id,
+                        node_id,
+                        candidate_id,
+                    )
+        return signed_response(turn)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+@app.post("/atelier/projects/{project_id}/nodes", response_model=AtelierNode)
+async def create_atelier_node(project_id: str, request: CreateAtelierNodeRequest):
+    try:
+        node = pipeline.create_atelier_node(project_id, request.model_dump())
+        return signed_response(node)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+@app.put("/atelier/projects/{project_id}/nodes/{node_id}", response_model=AtelierNode)
+async def update_atelier_node(project_id: str, node_id: str, request: UpdateAtelierNodeRequest):
+    try:
+        updates = {k: v for k, v in request.model_dump().items() if v is not None}
+        node = pipeline.update_atelier_node(project_id, node_id, updates)
+        return signed_response(node)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+@app.delete("/atelier/projects/{project_id}/nodes/{node_id}")
+async def delete_atelier_node(project_id: str, node_id: str):
+    try:
+        pipeline.delete_atelier_node(project_id, node_id)
+        return {"status": "deleted"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/atelier/projects/{project_id}/nodes/{node_id}/video_candidates", response_model=AtelierNode)
+async def create_atelier_video_candidates(
+    project_id: str,
+    node_id: str,
+    request: CreateAtelierVideoCandidatesRequest,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        node = pipeline.create_atelier_video_candidates(
+            project_id=project_id,
+            node_id=node_id,
+            prompt=request.prompt,
+            model=request.model,
+            reference_image_urls=request.reference_image_urls,
+            batch_size=request.batch_size,
+            params=request.params,
+        )
+        candidates = (node.data or {}).get("candidates") or []
+        for candidate in candidates[-request.batch_size:]:
+            background_tasks.add_task(
+                pipeline.process_atelier_video_candidate,
+                project_id,
+                node_id,
+                candidate["id"],
+            )
+        return signed_response(node)
+    except ValueError as e:
+        raise HTTPException(status_code=400 if "required" in str(e).lower() else 404, detail=str(e))
+
+
+@app.post("/atelier/projects/{project_id}/nodes/{node_id}/video_candidates/regenerate", response_model=AtelierNode)
+async def regenerate_atelier_video_candidates(
+    project_id: str,
+    node_id: str,
+    request: RegenerateAtelierVideoCandidatesRequest,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        node = pipeline.regenerate_atelier_video_candidates(
+            project_id=project_id,
+            node_id=node_id,
+            prompt=request.prompt,
+            model=request.model,
+            reference_image_urls=request.reference_image_urls,
+            batch_size=request.batch_size,
+            params=request.params,
+        )
+        candidates = (node.data or {}).get("candidates") or []
+        for candidate in candidates:
+            background_tasks.add_task(
+                pipeline.process_atelier_video_candidate,
+                project_id,
+                node_id,
+                candidate["id"],
+            )
+        return signed_response(node)
+    except ValueError as e:
+        raise HTTPException(status_code=400 if "required" in str(e).lower() else 404, detail=str(e))
+
+
+@app.post("/atelier/projects/{project_id}/nodes/{node_id}/video_candidates/{candidate_id}/retry", response_model=AtelierNode)
+async def retry_atelier_video_candidate(
+    project_id: str,
+    node_id: str,
+    candidate_id: str,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        node = pipeline.retry_atelier_video_candidate(project_id, node_id, candidate_id)
+        background_tasks.add_task(
+            pipeline.process_atelier_video_candidate,
+            project_id,
+            node_id,
+            candidate_id,
+        )
+        return signed_response(node)
+    except ValueError as e:
+        raise HTTPException(status_code=400 if "running" in str(e).lower() else 404, detail=str(e))
+
+
+@app.post("/atelier/projects/{project_id}/nodes/{node_id}/video_candidates/select", response_model=AtelierNode)
+async def select_atelier_video_candidate(
+    project_id: str,
+    node_id: str,
+    request: SelectAtelierVideoCandidateRequest,
+):
+    try:
+        node = pipeline.select_atelier_video_candidate(project_id, node_id, request.candidate_id)
+        return signed_response(node)
+    except ValueError as e:
+        raise HTTPException(status_code=400 if "completed" in str(e).lower() else 404, detail=str(e))
+
+
+@app.delete("/atelier/projects/{project_id}/nodes/{node_id}/video_candidates/{candidate_id}", response_model=AtelierNode)
+async def delete_atelier_video_candidate(project_id: str, node_id: str, candidate_id: str):
+    try:
+        node = pipeline.delete_atelier_video_candidate(project_id, node_id, candidate_id)
+        return signed_response(node)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 
@@ -1189,6 +1508,8 @@ async def create_video_task(script_id: str, request: CreateVideoTaskRequest, bac
 
         return signed_response(tasks)
 
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback
         logger.exception("An error occurred")

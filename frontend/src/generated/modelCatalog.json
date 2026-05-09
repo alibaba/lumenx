@@ -2026,7 +2026,12 @@
       "duration": null,
       "family": "happyhorse",
       "id": "happyhorse-1.0-r2v",
-      "inputs": {},
+      "inputs": {
+        "reference_images": {
+          "max": 9,
+          "reference_type": "image"
+        }
+      },
       "params": {},
       "provider": "aliyun",
       "release_stage": "stable",
@@ -4218,7 +4223,7 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Reference images to video generation with multi-image support",
+      "description": "Reference video to video generation",
       "display_name": "Wan 2.7 R2V",
       "docs": {
         "context_hub_doc_ids": [
@@ -4234,7 +4239,7 @@
       "inputs": {
         "reference_images": {
           "max": 5,
-          "reference_type": "image"
+          "reference_type": "video"
         }
       },
       "params": {},
@@ -4565,7 +4570,12 @@
       "duration": null,
       "family": "happyhorse",
       "id": "happyhorse/happyhorse-1.0-video#r2v",
-      "inputs": {},
+      "inputs": {
+        "reference_images": {
+          "max": 9,
+          "reference_type": "image"
+        }
+      },
       "legacy_model_id": "happyhorse-1.0-r2v",
       "mode": "r2v",
       "model_line_id": "happyhorse/happyhorse-1.0-video",
@@ -6918,7 +6928,7 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Reference images to video generation with multi-image support",
+      "description": "Reference video to video generation",
       "display_name": "Wan 2.7 R2V",
       "docs": {
         "context_hub_doc_ids": [
@@ -6934,7 +6944,7 @@
       "inputs": {
         "reference_images": {
           "max": 5,
-          "reference_type": "image"
+          "reference_type": "video"
         }
       },
       "legacy_model_id": "wan2.7-r2v",

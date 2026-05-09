@@ -12,6 +12,9 @@ from src.utils.model_catalog import (
     build_provider_family_configs,
     get_catalog_accessor,
     get_default_model_settings,
+    get_r2v_reference_input_config,
+    resolve_r2v_route_model_id,
+    validate_r2v_reference_inputs,
     write_frontend_generated_catalog,
     write_generated_catalog,
 )
@@ -28,19 +31,22 @@ class TestModelCatalog:
 
         assert catalog["version"] == 1
         assert catalog["defaults"]["model_settings"] == {
-            "t2i_model": "wan2.6-t2i",
-            "i2i_model": "wan2.6-image",
-            "i2v_model": "wan2.6-i2v",
+            "t2i_model": "wan2.7-image-pro",
+            "i2i_model": "wan2.7-image",
+            "image_model": "wan2.7-image-pro",
+            "i2v_model": "wan2.7-i2v",
         }
 
         models = catalog["models"]
-        assert "wan2.6-t2i" in models
-        assert "wan2.6-image" in models
+        assert "wan2.7-image-pro" in models
+        assert "wan2.7-image" in models
+        assert "wan2.7-i2v" in models
+        assert "wan2.7-r2v" in models
         assert "wan2.6-i2v" in models
         assert "wan2.6-r2v" in models
-        assert "kling-v3" in models
-        assert "viduq3-pro" in models
-        assert "pixverse-v4-i2v" in models
+        assert "kling-v3-i2v" in models
+        assert "viduq3-pro-i2v" in models
+        assert "pixverse-c1-i2v" in models
 
         assert models["wan2.6-i2v"]["ui"]["visible_in"] == [
             "project_settings",
@@ -122,14 +128,35 @@ class TestModelCatalog:
 
         assert family_map["kling-"].backend_env_key == "KLING_PROVIDER_MODE"
         assert family_map["vidu"].backend_env_key == "VIDU_PROVIDER_MODE"
-        assert family_map["pixverse-"].backend_env_key == "PIXVERSE_PROVIDER_MODE"
+        assert family_map["pixverse-"].backend_env_key is None
 
     def test_default_model_settings_come_from_catalog(self):
         defaults = get_default_model_settings(MODEL_CATALOG_ROOT)
 
-        assert defaults.t2i_model == "wan2.6-t2i"
-        assert defaults.i2i_model == "wan2.6-image"
-        assert defaults.i2v_model == "wan2.6-i2v"
+        assert defaults.t2i_model == "wan2.7-image-pro"
+        assert defaults.i2i_model == "wan2.7-image"
+        assert defaults.image_model == "wan2.7-image-pro"
+        assert defaults.i2v_model == "wan2.7-i2v"
+
+    def test_r2v_routes_and_reference_contracts_are_model_specific(self):
+        catalog = build_catalog_dict(MODEL_CATALOG_ROOT)
+
+        assert resolve_r2v_route_model_id("happyhorse-1.0-i2v", catalog) == "happyhorse-1.0-r2v"
+        assert resolve_r2v_route_model_id("wan2.7-i2v", catalog) == "wan2.7-r2v"
+        assert resolve_r2v_route_model_id("wan2.6-i2v", catalog) == "wan2.6-r2v"
+
+        assert get_r2v_reference_input_config("happyhorse-1.0-r2v", catalog).reference_type == "image"
+        wan27_config = get_r2v_reference_input_config("wan2.7-r2v", catalog)
+        assert wan27_config.reference_type == "video"
+        assert wan27_config.max_refs == 5
+
+        with pytest.raises(ValueError, match="reference_video_urls"):
+            validate_r2v_reference_inputs(
+                model_id="wan2.7-r2v",
+                reference_video_urls=[],
+                reference_image_urls=["image.png"],
+                catalog=catalog,
+            )
 
     def test_validation_report_passes_for_repo_catalog(self):
         catalog = build_catalog_dict(MODEL_CATALOG_ROOT)
@@ -138,7 +165,7 @@ class TestModelCatalog:
 
         assert report.ok is True
         assert report.errors == ()
-        assert report.stats["defaults"]["t2i_model"] == "wan2.6-t2i"
+        assert report.stats["defaults"]["t2i_model"] == "wan2.7-image-pro"
         assert report.stats["surface_summary"]["video_sidebar"]["i2v"]
 
     def test_validation_report_detects_frontend_catalog_drift(self):
@@ -154,7 +181,7 @@ class TestModelCatalog:
     def test_validation_report_detects_default_visibility_regression(self):
         catalog = build_catalog_dict(MODEL_CATALOG_ROOT)
         broken_catalog = deepcopy(catalog)
-        broken_catalog["models"]["wan2.6-i2v"]["ui"]["visible_in"] = [
+        broken_catalog["models"]["wan2.7-i2v"]["ui"]["visible_in"] = [
             "project_settings",
             "series_settings",
             "global_settings",
@@ -176,6 +203,7 @@ class TestModelCatalogValidation:
                     "model_settings": {
                         "t2i_model": "wan2.6-t2i",
                         "i2i_model": "wan2.6-image",
+                        "image_model": "wan2.6-image",
                         "i2v_model": "wan2.6-i2v",
                     }
                 },
@@ -234,6 +262,7 @@ class TestModelCatalogValidation:
                     "model_settings": {
                         "t2i_model": "wan2.6-t2i",
                         "i2i_model": "wan2.6-image",
+                        "image_model": "wan2.6-image",
                         "i2v_model": "wan2.6-i2v",
                     }
                 },
@@ -445,19 +474,19 @@ class TestGetGatewayForModel:
     def test_gateway_lookup_vendor_backend(self):
         from src.utils.provider_registry import get_gateway_for_model
 
-        result = get_gateway_for_model("kling-v3", backend="vendor")
+        result = get_gateway_for_model("kling-v3-i2v", backend="vendor")
         assert result == "kling"
 
     def test_gateway_lookup_dashscope_backend_for_dual_provider(self):
         from src.utils.provider_registry import get_gateway_for_model
 
-        result = get_gateway_for_model("kling-v3", backend="dashscope")
+        result = get_gateway_for_model("kling-v3-i2v", backend="dashscope")
         assert result == "dashscope"
 
     def test_gateway_lookup_vidu_vendor(self):
         from src.utils.provider_registry import get_gateway_for_model
 
-        result = get_gateway_for_model("viduq3-pro", backend="vendor")
+        result = get_gateway_for_model("viduq3-pro-i2v", backend="vendor")
         assert result == "vidu"
 
     def test_gateway_lookup_returns_none_for_unknown_model(self):

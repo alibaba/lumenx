@@ -8,7 +8,20 @@ import subprocess
 import threading
 import platform
 from urllib.parse import quote
-from .models import Script, GenerationStatus, VideoTask, Character, Scene, StoryboardFrame, Series, PromptConfig
+from .models import (
+    AtelierAgentPolicy,
+    AtelierAgentTurn,
+    AtelierNode,
+    AtelierProject,
+    Script,
+    GenerationStatus,
+    VideoTask,
+    Character,
+    Scene,
+    StoryboardFrame,
+    Series,
+    PromptConfig,
+)
 from .llm import ScriptProcessor
 from .assets import AssetGenerator
 from .storyboard import StoryboardGenerator
@@ -19,6 +32,8 @@ from ...utils import get_logger
 from ...utils.oss_utils import is_object_key
 from ...utils.provider_registry import resolve_provider_backend
 from ...utils.system_check import get_ffmpeg_path, get_ffmpeg_install_instructions
+from ...utils.model_catalog import resolve_r2v_route_model_id, validate_r2v_reference_inputs
+from .atelier_agent import AtelierAgentHarness
 
 logger = get_logger(__name__)
 
@@ -59,9 +74,11 @@ class ComicGenPipeline:
         
         self.data_file = "output/projects.json"
         self.series_data_file = "output/series.json"
+        self.atelier_data_file = "output/atelier_projects.json"
         self._save_lock = threading.RLock()  # Reentrant lock to prevent concurrent file writes
         self.scripts: Dict[str, Script] = self._load_data()
         self.series_store: Dict[str, Series] = self._load_series_data()
+        self.atelier_projects: Dict[str, AtelierProject] = self._load_atelier_data()
         
         # Task management for async asset generation
         # Format: { task_id: { status: str, progress: int, error: str, script_id: str, asset_id: str, created_at: float } }
@@ -448,6 +465,25 @@ class ComicGenPipeline:
             task = self.video_generation_tasks.get(task_id)
             
         if not task:
+            for script in self.scripts.values():
+                video_task = next((candidate for candidate in script.video_tasks if candidate.id == task_id), None)
+                if video_task:
+                    return {
+                        "task_id": task_id,
+                        "status": video_task.status,
+                        "progress": 100 if video_task.status == "completed" else 0,
+                        "error": None,
+                        "asset_id": video_task.asset_id,
+                        "asset_type": None,
+                        "script_id": script.id,
+                        "frame_id": video_task.frame_id,
+                        "video_url": video_task.video_url,
+                        "model": video_task.model,
+                        "generation_mode": video_task.generation_mode,
+                        "reference_video_urls": video_task.reference_video_urls,
+                        "reference_image_urls": video_task.reference_image_urls,
+                        "created_at": video_task.created_at,
+                    }
             return None
         
         return {
@@ -1403,20 +1439,14 @@ class ComicGenPipeline:
         
         task_id = str(uuid.uuid4())
         
-        # If R2V mode is selected, use the appropriate R2V model
+        # If R2V mode is selected, use the concrete model-line R2V route.
         if generation_mode == "r2v":
-            if model and model.startswith("happyhorse-"):
-                model = "happyhorse-1.0-r2v"
-            elif model and model.startswith("wan2.7-"):
-                model = "wan2.7-r2v"
-            elif model and model.startswith("kling"):
-                model = "kling-v3-r2v"
-            elif model and model.startswith("pixverse"):
-                model = "pixverse-c1-r2v"
-            elif model and model.startswith("vidu"):
-                model = "viduq3-pro-r2v"
-            else:
-                model = "wan2.7-r2v"
+            model = resolve_r2v_route_model_id(model or "wan2.7-i2v")
+            validate_r2v_reference_inputs(
+                model_id=model,
+                reference_video_urls=reference_video_urls or [],
+                reference_image_urls=reference_image_urls or [],
+            )
         
         # Snapshot the input image to ensure consistency
         snapshot_url = image_url
@@ -2629,6 +2659,537 @@ class ComicGenPipeline:
         """Save series data with thread lock."""
         with self._save_lock:
             self._save_series_data_unlocked()
+
+    # ============================================================
+    # Atelier Project Operations
+    # ============================================================
+
+    def _load_atelier_data(self) -> Dict[str, AtelierProject]:
+        if not os.path.exists(self.atelier_data_file):
+            return {}
+        try:
+            with open(self.atelier_data_file, 'r') as f:
+                data = json.load(f)
+                return {k: AtelierProject(**v) for k, v in data.items()}
+        except Exception as e:
+            logger.error(f"Failed to load atelier data: {e}")
+            return {}
+
+    def _save_atelier_data_unlocked(self):
+        try:
+            os.makedirs(os.path.dirname(self.atelier_data_file) or ".", exist_ok=True)
+            with open(self.atelier_data_file, 'w') as f:
+                json.dump({k: v.model_dump(mode="json") for k, v in self.atelier_projects.items()}, f, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to save atelier data: {e}")
+
+    def _save_atelier_data(self):
+        with self._save_lock:
+            self._save_atelier_data_unlocked()
+
+    def create_atelier_project(
+        self,
+        title: str,
+        description: str = "",
+        source_project_id: Optional[str] = None,
+    ) -> AtelierProject:
+        with self._save_lock:
+            if source_project_id and source_project_id not in self.scripts:
+                raise ValueError("Source project not found")
+            now = time.time()
+            project = AtelierProject(
+                id=str(uuid.uuid4()),
+                title=title,
+                description=description,
+                source_project_id=source_project_id,
+                created_at=now,
+                updated_at=now,
+            )
+            self.atelier_projects[project.id] = project
+            self._save_atelier_data_unlocked()
+            return project
+
+    def get_atelier_project(self, project_id: str) -> Optional[AtelierProject]:
+        return self.atelier_projects.get(project_id)
+
+    def list_atelier_projects(self) -> List[AtelierProject]:
+        return list(self.atelier_projects.values())
+
+    def update_atelier_project(self, project_id: str, updates: Dict[str, Any]) -> AtelierProject:
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                raise ValueError("Atelier project not found")
+            for key, value in updates.items():
+                if key in {"title", "description", "source_project_id"} and value is not None:
+                    if key == "source_project_id" and value and value not in self.scripts:
+                        raise ValueError("Source project not found")
+                    setattr(project, key, value)
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+            return project
+
+    def delete_atelier_project(self, project_id: str) -> None:
+        with self._save_lock:
+            if project_id not in self.atelier_projects:
+                raise ValueError("Atelier project not found")
+            del self.atelier_projects[project_id]
+            self._save_atelier_data_unlocked()
+
+    def update_atelier_agent_policy(
+        self,
+        project_id: str,
+        updates: Dict[str, Any],
+    ) -> AtelierProject:
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                raise ValueError("Atelier project not found")
+            current = project.agent_policy.model_dump()
+            for key in ("approval_mode", "allowed_tools", "max_nodes_per_action"):
+                if key in updates and updates[key] is not None:
+                    current[key] = updates[key]
+            current["updated_at"] = time.time()
+            project.agent_policy = AtelierAgentPolicy(**current)
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+            return project
+
+    def list_atelier_agent_tools(self) -> List[Dict[str, Any]]:
+        return AtelierAgentHarness(self).list_tool_specs()
+
+    def run_atelier_agent_turn(
+        self,
+        project_id: str,
+        tool_calls: List[Dict[str, Any]],
+        user_message: str = "",
+        preview: bool = False,
+        approve: bool = False,
+        turn_id: Optional[str] = None,
+    ) -> AtelierAgentTurn:
+        return AtelierAgentHarness(self).run_turn(
+            project_id=project_id,
+            tool_calls=tool_calls,
+            user_message=user_message,
+            preview=preview,
+            approve=approve,
+            turn_id=turn_id,
+        )
+
+    def create_atelier_node(self, project_id: str, payload: Dict[str, Any]) -> AtelierNode:
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                raise ValueError("Atelier project not found")
+            if payload.get("source_project_id") and payload["source_project_id"] not in self.scripts:
+                raise ValueError("Source project not found")
+            now = time.time()
+            node = AtelierNode(
+                id=payload.get("id") or str(uuid.uuid4()),
+                project_id=project_id,
+                type=payload.get("type", "idea"),
+                title=payload.get("title", ""),
+                prompt=payload.get("prompt", ""),
+                status=payload.get("status", "draft"),
+                x=payload.get("x", 0.0),
+                y=payload.get("y", 0.0),
+                width=payload.get("width", 320.0),
+                height=payload.get("height", 180.0),
+                source_project_id=payload.get("source_project_id"),
+                frame_id=payload.get("frame_id"),
+                asset_id=payload.get("asset_id"),
+                video_task_id=payload.get("video_task_id"),
+                media_urls=payload.get("media_urls", []),
+                data=payload.get("data", {}),
+                created_by=payload.get("created_by", "user"),
+                created_at=now,
+                updated_at=now,
+            )
+            if any(existing.id == node.id for existing in project.nodes):
+                raise ValueError("Atelier node already exists")
+            project.nodes.append(node)
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+            return node
+
+    def update_atelier_node(
+        self,
+        project_id: str,
+        node_id: str,
+        updates: Dict[str, Any],
+    ) -> AtelierNode:
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                raise ValueError("Atelier project not found")
+            node = next((candidate for candidate in project.nodes if candidate.id == node_id), None)
+            if not node:
+                raise ValueError("Atelier node not found")
+            allowed_fields = {
+                "type", "title", "prompt", "status", "x", "y", "width", "height",
+                "source_project_id", "frame_id", "asset_id", "video_task_id",
+                "media_urls", "data", "created_by",
+            }
+            for key, value in updates.items():
+                if key in allowed_fields and value is not None:
+                    if key == "source_project_id" and value and value not in self.scripts:
+                        raise ValueError("Source project not found")
+                    setattr(node, key, value)
+            node.updated_at = time.time()
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+            return node
+
+    def create_atelier_video_candidates(
+        self,
+        project_id: str,
+        node_id: str,
+        prompt: str,
+        model: str,
+        reference_image_urls: List[str],
+        batch_size: int = 3,
+        params: Optional[Dict[str, Any]] = None,
+        replace_existing: bool = False,
+    ) -> AtelierNode:
+        with self._save_lock:
+            project, node = self._get_atelier_node_pair(project_id, node_id)
+            if not reference_image_urls:
+                raise ValueError("At least one reference image is required")
+            safe_batch_size = max(1, min(batch_size, 6))
+            now = time.time()
+            node_data = dict(node.data or {})
+            existing_candidates = [] if replace_existing else list(node_data.get("candidates") or [])
+            generation = {
+                "prompt": prompt,
+                "model": model,
+                "params": params or {},
+                "reference_image_urls": reference_image_urls,
+                "batch_size": safe_batch_size,
+                "created_at": now,
+            }
+            new_candidates = []
+            for index in range(safe_batch_size):
+                candidate_id = str(uuid.uuid4())
+                new_candidates.append({
+                    "id": candidate_id,
+                    "status": "pending",
+                    "video_url": None,
+                    "prompt": prompt,
+                    "model": model,
+                    "reference_image_urls": reference_image_urls,
+                    "params": params or {},
+                    "error": None,
+                    "created_at": now,
+                    "label": f"Take {len(existing_candidates) + index + 1}",
+                    "attempt_count": 0,
+                    "retry_count": 0,
+                    "attempts": [],
+                    "generation_snapshot": {
+                        "prompt": prompt,
+                        "model": model,
+                        "reference_image_urls": reference_image_urls,
+                        "params": params or {},
+                        "queued_at": now,
+                    },
+                })
+            node.data = {
+                **node_data,
+                "generation": generation,
+                "reference_image_urls": reference_image_urls,
+                "candidates": existing_candidates + new_candidates,
+                "selected_candidate_id": None if replace_existing else node_data.get("selected_candidate_id"),
+            }
+            if replace_existing:
+                node.video_task_id = None
+                node.media_urls = []
+            node.prompt = prompt
+            node.status = "processing"
+            node.updated_at = time.time()
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+            return node
+
+    def regenerate_atelier_video_candidates(
+        self,
+        project_id: str,
+        node_id: str,
+        prompt: Optional[str] = None,
+        model: Optional[str] = None,
+        reference_image_urls: Optional[List[str]] = None,
+        batch_size: Optional[int] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> AtelierNode:
+        project, node = self._get_atelier_node_pair(project_id, node_id)
+        generation = dict((node.data or {}).get("generation") or {})
+        return self.create_atelier_video_candidates(
+            project_id=project.id,
+            node_id=node.id,
+            prompt=prompt or generation.get("prompt") or node.prompt,
+            model=model or generation.get("model") or "wan2.7-i2v",
+            reference_image_urls=(
+                reference_image_urls
+                if reference_image_urls is not None
+                else generation.get("reference_image_urls") or (node.data or {}).get("reference_image_urls") or []
+            ),
+            batch_size=batch_size or generation.get("batch_size") or 3,
+            params=params if params is not None else generation.get("params") or {},
+            replace_existing=True,
+        )
+
+    def retry_atelier_video_candidate(
+        self,
+        project_id: str,
+        node_id: str,
+        candidate_id: str,
+    ) -> AtelierNode:
+        with self._save_lock:
+            project, node = self._get_atelier_node_pair(project_id, node_id)
+            candidate = self._get_atelier_candidate(node, candidate_id)
+            if candidate.get("status") in {"pending", "processing"}:
+                raise ValueError("Atelier video candidate is already running")
+            now = time.time()
+            candidate["status"] = "pending"
+            candidate["video_url"] = None
+            candidate["error"] = None
+            candidate["completed_at"] = None
+            candidate["failed_at"] = None
+            candidate["retry_count"] = int(candidate.get("retry_count") or 0) + 1
+            candidate["retry_requested_at"] = now
+            candidate["generation_snapshot"] = {
+                "prompt": candidate.get("prompt") or node.prompt,
+                "model": candidate.get("model") or "wan2.7-i2v",
+                "reference_image_urls": candidate.get("reference_image_urls") or [],
+                "params": candidate.get("params") or {},
+                "queued_at": now,
+            }
+            node_data = dict(node.data or {})
+            if node_data.get("selected_candidate_id") == candidate_id:
+                node_data["selected_candidate_id"] = None
+                node.video_task_id = None
+                node.media_urls = []
+                node.data = node_data
+            node.status = "processing"
+            node.updated_at = now
+            project.updated_at = now
+            self._save_atelier_data_unlocked()
+            return node
+
+    def process_atelier_video_candidate(
+        self,
+        project_id: str,
+        node_id: str,
+        candidate_id: str,
+    ) -> None:
+        try:
+            project, node = self._get_atelier_node_pair(project_id, node_id)
+            candidate = self._get_atelier_candidate(node, candidate_id)
+            started_at = time.time()
+            attempt_number = int(candidate.get("attempt_count") or 0) + 1
+            candidate["status"] = "processing"
+            candidate["attempt_count"] = attempt_number
+            candidate["attempt_started_at"] = started_at
+            candidate["error"] = None
+            node.status = "processing"
+            node.updated_at = time.time()
+            project.updated_at = time.time()
+            self._save_atelier_data()
+
+            reference_image_urls = candidate.get("reference_image_urls") or []
+            source_image_url = reference_image_urls[0] if reference_image_urls else ""
+            img_path = self._download_temp_image(source_image_url) if source_image_url else None
+            output_filename = f"atelier_{candidate_id}.mp4"
+            output_path = os.path.join("output", "video", output_filename)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            params = candidate.get("params") or {}
+            model = candidate.get("model") or "wan2.7-i2v"
+            candidate["runtime_snapshot"] = {
+                "attempt": attempt_number,
+                "model": model,
+                "params": params,
+                "reference_image_urls": reference_image_urls,
+                "source_image_url": source_image_url,
+                "output_path": output_path,
+                "started_at": started_at,
+            }
+
+            self.video_generator.model.generate(
+                prompt=candidate.get("prompt") or node.prompt,
+                output_path=output_path,
+                img_path=img_path,
+                img_url=source_image_url,
+                duration=int(params.get("duration") or 5),
+                seed=params.get("seed"),
+                resolution=params.get("resolution") or "720p",
+                audio_url=params.get("audio_url"),
+                audio=bool(params.get("generate_audio", False)),
+                prompt_extend=bool(params.get("prompt_extend", True)),
+                negative_prompt=params.get("negative_prompt"),
+                model=model,
+                shot_type=params.get("shot_type") or "single",
+                ref_video_urls=None,
+                ref_image_urls=reference_image_urls if params.get("generation_mode") == "r2v" else None,
+                ratio=params.get("ratio"),
+                audio_setting=params.get("audio_setting"),
+                camera_motion=None,
+                subject_motion=None,
+            )
+
+            project, node = self._get_atelier_node_pair(project_id, node_id)
+            candidate = self._get_atelier_candidate(node, candidate_id)
+            candidate["status"] = "completed"
+            candidate["video_url"] = os.path.relpath(output_path, "output")
+            candidate["error"] = None
+            completed_at = time.time()
+            candidate["completed_at"] = completed_at
+            self._record_atelier_candidate_attempt(
+                candidate,
+                attempt_number,
+                "completed",
+                started_at,
+                completed_at,
+                video_url=candidate["video_url"],
+            )
+            self._refresh_atelier_node_status(project, node)
+            self._save_atelier_data()
+        except Exception as e:
+            logger.exception("Failed to process Atelier video candidate")
+            try:
+                project, node = self._get_atelier_node_pair(project_id, node_id)
+                candidate = self._get_atelier_candidate(node, candidate_id)
+                failed_at = time.time()
+                attempt_number = int(candidate.get("attempt_count") or 1)
+                started_at = float(candidate.get("attempt_started_at") or failed_at)
+                candidate["status"] = "failed"
+                candidate["error"] = str(e)
+                candidate["failed_at"] = failed_at
+                candidate["completed_at"] = failed_at
+                self._record_atelier_candidate_attempt(
+                    candidate,
+                    attempt_number,
+                    "failed",
+                    started_at,
+                    failed_at,
+                    error=str(e),
+                )
+                self._refresh_atelier_node_status(project, node)
+                self._save_atelier_data()
+            except Exception:
+                logger.exception("Failed to persist Atelier candidate failure")
+
+    def select_atelier_video_candidate(
+        self,
+        project_id: str,
+        node_id: str,
+        candidate_id: str,
+    ) -> AtelierNode:
+        with self._save_lock:
+            project, node = self._get_atelier_node_pair(project_id, node_id)
+            candidate = self._get_atelier_candidate(node, candidate_id)
+            if candidate.get("status") != "completed" or not candidate.get("video_url"):
+                raise ValueError("Only completed video candidates can be selected")
+            node_data = dict(node.data or {})
+            node_data["selected_candidate_id"] = candidate_id
+            node.data = node_data
+            node.video_task_id = candidate_id
+            node.media_urls = [candidate["video_url"]]
+            node.status = "completed"
+            node.updated_at = time.time()
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+            return node
+
+    def delete_atelier_video_candidate(
+        self,
+        project_id: str,
+        node_id: str,
+        candidate_id: str,
+    ) -> AtelierNode:
+        with self._save_lock:
+            project, node = self._get_atelier_node_pair(project_id, node_id)
+            node_data = dict(node.data or {})
+            candidates = list(node_data.get("candidates") or [])
+            next_candidates = [candidate for candidate in candidates if candidate.get("id") != candidate_id]
+            if len(next_candidates) == len(candidates):
+                raise ValueError("Atelier video candidate not found")
+            node_data["candidates"] = next_candidates
+            if node_data.get("selected_candidate_id") == candidate_id:
+                node_data["selected_candidate_id"] = None
+                node.video_task_id = None
+                node.media_urls = []
+            node.data = node_data
+            self._refresh_atelier_node_status(project, node)
+            self._save_atelier_data_unlocked()
+            return node
+
+    def _get_atelier_node_pair(self, project_id: str, node_id: str) -> Tuple[AtelierProject, AtelierNode]:
+        project = self.atelier_projects.get(project_id)
+        if not project:
+            raise ValueError("Atelier project not found")
+        node = next((candidate for candidate in project.nodes if candidate.id == node_id), None)
+        if not node:
+            raise ValueError("Atelier node not found")
+        return project, node
+
+    def _get_atelier_candidate(self, node: AtelierNode, candidate_id: str) -> Dict[str, Any]:
+        node_data = dict(node.data or {})
+        candidates = node_data.get("candidates") or []
+        candidate = next((item for item in candidates if item.get("id") == candidate_id), None)
+        if not candidate:
+            raise ValueError("Atelier video candidate not found")
+        return candidate
+
+    def _refresh_atelier_node_status(self, project: AtelierProject, node: AtelierNode) -> None:
+        candidates = list((node.data or {}).get("candidates") or [])
+        if not candidates:
+            node.status = "draft"
+        elif any(candidate.get("status") in {"pending", "processing"} for candidate in candidates):
+            node.status = "processing"
+        elif any(candidate.get("status") == "completed" for candidate in candidates):
+            node.status = "completed" if (node.data or {}).get("selected_candidate_id") else "review"
+        else:
+            node.status = "failed"
+        node.updated_at = time.time()
+        project.updated_at = time.time()
+
+    def _record_atelier_candidate_attempt(
+        self,
+        candidate: Dict[str, Any],
+        attempt_number: int,
+        status: str,
+        started_at: float,
+        finished_at: float,
+        video_url: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        attempts = [
+            attempt
+            for attempt in list(candidate.get("attempts") or [])
+            if attempt.get("attempt") != attempt_number
+        ]
+        attempts.append({
+            "attempt": attempt_number,
+            "status": status,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "model": candidate.get("model"),
+            "params": candidate.get("params") or {},
+            "reference_image_urls": candidate.get("reference_image_urls") or [],
+            "video_url": video_url,
+            "error": error,
+        })
+        candidate["attempts"] = attempts
+
+    def delete_atelier_node(self, project_id: str, node_id: str) -> None:
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                raise ValueError("Atelier project not found")
+            original_count = len(project.nodes)
+            project.nodes = [node for node in project.nodes if node.id != node_id]
+            if len(project.nodes) == original_count:
+                raise ValueError("Atelier node not found")
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
 
     def create_series(self, title: str, description: str = "", workflow_mode: str = "i2v_legacy") -> Series:
         """Create a new Series."""

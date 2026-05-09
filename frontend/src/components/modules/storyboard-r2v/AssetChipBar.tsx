@@ -1,24 +1,22 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import type { StoryboardR2VAssetLike, StoryboardR2VCharacterLike } from "@/lib/storyboardR2VAssets";
 
 interface AssetChipBarProps {
-    characters: any[];
-    scenes: any[];
-    props: any[];
+    characters: StoryboardR2VCharacterLike[];
+    scenes: StoryboardR2VAssetLike[];
+    props: StoryboardR2VAssetLike[];
     onInsertAsset: (type: string, name: string) => void;
 }
 
 export default function AssetChipBar({ characters, scenes, props, onInsertAsset }: AssetChipBarProps) {
-    const t = useTranslations("storyboardR2V");
-
     if (characters.length === 0 && scenes.length === 0 && props.length === 0) {
         return null;
     }
 
     return (
         <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-1">
-            {characters.map((c: any, i: number) => (
+            {characters.map((c, i) => (
                 <button
                     key={c.id}
                     onClick={() => onInsertAsset(`character${i + 1}`, c.name)}
@@ -28,7 +26,7 @@ export default function AssetChipBar({ characters, scenes, props, onInsertAsset 
                     {c.name}
                 </button>
             ))}
-            {scenes.map((s: any) => (
+            {scenes.map((s) => (
                 <button
                     key={s.id}
                     onClick={() => onInsertAsset("scene", s.name)}
@@ -38,7 +36,7 @@ export default function AssetChipBar({ characters, scenes, props, onInsertAsset 
                     {s.name}
                 </button>
             ))}
-            {props.map((p: any) => (
+            {props.map((p) => (
                 <button
                     key={p.id}
                     onClick={() => onInsertAsset("prop", p.name)}

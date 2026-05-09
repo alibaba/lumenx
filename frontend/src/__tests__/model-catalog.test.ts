@@ -15,6 +15,8 @@ import {
     getMaxReferenceImages,
     getModelLineEntry,
     getModeGateway,
+    getR2vReferenceInputConfig,
+    getR2vRouteModelId,
     resolveModelSettings,
 } from '@/lib/modelCatalog';
 
@@ -34,32 +36,26 @@ afterEach(() => {
 describe('model catalog selectors', () => {
     it('derives visible model selectors from catalog defaults', () => {
         expect(DEFAULT_MODEL_SETTINGS).toMatchObject({
-            t2i_model: 'wan2.6-t2i',
-            i2i_model: 'wan2.6-image',
-            i2v_model: 'wan2.6-i2v',
+            t2i_model: 'wan2.7-image-pro',
+            i2i_model: 'wan2.7-image',
+            image_model: 'wan2.7-image-pro',
+            i2v_model: 'wan2.7-i2v',
         });
 
-        expect(GLOBAL_T2I_MODELS.map((model) => model.id)).toEqual([
-            'wan2.6-t2i',
-            'wan2.5-t2i-preview',
-            'wan2.2-t2i-plus',
-            'wan2.2-t2i-flash',
-        ]);
+        expect(GLOBAL_T2I_MODELS.map((model) => model.id)).toEqual([]);
 
-        expect(GLOBAL_I2I_MODELS.map((model) => model.id)).toEqual([
-            'wan2.6-image',
-            'wan2.5-i2i-preview',
-        ]);
+        expect(GLOBAL_I2I_MODELS.map((model) => model.id)).toEqual([]);
 
         expect(GLOBAL_I2V_MODELS.map((model) => model.id)).toEqual([
+            'happyhorse-1.0-i2v',
+            'kling-v3-i2v',
+            'pixverse/pixverse-v6-video',
+            'pixverse-c1-i2v',
+            'wan2.7-i2v',
             'wan2.6-i2v',
             'wan2.6-i2v-flash',
-            'wan2.5-i2v-preview',
-            'wan2.2-i2v-plus',
-            'wan2.2-i2v-flash',
-            'kling-v3',
-            'viduq3-pro',
-            'viduq3-turbo',
+            'viduq3-pro-i2v',
+            'viduq3-turbo-i2v',
         ]);
     });
 
@@ -81,9 +77,9 @@ describe('model catalog fallbacks', () => {
                 'global_settings'
             )
         ).toMatchObject({
-            t2i_model: 'wan2.6-t2i',
-            i2i_model: 'wan2.6-image',
-            i2v_model: 'wan2.6-i2v',
+            t2i_model: 'wan2.7-image-pro',
+            i2i_model: 'wan2.7-image',
+            i2v_model: 'wan2.7-i2v',
         });
     });
 
@@ -128,12 +124,7 @@ describe('model catalog fallbacks', () => {
             default: catalogWithCompat,
         }));
 
-        const {
-            GLOBAL_I2V_MODELS: compatI2vModels,
-            R2V_ROUTE_MODEL_ID: compatR2vRouteModelId,
-            R2V_SELECTION_MODEL_ID: compatR2vSelectionModelId,
-            resolveModelSettings: resolveCompatModelSettings,
-        } = await import('@/lib/modelCatalog');
+        const { GLOBAL_I2V_MODELS: compatI2vModels, getR2vRouteModelId: getCompatR2vRouteModelId, resolveModelSettings: resolveCompatModelSettings } = await import('@/lib/modelCatalog');
 
         expect(
             resolveCompatModelSettings(
@@ -143,10 +134,7 @@ describe('model catalog fallbacks', () => {
                 },
                 'global_settings'
             )
-        ).toMatchObject({
-            i2i_model: 'wan2.6-image',
-            i2v_model: 'wan2.6-i2v',
-        });
+        ).toMatchObject({ i2v_model: 'wan2.6-i2v' });
 
         expect(
             resolveCompatModelSettings(
@@ -155,24 +143,32 @@ describe('model catalog fallbacks', () => {
                 },
                 'global_settings'
             ).i2v_model
-        ).toBe('wan2.6-i2v');
+        ).toBe('wan2.7-i2v');
 
         expect(compatI2vModels.map((model) => model.id)).toContain('wan2.6-i2v');
         expect(compatI2vModels.some((model) => model.id === 'wan/wan2.6-video#i2v')).toBe(false);
-        expect(compatR2vSelectionModelId).toBe('wan2.6-i2v');
-        expect(compatR2vRouteModelId).toBe('wan2.6-r2v');
+        expect(getCompatR2vRouteModelId('wan2.6-i2v')).toBe('wan2.6-r2v');
     });
 });
 
 describe('model catalog runtime helpers', () => {
     it('derives the current R2V selection and route ids from catalog data', () => {
-        expect(R2V_SELECTION_MODEL_ID).toBe('wan2.6-i2v');
-        expect(R2V_ROUTE_MODEL_ID).toBe('wan2.6-r2v');
+        expect(R2V_SELECTION_MODEL_ID).toBe('happyhorse-1.0-i2v');
+        expect(R2V_ROUTE_MODEL_ID).toBe('happyhorse-1.0-r2v');
+        expect(getR2vRouteModelId('happyhorse-1.0-i2v')).toBe('happyhorse-1.0-r2v');
+        expect(getR2vRouteModelId('wan2.7-i2v')).toBe('wan2.7-r2v');
+        expect(getR2vRouteModelId('wan2.6-i2v')).toBe('wan2.6-r2v');
     });
 
     it('reads per-model reference image limits from catalog metadata', () => {
-        expect(getMaxReferenceImages('wan2.6-image')).toBe(4);
-        expect(getMaxReferenceImages('wan2.5-i2i-preview')).toBe(3);
+        expect(getMaxReferenceImages('wan2.7-image')).toBe(9);
+        expect(getMaxReferenceImages('qwen-image-2.0')).toBe(3);
+    });
+
+    it('reads concrete R2V reference input contracts per routed model', () => {
+        expect(getR2vReferenceInputConfig('happyhorse-1.0-r2v')).toEqual({ type: 'image', max: 9 });
+        expect(getR2vReferenceInputConfig('wan2.7-r2v')).toEqual({ type: 'video', max: 5 });
+        expect(getR2vReferenceInputConfig('wan2.6-r2v')).toEqual({ type: 'video', max: 3 });
     });
 });
 

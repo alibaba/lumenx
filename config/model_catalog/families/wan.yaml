@@ -117,7 +117,7 @@ models:
       r2v:
         legacy_id: wan2.7-r2v
         display_name: Wan 2.7 R2V
-        description: Reference images to video generation with multi-image support
+        description: Reference video to video generation
         status: hidden
         capabilities: [r2v]
         ui:
@@ -127,7 +127,7 @@ models:
         inputs:
           reference_images:
             max: 5
-            reference_type: image
+            reference_type: video
       t2v:
         legacy_id: wan2.7-t2v
         display_name: Wan 2.7 T2V

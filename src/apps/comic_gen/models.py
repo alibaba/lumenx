@@ -1,6 +1,7 @@
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import time
+import uuid
 from pydantic import BaseModel, Field
 
 from ...utils.model_catalog import get_default_model_settings
@@ -348,5 +349,96 @@ class Series(BaseModel):
     # Episode references
     episode_ids: List[str] = Field(default_factory=list, description="Ordered list of Episode/Script IDs")
 
+    created_at: float
+    updated_at: float
+
+
+class AtelierApprovalMode(str, Enum):
+    UNTRUSTED = "untrusted"
+    ON_FAILURE = "on_failure"
+    ON_REQUEST = "on_request"
+    NEVER = "never"
+
+
+class AtelierAgentPolicy(BaseModel):
+    approval_mode: AtelierApprovalMode = Field(
+        AtelierApprovalMode.UNTRUSTED,
+        description="Approval mode for agent actions on the canvas",
+    )
+    allowed_tools: List[str] = Field(
+        default_factory=list,
+        description="Canvas tool names the agent may call; empty means no project-level restriction",
+    )
+    max_nodes_per_action: int = Field(
+        8,
+        ge=1,
+        le=50,
+        description="Upper bound for nodes an agent may create in one action",
+    )
+    updated_at: float = Field(default_factory=time.time)
+
+
+class AtelierAgentToolStatus(str, Enum):
+    PROPOSED = "proposed"
+    APPROVAL_REQUIRED = "approval_required"
+    COMPLETED = "completed"
+    DENIED = "denied"
+    FAILED = "failed"
+
+
+class AtelierAgentToolCall(BaseModel):
+    call_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    tool_name: str = Field(..., description="Namespaced Atelier agent tool name")
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    status: AtelierAgentToolStatus = AtelierAgentToolStatus.PROPOSED
+    approval_required: bool = False
+    approval_granted: bool = False
+    error: Optional[str] = None
+    result_snapshot: Optional[Dict[str, Any]] = None
+    created_at: float = Field(default_factory=time.time)
+    completed_at: Optional[float] = None
+
+
+class AtelierAgentTurn(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    project_id: str
+    user_message: str = ""
+    preview: bool = False
+    status: str = Field("pending", description="pending/waiting_approval/completed/failed")
+    tool_calls: List[AtelierAgentToolCall] = Field(default_factory=list)
+    created_at: float = Field(default_factory=time.time)
+    completed_at: Optional[float] = None
+
+
+class AtelierNode(BaseModel):
+    id: str = Field(..., description="Unique node identifier")
+    project_id: str = Field(..., description="Parent Atelier project ID")
+    type: str = Field("idea", description="Node type, for example idea/image/video/audio/workflow")
+    title: str = Field("", description="Short visible node title")
+    prompt: str = Field("", description="Generation or planning prompt attached to this node")
+    status: str = Field("draft", description="draft/pending/processing/completed/failed")
+    x: float = Field(0.0, description="Canvas X position")
+    y: float = Field(0.0, description="Canvas Y position")
+    width: float = Field(320.0, description="Canvas node width")
+    height: float = Field(180.0, description="Canvas node height")
+    source_project_id: Optional[str] = Field(None, description="Studio project ID this node references")
+    frame_id: Optional[str] = Field(None, description="Storyboard frame ID this node references")
+    asset_id: Optional[str] = Field(None, description="Studio asset ID this node references")
+    video_task_id: Optional[str] = Field(None, description="Shared VideoTask ID this node references")
+    media_urls: List[str] = Field(default_factory=list, description="Generated or attached media URLs")
+    data: Dict[str, Any] = Field(default_factory=dict, description="Node-type specific payload")
+    created_by: str = Field("user", description="user or agent")
+    created_at: float = Field(default_factory=time.time)
+    updated_at: float = Field(default_factory=time.time)
+
+
+class AtelierProject(BaseModel):
+    id: str = Field(..., description="Unique Atelier project ID")
+    title: str = Field(..., description="Canvas project title")
+    description: str = Field("", description="Canvas project description")
+    source_project_id: Optional[str] = Field(None, description="Optional Studio project ID used as a seed")
+    nodes: List[AtelierNode] = Field(default_factory=list)
+    agent_policy: AtelierAgentPolicy = Field(default_factory=AtelierAgentPolicy)
+    agent_turns: List[AtelierAgentTurn] = Field(default_factory=list)
     created_at: float
     updated_at: float

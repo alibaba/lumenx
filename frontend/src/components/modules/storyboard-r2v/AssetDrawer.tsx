@@ -3,34 +3,68 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, User, MapPin, Package } from "lucide-react";
 import { useTranslations } from "next-intl";
+import {
+    getStoryboardR2VAssetReadiness,
+    type StoryboardR2VAssetLike,
+    type StoryboardR2VCharacterLike,
+} from "@/lib/storyboardR2VAssets";
 
 interface AssetDrawerProps {
     isOpen: boolean;
     onClose: () => void;
-    characters: any[];
-    scenes: any[];
-    props: any[];
+    characters: StoryboardR2VCharacterLike[];
+    scenes: StoryboardR2VAssetLike[];
+    props: StoryboardR2VAssetLike[];
     onSelectAsset: (type: string, name: string) => void;
 }
 
-function getAssetThumbnail(item: any, type: "character" | "scene" | "prop"): string | null {
+function getImageVariantUrl(asset?: {
+    selected_id?: string | null;
+    selected_image_id?: string | null;
+    variants?: Array<{ id?: string; url?: string }>;
+    image_variants?: Array<{ id?: string; url?: string }>;
+}): string | null {
+    if (!asset) return null;
+    const selectedId = asset.selected_image_id || asset.selected_id;
+    const variants = asset.image_variants || asset.variants || [];
+    const selected = selectedId ? variants.find((variant) => variant.id === selectedId) : undefined;
+    return selected?.url || variants[0]?.url || null;
+}
+
+function getAssetThumbnail(
+    item: StoryboardR2VCharacterLike | StoryboardR2VAssetLike,
+    type: "character" | "scene" | "prop"
+): string | null {
     if (type === "character") {
-        const asset = item.full_body_asset || item.headshot_asset;
-        if (asset?.selected_id && asset.variants?.length) {
-            const selected = asset.variants.find((v: any) => v.id === asset.selected_id);
-            if (selected) return selected.url;
-        }
-        if (asset?.variants?.[0]) return asset.variants[0].url;
-        if (item.avatar_url) return item.avatar_url;
-    } else {
-        const asset = item.image_asset;
-        if (asset?.selected_id && asset.variants?.length) {
-            const selected = asset.variants.find((v: any) => v.id === asset.selected_id);
-            if (selected) return selected.url;
-        }
-        if (asset?.variants?.[0]) return asset.variants[0].url;
+        const character = item as StoryboardR2VCharacterLike;
+        return (
+            getImageVariantUrl(character.full_body) ||
+            getImageVariantUrl(character.full_body_asset) ||
+            getImageVariantUrl(character.head_shot) ||
+            getImageVariantUrl(character.headshot_asset) ||
+            character.full_body_image_url ||
+            character.avatar_url ||
+            null
+        );
     }
-    return null;
+
+    const asset = item as StoryboardR2VAssetLike;
+    return getImageVariantUrl(asset.image_asset) || asset.image_url || null;
+}
+
+function AssetReadinessBadges({ hasImageRef, hasVideoRef }: { hasImageRef: boolean; hasVideoRef: boolean }) {
+    return (
+        <div className="flex items-center gap-1">
+            <span
+                className={`h-1.5 w-1.5 rounded-full ${hasImageRef ? "bg-emerald-400" : "bg-white/20"}`}
+                title={hasImageRef ? "Image ref ready" : "Missing image ref"}
+            />
+            <span
+                className={`h-1.5 w-1.5 rounded-full ${hasVideoRef ? "bg-sky-400" : "bg-white/20"}`}
+                title={hasVideoRef ? "Motion ref ready" : "Missing motion ref"}
+            />
+        </div>
+    );
 }
 
 export default function AssetDrawer({ isOpen, onClose, characters, scenes, props, onSelectAsset }: AssetDrawerProps) {
@@ -86,8 +120,9 @@ export default function AssetDrawer({ isOpen, onClose, characters, scenes, props
                                                 <span className="text-[11px] font-medium text-text-secondary uppercase tracking-wide">{t("characters")}</span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {characters.map((c: any, i: number) => {
+                                                {characters.map((c, i) => {
                                                     const thumb = getAssetThumbnail(c, "character");
+                                                    const readiness = getStoryboardR2VAssetReadiness(c, "character");
                                                     return (
                                                         <button
                                                             key={c.id}
@@ -105,6 +140,7 @@ export default function AssetDrawer({ isOpen, onClose, characters, scenes, props
                                                                 )}
                                                             </div>
                                                             <span className="text-[11px] text-foreground group-hover:text-primary truncate w-full text-center">{c.name}</span>
+                                                            <AssetReadinessBadges {...readiness} />
                                                         </button>
                                                     );
                                                 })}
@@ -120,8 +156,9 @@ export default function AssetDrawer({ isOpen, onClose, characters, scenes, props
                                                 <span className="text-[11px] font-medium text-text-secondary uppercase tracking-wide">{t("scenes")}</span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {scenes.map((s: any) => {
+                                                {scenes.map((s) => {
                                                     const thumb = getAssetThumbnail(s, "scene");
+                                                    const readiness = getStoryboardR2VAssetReadiness(s, "scene");
                                                     return (
                                                         <button
                                                             key={s.id}
@@ -139,6 +176,7 @@ export default function AssetDrawer({ isOpen, onClose, characters, scenes, props
                                                                 )}
                                                             </div>
                                                             <span className="text-[11px] text-foreground group-hover:text-primary truncate w-full text-center">{s.name}</span>
+                                                            <AssetReadinessBadges {...readiness} />
                                                         </button>
                                                     );
                                                 })}
@@ -154,8 +192,9 @@ export default function AssetDrawer({ isOpen, onClose, characters, scenes, props
                                                 <span className="text-[11px] font-medium text-text-secondary uppercase tracking-wide">{t("props")}</span>
                                             </div>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {props.map((p: any) => {
+                                                {props.map((p) => {
                                                     const thumb = getAssetThumbnail(p, "prop");
+                                                    const readiness = getStoryboardR2VAssetReadiness(p, "prop");
                                                     return (
                                                         <button
                                                             key={p.id}
@@ -173,6 +212,7 @@ export default function AssetDrawer({ isOpen, onClose, characters, scenes, props
                                                                 )}
                                                             </div>
                                                             <span className="text-[11px] text-foreground group-hover:text-primary truncate w-full text-center">{p.name}</span>
+                                                            <AssetReadinessBadges {...readiness} />
                                                         </button>
                                                     );
                                                 })}

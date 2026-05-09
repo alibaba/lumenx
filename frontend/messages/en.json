@@ -14,6 +14,7 @@
   },
   "nav": {
     "workspace": "Workspace",
+    "atelier": "Atelier",
     "library": "Library",
     "settings": "Settings"
   },
@@ -663,6 +664,13 @@
     "advancedParams": "Advanced",
     "t2iGenerating": "Generating image...",
     "t2iCompleted": "Image generated",
-    "currentModel": "Model"
+    "currentModel": "Model",
+    "imageRefCount": "{count} image refs",
+    "videoRefCount": "{count} video refs",
+    "missingAssetRefs": "Missing: {refs}",
+    "missingImageRefs": "Add at least one asset with an image reference",
+    "missingVideoRefs": "Add at least one asset with a motion reference video",
+    "tooManyImageRefs": "{count} image refs selected, max {max}",
+    "tooManyVideoRefs": "{count} video refs selected, max {max}"
   }
 }

@@ -37,6 +37,12 @@ class DefaultModelSettings:
 
 
 @dataclass(frozen=True)
+class R2VReferenceInputConfig:
+    reference_type: str
+    max_refs: int
+
+
+@dataclass(frozen=True)
 class CatalogValidationReport:
     ok: bool
     errors: Tuple[str, ...]
@@ -1051,6 +1057,98 @@ def get_catalog_accessor(
     """Build a CatalogAccessor from a loaded or generated catalog."""
     active_catalog = catalog or load_generated_model_catalog()
     return CatalogAccessor(active_catalog)
+
+
+def resolve_r2v_route_model_id(
+    selected_model_id: str,
+    catalog: Optional[Mapping[str, Any]] = None,
+) -> str:
+    """Resolve the concrete hidden R2V model for the selected video model."""
+    active_catalog = catalog or load_generated_model_catalog()
+    accessor = get_catalog_accessor(active_catalog)
+    flat_model_id = accessor.resolve_to_flat(selected_model_id)
+    canonical_mode_id = (
+        accessor.resolve_legacy_to_canonical(flat_model_id)
+        or (selected_model_id if selected_model_id in active_catalog.get("modes", {}) else None)
+    )
+
+    if canonical_mode_id:
+        mode_entry = accessor.get_mode_entry(canonical_mode_id)
+        model_line_id = mode_entry.get("model_line_id") if mode_entry else None
+        model_line = accessor.get_model_line(model_line_id) if model_line_id else None
+        candidate_mode_ids = model_line.get("modes", []) if model_line else []
+        for candidate_mode_id in candidate_mode_ids:
+            candidate_mode = accessor.get_mode_entry(candidate_mode_id)
+            if candidate_mode and candidate_mode.get("mode") == "r2v":
+                route_model_id = accessor.resolve_canonical_to_legacy(candidate_mode_id)
+                if route_model_id:
+                    return route_model_id
+
+    fallback_routes = (
+        ("happyhorse-1.0-", "happyhorse-1.0-r2v"),
+        ("wan2.7-", "wan2.7-r2v"),
+        ("wan2.6-", "wan2.6-r2v"),
+        ("kling", "kling-v3-r2v"),
+        ("pixverse", "pixverse-c1-r2v"),
+        ("vidu", "viduq3-pro-r2v"),
+    )
+    for prefix, route_model_id in fallback_routes:
+        if flat_model_id.startswith(prefix) and route_model_id in active_catalog.get("models", {}):
+            return route_model_id
+
+    if "wan2.7-r2v" in active_catalog.get("models", {}):
+        return "wan2.7-r2v"
+    return flat_model_id
+
+
+def get_r2v_reference_input_config(
+    model_id: str,
+    catalog: Optional[Mapping[str, Any]] = None,
+) -> R2VReferenceInputConfig:
+    """Return the concrete reference input contract for an R2V model."""
+    active_catalog = catalog or load_generated_model_catalog()
+    accessor = get_catalog_accessor(active_catalog)
+    flat_model_id = accessor.resolve_to_flat(model_id)
+    model = active_catalog.get("models", {}).get(flat_model_id, {})
+    reference_images = model.get("inputs", {}).get("reference_images", {})
+    reference_type = reference_images.get("reference_type") or "image"
+    if reference_type not in {"image", "video"}:
+        reference_type = "image"
+
+    default_max = 3 if reference_type == "video" else 9
+    max_refs = reference_images.get("max", default_max)
+    if not isinstance(max_refs, int) or max_refs <= 0:
+        max_refs = default_max
+
+    return R2VReferenceInputConfig(reference_type=reference_type, max_refs=max_refs)
+
+
+def validate_r2v_reference_inputs(
+    *,
+    model_id: str,
+    reference_video_urls: Sequence[str],
+    reference_image_urls: Sequence[str],
+    catalog: Optional[Mapping[str, Any]] = None,
+) -> R2VReferenceInputConfig:
+    """Validate R2V references against the concrete model contract."""
+    config = get_r2v_reference_input_config(model_id, catalog)
+    required_urls = (
+        list(reference_video_urls)
+        if config.reference_type == "video"
+        else list(reference_image_urls)
+    )
+
+    if not required_urls:
+        required_label = "reference_video_urls" if config.reference_type == "video" else "reference_image_urls"
+        raise ValueError(f"Model '{model_id}' requires non-empty {required_label} for R2V")
+
+    if len(required_urls) > config.max_refs:
+        required_label = "reference_video_urls" if config.reference_type == "video" else "reference_image_urls"
+        raise ValueError(
+            f"Model '{model_id}' accepts at most {config.max_refs} {required_label}; got {len(required_urls)}"
+        )
+
+    return config
 
 
 def get_default_model_settings(catalog_root: Optional[Path] = None) -> DefaultModelSettings:

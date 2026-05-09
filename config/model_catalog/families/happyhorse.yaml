@@ -71,6 +71,10 @@ models:
           selection_group: i2v
           visible_in: []
           order: 10
+        inputs:
+          reference_images:
+            max: 9
+            reference_type: image
   # Standalone: T2V (hidden)
   - id: happyhorse-1.0-t2v
     display_name: HappyHorse T2V

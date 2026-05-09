@@ -11,11 +11,17 @@ import {
     Copy,
     Sparkles,
     Video,
-    Image,
     ImageIcon,
     AtSign,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import {
+    insertStoryboardR2VTag,
+    type StoryboardR2VAssetLike,
+    type StoryboardR2VCharacterLike,
+    type StoryboardR2VReferenceIssue,
+    type StoryboardR2VReferenceValidation,
+} from "@/lib/storyboardR2VAssets";
 import AssetChipBar from "./AssetChipBar";
 
 export interface ShotNode {
@@ -39,9 +45,10 @@ interface ShotCardProps {
     shot: ShotNode;
     index: number;
     totalShots: number;
-    characters: any[];
-    scenes: any[];
-    props: any[];
+    characters: StoryboardR2VCharacterLike[];
+    scenes: StoryboardR2VAssetLike[];
+    props: StoryboardR2VAssetLike[];
+    referenceValidation?: StoryboardR2VReferenceValidation;
     onUpdatePrompt: (prompt: string) => void;
     onGenerateT2I: () => void;
     onGenerateVideo: () => void;
@@ -51,7 +58,7 @@ interface ShotCardProps {
     onDuplicate: () => void;
     onSetTabMode: (mode: "t2i_i2v" | "direct_r2v") => void;
     onOpenDrawer: () => void;
-    onInsertAsset: (type: string, name: string) => void;
+    onRegisterTextarea?: (element: HTMLTextAreaElement | null) => void;
 }
 
 export default function ShotCard({
@@ -61,6 +68,7 @@ export default function ShotCard({
     characters,
     scenes,
     props,
+    referenceValidation,
     onUpdatePrompt,
     onGenerateT2I,
     onGenerateVideo,
@@ -70,9 +78,9 @@ export default function ShotCard({
     onDuplicate,
     onSetTabMode,
     onOpenDrawer,
-    onInsertAsset,
+    onRegisterTextarea,
 }: ShotCardProps) {
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const cardRef = useRef<HTMLDivElement>(null);
     const t = useTranslations("storyboardR2V");
 
@@ -90,6 +98,30 @@ export default function ShotCard({
         el.style.setProperty("--spotlight-x", `${e.clientX - rect.left}px`);
         el.style.setProperty("--spotlight-y", `${e.clientY - rect.top}px`);
     }, []);
+
+    const setTextareaElement = useCallback(
+        (element: HTMLTextAreaElement | null) => {
+            textareaRef.current = element;
+            onRegisterTextarea?.(element);
+        },
+        [onRegisterTextarea]
+    );
+
+    const renderReferenceIssue = (issue: StoryboardR2VReferenceIssue) => {
+        if (issue.type === "missing_assets") {
+            return t("missingAssetRefs", { refs: issue.refs.join(", ") });
+        }
+        if (issue.type === "missing_image_refs") {
+            return t("missingImageRefs");
+        }
+        if (issue.type === "missing_video_refs") {
+            return t("missingVideoRefs");
+        }
+        if (issue.type === "too_many_image_refs") {
+            return t("tooManyImageRefs", { count: issue.count, max: issue.max });
+        }
+        return t("tooManyVideoRefs", { count: issue.count, max: issue.max });
+    };
 
     const renderPreview = () => {
         if (shot.tabMode === "t2i_i2v") {
@@ -243,6 +275,8 @@ export default function ShotCard({
             shot.t2iStatus === "pending" ||
             shot.videoStatus === "processing" ||
             shot.videoStatus === "pending";
+        const hasReferenceBlocker =
+            shot.tabMode === "direct_r2v" && referenceValidation ? !referenceValidation.canGenerate : false;
 
         const baseButtonClasses =
             "relative flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg overflow-hidden transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100";
@@ -285,7 +319,7 @@ export default function ShotCard({
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={onGenerateVideo}
-                disabled={!shot.prompt.trim() || isProcessing}
+                disabled={!shot.prompt.trim() || isProcessing || hasReferenceBlocker}
                 className={`${baseButtonClasses} bg-primary/90 hover:bg-primary text-white shadow-[0_0_20px_rgba(100,108,255,0.15)] hover:shadow-[0_0_28px_rgba(100,108,255,0.25)]`}
             >
                 {shot.videoStatus === "processing" ? (
@@ -305,10 +339,10 @@ export default function ShotCard({
             const start = textarea.selectionStart;
             const end = textarea.selectionEnd;
             const currentPrompt = shot.prompt;
-            const newPrompt = currentPrompt.slice(0, start) + tag + currentPrompt.slice(end);
-            onUpdatePrompt(newPrompt);
+            const insertion = insertStoryboardR2VTag(currentPrompt, tag, start, end);
+            onUpdatePrompt(insertion.prompt);
             setTimeout(() => {
-                textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+                textarea.selectionStart = textarea.selectionEnd = insertion.cursor;
                 textarea.focus();
             }, 0);
         } else {
@@ -390,7 +424,7 @@ export default function ShotCard({
                     <div className="flex-1 p-3 flex flex-col gap-2">
                         {/* Prompt Editor */}
                         <textarea
-                            ref={textareaRef}
+                            ref={setTextareaElement}
                             value={shot.prompt}
                             onChange={(e) => onUpdatePrompt(e.target.value)}
                             placeholder={t("promptPlaceholder")}
@@ -405,6 +439,30 @@ export default function ShotCard({
                             props={props}
                             onInsertAsset={handleInsertAssetFromChip}
                         />
+
+                        {shot.tabMode === "direct_r2v" && referenceValidation && (
+                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                                <span
+                                    className={`px-2 py-1 rounded-md border ${
+                                        referenceValidation.canGenerate
+                                            ? "bg-emerald-500/10 border-emerald-400/20 text-emerald-300"
+                                            : "bg-amber-500/10 border-amber-400/20 text-amber-300"
+                                    }`}
+                                >
+                                    {referenceValidation.mode === "image"
+                                        ? t("imageRefCount", { count: referenceValidation.requiredUrls.length })
+                                        : t("videoRefCount", { count: referenceValidation.requiredUrls.length })}
+                                </span>
+                                {referenceValidation.issues.map((issue) => (
+                                    <span
+                                        key={issue.type === "missing_assets" ? `${issue.type}:${issue.refs.join("|")}` : issue.type}
+                                        className="text-amber-300/90"
+                                    >
+                                        {renderReferenceIssue(issue)}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
 
                         {/* Action Bar */}
                         <div className="flex items-center justify-between mt-0.5">

@@ -14,6 +14,7 @@
   },
   "nav": {
     "workspace": "工作区",
+    "atelier": "Atelier",
     "library": "主体库",
     "settings": "设置"
   },
@@ -663,6 +664,13 @@
     "advancedParams": "高级参数",
     "t2iGenerating": "图片生成中...",
     "t2iCompleted": "图片已生成",
-    "currentModel": "当前模型"
+    "currentModel": "当前模型",
+    "imageRefCount": "{count} 张图片引用",
+    "videoRefCount": "{count} 个视频引用",
+    "missingAssetRefs": "缺失引用：{refs}",
+    "missingImageRefs": "至少添加一个带图片的资产引用",
+    "missingVideoRefs": "至少添加一个带动态参考视频的资产引用",
+    "tooManyImageRefs": "已选择 {count} 张图片引用，最多 {max} 张",
+    "tooManyVideoRefs": "已选择 {count} 个视频引用，最多 {max} 个"
   }
 }
