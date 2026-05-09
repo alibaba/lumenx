@@ -6,6 +6,7 @@ vi.mock('@/lib/api', () => ({
         getAtelierProject: vi.fn(),
         listAtelierAgentTools: vi.fn(),
         runAtelierAgentTurn: vi.fn(),
+        updateAtelierAgentPolicy: vi.fn(),
         updateAtelierNode: vi.fn(),
     },
 }));
@@ -102,6 +103,35 @@ describe('atelier store canvas interactions', () => {
 
         expect(api.listAtelierAgentTools).toHaveBeenCalledWith('atelier-1');
         expect(useAtelierStore.getState().agentTools.map((tool) => tool.name)).toEqual(['canvas.createVideoNode']);
+    });
+
+    it('updates agent policy through the shared Atelier project state', async () => {
+        const { api } = await import('@/lib/api');
+        const { useAtelierStore } = await import('@/store/atelierStore');
+        const updatedProject = {
+            ...cloneProject(),
+            agent_policy: {
+                approval_mode: 'never' as const,
+                allowed_tools: ['canvas.readProject'],
+                max_nodes_per_action: 4,
+                updated_at: 2,
+            },
+        };
+        vi.mocked(api.updateAtelierAgentPolicy).mockResolvedValueOnce(updatedProject);
+
+        await useAtelierStore.getState().updateAgentPolicy({
+            approval_mode: 'never',
+            allowed_tools: ['canvas.readProject'],
+            max_nodes_per_action: 4,
+        });
+
+        expect(api.updateAtelierAgentPolicy).toHaveBeenCalledWith('atelier-1', {
+            approval_mode: 'never',
+            allowed_tools: ['canvas.readProject'],
+            max_nodes_per_action: 4,
+        });
+        expect(useAtelierStore.getState().currentProject?.agent_policy.approval_mode).toBe('never');
+        expect(useAtelierStore.getState().currentProject?.agent_policy.allowed_tools).toEqual(['canvas.readProject']);
     });
 
     it('runs preview agent turns without mutating canvas nodes locally', async () => {
@@ -272,6 +302,76 @@ describe('atelier store canvas interactions', () => {
             turn_id: 'turn-approval',
             tool_calls: [{ tool_name: 'canvas.createVideoNode', arguments: { title: 'Agent Shot' } }],
         });
+    });
+
+    it('clears a pending agent turn after denial without selecting a new node', async () => {
+        const { api } = await import('@/lib/api');
+        const { useAtelierStore } = await import('@/store/atelierStore');
+        const waitingTurn: AtelierAgentTurn = {
+            id: 'turn-approval',
+            project_id: 'atelier-1',
+            user_message: 'A neon rooftop reveal',
+            preview: false,
+            status: 'waiting_approval',
+            tool_calls: [
+                {
+                    call_id: 'call-pending',
+                    tool_name: 'canvas.createVideoNode',
+                    arguments: { title: 'Agent Shot' },
+                    status: 'approval_required',
+                    approval_required: true,
+                    approval_granted: false,
+                    created_at: 2,
+                },
+            ],
+            created_at: 2,
+        };
+        const deniedTurn: AtelierAgentTurn = {
+            ...waitingTurn,
+            status: 'failed',
+            tool_calls: [
+                {
+                    ...waitingTurn.tool_calls[0],
+                    status: 'denied',
+                    error: 'User denied approval',
+                    completed_at: 3,
+                },
+            ],
+            completed_at: 3,
+        };
+        const refreshed = {
+            ...cloneProject(),
+            agent_turns: [deniedTurn],
+        };
+        useAtelierStore.setState({
+            projects: [cloneProject()],
+            currentProject: {
+                ...cloneProject(),
+                agent_turns: [waitingTurn],
+            },
+            selectedNodeId: 'node-1',
+            agentTurns: [waitingTurn],
+            pendingAgentTurn: waitingTurn,
+        });
+        vi.mocked(api.runAtelierAgentTurn).mockResolvedValueOnce(deniedTurn);
+        vi.mocked(api.getAtelierProject).mockResolvedValueOnce(refreshed);
+
+        await useAtelierStore.getState().runAgentTurn({
+            user_message: 'A neon rooftop reveal',
+            deny: true,
+            turn_id: 'turn-approval',
+            tool_calls: [],
+        });
+
+        expect(api.runAtelierAgentTurn).toHaveBeenCalledWith('atelier-1', {
+            user_message: 'A neon rooftop reveal',
+            deny: true,
+            turn_id: 'turn-approval',
+            tool_calls: [],
+        });
+        expect(useAtelierStore.getState().pendingAgentTurn).toBeNull();
+        expect(useAtelierStore.getState().selectedNodeId).toBe('node-1');
+        expect(useAtelierStore.getState().agentTurns[0].tool_calls[0].status).toBe('denied');
     });
 
     it('moves a node locally before persistence completes', async () => {

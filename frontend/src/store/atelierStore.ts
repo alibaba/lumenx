@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
     api,
+    type AtelierAgentPolicy,
     type AtelierAgentToolSpec,
     type AtelierAgentTurn,
     type AtelierGenerationConfig,
@@ -23,6 +24,9 @@ interface AtelierStore {
     ensureProject: () => Promise<AtelierProject>;
     createProject: (title?: string) => Promise<AtelierProject>;
     loadAgentTools: () => Promise<AtelierAgentToolSpec[]>;
+    updateAgentPolicy: (
+        policy: Partial<Pick<AtelierAgentPolicy, "approval_mode" | "allowed_tools" | "max_nodes_per_action">>
+    ) => Promise<AtelierProject>;
     runAgentTurn: (payload: RunAtelierAgentTurnPayload) => Promise<AtelierAgentTurn>;
     createVideoNode: () => Promise<AtelierNode>;
     updateNode: (nodeId: string, patch: Partial<AtelierNode>) => Promise<AtelierNode>;
@@ -151,6 +155,19 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
         const tools = await api.listAtelierAgentTools(project.id);
         set({ agentTools: tools });
         return tools;
+    },
+
+    updateAgentPolicy: async (policy) => {
+        const project = await get().ensureProject();
+        const updated = await api.updateAtelierAgentPolicy(project.id, policy);
+        set((state) => ({
+            currentProject: updated,
+            projects: replaceProject(state.projects, updated),
+            selectedNodeId: getProjectSelection(updated, state.selectedNodeId),
+            agentTurns: updated.agent_turns ?? [],
+            pendingAgentTurn: getPendingAgentTurn(updated.agent_turns),
+        }));
+        return updated;
     },
 
     runAgentTurn: async (payload) => {

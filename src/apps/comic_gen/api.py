@@ -379,6 +379,7 @@ class RunAtelierAgentTurnRequest(BaseModel):
     tool_calls: List[AtelierAgentToolCallRequest] = Field(default_factory=list)
     preview: bool = False
     approve: bool = False
+    deny: bool = False
     turn_id: Optional[str] = None
 
 
@@ -457,6 +458,7 @@ async def run_atelier_agent_turn(
             user_message=request.user_message,
             preview=request.preview,
             approve=request.approve,
+            deny=request.deny,
             turn_id=request.turn_id,
         )
         if not request.preview:

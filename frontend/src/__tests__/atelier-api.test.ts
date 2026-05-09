@@ -63,6 +63,34 @@ describe('atelier API client', () => {
         expect(result.agent_policy.approval_mode).toBe('never');
     });
 
+    it('submits denied agent approvals with the pending turn id', async () => {
+        mockedAxios.post.mockResolvedValueOnce({
+            data: {
+                id: 'turn-1',
+                status: 'failed',
+                tool_calls: [],
+            },
+        });
+        const { api } = await import('@/lib/api');
+
+        await api.runAtelierAgentTurn('atelier-1', {
+            user_message: 'Reject this plan',
+            tool_calls: [],
+            deny: true,
+            turn_id: 'turn-1',
+        });
+
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+            'http://localhost:17177/atelier/projects/atelier-1/agent/turns',
+            {
+                user_message: 'Reject this plan',
+                tool_calls: [],
+                deny: true,
+                turn_id: 'turn-1',
+            }
+        );
+    });
+
     it('creates nodes with Studio resource references but without depending on Studio UI', async () => {
         mockedAxios.post.mockResolvedValueOnce({
             data: {

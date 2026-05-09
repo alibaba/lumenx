@@ -124,6 +124,7 @@ export interface RunAtelierAgentTurnPayload {
     tool_calls: AtelierAgentToolCallPayload[];
     preview?: boolean;
     approve?: boolean;
+    deny?: boolean;
     turn_id?: string;
 }
 

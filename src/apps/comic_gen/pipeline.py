@@ -2765,6 +2765,7 @@ class ComicGenPipeline:
         user_message: str = "",
         preview: bool = False,
         approve: bool = False,
+        deny: bool = False,
         turn_id: Optional[str] = None,
     ) -> AtelierAgentTurn:
         return AtelierAgentHarness(self).run_turn(
@@ -2773,6 +2774,7 @@ class ComicGenPipeline:
             user_message=user_message,
             preview=preview,
             approve=approve,
+            deny=deny,
             turn_id=turn_id,
         )
 

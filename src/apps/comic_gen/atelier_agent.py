@@ -121,6 +121,7 @@ class AtelierAgentHarness:
         user_message: str = "",
         preview: bool = False,
         approve: bool = False,
+        deny: bool = False,
         turn_id: Optional[str] = None,
     ) -> AtelierAgentTurn:
         project = self.pipeline.get_atelier_project(project_id)
@@ -128,8 +129,41 @@ class AtelierAgentHarness:
             raise ValueError("Atelier project not found")
 
         pending_turns = [candidate for candidate in project.agent_turns if candidate.status == "waiting_approval"]
+        if approve and deny:
+            raise ValueError("Cannot approve and deny the same Atelier agent turn")
         if approve and preview:
             raise ValueError("Approval cannot run in preview mode")
+        if deny and preview:
+            raise ValueError("Denial cannot run in preview mode")
+
+        if deny:
+            if not turn_id:
+                raise ValueError("turn_id is required when denying an Atelier agent turn")
+            turn = next((candidate for candidate in project.agent_turns if candidate.id == turn_id), None)
+            if not turn:
+                raise ValueError("Atelier agent turn not found")
+            if turn.status != "waiting_approval":
+                raise ValueError("Atelier agent turn is not waiting for approval")
+            denied_calls = [
+                call for call in turn.tool_calls
+                if call.status == AtelierAgentToolStatus.APPROVAL_REQUIRED
+            ]
+            if not denied_calls:
+                raise ValueError("Atelier agent turn has no approval-required tool calls")
+            for call in denied_calls:
+                call.status = AtelierAgentToolStatus.DENIED
+                call.approval_required = True
+                call.approval_granted = False
+                call.error = "User denied approval"
+                call.completed_at = time.time()
+            turn.user_message = user_message or turn.user_message
+            turn.preview = False
+            turn.status = "failed"
+            turn.completed_at = time.time()
+            project.updated_at = time.time()
+            self.pipeline._save_atelier_data()
+            return turn
+
         source_tool_calls: List[Tuple[Dict[str, Any], Optional[AtelierAgentToolCall]]] = [
             (raw_call, None) for raw_call in tool_calls
         ]

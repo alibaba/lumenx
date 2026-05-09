@@ -441,6 +441,56 @@ def test_atelier_agent_approval_rejects_preview_mode(pipeline):
     assert project.agent_turns[0].status == "waiting_approval"
 
 
+def test_atelier_agent_denies_pending_approval_without_mutation(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pending_turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [{"tool_name": "canvas.createVideoNode", "arguments": {"title": "Shot", "prompt": "A chase"}}],
+    )
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [],
+        deny=True,
+        turn_id=pending_turn.id,
+    )
+
+    assert turn.id == pending_turn.id
+    assert turn.status == "failed"
+    assert turn.tool_calls[0].status == "denied"
+    assert turn.tool_calls[0].approval_granted is False
+    assert "User denied approval" in turn.tool_calls[0].error
+    assert pipeline.get_atelier_project(project.id).nodes == []
+
+
+def test_atelier_agent_denial_requires_turn_id(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pipeline.run_atelier_agent_turn(
+        project.id,
+        [{"tool_name": "canvas.createVideoNode", "arguments": {"title": "Shot", "prompt": "A chase"}}],
+    )
+
+    with pytest.raises(ValueError, match="turn_id is required"):
+        pipeline.run_atelier_agent_turn(project.id, [], deny=True)
+
+
+def test_atelier_agent_cannot_approve_and_deny_same_turn(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pending_turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [{"tool_name": "canvas.createVideoNode", "arguments": {"title": "Shot", "prompt": "A chase"}}],
+    )
+
+    with pytest.raises(ValueError, match="Cannot approve and deny"):
+        pipeline.run_atelier_agent_turn(
+            project.id,
+            [{"tool_name": "canvas.createVideoNode", "arguments": {"title": "Shot", "prompt": "A chase"}}],
+            approve=True,
+            deny=True,
+            turn_id=pending_turn.id,
+        )
+
+
 def test_atelier_agent_approval_preserves_pending_call_identity(pipeline):
     project = pipeline.create_atelier_project("Board")
     pending_turn = pipeline.run_atelier_agent_turn(

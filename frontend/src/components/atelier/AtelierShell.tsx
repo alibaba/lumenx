@@ -2,8 +2,8 @@
 
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Film, Image as ImageIcon, Link2, Loader2, Plus, RefreshCw, RotateCcw, Trash2, Unlink2, Upload, Wand2 } from "lucide-react";
-import { type AtelierAgentToolCallPayload, type AtelierAgentTurn, type AtelierNode, type AtelierVideoCandidate } from "@/lib/api";
+import { Check, Film, Image as ImageIcon, Link2, Loader2, Plus, RefreshCw, RotateCcw, ShieldCheck, Trash2, Unlink2, Upload, Wand2, X } from "lucide-react";
+import { type AtelierAgentToolCallPayload, type AtelierAgentTurn, type AtelierApprovalMode, type AtelierNode, type AtelierVideoCandidate } from "@/lib/api";
 import { buildReferenceLinks, findVideoDropTarget, getAtelierReferenceNodeIds as getReferenceNodeIds } from "@/lib/atelierCanvas";
 import {
     getAtelierAgentPlanContext,
@@ -95,6 +95,13 @@ function toolCallTone(status: string) {
     if (status === "approval_required") return "border-amber-300/40 text-amber-100";
     return "border-white/12 text-text-secondary";
 }
+
+const APPROVAL_MODE_OPTIONS: Array<{ value: AtelierApprovalMode; label: string; description: string }> = [
+    { value: "untrusted", label: "Untrusted", description: "Ask before canvas or generation actions." },
+    { value: "on_failure", label: "On failure", description: "Canvas writes may run; generation still asks." },
+    { value: "on_request", label: "On request", description: "Ask only for tools marked as approval-only." },
+    { value: "never", label: "Never", description: "Run allowed tools within hard limits." },
+];
 
 function clearPlannedAgentTurn(
     setPreviewTurn: (turn: AtelierAgentTurn | null) => void,
@@ -920,12 +927,15 @@ function AgentPanel() {
     const isAgentRunning = useAtelierStore((state) => state.isAgentRunning);
     const attachReferenceNode = useAtelierStore((state) => state.attachReferenceNode);
     const loadAgentTools = useAtelierStore((state) => state.loadAgentTools);
+    const updateAgentPolicy = useAtelierStore((state) => state.updateAgentPolicy);
     const runAgentTurn = useAtelierStore((state) => state.runAgentTurn);
     const [attachingTargetId, setAttachingTargetId] = useState<string | null>(null);
     const [agentInput, setAgentInput] = useState("");
     const [plannedToolCalls, setPlannedToolCalls] = useState<AtelierAgentToolCallPayload[]>([]);
     const [previewTurn, setPreviewTurn] = useState<AtelierAgentTurn | null>(null);
     const [agentError, setAgentError] = useState<string | null>(null);
+    const [isPolicyOpen, setIsPolicyOpen] = useState(false);
+    const [isPolicyUpdating, setIsPolicyUpdating] = useState(false);
     const plannedContextRef = useRef<AtelierAgentPlanContext | null>(null);
     const selectedNode = project?.nodes.find((node) => node.id === selectedNodeId) ?? null;
     const parentNodeId = selectedNode ? getNodeData(selectedNode).parent_node_id : null;
@@ -943,6 +953,9 @@ function AgentPanel() {
         ? (project?.nodes ?? []).filter((node) => node.type === "video")
         : [];
     const projectId = project?.id;
+    const agentPolicy = project?.agent_policy;
+    const allowedTools = agentPolicy?.allowed_tools ?? [];
+    const allToolNames = agentTools.map((tool) => tool.name);
     const recentTurns = agentTurns.length > 0 ? [...agentTurns].slice(-5).reverse() : [];
     const activePlan = previewTurn ?? pendingAgentTurn;
     const pendingApprovalBlock = isAgentTurnBlocked(pendingAgentTurn);
@@ -971,6 +984,40 @@ function AgentPanel() {
         setPlannedToolCalls(plan.toolCalls);
         plannedContextRef.current = currentPlanContext;
         return plan;
+    };
+
+    const updatePolicy = async (
+        policy: Parameters<typeof updateAgentPolicy>[0]
+    ) => {
+        setAgentError(null);
+        setIsPolicyUpdating(true);
+        try {
+            await updateAgentPolicy(policy);
+        } catch (error) {
+            setAgentError(error instanceof Error ? error.message : "Agent policy update failed");
+        } finally {
+            setIsPolicyUpdating(false);
+        }
+    };
+
+    const isToolAllowed = (toolName: string) => allowedTools.length === 0 || allowedTools.includes(toolName);
+
+    const handleToggleAllowedTool = (toolName: string) => {
+        if (!agentPolicy || allToolNames.length === 0) return;
+        const nextAllowedTools = allowedTools.length === 0
+            ? allToolNames.filter((name) => name !== toolName)
+            : allowedTools.includes(toolName)
+                ? allowedTools.filter((name) => name !== toolName)
+                : [...allowedTools, toolName];
+
+        if (nextAllowedTools.length === 0) {
+            setAgentError("At least one tool must remain allowed; use Allow all to remove restrictions.");
+            return;
+        }
+
+        updatePolicy({
+            allowed_tools: nextAllowedTools.length === allToolNames.length ? [] : nextAllowedTools,
+        });
     };
 
     const handlePreviewAgentTurn = async () => {
@@ -1040,6 +1087,23 @@ function AgentPanel() {
         }
     };
 
+    const handleDenyPendingTurn = async () => {
+        setAgentError(null);
+        if (!pendingAgentTurn) return;
+        try {
+            await runAgentTurn({
+                user_message: pendingAgentTurn.user_message || agentInput,
+                tool_calls: [],
+                deny: true,
+                turn_id: pendingAgentTurn.id,
+            });
+            clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls);
+            plannedContextRef.current = null;
+        } catch (error) {
+            setAgentError(error instanceof Error ? error.message : "Agent denial failed");
+        }
+    };
+
     const handlePanelAttach = async (videoNodeId: string) => {
         if (!selectedNode) return;
         setAttachingTargetId(videoNodeId);
@@ -1057,6 +1121,102 @@ function AgentPanel() {
                 <div className="text-xs text-text-muted">{agentTools.length} tools · {project?.agent_policy.approval_mode ?? "untrusted"}</div>
             </div>
             <div className="space-y-3 text-xs text-text-secondary">
+                <div className="space-y-3 rounded-md border border-white/10 bg-white/[0.04] p-3">
+                    <button
+                        type="button"
+                        onClick={() => setIsPolicyOpen((value) => !value)}
+                        className="flex w-full items-center justify-between gap-3 text-left"
+                    >
+                        <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
+                            <ShieldCheck size={14} className="text-primary" />
+                            Permissions
+                        </span>
+                        <span className="rounded border border-white/10 bg-black/25 px-2 py-1 text-[11px] uppercase text-text-muted">
+                            {agentPolicy?.approval_mode ?? "untrusted"}
+                        </span>
+                    </button>
+                    {isPolicyOpen && agentPolicy && (
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-1.5">
+                                {APPROVAL_MODE_OPTIONS.map((option) => {
+                                    const isActive = agentPolicy.approval_mode === option.value;
+                                    return (
+                                        <button
+                                            key={option.value}
+                                            type="button"
+                                            disabled={isPolicyUpdating || isActive}
+                                            onClick={() => updatePolicy({ approval_mode: option.value })}
+                                            className={`rounded-md border px-2 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                                                isActive
+                                                    ? "border-primary/60 bg-primary/15 text-white"
+                                                    : "border-white/10 bg-black/20 text-text-secondary hover:bg-white/10"
+                                            }`}
+                                        >
+                                            <div className="font-semibold">{option.label}</div>
+                                            <div className="mt-0.5 text-[10px] leading-snug text-text-muted">{option.description}</div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <label className="block">
+                                <span className="mb-1 block text-[11px] font-medium text-text-secondary">Max nodes per action</span>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={24}
+                                    value={agentPolicy.max_nodes_per_action}
+                                    disabled={isPolicyUpdating}
+                                    onChange={(event) => {
+                                        const value = Number(event.target.value);
+                                        if (Number.isFinite(value)) {
+                                            updatePolicy({ max_nodes_per_action: Math.max(1, Math.min(24, value)) });
+                                        }
+                                    }}
+                                    className="w-full rounded-md border border-white/10 bg-black/30 px-3 py-2 text-xs text-foreground outline-none focus:border-primary/60 disabled:opacity-50"
+                                />
+                            </label>
+                            <div>
+                                <div className="mb-1 flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-medium text-text-secondary">Allowed tools</span>
+                                    <button
+                                        type="button"
+                                        disabled={isPolicyUpdating || allowedTools.length === 0}
+                                        onClick={() => updatePolicy({ allowed_tools: [] })}
+                                        className="rounded border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-text-muted hover:bg-white/10 disabled:opacity-40"
+                                    >
+                                        Allow all
+                                    </button>
+                                </div>
+                                <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-white/10 bg-black/20 p-1.5">
+                                    {agentTools.length === 0 ? (
+                                        <div className="px-2 py-2 text-text-muted">Loading tools</div>
+                                    ) : (
+                                        agentTools.map((tool) => (
+                                            <label key={tool.name} className="flex items-start gap-2 rounded px-2 py-1.5 hover:bg-white/5">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isToolAllowed(tool.name)}
+                                                    disabled={isPolicyUpdating}
+                                                    onChange={() => handleToggleAllowedTool(tool.name)}
+                                                    className="mt-0.5"
+                                                />
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-foreground">{tool.name}</span>
+                                                    <span className="block text-[10px] text-text-muted">
+                                                        {tool.required_permission} · cost {tool.max_count_cost}
+                                                    </span>
+                                                </span>
+                                            </label>
+                                        ))
+                                    )}
+                                </div>
+                                <div className="mt-1 text-[10px] text-text-muted">
+                                    {allowedTools.length === 0 ? "All registered Atelier tools are allowed." : `${allowedTools.length} tools allowed.`}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
                 <div className="space-y-3 rounded-md border border-white/10 bg-white/[0.04] p-3">
                     <div>
                         <div className="mb-1 text-[11px] uppercase tracking-wide text-primary/80">Intent</div>
@@ -1100,15 +1260,26 @@ function AgentPanel() {
                     {pendingAgentTurn && (
                         <div className="rounded border border-amber-300/30 bg-amber-300/10 p-2 text-amber-50">
                             <div className="mb-2 font-medium">Approval required</div>
-                            <button
-                                type="button"
-                                disabled={isAgentRunning}
-                                onClick={handleApprovePendingTurn}
-                                className="inline-flex w-full items-center justify-center gap-2 rounded bg-amber-300/20 px-2 py-1.5 text-amber-50 hover:bg-amber-300/30 disabled:opacity-40"
-                            >
-                                {isAgentRunning ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                                Approve
-                            </button>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    disabled={isAgentRunning}
+                                    onClick={handleApprovePendingTurn}
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded bg-amber-300/20 px-2 py-1.5 text-amber-50 hover:bg-amber-300/30 disabled:opacity-40"
+                                >
+                                    {isAgentRunning ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                                    Approve
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isAgentRunning}
+                                    onClick={handleDenyPendingTurn}
+                                    className="inline-flex w-full items-center justify-center gap-2 rounded border border-red-300/25 bg-red-500/15 px-2 py-1.5 text-red-100 hover:bg-red-500/25 disabled:opacity-40"
+                                >
+                                    {isAgentRunning ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+                                    Reject
+                                </button>
+                            </div>
                         </div>
                     )}
                     {activePlan && (
