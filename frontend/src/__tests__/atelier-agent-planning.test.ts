@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AtelierAgentTurn } from '@/lib/api';
 import {
+    getAtelierAgentTurnSummaries,
     getAtelierPlanContextRows,
     getAtelierAgentPlanContext,
     getAtelierPlannerPackageRows,
@@ -125,5 +126,78 @@ describe('atelier agent planning', () => {
         expect(rows).toContainEqual({ label: 'Adapter', value: 'unit-test-adapter' });
         expect(rows).toContainEqual({ label: 'Model trace', value: 'trace-1' });
         expect(rows).toContainEqual({ label: 'Context keys', value: 'adapter_name, schema_version, tool_schema_version' });
+    });
+
+    it('summarizes turn history without exposing raw tool arguments or snapshots', () => {
+        const summaries = getAtelierAgentTurnSummaries([
+            {
+                id: 'turn-1',
+                project_id: 'atelier-1',
+                user_message: 'Create a rooftop shot',
+                preview: false,
+                status: 'completed',
+                tool_calls: [
+                    {
+                        call_id: 'call-1',
+                        tool_name: 'canvas.createVideoNode',
+                        arguments: {
+                            prompt: 'Raw prompt should not be copied into history summary',
+                        },
+                        status: 'completed',
+                        approval_required: true,
+                        approval_granted: true,
+                        result_snapshot: {
+                            node: {
+                                id: 'node-1',
+                                title: 'Rooftop shot',
+                                prompt: 'Raw result prompt should not be copied into history summary',
+                            },
+                        },
+                        created_at: 1,
+                    },
+                    {
+                        call_id: 'call-2',
+                        tool_name: 'generation.createVideoCandidates',
+                        arguments: {
+                            reference_image_urls: ['raw-ref.png'],
+                        },
+                        status: 'failed',
+                        approval_required: false,
+                        approval_granted: false,
+                        error: 'Missing reference image',
+                        result_snapshot: null,
+                        created_at: 2,
+                    },
+                ],
+                created_at: 1,
+            },
+        ]);
+
+        expect(summaries).toHaveLength(1);
+        expect(summaries[0]).toMatchObject({
+            title: 'Create a rooftop shot',
+            mode: 'execute',
+            callCount: 2,
+            completedCount: 1,
+            failedCount: 1,
+            waitingApprovalCount: 0,
+            resultSummary: 'Node: Rooftop shot',
+        });
+        expect(summaries[0].toolCalls).toEqual([
+            {
+                callId: 'call-1',
+                toolName: 'canvas.createVideoNode',
+                status: 'completed',
+                result: 'Node: Rooftop shot',
+            },
+            {
+                callId: 'call-2',
+                toolName: 'generation.createVideoCandidates',
+                status: 'failed',
+                result: 'Missing reference image',
+            },
+        ]);
+        expect(JSON.stringify(summaries)).not.toContain('Raw prompt');
+        expect(JSON.stringify(summaries)).not.toContain('raw-ref.png');
     });
 });

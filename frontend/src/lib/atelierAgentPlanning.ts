@@ -1,4 +1,5 @@
 import {
+    type AtelierAgentToolCall,
     type AtelierAgentPlanContext as CoreAtelierAgentPlanContext,
     type AtelierAgentPlannerPackage,
     type AtelierAgentTurn,
@@ -20,6 +21,26 @@ export interface AtelierAgentPlanContext {
 export interface AtelierAgentTraceRow {
     label: string;
     value: string;
+}
+
+export interface AtelierAgentToolCallSummary {
+    callId: string;
+    toolName: string;
+    status: string;
+    result: string | null;
+}
+
+export interface AtelierAgentTurnSummary {
+    id: string;
+    title: string;
+    status: string;
+    mode: "preview" | "execute";
+    callCount: number;
+    completedCount: number;
+    failedCount: number;
+    waitingApprovalCount: number;
+    resultSummary: string | null;
+    toolCalls: AtelierAgentToolCallSummary[];
 }
 
 export function validateAtelierAgentIntent(intent: string): AtelierAgentPlanResult {
@@ -98,4 +119,52 @@ export function getAtelierPlanContextRows(
         { label: "Tool schema", value: context.tool_schema_version ?? "unknown" },
         { label: "Context keys", value: plannerInputKeys.length > 0 ? plannerInputKeys.join(", ") : "none" },
     ];
+}
+
+function summarizeToolCallResult(call: AtelierAgentToolCall): string | null {
+    const snapshot = call.result_snapshot;
+    if (!snapshot || typeof snapshot !== "object") return call.error ?? null;
+    const maybeNode = "node" in snapshot ? snapshot.node : "video_node" in snapshot ? snapshot.video_node : null;
+    if (maybeNode && typeof maybeNode === "object" && "title" in maybeNode && typeof maybeNode.title === "string") {
+        return `Node: ${maybeNode.title}`;
+    }
+    if ("candidate_ids" in snapshot && Array.isArray(snapshot.candidate_ids)) {
+        return `Candidates: ${snapshot.candidate_ids.length}`;
+    }
+    if ("node_ids" in snapshot && Array.isArray(snapshot.node_ids)) {
+        return `Nodes: ${snapshot.node_ids.length}`;
+    }
+    return call.error ?? "Result captured";
+}
+
+export function getAtelierAgentTurnSummary(turn: AtelierAgentTurn): AtelierAgentTurnSummary {
+    const toolCalls = turn.tool_calls.map((call) => ({
+        callId: call.call_id,
+        toolName: call.tool_name,
+        status: call.status,
+        result: summarizeToolCallResult(call),
+    }));
+    const completedCount = toolCalls.filter((call) => call.status === "completed").length;
+    const failedCount = toolCalls.filter((call) => call.status === "failed" || call.status === "denied").length;
+    const waitingApprovalCount = toolCalls.filter((call) => call.status === "approval_required").length;
+    const firstResult = toolCalls.find((call) => call.result)?.result ?? null;
+    return {
+        id: turn.id,
+        title: turn.user_message || "Agent turn",
+        status: turn.status,
+        mode: turn.preview ? "preview" : "execute",
+        callCount: toolCalls.length,
+        completedCount,
+        failedCount,
+        waitingApprovalCount,
+        resultSummary: firstResult,
+        toolCalls,
+    };
+}
+
+export function getAtelierAgentTurnSummaries(
+    turns: AtelierAgentTurn[],
+    limit = 5
+): AtelierAgentTurnSummary[] {
+    return [...turns].slice(-limit).reverse().map(getAtelierAgentTurnSummary);
 }

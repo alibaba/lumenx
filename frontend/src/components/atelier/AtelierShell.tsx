@@ -15,6 +15,7 @@ import {
 import { buildReferenceLinks, findVideoDropTarget, getAtelierReferenceNodeIds as getReferenceNodeIds } from "@/lib/atelierCanvas";
 import {
     getAtelierAgentPlanContext,
+    getAtelierAgentTurnSummaries,
     getAtelierPlanContextRows,
     getAtelierPlannerPackageRows,
     isAgentTurnBlocked,
@@ -954,6 +955,7 @@ function AgentPanel() {
     const [agentError, setAgentError] = useState<string | null>(null);
     const [isPolicyOpen, setIsPolicyOpen] = useState(false);
     const [isPolicyUpdating, setIsPolicyUpdating] = useState(false);
+    const [expandedHistoryTurnId, setExpandedHistoryTurnId] = useState<string | null>(null);
     const plannedContextRef = useRef<AtelierAgentPlanContext | null>(null);
     const selectedNode = project?.nodes.find((node) => node.id === selectedNodeId) ?? null;
     const parentNodeId = selectedNode ? getNodeData(selectedNode).parent_node_id : null;
@@ -974,7 +976,7 @@ function AgentPanel() {
     const agentPolicy = project?.agent_policy;
     const allowedTools = agentPolicy?.allowed_tools ?? [];
     const allToolNames = agentTools.map((tool) => tool.name);
-    const recentTurns = agentTurns.length > 0 ? [...agentTurns].slice(-5).reverse() : [];
+    const recentTurnSummaries = useMemo(() => getAtelierAgentTurnSummaries(agentTurns, 5), [agentTurns]);
     const activePlan = previewTurn ?? pendingAgentTurn;
     const pendingApprovalBlock = isAgentTurnBlocked(pendingAgentTurn);
     const plannerPackageRows = useMemo(() => getAtelierPlannerPackageRows(plannerPackage), [plannerPackage]);
@@ -1381,19 +1383,51 @@ function AgentPanel() {
                             </div>
                         </div>
                     )}
-                    {recentTurns.length > 0 && (
+                    {recentTurnSummaries.length > 0 && (
                         <div>
                             <div className="mb-1 text-[11px] font-medium text-text-secondary">History</div>
                             <div className="space-y-1">
-                                {recentTurns.map((turn) => (
+                                {recentTurnSummaries.map((turn) => (
                                     <div key={turn.id} className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="min-w-0 flex-1 truncate text-foreground">{turn.user_message || "Agent turn"}</span>
-                                            <span className="shrink-0 uppercase text-text-muted">{turn.status}</span>
-                                        </div>
-                                        <div className="mt-1 text-[11px] text-text-muted">
-                                            {turn.preview ? "preview" : "execute"} · {turn.tool_calls.length} calls
-                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setExpandedHistoryTurnId((current) => (current === turn.id ? null : turn.id))}
+                                            className="w-full text-left"
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="min-w-0 flex-1 truncate text-foreground">{turn.title}</span>
+                                                <span className="shrink-0 uppercase text-text-muted">{turn.status}</span>
+                                            </div>
+                                            <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-muted">
+                                                <span className="min-w-0 truncate">{turn.mode} · {turn.callCount} calls</span>
+                                                <span className="shrink-0">
+                                                    {turn.completedCount} ok · {turn.failedCount} failed
+                                                </span>
+                                            </div>
+                                            {turn.resultSummary && (
+                                                <div className="mt-1 truncate text-[11px] text-text-secondary">{turn.resultSummary}</div>
+                                            )}
+                                        </button>
+                                        {expandedHistoryTurnId === turn.id && (
+                                            <div className="mt-2 space-y-1 border-t border-white/10 pt-2">
+                                                {turn.waitingApprovalCount > 0 && (
+                                                    <div className="rounded border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[10px] text-amber-100">
+                                                        {turn.waitingApprovalCount} waiting approval
+                                                    </div>
+                                                )}
+                                                {turn.toolCalls.map((call) => (
+                                                    <div key={call.callId} className="rounded border border-white/10 bg-white/[0.03] px-2 py-1">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">{call.toolName}</span>
+                                                            <span className="shrink-0 text-[10px] uppercase text-text-muted">{call.status}</span>
+                                                        </div>
+                                                        {call.result && (
+                                                            <div className="mt-0.5 truncate text-[10px] text-text-muted">{call.result}</div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
