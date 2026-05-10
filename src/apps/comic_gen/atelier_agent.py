@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .models import (
+    AtelierAgentPlan,
+    AtelierAgentPlanContext,
     AtelierAgentPolicy,
     AtelierAgentToolCall,
     AtelierAgentToolStatus,
@@ -12,12 +14,13 @@ from .models import (
     AtelierNode,
     AtelierProject,
 )
-from ...utils.model_catalog import resolve_r2v_route_model_id, validate_r2v_reference_inputs
+from ...utils.model_catalog import get_default_model_settings, resolve_r2v_route_model_id, validate_r2v_reference_inputs
 
 
 READ_PERMISSION = "read"
 CANVAS_WRITE_PERMISSION = "canvas_write"
 GENERATION_PERMISSION = "generation"
+_DEFAULT_MODEL_SETTINGS = get_default_model_settings()
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,33 @@ def _tool_call_payloads_match(left: List[Dict[str, Any]], right: List[Dict[str, 
         {"tool_name": item.get("tool_name"), "arguments": dict(item.get("arguments") or {})}
         for item in right
     ]
+
+
+def _compact_intent_title(intent: str) -> str:
+    trimmed = " ".join(intent.strip().split())
+    if not trimmed:
+        return "Agent Video Node"
+    return f"{trimmed[:32]}..." if len(trimmed) > 32 else trimmed
+
+
+def _get_node_model_id(node: Optional[AtelierNode]) -> str:
+    if node and isinstance((node.data or {}).get("model"), str):
+        return str((node.data or {}).get("model"))
+    return _DEFAULT_MODEL_SETTINGS.i2v_model
+
+
+def _get_reference_image_urls(node: Optional[AtelierNode]) -> List[str]:
+    if not node:
+        return []
+    refs = (node.data or {}).get("reference_image_urls")
+    if not isinstance(refs, list):
+        return []
+    return [item for item in refs if isinstance(item, str) and item]
+
+
+def _should_generate_candidates(intent: str) -> bool:
+    normalized = intent.lower()
+    return any(token in normalized for token in ("生成", "候选", "视频", "generate", "candidate", "render"))
 
 
 class AtelierToolRegistry:
@@ -113,6 +143,131 @@ class AtelierAgentHarness:
             }
             for spec in self.registry.list_specs()
         ]
+
+    def plan_turn(
+        self,
+        project_id: str,
+        user_message: str,
+        selected_node_id: Optional[str] = None,
+        skill_name: Optional[str] = None,
+    ) -> AtelierAgentPlan:
+        project = self.pipeline.get_atelier_project(project_id)
+        if not project:
+            raise ValueError("Atelier project not found")
+
+        prompt = user_message.strip()
+        context = AtelierAgentPlanContext(selected_node_id=selected_node_id)
+        if not prompt:
+            return AtelierAgentPlan(
+                project_id=project_id,
+                user_message=user_message,
+                skill_name=skill_name,
+                status="blocked",
+                reason="Enter an intent before previewing or executing.",
+                context=context,
+            )
+
+        selected_node = None
+        if selected_node_id:
+            selected_node = next((node for node in project.nodes if node.id == selected_node_id), None)
+            if not selected_node:
+                return AtelierAgentPlan(
+                    project_id=project_id,
+                    user_message=user_message,
+                    skill_name=skill_name,
+                    status="blocked",
+                    reason="Selected Atelier node was not found.",
+                    context=context,
+                )
+
+        if _should_generate_candidates(prompt):
+            if not selected_node or selected_node.type != "video":
+                return AtelierAgentPlan(
+                    project_id=project_id,
+                    user_message=user_message,
+                    skill_name=skill_name,
+                    status="blocked",
+                    reason="Video candidate generation requires a selected video node with reference images.",
+                    context=context,
+                )
+            reference_image_urls = _get_reference_image_urls(selected_node)
+            if not reference_image_urls:
+                return AtelierAgentPlan(
+                    project_id=project_id,
+                    user_message=user_message,
+                    skill_name=skill_name,
+                    status="blocked",
+                    reason="Video candidate generation requires at least one reference image on the selected node.",
+                    context=context,
+                )
+            return AtelierAgentPlan(
+                project_id=project_id,
+                user_message=user_message,
+                skill_name=skill_name or "candidate-brief",
+                status="ready",
+                reason="Generate candidate videos for the selected node.",
+                context=context,
+                tool_calls=[
+                    {
+                        "tool_name": "generation.createVideoCandidates",
+                        "arguments": {
+                            "node_id": selected_node.id,
+                            "prompt": selected_node.prompt or prompt,
+                            "model": _get_node_model_id(selected_node),
+                            "reference_image_urls": reference_image_urls,
+                            "batch_size": 3,
+                            "params": {
+                                "duration": 5,
+                                "resolution": "720p",
+                                "prompt_extend": True,
+                                "generation_mode": "i2v",
+                            },
+                        },
+                    }
+                ],
+            )
+
+        if selected_node and selected_node.type == "video":
+            return AtelierAgentPlan(
+                project_id=project_id,
+                user_message=user_message,
+                skill_name=skill_name or "shot-variant-maker",
+                status="ready",
+                reason="Update the selected video node prompt.",
+                context=context,
+                tool_calls=[
+                    {
+                        "tool_name": "canvas.updateNodePrompt",
+                        "arguments": {
+                            "node_id": selected_node.id,
+                            "prompt": prompt,
+                            "model": _get_node_model_id(selected_node),
+                        },
+                    }
+                ],
+            )
+
+        project_node_count = len(project.nodes)
+        return AtelierAgentPlan(
+            project_id=project_id,
+            user_message=user_message,
+            skill_name=skill_name or "idea-to-canvas",
+            status="ready",
+            reason="Create a draft video node from the user intent.",
+            context=context,
+            tool_calls=[
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {
+                        "title": _compact_intent_title(prompt),
+                        "prompt": prompt,
+                        "model": _DEFAULT_MODEL_SETTINGS.i2v_model,
+                        "x": 160 + project_node_count * 36,
+                        "y": 160 + project_node_count * 28,
+                    },
+                }
+            ],
+        )
 
     def run_turn(
         self,

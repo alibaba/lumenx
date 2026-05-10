@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
     api,
+    type AtelierAgentPlan,
     type AtelierAgentPolicy,
     type AtelierAgentToolSpec,
     type AtelierAgentTurn,
@@ -24,6 +25,11 @@ interface AtelierStore {
     ensureProject: () => Promise<AtelierProject>;
     createProject: (title?: string) => Promise<AtelierProject>;
     loadAgentTools: () => Promise<AtelierAgentToolSpec[]>;
+    planAgentTurn: (payload: {
+        user_message?: string;
+        selected_node_id?: string | null;
+        skill_name?: string | null;
+    }) => Promise<AtelierAgentPlan>;
     updateAgentPolicy: (
         policy: Partial<Pick<AtelierAgentPolicy, "approval_mode" | "allowed_tools" | "max_nodes_per_action">>
     ) => Promise<AtelierProject>;
@@ -155,6 +161,11 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
         const tools = await api.listAtelierAgentTools(project.id);
         set({ agentTools: tools });
         return tools;
+    },
+
+    planAgentTurn: async (payload) => {
+        const project = await get().ensureProject();
+        return api.planAtelierAgentTurn(project.id, payload);
     },
 
     updateAgentPolicy: async (policy) => {

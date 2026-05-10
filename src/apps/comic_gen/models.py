@@ -399,6 +399,22 @@ class AtelierAgentToolCall(BaseModel):
     completed_at: Optional[float] = None
 
 
+class AtelierAgentPlanContext(BaseModel):
+    selected_node_id: Optional[str] = None
+
+
+class AtelierAgentPlan(BaseModel):
+    project_id: str
+    user_message: str = ""
+    planner: str = Field("deterministic_core", description="Planner implementation that produced this plan")
+    skill_name: Optional[str] = None
+    status: str = Field("ready", description="ready/blocked")
+    reason: str = ""
+    tool_calls: List[Dict[str, Any]] = Field(default_factory=list)
+    context: AtelierAgentPlanContext = Field(default_factory=AtelierAgentPlanContext)
+    created_at: float = Field(default_factory=time.time)
+
+
 class AtelierAgentTurn(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str

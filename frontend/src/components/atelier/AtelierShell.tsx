@@ -9,7 +9,7 @@ import {
     getAtelierAgentPlanContext,
     isAgentTurnBlocked,
     isAtelierAgentPlanStale,
-    planAtelierAgentTurn,
+    validateAtelierAgentIntent,
     type AtelierAgentPlanContext,
 } from "@/lib/atelierAgentPlanning";
 import { getAssetUrl } from "@/lib/utils";
@@ -927,6 +927,7 @@ function AgentPanel() {
     const isAgentRunning = useAtelierStore((state) => state.isAgentRunning);
     const attachReferenceNode = useAtelierStore((state) => state.attachReferenceNode);
     const loadAgentTools = useAtelierStore((state) => state.loadAgentTools);
+    const planAgentTurn = useAtelierStore((state) => state.planAgentTurn);
     const updateAgentPolicy = useAtelierStore((state) => state.updateAgentPolicy);
     const runAgentTurn = useAtelierStore((state) => state.runAgentTurn);
     const [attachingTargetId, setAttachingTargetId] = useState<string | null>(null);
@@ -978,12 +979,28 @@ function AgentPanel() {
         plannedContextRef.current = null;
     }, [currentPlanContext]);
 
-    const planToolCalls = () => {
-        const plan = planAtelierAgentTurn(agentInput, project?.nodes.length ?? 0, selectedNode);
-        setAgentError(plan.error);
-        setPlannedToolCalls(plan.toolCalls);
+    const planToolCalls = async () => {
+        const validation = validateAtelierAgentIntent(agentInput);
+        if (validation.error) {
+            setAgentError(validation.error);
+            setPlannedToolCalls([]);
+            plannedContextRef.current = currentPlanContext;
+            return { toolCalls: [], error: validation.error };
+        }
+        const plan = await planAgentTurn({
+            user_message: agentInput,
+            selected_node_id: selectedNode?.id ?? null,
+        });
+        if (plan.status === "blocked") {
+            setAgentError(plan.reason);
+            setPlannedToolCalls([]);
+            plannedContextRef.current = currentPlanContext;
+            return { toolCalls: [], error: plan.reason };
+        }
+        setAgentError(null);
+        setPlannedToolCalls(plan.tool_calls);
         plannedContextRef.current = currentPlanContext;
-        return plan;
+        return { toolCalls: plan.tool_calls, error: null };
     };
 
     const updatePolicy = async (
@@ -1026,7 +1043,7 @@ function AgentPanel() {
             setAgentError("Resolve the pending approval before starting a new agent turn.");
             return;
         }
-        const plan = planToolCalls();
+        const plan = await planToolCalls();
         if (plan.error || plan.toolCalls.length === 0) return;
         try {
             const turn = await runAgentTurn({
@@ -1050,7 +1067,7 @@ function AgentPanel() {
         const canReusePlan = plannedToolCalls.length > 0 && !isAtelierAgentPlanStale(plannedContextRef.current, currentPlanContext);
         const plan = canReusePlan
             ? { toolCalls: plannedToolCalls, error: null }
-            : planToolCalls();
+            : await planToolCalls();
         if (plan.error || plan.toolCalls.length === 0) return;
         try {
             const turn = await runAgentTurn({

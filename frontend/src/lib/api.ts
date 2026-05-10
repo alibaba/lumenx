@@ -93,6 +93,22 @@ export interface AtelierAgentToolCall {
     completed_at?: number | null;
 }
 
+export interface AtelierAgentPlanContext {
+    selected_node_id?: string | null;
+}
+
+export interface AtelierAgentPlan {
+    project_id: string;
+    user_message: string;
+    planner: string;
+    skill_name?: string | null;
+    status: "ready" | "blocked";
+    reason: string;
+    tool_calls: AtelierAgentToolCallPayload[];
+    context: AtelierAgentPlanContext;
+    created_at: number;
+}
+
 export interface AtelierAgentTurn {
     id: string;
     project_id: string;
@@ -126,6 +142,12 @@ export interface RunAtelierAgentTurnPayload {
     approve?: boolean;
     deny?: boolean;
     turn_id?: string;
+}
+
+export interface PlanAtelierAgentTurnPayload {
+    user_message?: string;
+    selected_node_id?: string | null;
+    skill_name?: string | null;
 }
 
 export interface AtelierNode {
@@ -886,6 +908,13 @@ export const api = {
     },
     listAtelierAgentTools: async (projectId: string): Promise<AtelierAgentToolSpec[]> => {
         const response = await axios.get(`${API_URL}/atelier/projects/${projectId}/agent/tools`);
+        return response.data;
+    },
+    planAtelierAgentTurn: async (
+        projectId: string,
+        payload: PlanAtelierAgentTurnPayload
+    ): Promise<AtelierAgentPlan> => {
+        const response = await axios.post(`${API_URL}/atelier/projects/${projectId}/agent/plan`, payload);
         return response.data;
     },
     runAtelierAgentTurn: async (

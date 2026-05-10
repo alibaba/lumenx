@@ -5,6 +5,7 @@ vi.mock('@/lib/api', () => ({
     api: {
         getAtelierProject: vi.fn(),
         listAtelierAgentTools: vi.fn(),
+        planAtelierAgentTurn: vi.fn(),
         runAtelierAgentTurn: vi.fn(),
         updateAtelierAgentPolicy: vi.fn(),
         updateAtelierNode: vi.fn(),
@@ -103,6 +104,38 @@ describe('atelier store canvas interactions', () => {
 
         expect(api.listAtelierAgentTools).toHaveBeenCalledWith('atelier-1');
         expect(useAtelierStore.getState().agentTools.map((tool) => tool.name)).toEqual(['canvas.createVideoNode']);
+    });
+
+    it('requests agent plans from Atelier Core instead of local-only planning', async () => {
+        const { api } = await import('@/lib/api');
+        const { useAtelierStore } = await import('@/store/atelierStore');
+        vi.mocked(api.planAtelierAgentTurn).mockResolvedValueOnce({
+            project_id: 'atelier-1',
+            user_message: 'Create a moonlit chase shot',
+            planner: 'deterministic_core',
+            skill_name: 'idea-to-canvas',
+            status: 'ready',
+            reason: 'Create a draft video node from the user intent.',
+            tool_calls: [
+                {
+                    tool_name: 'canvas.createVideoNode',
+                    arguments: { title: 'Create a moonlit chase shot', prompt: 'Create a moonlit chase shot' },
+                },
+            ],
+            context: { selected_node_id: 'node-1' },
+            created_at: 2,
+        });
+
+        const plan = await useAtelierStore.getState().planAgentTurn({
+            user_message: 'Create a moonlit chase shot',
+            selected_node_id: 'node-1',
+        });
+
+        expect(api.planAtelierAgentTurn).toHaveBeenCalledWith('atelier-1', {
+            user_message: 'Create a moonlit chase shot',
+            selected_node_id: 'node-1',
+        });
+        expect(plan.tool_calls[0].tool_name).toBe('canvas.createVideoNode');
     });
 
     it('updates agent policy through the shared Atelier project state', async () => {

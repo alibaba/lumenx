@@ -579,6 +579,89 @@ def test_atelier_agent_preview_does_not_mutate_canvas(pipeline):
     assert project.nodes == []
 
 
+def test_atelier_agent_planner_creates_video_node_plan_from_freeform_intent(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(project.id, "A rain-soaked rooftop chase")
+
+    assert plan.status == "ready"
+    assert plan.planner == "deterministic_core"
+    assert plan.skill_name == "idea-to-canvas"
+    assert plan.reason == "Create a draft video node from the user intent."
+    assert plan.tool_calls == [
+        {
+            "tool_name": "canvas.createVideoNode",
+            "arguments": {
+                "title": "A rain-soaked rooftop chase",
+                "prompt": "A rain-soaked rooftop chase",
+                "model": "wan2.7-i2v",
+                "x": 160,
+                "y": 160,
+            },
+        }
+    ]
+
+
+def test_atelier_agent_planner_updates_selected_video_prompt(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    video = pipeline.create_atelier_node(
+        project.id,
+        {"type": "video", "title": "Shot", "data": {"model": "happyhorse-1.0-i2v"}},
+    )
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "Make the character turn toward camera",
+        selected_node_id=video.id,
+    )
+
+    assert plan.status == "ready"
+    assert plan.skill_name == "shot-variant-maker"
+    assert plan.tool_calls[0] == {
+        "tool_name": "canvas.updateNodePrompt",
+        "arguments": {
+            "node_id": video.id,
+            "prompt": "Make the character turn toward camera",
+            "model": "happyhorse-1.0-i2v",
+        },
+    }
+
+
+def test_atelier_agent_planner_blocks_generation_without_selected_reference_video_node(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(project.id, "生成 3 个候选视频")
+
+    assert plan.status == "blocked"
+    assert plan.tool_calls == []
+    assert "selected video node" in plan.reason
+
+
+def test_atelier_agent_planner_generates_candidates_for_selected_referenced_video(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    video = pipeline.create_atelier_node(
+        project.id,
+        {
+            "type": "video",
+            "title": "Shot",
+            "prompt": "A rooftop chase",
+            "data": {
+                "model": "wan2.7-i2v",
+                "reference_image_urls": ["uploads/ref-a.png"],
+            },
+        },
+    )
+
+    plan = pipeline.plan_atelier_agent_turn(project.id, "生成 3 个候选视频", selected_node_id=video.id)
+
+    assert plan.status == "ready"
+    assert plan.skill_name == "candidate-brief"
+    assert plan.tool_calls[0]["tool_name"] == "generation.createVideoCandidates"
+    assert plan.tool_calls[0]["arguments"]["node_id"] == video.id
+    assert plan.tool_calls[0]["arguments"]["prompt"] == "A rooftop chase"
+    assert plan.tool_calls[0]["arguments"]["reference_image_urls"] == ["uploads/ref-a.png"]
+
+
 def test_atelier_agent_generation_requires_reference_images(pipeline):
     project = pipeline.create_atelier_project("Board")
     pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})

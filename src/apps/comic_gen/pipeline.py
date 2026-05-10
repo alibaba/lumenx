@@ -10,6 +10,7 @@ import platform
 from urllib.parse import quote
 from .models import (
     AtelierAgentPolicy,
+    AtelierAgentPlan,
     AtelierAgentTurn,
     AtelierNode,
     AtelierProject,
@@ -2757,6 +2758,20 @@ class ComicGenPipeline:
 
     def list_atelier_agent_tools(self) -> List[Dict[str, Any]]:
         return AtelierAgentHarness(self).list_tool_specs()
+
+    def plan_atelier_agent_turn(
+        self,
+        project_id: str,
+        user_message: str,
+        selected_node_id: Optional[str] = None,
+        skill_name: Optional[str] = None,
+    ) -> AtelierAgentPlan:
+        return AtelierAgentHarness(self).plan_turn(
+            project_id=project_id,
+            user_message=user_message,
+            selected_node_id=selected_node_id,
+            skill_name=skill_name,
+        )
 
     def run_atelier_agent_turn(
         self,

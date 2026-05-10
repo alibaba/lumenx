@@ -91,6 +91,43 @@ describe('atelier API client', () => {
         );
     });
 
+    it('asks Atelier Core to plan agent tool calls from user intent', async () => {
+        mockedAxios.post.mockResolvedValueOnce({
+            data: {
+                project_id: 'atelier-1',
+                user_message: 'Create a moonlit chase shot',
+                planner: 'deterministic_core',
+                skill_name: 'idea-to-canvas',
+                status: 'ready',
+                reason: 'Create a draft video node from the user intent.',
+                tool_calls: [
+                    {
+                        tool_name: 'canvas.createVideoNode',
+                        arguments: { prompt: 'Create a moonlit chase shot' },
+                    },
+                ],
+                context: { selected_node_id: null },
+                created_at: 2,
+            },
+        });
+        const { api } = await import('@/lib/api');
+
+        const plan = await api.planAtelierAgentTurn('atelier-1', {
+            user_message: 'Create a moonlit chase shot',
+            selected_node_id: null,
+        });
+
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+            'http://localhost:17177/atelier/projects/atelier-1/agent/plan',
+            {
+                user_message: 'Create a moonlit chase shot',
+                selected_node_id: null,
+            }
+        );
+        expect(plan.planner).toBe('deterministic_core');
+        expect(plan.tool_calls[0].tool_name).toBe('canvas.createVideoNode');
+    });
+
     it('creates nodes with Studio resource references but without depending on Studio UI', async () => {
         mockedAxios.post.mockResolvedValueOnce({
             data: {
