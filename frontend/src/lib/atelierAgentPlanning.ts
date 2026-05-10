@@ -45,6 +45,11 @@ export interface AtelierAgentTurnSummary {
 
 export interface AtelierAgentSessionSummary {
     status: "idle" | "planned" | "waiting_approval" | "running";
+    focus: {
+        label: string;
+        detail: string;
+        turnId: string | null;
+    };
     turnCount: number;
     plannedCallCount: number;
     waitingApprovalCount: number;
@@ -206,9 +211,40 @@ export function getAtelierAgentSessionSummary({
             : plannedCallCount > 0
                 ? "planned"
                 : "idle";
+    const latestTurn = turns.at(-1) ?? null;
+    const focus = pendingTurn
+        ? {
+            label: "Approval",
+            detail: pendingTurn.user_message || "Pending agent turn",
+            turnId: pendingTurn.id,
+        }
+        : plannedCallCount > 0
+            ? {
+                label: "Plan ready",
+                detail: `${plannedCallCount} tool call${plannedCallCount === 1 ? "" : "s"} staged`,
+                turnId: null,
+            }
+            : isRunning
+                ? {
+                    label: "Running",
+                    detail: "Agent turn in progress",
+                    turnId: null,
+                }
+                : latestTurn
+                    ? {
+                        label: latestTurn.preview ? "Latest preview" : "Latest execution",
+                        detail: latestTurn.user_message || "Agent turn",
+                        turnId: latestTurn.id,
+                    }
+                    : {
+                        label: "Idle",
+                        detail: "No active turn",
+                        turnId: null,
+                    };
 
     return {
         status,
+        focus,
         turnCount: turns.length,
         plannedCallCount,
         waitingApprovalCount,

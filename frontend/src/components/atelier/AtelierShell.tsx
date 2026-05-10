@@ -1292,6 +1292,17 @@ function AgentPanel() {
                                 {agentSessionSummary.status}
                             </span>
                         </div>
+                        <div className="mb-2 rounded border border-white/10 bg-white/[0.03] px-2 py-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="shrink-0 text-[10px] uppercase text-text-muted">Focus</span>
+                                <span className="min-w-0 truncate text-right text-[11px] font-semibold text-foreground">
+                                    {agentSessionSummary.focus.label}
+                                </span>
+                            </div>
+                            <div className="mt-0.5 truncate text-[10px] text-text-muted">
+                                {agentSessionSummary.focus.detail}
+                            </div>
+                        </div>
                         <div className="grid grid-cols-3 gap-1">
                             <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
                                 <div className="text-[10px] uppercase text-text-muted">Turns</div>

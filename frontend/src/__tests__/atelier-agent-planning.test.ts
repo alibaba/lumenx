@@ -263,6 +263,11 @@ describe('atelier agent planning', () => {
         });
         expect(waitingSession).toEqual({
             status: 'waiting_approval',
+            focus: {
+                label: 'Approval',
+                detail: 'Needs approval',
+                turnId: 'turn-waiting',
+            },
             turnCount: 2,
             plannedCallCount: 3,
             waitingApprovalCount: 1,
@@ -277,13 +282,27 @@ describe('atelier agent planning', () => {
             plannedCallCount: 2,
             pendingTurn: null,
             isRunning: false,
-        }).status).toBe('planned');
+        })).toMatchObject({
+            status: 'planned',
+            focus: {
+                label: 'Plan ready',
+                detail: '2 tool calls staged',
+                turnId: null,
+            },
+        });
         expect(getAtelierAgentSessionSummary({
             turns: [],
             plannedCallCount: 0,
             pendingTurn: null,
             isRunning: true,
-        }).status).toBe('running');
+        })).toMatchObject({
+            status: 'running',
+            focus: {
+                label: 'Running',
+                detail: 'Agent turn in progress',
+                turnId: null,
+            },
+        });
         expect(getAtelierAgentSessionSummary({
             turns: [],
             plannedCallCount: 0,
@@ -303,6 +322,19 @@ describe('atelier agent planning', () => {
             status: 'waiting_approval',
             turnCount: 0,
             waitingApprovalCount: 1,
+        });
+        expect(getAtelierAgentSessionSummary({
+            turns: [completedTurn],
+            plannedCallCount: 0,
+            pendingTurn: null,
+            isRunning: false,
+        })).toMatchObject({
+            status: 'idle',
+            focus: {
+                label: 'Latest preview',
+                detail: 'Completed',
+                turnId: 'turn-completed',
+            },
         });
     });
 });
