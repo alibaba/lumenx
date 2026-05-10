@@ -582,7 +582,11 @@ def test_atelier_agent_preview_does_not_mutate_canvas(pipeline):
 def test_atelier_agent_planner_creates_video_node_plan_from_freeform_intent(pipeline):
     project = pipeline.create_atelier_project("Board")
 
-    plan = pipeline.plan_atelier_agent_turn(project.id, "A rain-soaked rooftop chase")
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "A rain-soaked rooftop chase",
+        planner="deterministic_core",
+    )
 
     assert plan.status == "ready"
     assert plan.planner == "deterministic_core"
@@ -600,6 +604,22 @@ def test_atelier_agent_planner_creates_video_node_plan_from_freeform_intent(pipe
             },
         }
     ]
+
+
+def test_atelier_agent_planner_blocks_unknown_planner_without_tool_calls(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "Create a moonlit chase shot",
+        planner="model_planner_vNext",
+    )
+
+    assert plan.status == "blocked"
+    assert plan.planner == "model_planner_vNext"
+    assert plan.tool_calls == []
+    assert "Unknown Atelier agent planner" in plan.reason
+    assert project.nodes == []
 
 
 def test_atelier_agent_planner_updates_selected_video_prompt(pipeline):

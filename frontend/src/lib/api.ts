@@ -148,6 +148,7 @@ export interface PlanAtelierAgentTurnPayload {
     user_message?: string;
     selected_node_id?: string | null;
     skill_name?: string | null;
+    planner?: string | null;
 }
 
 export interface AtelierNode {

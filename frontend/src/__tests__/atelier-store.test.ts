@@ -129,11 +129,13 @@ describe('atelier store canvas interactions', () => {
         const plan = await useAtelierStore.getState().planAgentTurn({
             user_message: 'Create a moonlit chase shot',
             selected_node_id: 'node-1',
+            planner: 'deterministic_core',
         });
 
         expect(api.planAtelierAgentTurn).toHaveBeenCalledWith('atelier-1', {
             user_message: 'Create a moonlit chase shot',
             selected_node_id: 'node-1',
+            planner: 'deterministic_core',
         });
         expect(plan.tool_calls[0].tool_name).toBe('canvas.createVideoNode');
     });

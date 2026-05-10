@@ -29,6 +29,7 @@ interface AtelierStore {
         user_message?: string;
         selected_node_id?: string | null;
         skill_name?: string | null;
+        planner?: string | null;
     }) => Promise<AtelierAgentPlan>;
     updateAgentPolicy: (
         policy: Partial<Pick<AtelierAgentPolicy, "approval_mode" | "allowed_tools" | "max_nodes_per_action">>

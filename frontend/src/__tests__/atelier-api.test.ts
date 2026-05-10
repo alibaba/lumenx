@@ -115,6 +115,7 @@ describe('atelier API client', () => {
         const plan = await api.planAtelierAgentTurn('atelier-1', {
             user_message: 'Create a moonlit chase shot',
             selected_node_id: null,
+            planner: 'deterministic_core',
         });
 
         expect(mockedAxios.post).toHaveBeenCalledWith(
@@ -122,6 +123,7 @@ describe('atelier API client', () => {
             {
                 user_message: 'Create a moonlit chase shot',
                 selected_node_id: null,
+                planner: 'deterministic_core',
             }
         );
         expect(plan.planner).toBe('deterministic_core');
