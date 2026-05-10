@@ -15,6 +15,7 @@ import {
 import { buildReferenceLinks, findVideoDropTarget, getAtelierReferenceNodeIds as getReferenceNodeIds } from "@/lib/atelierCanvas";
 import {
     getAtelierAgentPlanContext,
+    getAtelierAgentSessionSummary,
     getAtelierAgentTurnSummaries,
     getAtelierPlanContextRows,
     getAtelierPlannerPackageRows,
@@ -979,6 +980,15 @@ function AgentPanel() {
     const recentTurnSummaries = useMemo(() => getAtelierAgentTurnSummaries(agentTurns, 5), [agentTurns]);
     const activePlan = previewTurn ?? pendingAgentTurn;
     const pendingApprovalBlock = isAgentTurnBlocked(pendingAgentTurn);
+    const agentSessionSummary = useMemo(
+        () => getAtelierAgentSessionSummary({
+            turns: agentTurns,
+            plannedCallCount: plannedToolCalls.length,
+            pendingTurn: pendingAgentTurn,
+            isRunning: isAgentRunning,
+        }),
+        [agentTurns, plannedToolCalls.length, pendingAgentTurn, isAgentRunning]
+    );
     const plannerPackageRows = useMemo(() => getAtelierPlannerPackageRows(plannerPackage), [plannerPackage]);
     const planContextRows = useMemo(() => getAtelierPlanContextRows(planContext), [planContext]);
     const currentPlanContext = useMemo(
@@ -1275,6 +1285,42 @@ function AgentPanel() {
                     )}
                 </div>
                 <div className="space-y-3 rounded-md border border-white/10 bg-white/[0.04] p-3">
+                    <div className="rounded-md border border-white/10 bg-black/20 p-2">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-primary/80">Session</span>
+                            <span className="shrink-0 rounded border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase text-text-muted">
+                                {agentSessionSummary.status}
+                            </span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-1">
+                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
+                                <div className="text-[10px] uppercase text-text-muted">Turns</div>
+                                <div className="text-sm font-semibold text-foreground">{agentSessionSummary.turnCount}</div>
+                            </div>
+                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
+                                <div className="text-[10px] uppercase text-text-muted">Planned</div>
+                                <div className="text-sm font-semibold text-foreground">{agentSessionSummary.plannedCallCount}</div>
+                            </div>
+                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
+                                <div className="text-[10px] uppercase text-text-muted">Waiting</div>
+                                <div className="text-sm font-semibold text-amber-100">{agentSessionSummary.waitingApprovalCount}</div>
+                            </div>
+                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
+                                <div className="text-[10px] uppercase text-text-muted">Done</div>
+                                <div className="text-sm font-semibold text-emerald-200">{agentSessionSummary.completedCallCount}</div>
+                            </div>
+                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
+                                <div className="text-[10px] uppercase text-text-muted">Failed</div>
+                                <div className="text-sm font-semibold text-red-100">{agentSessionSummary.failedCallCount}</div>
+                            </div>
+                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
+                                <div className="text-[10px] uppercase text-text-muted">Modes</div>
+                                <div className="truncate text-[11px] font-semibold text-text-secondary">
+                                    {agentSessionSummary.previewTurnCount}p · {agentSessionSummary.executeTurnCount}e
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div>
                         <div className="mb-1 text-[11px] uppercase tracking-wide text-primary/80">Intent</div>
                         <textarea

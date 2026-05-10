@@ -43,6 +43,17 @@ export interface AtelierAgentTurnSummary {
     toolCalls: AtelierAgentToolCallSummary[];
 }
 
+export interface AtelierAgentSessionSummary {
+    status: "idle" | "planned" | "waiting_approval" | "running";
+    turnCount: number;
+    plannedCallCount: number;
+    waitingApprovalCount: number;
+    completedCallCount: number;
+    failedCallCount: number;
+    previewTurnCount: number;
+    executeTurnCount: number;
+}
+
 export function validateAtelierAgentIntent(intent: string): AtelierAgentPlanResult {
     const prompt = intent.trim();
     if (!prompt) {
@@ -167,4 +178,43 @@ export function getAtelierAgentTurnSummaries(
     limit = 5
 ): AtelierAgentTurnSummary[] {
     return [...turns].slice(-limit).reverse().map(getAtelierAgentTurnSummary);
+}
+
+export function getAtelierAgentSessionSummary({
+    turns,
+    plannedCallCount,
+    pendingTurn,
+    isRunning,
+}: {
+    turns: AtelierAgentTurn[];
+    plannedCallCount: number;
+    pendingTurn: AtelierAgentTurn | null;
+    isRunning: boolean;
+}): AtelierAgentSessionSummary {
+    const turnSummaries = turns.map(getAtelierAgentTurnSummary);
+    const completedCallCount = turnSummaries.reduce((count, turn) => count + turn.completedCount, 0);
+    const failedCallCount = turnSummaries.reduce((count, turn) => count + turn.failedCount, 0);
+    const previewTurnCount = turns.filter((turn) => turn.preview).length;
+    const executeTurnCount = turns.length - previewTurnCount;
+    const waitingApprovalCount = pendingTurn
+        ? getAtelierAgentTurnSummary(pendingTurn).waitingApprovalCount
+        : 0;
+    const status = waitingApprovalCount > 0
+        ? "waiting_approval"
+        : isRunning
+            ? "running"
+            : plannedCallCount > 0
+                ? "planned"
+                : "idle";
+
+    return {
+        status,
+        turnCount: turns.length,
+        plannedCallCount,
+        waitingApprovalCount,
+        completedCallCount,
+        failedCallCount,
+        previewTurnCount,
+        executeTurnCount,
+    };
 }

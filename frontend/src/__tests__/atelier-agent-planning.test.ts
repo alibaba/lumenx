@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AtelierAgentTurn } from '@/lib/api';
 import {
+    getAtelierAgentSessionSummary,
     getAtelierAgentTurnSummaries,
     getAtelierPlanContextRows,
     getAtelierAgentPlanContext,
@@ -199,5 +200,109 @@ describe('atelier agent planning', () => {
         ]);
         expect(JSON.stringify(summaries)).not.toContain('Raw prompt');
         expect(JSON.stringify(summaries)).not.toContain('raw-ref.png');
+    });
+
+    it('summarizes session status from planned calls and safe turn counts', () => {
+        const waitingTurn = {
+            id: 'turn-waiting',
+            project_id: 'atelier-1',
+            user_message: 'Needs approval',
+            preview: false,
+            status: 'waiting_approval',
+            tool_calls: [
+                {
+                    call_id: 'call-waiting',
+                    tool_name: 'canvas.createVideoNode',
+                    arguments: { prompt: 'raw prompt should stay out' },
+                    status: 'approval_required',
+                    approval_required: true,
+                    approval_granted: false,
+                    result_snapshot: null,
+                    created_at: 1,
+                },
+            ],
+            created_at: 1,
+        } as AtelierAgentTurn;
+        const completedTurn = {
+            id: 'turn-completed',
+            project_id: 'atelier-1',
+            user_message: 'Completed',
+            preview: true,
+            status: 'completed',
+            tool_calls: [
+                {
+                    call_id: 'call-ok',
+                    tool_name: 'generation.createVideoCandidates',
+                    arguments: { reference_image_urls: ['raw-ref.png'] },
+                    status: 'completed',
+                    approval_required: false,
+                    approval_granted: false,
+                    result_snapshot: { candidate_ids: ['candidate-1', 'candidate-2'] },
+                    created_at: 2,
+                },
+                {
+                    call_id: 'call-failed',
+                    tool_name: 'canvas.attachReferenceNode',
+                    arguments: { node_id: 'raw-node-id' },
+                    status: 'failed',
+                    approval_required: false,
+                    approval_granted: false,
+                    error: 'Attachment failed',
+                    result_snapshot: null,
+                    created_at: 3,
+                },
+            ],
+            created_at: 2,
+        } as AtelierAgentTurn;
+
+        const waitingSession = getAtelierAgentSessionSummary({
+            turns: [waitingTurn, completedTurn],
+            plannedCallCount: 3,
+            pendingTurn: waitingTurn,
+            isRunning: false,
+        });
+        expect(waitingSession).toEqual({
+            status: 'waiting_approval',
+            turnCount: 2,
+            plannedCallCount: 3,
+            waitingApprovalCount: 1,
+            completedCallCount: 1,
+            failedCallCount: 1,
+            previewTurnCount: 1,
+            executeTurnCount: 1,
+        });
+        expect(JSON.stringify(waitingSession)).not.toContain('raw');
+        expect(getAtelierAgentSessionSummary({
+            turns: [],
+            plannedCallCount: 2,
+            pendingTurn: null,
+            isRunning: false,
+        }).status).toBe('planned');
+        expect(getAtelierAgentSessionSummary({
+            turns: [],
+            plannedCallCount: 0,
+            pendingTurn: null,
+            isRunning: true,
+        }).status).toBe('running');
+        expect(getAtelierAgentSessionSummary({
+            turns: [],
+            plannedCallCount: 0,
+            pendingTurn: waitingTurn,
+            isRunning: true,
+        })).toMatchObject({
+            status: 'waiting_approval',
+            turnCount: 0,
+            waitingApprovalCount: 1,
+        });
+        expect(getAtelierAgentSessionSummary({
+            turns: [],
+            plannedCallCount: 0,
+            pendingTurn: waitingTurn,
+            isRunning: false,
+        })).toMatchObject({
+            status: 'waiting_approval',
+            turnCount: 0,
+            waitingApprovalCount: 1,
+        });
     });
 });
