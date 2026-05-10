@@ -389,6 +389,7 @@ class PlanAtelierAgentTurnRequest(BaseModel):
     selected_node_id: Optional[str] = None
     skill_name: Optional[str] = None
     planner: Optional[str] = None
+    planner_input: Dict[str, Any] = Field(default_factory=dict)
 
 
 @app.post("/atelier/projects", response_model=AtelierProject)
@@ -462,6 +463,7 @@ async def plan_atelier_agent_turn(project_id: str, request: PlanAtelierAgentTurn
             selected_node_id=request.selected_node_id,
             skill_name=request.skill_name,
             planner=request.planner,
+            planner_input=request.planner_input,
         )
         return signed_response(plan)
     except ValueError as e:

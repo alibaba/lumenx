@@ -21,6 +21,15 @@ READ_PERMISSION = "read"
 CANVAS_WRITE_PERMISSION = "canvas_write"
 GENERATION_PERMISSION = "generation"
 _DEFAULT_MODEL_SETTINGS = get_default_model_settings()
+PLANNER_SCHEMA_VERSION = "atelier.agent.planner.v1"
+TOOL_SCHEMA_VERSION = "atelier.tools.v1"
+PLANNER_CONTEXT_INPUT_KEYS = {
+    "schema_version",
+    "adapter_name",
+    "tool_schema_version",
+    "model_trace_id",
+    "skill_name",
+}
 
 
 @dataclass(frozen=True)
@@ -103,6 +112,7 @@ class AtelierAgentPlanner(Protocol):
         user_message: str,
         selected_node_id: Optional[str] = None,
         skill_name: Optional[str] = None,
+        planner_input: Optional[Dict[str, Any]] = None,
     ) -> AtelierAgentPlan:
         ...
 
@@ -129,6 +139,7 @@ class DeterministicCorePlanner:
         user_message: str,
         selected_node_id: Optional[str] = None,
         skill_name: Optional[str] = None,
+        planner_input: Optional[Dict[str, Any]] = None,
     ) -> AtelierAgentPlan:
         prompt = user_message.strip()
         context = AtelierAgentPlanContext(selected_node_id=selected_node_id)
@@ -252,6 +263,140 @@ class DeterministicCorePlanner:
         )
 
 
+class ModelAdapterPlanner:
+    name = "model_adapter"
+
+    def __init__(self, tool_registry: AtelierToolRegistry):
+        self.tool_registry = tool_registry
+
+    def plan(
+        self,
+        project: AtelierProject,
+        user_message: str,
+        selected_node_id: Optional[str] = None,
+        skill_name: Optional[str] = None,
+        planner_input: Optional[Dict[str, Any]] = None,
+    ) -> AtelierAgentPlan:
+        planner_input_payload = dict(planner_input or {})
+        context = AtelierAgentPlanContext(
+            selected_node_id=selected_node_id,
+            planner_input=self._context_input(planner_input_payload),
+            planner_schema_version=str(planner_input_payload.get("schema_version") or PLANNER_SCHEMA_VERSION),
+            planner_adapter_name=self._optional_string(planner_input_payload.get("adapter_name")),
+            tool_schema_version=str(planner_input_payload.get("tool_schema_version") or TOOL_SCHEMA_VERSION),
+            model_trace_id=self._optional_string(planner_input_payload.get("model_trace_id")),
+        )
+        draft_calls = list(planner_input_payload.get("tool_calls") or [])
+        if not draft_calls:
+            return AtelierAgentPlan(
+                project_id=project.id,
+                user_message=user_message,
+                planner=self.name,
+                skill_name=skill_name,
+                status="blocked",
+                reason="Model planner requires validated draft tool calls from a model adapter.",
+                context=context,
+            )
+
+        if context.planner_schema_version != PLANNER_SCHEMA_VERSION:
+            return self._blocked(
+                project,
+                user_message,
+                skill_name,
+                context,
+                f"Unsupported model planner schema_version: {context.planner_schema_version}",
+            )
+        if context.tool_schema_version != TOOL_SCHEMA_VERSION:
+            return self._blocked(
+                project,
+                user_message,
+                skill_name,
+                context,
+                f"Unsupported Atelier tool_schema_version: {context.tool_schema_version}",
+            )
+
+        sanitized_calls: List[Dict[str, Any]] = []
+        for index, raw_call in enumerate(draft_calls):
+            if not isinstance(raw_call, dict):
+                return self._blocked(
+                    project,
+                    user_message,
+                    skill_name,
+                    context,
+                    f"Model planner tool call #{index + 1} must be an object.",
+                )
+            tool_name = str(raw_call.get("tool_name") or raw_call.get("name") or "")
+            if not tool_name or not self.tool_registry.get(tool_name):
+                return self._blocked(
+                    project,
+                    user_message,
+                    skill_name,
+                    context,
+                    f"Model planner proposed an unknown Atelier tool: {tool_name or '<empty>'}",
+                )
+            arguments = raw_call.get("arguments") or {}
+            if not isinstance(arguments, dict):
+                return self._blocked(
+                    project,
+                    user_message,
+                    skill_name,
+                    context,
+                    f"Model planner arguments for {tool_name} must be an object.",
+                )
+            sanitized_calls.append({"tool_name": tool_name, "arguments": dict(arguments)})
+
+        context.planner_input = self._context_input(planner_input_payload, sanitized_calls)
+
+        return AtelierAgentPlan(
+            project_id=project.id,
+            user_message=user_message,
+            planner=self.name,
+            skill_name=skill_name or str(planner_input_payload.get("skill_name") or "model-planner"),
+            status="ready",
+            reason="Model planner produced a validated Atelier tool-call plan.",
+            tool_calls=sanitized_calls,
+            context=context,
+        )
+
+    @staticmethod
+    def _optional_string(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        return str(value)
+
+    @staticmethod
+    def _context_input(
+        planner_input: Dict[str, Any],
+        tool_calls: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
+        context_input = {
+            key: planner_input[key]
+            for key in PLANNER_CONTEXT_INPUT_KEYS
+            if key in planner_input
+        }
+        if tool_calls is not None:
+            context_input["tool_calls"] = tool_calls
+        return context_input
+
+    def _blocked(
+        self,
+        project: AtelierProject,
+        user_message: str,
+        skill_name: Optional[str],
+        context: AtelierAgentPlanContext,
+        reason: str,
+    ) -> AtelierAgentPlan:
+        return AtelierAgentPlan(
+            project_id=project.id,
+            user_message=user_message,
+            planner=self.name,
+            skill_name=skill_name,
+            status="blocked",
+            reason=reason,
+            context=context,
+        )
+
+
 class AtelierPermissionEnforcer:
     def evaluate(
         self,
@@ -286,7 +431,7 @@ class AtelierAgentHarness:
     def __init__(self, pipeline: Any):
         self.pipeline = pipeline
         self.registry = build_default_atelier_tool_registry()
-        self.planner_registry = build_default_atelier_planner_registry()
+        self.planner_registry = build_default_atelier_planner_registry(self.registry)
         self.enforcer = AtelierPermissionEnforcer()
 
     def list_tool_specs(self) -> List[Dict[str, Any]]:
@@ -310,6 +455,7 @@ class AtelierAgentHarness:
         selected_node_id: Optional[str] = None,
         skill_name: Optional[str] = None,
         planner_name: Optional[str] = None,
+        planner_input: Optional[Dict[str, Any]] = None,
     ) -> AtelierAgentPlan:
         project = self.pipeline.get_atelier_project(project_id)
         if not project:
@@ -324,13 +470,17 @@ class AtelierAgentHarness:
                 skill_name=skill_name,
                 status="blocked",
                 reason=f"Unknown Atelier agent planner: {planner_name}",
-                context=AtelierAgentPlanContext(selected_node_id=selected_node_id),
+                context=AtelierAgentPlanContext(
+                    selected_node_id=selected_node_id,
+                    planner_input=dict(planner_input or {}),
+                ),
             )
         return planner.plan(
             project=project,
             user_message=user_message,
             selected_node_id=selected_node_id,
             skill_name=skill_name,
+            planner_input=planner_input,
         )
 
     def run_turn(
@@ -736,7 +886,10 @@ def build_default_atelier_tool_registry() -> AtelierToolRegistry:
     return registry
 
 
-def build_default_atelier_planner_registry() -> AtelierPlannerRegistry:
+def build_default_atelier_planner_registry(
+    tool_registry: Optional[AtelierToolRegistry] = None,
+) -> AtelierPlannerRegistry:
     registry = AtelierPlannerRegistry()
     registry.register(DeterministicCorePlanner())
+    registry.register(ModelAdapterPlanner(tool_registry or build_default_atelier_tool_registry()))
     return registry

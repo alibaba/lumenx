@@ -112,30 +112,60 @@ describe('atelier store canvas interactions', () => {
         vi.mocked(api.planAtelierAgentTurn).mockResolvedValueOnce({
             project_id: 'atelier-1',
             user_message: 'Create a moonlit chase shot',
-            planner: 'deterministic_core',
+            planner: 'model_adapter',
             skill_name: 'idea-to-canvas',
             status: 'ready',
-            reason: 'Create a draft video node from the user intent.',
+            reason: 'Model planner produced a validated Atelier tool-call plan.',
             tool_calls: [
                 {
                     tool_name: 'canvas.createVideoNode',
                     arguments: { title: 'Create a moonlit chase shot', prompt: 'Create a moonlit chase shot' },
                 },
             ],
-            context: { selected_node_id: 'node-1' },
+            context: {
+                selected_node_id: 'node-1',
+                planner_schema_version: 'atelier.agent.planner.v1',
+                planner_adapter_name: 'unit-test-adapter',
+                tool_schema_version: 'atelier.tools.v1',
+                model_trace_id: 'trace-1',
+            },
             created_at: 2,
         });
 
         const plan = await useAtelierStore.getState().planAgentTurn({
             user_message: 'Create a moonlit chase shot',
             selected_node_id: 'node-1',
-            planner: 'deterministic_core',
+            planner: 'model_adapter',
+            planner_input: {
+                schema_version: 'atelier.agent.planner.v1',
+                adapter_name: 'unit-test-adapter',
+                tool_schema_version: 'atelier.tools.v1',
+                model_trace_id: 'trace-1',
+                tool_calls: [
+                    {
+                        tool_name: 'canvas.createVideoNode',
+                        arguments: { title: 'Create a moonlit chase shot' },
+                    },
+                ],
+            },
         });
 
         expect(api.planAtelierAgentTurn).toHaveBeenCalledWith('atelier-1', {
             user_message: 'Create a moonlit chase shot',
             selected_node_id: 'node-1',
-            planner: 'deterministic_core',
+            planner: 'model_adapter',
+            planner_input: {
+                schema_version: 'atelier.agent.planner.v1',
+                adapter_name: 'unit-test-adapter',
+                tool_schema_version: 'atelier.tools.v1',
+                model_trace_id: 'trace-1',
+                tool_calls: [
+                    {
+                        tool_name: 'canvas.createVideoNode',
+                        arguments: { title: 'Create a moonlit chase shot' },
+                    },
+                ],
+            },
         });
         expect(plan.tool_calls[0].tool_name).toBe('canvas.createVideoNode');
     });

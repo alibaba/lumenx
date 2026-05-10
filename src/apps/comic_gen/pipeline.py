@@ -2766,6 +2766,7 @@ class ComicGenPipeline:
         selected_node_id: Optional[str] = None,
         skill_name: Optional[str] = None,
         planner: Optional[str] = None,
+        planner_input: Optional[Dict[str, Any]] = None,
     ) -> AtelierAgentPlan:
         return AtelierAgentHarness(self).plan_turn(
             project_id=project_id,
@@ -2773,6 +2774,7 @@ class ComicGenPipeline:
             selected_node_id=selected_node_id,
             skill_name=skill_name,
             planner_name=planner,
+            planner_input=planner_input,
         )
 
     def run_atelier_agent_turn(

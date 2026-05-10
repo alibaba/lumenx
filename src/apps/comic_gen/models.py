@@ -401,6 +401,11 @@ class AtelierAgentToolCall(BaseModel):
 
 class AtelierAgentPlanContext(BaseModel):
     selected_node_id: Optional[str] = None
+    planner_input: Dict[str, Any] = Field(default_factory=dict)
+    planner_schema_version: str = Field("atelier.agent.planner.v1", description="Planner input/output envelope version")
+    planner_adapter_name: Optional[str] = None
+    tool_schema_version: str = Field("atelier.tools.v1", description="Tool schema version visible to the planner")
+    model_trace_id: Optional[str] = None
 
 
 class AtelierAgentPlan(BaseModel):

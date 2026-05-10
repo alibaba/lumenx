@@ -622,6 +622,103 @@ def test_atelier_agent_planner_blocks_unknown_planner_without_tool_calls(pipelin
     assert project.nodes == []
 
 
+def test_atelier_agent_model_adapter_planner_accepts_validated_tool_calls(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "Create a moonlit chase shot",
+        planner="model_adapter",
+        planner_input={
+            "schema_version": "atelier.agent.planner.v1",
+            "adapter_name": "unit-test-adapter",
+            "tool_schema_version": "atelier.tools.v1",
+            "model_trace_id": "trace-1",
+            "skill_name": "idea-to-canvas",
+            "raw_provider_payload": {"secret": "do-not-echo"},
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {
+                        "title": "Moonlit chase",
+                        "prompt": "A moonlit chase across rooftops",
+                    },
+                }
+            ],
+        },
+    )
+
+    assert plan.status == "ready"
+    assert plan.planner == "model_adapter"
+    assert plan.skill_name == "idea-to-canvas"
+    assert plan.reason == "Model planner produced a validated Atelier tool-call plan."
+    assert plan.context.planner_input["skill_name"] == "idea-to-canvas"
+    assert "raw_provider_payload" not in plan.context.planner_input
+    assert plan.context.planner_schema_version == "atelier.agent.planner.v1"
+    assert plan.context.planner_adapter_name == "unit-test-adapter"
+    assert plan.context.tool_schema_version == "atelier.tools.v1"
+    assert plan.context.model_trace_id == "trace-1"
+    assert plan.tool_calls == [
+        {
+            "tool_name": "canvas.createVideoNode",
+            "arguments": {
+                "title": "Moonlit chase",
+                "prompt": "A moonlit chase across rooftops",
+            },
+        }
+    ]
+    assert project.nodes == []
+
+
+def test_atelier_agent_model_adapter_planner_blocks_unsupported_schema_version(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "Create a moonlit chase shot",
+        planner="model_adapter",
+        planner_input={
+            "schema_version": "atelier.agent.planner.v0",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"prompt": "A moonlit chase"},
+                }
+            ],
+        },
+    )
+
+    assert plan.status == "blocked"
+    assert plan.planner == "model_adapter"
+    assert plan.tool_calls == []
+    assert "Unsupported model planner schema_version" in plan.reason
+    assert project.nodes == []
+
+
+def test_atelier_agent_model_adapter_planner_blocks_unknown_tools(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "Delete everything",
+        planner="model_adapter",
+        planner_input={
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.deleteProject",
+                    "arguments": {"project_id": project.id},
+                }
+            ],
+        },
+    )
+
+    assert plan.status == "blocked"
+    assert plan.planner == "model_adapter"
+    assert plan.tool_calls == []
+    assert "unknown Atelier tool" in plan.reason
+    assert project.nodes == []
+
+
 def test_atelier_agent_planner_updates_selected_video_prompt(pipeline):
     project = pipeline.create_atelier_project("Board")
     video = pipeline.create_atelier_node(

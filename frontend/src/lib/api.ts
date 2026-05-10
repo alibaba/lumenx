@@ -95,6 +95,11 @@ export interface AtelierAgentToolCall {
 
 export interface AtelierAgentPlanContext {
     selected_node_id?: string | null;
+    planner_input?: Record<string, unknown>;
+    planner_schema_version?: string;
+    planner_adapter_name?: string | null;
+    tool_schema_version?: string;
+    model_trace_id?: string | null;
 }
 
 export interface AtelierAgentPlan {
@@ -149,6 +154,7 @@ export interface PlanAtelierAgentTurnPayload {
     selected_node_id?: string | null;
     skill_name?: string | null;
     planner?: string | null;
+    planner_input?: Record<string, unknown>;
 }
 
 export interface AtelierNode {

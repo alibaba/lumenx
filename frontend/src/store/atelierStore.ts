@@ -30,6 +30,7 @@ interface AtelierStore {
         selected_node_id?: string | null;
         skill_name?: string | null;
         planner?: string | null;
+        planner_input?: Record<string, unknown>;
     }) => Promise<AtelierAgentPlan>;
     updateAgentPolicy: (
         policy: Partial<Pick<AtelierAgentPolicy, "approval_mode" | "allowed_tools" | "max_nodes_per_action">>

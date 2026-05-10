@@ -96,17 +96,36 @@ describe('atelier API client', () => {
             data: {
                 project_id: 'atelier-1',
                 user_message: 'Create a moonlit chase shot',
-                planner: 'deterministic_core',
+                planner: 'model_adapter',
                 skill_name: 'idea-to-canvas',
                 status: 'ready',
-                reason: 'Create a draft video node from the user intent.',
+                reason: 'Model planner produced a validated Atelier tool-call plan.',
                 tool_calls: [
                     {
                         tool_name: 'canvas.createVideoNode',
                         arguments: { prompt: 'Create a moonlit chase shot' },
                     },
                 ],
-                context: { selected_node_id: null },
+                context: {
+                    selected_node_id: null,
+                    planner_schema_version: 'atelier.agent.planner.v1',
+                    planner_adapter_name: 'unit-test-adapter',
+                    tool_schema_version: 'atelier.tools.v1',
+                    model_trace_id: 'trace-1',
+                    planner_input: {
+                        schema_version: 'atelier.agent.planner.v1',
+                        adapter_name: 'unit-test-adapter',
+                        tool_schema_version: 'atelier.tools.v1',
+                        model_trace_id: 'trace-1',
+                        skill_name: 'idea-to-canvas',
+                        tool_calls: [
+                            {
+                                tool_name: 'canvas.createVideoNode',
+                                arguments: { title: 'Moonlit chase' },
+                            },
+                        ],
+                    },
+                },
                 created_at: 2,
             },
         });
@@ -115,7 +134,20 @@ describe('atelier API client', () => {
         const plan = await api.planAtelierAgentTurn('atelier-1', {
             user_message: 'Create a moonlit chase shot',
             selected_node_id: null,
-            planner: 'deterministic_core',
+            planner: 'model_adapter',
+            planner_input: {
+                schema_version: 'atelier.agent.planner.v1',
+                adapter_name: 'unit-test-adapter',
+                tool_schema_version: 'atelier.tools.v1',
+                model_trace_id: 'trace-1',
+                skill_name: 'idea-to-canvas',
+                tool_calls: [
+                    {
+                        tool_name: 'canvas.createVideoNode',
+                        arguments: { title: 'Moonlit chase' },
+                    },
+                ],
+            },
         });
 
         expect(mockedAxios.post).toHaveBeenCalledWith(
@@ -123,10 +155,23 @@ describe('atelier API client', () => {
             {
                 user_message: 'Create a moonlit chase shot',
                 selected_node_id: null,
-                planner: 'deterministic_core',
+                planner: 'model_adapter',
+                planner_input: {
+                    schema_version: 'atelier.agent.planner.v1',
+                    adapter_name: 'unit-test-adapter',
+                    tool_schema_version: 'atelier.tools.v1',
+                    model_trace_id: 'trace-1',
+                    skill_name: 'idea-to-canvas',
+                    tool_calls: [
+                        {
+                            tool_name: 'canvas.createVideoNode',
+                            arguments: { title: 'Moonlit chase' },
+                        },
+                    ],
+                },
             }
         );
-        expect(plan.planner).toBe('deterministic_core');
+        expect(plan.planner).toBe('model_adapter');
         expect(plan.tool_calls[0].tool_name).toBe('canvas.createVideoNode');
     });
 
