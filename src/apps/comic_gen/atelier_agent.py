@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
 from .models import (
     AtelierAgentPlan,
     AtelierAgentPlanContext,
+    AtelierAgentPlannerPackage,
     AtelierAgentPolicy,
     AtelierAgentToolCall,
     AtelierAgentToolStatus,
@@ -30,6 +31,30 @@ PLANNER_CONTEXT_INPUT_KEYS = {
     "model_trace_id",
     "skill_name",
 }
+PLANNER_OUTPUT_CONTRACT = {
+    "schema_version": PLANNER_SCHEMA_VERSION,
+    "tool_schema_version": TOOL_SCHEMA_VERSION,
+    "required_top_level_keys": ["tool_calls"],
+    "tool_call_shape": {
+        "tool_name": "registered Atelier tool name",
+        "arguments": "object matching the registered tool input_schema",
+    },
+    "execution_boundary": "Planner output is advisory. Execute only through /atelier/projects/{project_id}/agent/turns.",
+}
+
+
+def _redact_planner_context_input(
+    planner_input: Dict[str, Any],
+    tool_calls: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    context_input = {
+        key: planner_input[key]
+        for key in PLANNER_CONTEXT_INPUT_KEYS
+        if key in planner_input
+    }
+    if tool_calls is not None:
+        context_input["tool_calls"] = tool_calls
+    return context_input
 
 
 @dataclass(frozen=True)
@@ -280,7 +305,7 @@ class ModelAdapterPlanner:
         planner_input_payload = dict(planner_input or {})
         context = AtelierAgentPlanContext(
             selected_node_id=selected_node_id,
-            planner_input=self._context_input(planner_input_payload),
+            planner_input=_redact_planner_context_input(planner_input_payload),
             planner_schema_version=str(planner_input_payload.get("schema_version") or PLANNER_SCHEMA_VERSION),
             planner_adapter_name=self._optional_string(planner_input_payload.get("adapter_name")),
             tool_schema_version=str(planner_input_payload.get("tool_schema_version") or TOOL_SCHEMA_VERSION),
@@ -345,7 +370,7 @@ class ModelAdapterPlanner:
                 )
             sanitized_calls.append({"tool_name": tool_name, "arguments": dict(arguments)})
 
-        context.planner_input = self._context_input(planner_input_payload, sanitized_calls)
+        context.planner_input = _redact_planner_context_input(planner_input_payload, sanitized_calls)
 
         return AtelierAgentPlan(
             project_id=project.id,
@@ -363,20 +388,6 @@ class ModelAdapterPlanner:
         if value is None:
             return None
         return str(value)
-
-    @staticmethod
-    def _context_input(
-        planner_input: Dict[str, Any],
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
-    ) -> Dict[str, Any]:
-        context_input = {
-            key: planner_input[key]
-            for key in PLANNER_CONTEXT_INPUT_KEYS
-            if key in planner_input
-        }
-        if tool_calls is not None:
-            context_input["tool_calls"] = tool_calls
-        return context_input
 
     def _blocked(
         self,
@@ -448,6 +459,41 @@ class AtelierAgentHarness:
             for spec in self.registry.list_specs()
         ]
 
+    def build_planner_package(
+        self,
+        project_id: str,
+        user_message: str = "",
+        selected_node_id: Optional[str] = None,
+        skill_name: Optional[str] = None,
+    ) -> AtelierAgentPlannerPackage:
+        project = self.pipeline.get_atelier_project(project_id)
+        if not project:
+            raise ValueError("Atelier project not found")
+        selected_node = None
+        if selected_node_id:
+            selected_node = next((node for node in project.nodes if node.id == selected_node_id), None)
+            if not selected_node:
+                raise ValueError("Selected Atelier node was not found")
+        return AtelierAgentPlannerPackage(
+            project_id=project.id,
+            user_message=user_message,
+            selected_node_id=selected_node_id,
+            skill_name=skill_name,
+            planner_schema_version=PLANNER_SCHEMA_VERSION,
+            tool_schema_version=TOOL_SCHEMA_VERSION,
+            output_contract=dict(PLANNER_OUTPUT_CONTRACT),
+            tool_schemas=self.list_tool_specs(),
+            project_snapshot={
+                "id": project.id,
+                "title": project.title,
+                "description": project.description,
+                "node_count": len(project.nodes),
+                "nodes": [_compact_node(node) for node in project.nodes],
+            },
+            selected_node_snapshot=_compact_node(selected_node) if selected_node else None,
+            policy_snapshot=project.agent_policy.model_dump(mode="json"),
+        )
+
     def plan_turn(
         self,
         project_id: str,
@@ -472,7 +518,7 @@ class AtelierAgentHarness:
                 reason=f"Unknown Atelier agent planner: {planner_name}",
                 context=AtelierAgentPlanContext(
                     selected_node_id=selected_node_id,
-                    planner_input=dict(planner_input or {}),
+                    planner_input=_redact_planner_context_input(dict(planner_input or {})),
                 ),
             )
         return planner.plan(

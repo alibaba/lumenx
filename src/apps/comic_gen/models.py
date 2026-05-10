@@ -408,6 +408,21 @@ class AtelierAgentPlanContext(BaseModel):
     model_trace_id: Optional[str] = None
 
 
+class AtelierAgentPlannerPackage(BaseModel):
+    project_id: str
+    user_message: str = ""
+    selected_node_id: Optional[str] = None
+    skill_name: Optional[str] = None
+    planner_schema_version: str = "atelier.agent.planner.v1"
+    tool_schema_version: str = "atelier.tools.v1"
+    output_contract: Dict[str, Any] = Field(default_factory=dict)
+    tool_schemas: List[Dict[str, Any]] = Field(default_factory=list)
+    project_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    selected_node_snapshot: Optional[Dict[str, Any]] = None
+    policy_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    created_at: float = Field(default_factory=time.time)
+
+
 class AtelierAgentPlan(BaseModel):
     project_id: str
     user_message: str = ""

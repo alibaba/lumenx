@@ -16,6 +16,7 @@ from .pipeline import ComicGenPipeline
 from .models import (
     AtelierAgentTurn,
     AtelierAgentPlan,
+    AtelierAgentPlannerPackage,
     AtelierNode,
     AtelierProject,
     PromptConfig,
@@ -392,6 +393,12 @@ class PlanAtelierAgentTurnRequest(BaseModel):
     planner_input: Dict[str, Any] = Field(default_factory=dict)
 
 
+class BuildAtelierAgentPlannerPackageRequest(BaseModel):
+    user_message: str = ""
+    selected_node_id: Optional[str] = None
+    skill_name: Optional[str] = None
+
+
 @app.post("/atelier/projects", response_model=AtelierProject)
 async def create_atelier_project(request: CreateAtelierProjectRequest):
     try:
@@ -452,6 +459,20 @@ async def list_atelier_agent_tools(project_id: str):
     if not pipeline.get_atelier_project(project_id):
         raise HTTPException(status_code=404, detail="Atelier project not found")
     return pipeline.list_atelier_agent_tools()
+
+
+@app.post("/atelier/projects/{project_id}/agent/planner_package", response_model=AtelierAgentPlannerPackage)
+async def build_atelier_agent_planner_package(project_id: str, request: BuildAtelierAgentPlannerPackageRequest):
+    try:
+        package = pipeline.build_atelier_agent_planner_package(
+            project_id=project_id,
+            user_message=request.user_message,
+            selected_node_id=request.selected_node_id,
+            skill_name=request.skill_name,
+        )
+        return signed_response(package)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
 
 
 @app.post("/atelier/projects/{project_id}/agent/plan", response_model=AtelierAgentPlan)

@@ -613,11 +613,18 @@ def test_atelier_agent_planner_blocks_unknown_planner_without_tool_calls(pipelin
         project.id,
         "Create a moonlit chase shot",
         planner="model_planner_vNext",
+        planner_input={
+            "schema_version": "atelier.agent.planner.v1",
+            "adapter_name": "unit-test-adapter",
+            "raw_provider_payload": {"secret": "do-not-echo"},
+        },
     )
 
     assert plan.status == "blocked"
     assert plan.planner == "model_planner_vNext"
     assert plan.tool_calls == []
+    assert plan.context.planner_input["adapter_name"] == "unit-test-adapter"
+    assert "raw_provider_payload" not in plan.context.planner_input
     assert "Unknown Atelier agent planner" in plan.reason
     assert project.nodes == []
 
@@ -668,6 +675,38 @@ def test_atelier_agent_model_adapter_planner_accepts_validated_tool_calls(pipeli
         }
     ]
     assert project.nodes == []
+
+
+def test_atelier_agent_planner_package_includes_core_snapshot_and_tool_schemas(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    video = pipeline.create_atelier_node(
+        project.id,
+        {
+            "type": "video",
+            "title": "Shot",
+            "prompt": "A rooftop chase",
+            "data": {"model": "wan2.7-i2v"},
+        },
+    )
+
+    package = pipeline.build_atelier_agent_planner_package(
+        project.id,
+        user_message="Adapt the shot for a reference image",
+        selected_node_id=video.id,
+        skill_name="idea-to-canvas",
+    )
+
+    assert package.project_id == project.id
+    assert package.planner_schema_version == "atelier.agent.planner.v1"
+    assert package.tool_schema_version == "atelier.tools.v1"
+    assert package.output_contract["schema_version"] == "atelier.agent.planner.v1"
+    assert package.output_contract["tool_schema_version"] == "atelier.tools.v1"
+    assert package.project_snapshot["node_count"] == 1
+    assert package.selected_node_snapshot["id"] == video.id
+    assert package.selected_node_snapshot["prompt"] == "A rooftop chase"
+    assert any(tool["name"] == "canvas.createVideoNode" for tool in package.tool_schemas)
+    assert package.policy_snapshot["approval_mode"] == project.agent_policy.approval_mode.value
+    assert project.nodes[0].title == "Shot"
 
 
 def test_atelier_agent_model_adapter_planner_blocks_unsupported_schema_version(pipeline):

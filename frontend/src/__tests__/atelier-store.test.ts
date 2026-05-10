@@ -5,6 +5,7 @@ vi.mock('@/lib/api', () => ({
     api: {
         getAtelierProject: vi.fn(),
         listAtelierAgentTools: vi.fn(),
+        buildAtelierAgentPlannerPackage: vi.fn(),
         planAtelierAgentTurn: vi.fn(),
         runAtelierAgentTurn: vi.fn(),
         updateAtelierAgentPolicy: vi.fn(),
@@ -168,6 +169,63 @@ describe('atelier store canvas interactions', () => {
             },
         });
         expect(plan.tool_calls[0].tool_name).toBe('canvas.createVideoNode');
+    });
+
+    it('requests planner packages from Atelier Core without mutating local canvas state', async () => {
+        const { api } = await import('@/lib/api');
+        const { useAtelierStore } = await import('@/store/atelierStore');
+        vi.mocked(api.buildAtelierAgentPlannerPackage).mockResolvedValueOnce({
+            project_id: 'atelier-1',
+            user_message: 'Adapt the shot for a reference image',
+            selected_node_id: 'node-1',
+            skill_name: 'idea-to-canvas',
+            planner_schema_version: 'atelier.agent.planner.v1',
+            tool_schema_version: 'atelier.tools.v1',
+            output_contract: {
+                schema_version: 'atelier.agent.planner.v1',
+                tool_schema_version: 'atelier.tools.v1',
+            },
+            tool_schemas: [
+                {
+                    name: 'canvas.createVideoNode',
+                    description: 'Create a video node',
+                    input_schema: { type: 'object' },
+                    required_permission: 'canvas_write',
+                    mutates_canvas: true,
+                    max_count_cost: 1,
+                    requires_approval: false,
+                },
+            ],
+            project_snapshot: {
+                id: 'atelier-1',
+                title: 'Board',
+                description: '',
+                node_count: 1,
+                nodes: [],
+            },
+            selected_node_snapshot: null,
+            policy_snapshot: {
+                approval_mode: 'untrusted',
+                allowed_tools: [],
+                max_nodes_per_action: 8,
+                updated_at: 2,
+            },
+            created_at: 2,
+        });
+
+        const packageResult = await useAtelierStore.getState().buildPlannerPackage({
+            user_message: 'Adapt the shot for a reference image',
+            selected_node_id: 'node-1',
+            skill_name: 'idea-to-canvas',
+        });
+
+        expect(api.buildAtelierAgentPlannerPackage).toHaveBeenCalledWith('atelier-1', {
+            user_message: 'Adapt the shot for a reference image',
+            selected_node_id: 'node-1',
+            skill_name: 'idea-to-canvas',
+        });
+        expect(packageResult.output_contract.schema_version).toBe('atelier.agent.planner.v1');
+        expect(packageResult.tool_schemas[0].name).toBe('canvas.createVideoNode');
     });
 
     it('updates agent policy through the shared Atelier project state', async () => {

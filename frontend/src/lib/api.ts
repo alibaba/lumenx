@@ -102,6 +102,27 @@ export interface AtelierAgentPlanContext {
     model_trace_id?: string | null;
 }
 
+export interface AtelierAgentPlannerPackage {
+    project_id: string;
+    user_message: string;
+    selected_node_id?: string | null;
+    skill_name?: string | null;
+    planner_schema_version: string;
+    tool_schema_version: string;
+    output_contract: Record<string, unknown>;
+    tool_schemas: AtelierAgentToolSpec[];
+    project_snapshot: {
+        id: string;
+        title: string;
+        description: string;
+        node_count: number;
+        nodes: AtelierNode[];
+    };
+    selected_node_snapshot?: AtelierNode | null;
+    policy_snapshot: AtelierAgentPolicy;
+    created_at: number;
+}
+
 export interface AtelierAgentPlan {
     project_id: string;
     user_message: string;
@@ -155,6 +176,12 @@ export interface PlanAtelierAgentTurnPayload {
     skill_name?: string | null;
     planner?: string | null;
     planner_input?: Record<string, unknown>;
+}
+
+export interface BuildAtelierAgentPlannerPackagePayload {
+    user_message?: string;
+    selected_node_id?: string | null;
+    skill_name?: string | null;
 }
 
 export interface AtelierNode {
@@ -915,6 +942,13 @@ export const api = {
     },
     listAtelierAgentTools: async (projectId: string): Promise<AtelierAgentToolSpec[]> => {
         const response = await axios.get(`${API_URL}/atelier/projects/${projectId}/agent/tools`);
+        return response.data;
+    },
+    buildAtelierAgentPlannerPackage: async (
+        projectId: string,
+        payload: BuildAtelierAgentPlannerPackagePayload
+    ): Promise<AtelierAgentPlannerPackage> => {
+        const response = await axios.post(`${API_URL}/atelier/projects/${projectId}/agent/planner_package`, payload);
         return response.data;
     },
     planAtelierAgentTurn: async (
