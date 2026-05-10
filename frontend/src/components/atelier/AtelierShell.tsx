@@ -3,10 +3,20 @@
 import type React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Film, Image as ImageIcon, Link2, Loader2, Plus, RefreshCw, RotateCcw, ShieldCheck, Trash2, Unlink2, Upload, Wand2, X } from "lucide-react";
-import { type AtelierAgentToolCallPayload, type AtelierAgentTurn, type AtelierApprovalMode, type AtelierNode, type AtelierVideoCandidate } from "@/lib/api";
+import {
+    type AtelierAgentPlanContext as CoreAtelierAgentPlanContext,
+    type AtelierAgentPlannerPackage,
+    type AtelierAgentToolCallPayload,
+    type AtelierAgentTurn,
+    type AtelierApprovalMode,
+    type AtelierNode,
+    type AtelierVideoCandidate,
+} from "@/lib/api";
 import { buildReferenceLinks, findVideoDropTarget, getAtelierReferenceNodeIds as getReferenceNodeIds } from "@/lib/atelierCanvas";
 import {
     getAtelierAgentPlanContext,
+    getAtelierPlanContextRows,
+    getAtelierPlannerPackageRows,
     isAgentTurnBlocked,
     isAtelierAgentPlanStale,
     validateAtelierAgentIntent,
@@ -105,10 +115,14 @@ const APPROVAL_MODE_OPTIONS: Array<{ value: AtelierApprovalMode; label: string; 
 
 function clearPlannedAgentTurn(
     setPreviewTurn: (turn: AtelierAgentTurn | null) => void,
-    setPlannedToolCalls: (calls: AtelierAgentToolCallPayload[]) => void
+    setPlannedToolCalls: (calls: AtelierAgentToolCallPayload[]) => void,
+    setPlannerPackage?: (plannerPackage: AtelierAgentPlannerPackage | null) => void,
+    setPlanContext?: (context: CoreAtelierAgentPlanContext | null) => void
 ) {
     setPreviewTurn(null);
     setPlannedToolCalls([]);
+    setPlannerPackage?.(null);
+    setPlanContext?.(null);
 }
 
 function getNodeCenter(node: AtelierNode) {
@@ -927,6 +941,7 @@ function AgentPanel() {
     const isAgentRunning = useAtelierStore((state) => state.isAgentRunning);
     const attachReferenceNode = useAtelierStore((state) => state.attachReferenceNode);
     const loadAgentTools = useAtelierStore((state) => state.loadAgentTools);
+    const buildPlannerPackage = useAtelierStore((state) => state.buildPlannerPackage);
     const planAgentTurn = useAtelierStore((state) => state.planAgentTurn);
     const updateAgentPolicy = useAtelierStore((state) => state.updateAgentPolicy);
     const runAgentTurn = useAtelierStore((state) => state.runAgentTurn);
@@ -934,6 +949,8 @@ function AgentPanel() {
     const [agentInput, setAgentInput] = useState("");
     const [plannedToolCalls, setPlannedToolCalls] = useState<AtelierAgentToolCallPayload[]>([]);
     const [previewTurn, setPreviewTurn] = useState<AtelierAgentTurn | null>(null);
+    const [plannerPackage, setPlannerPackage] = useState<AtelierAgentPlannerPackage | null>(null);
+    const [planContext, setPlanContext] = useState<CoreAtelierAgentPlanContext | null>(null);
     const [agentError, setAgentError] = useState<string | null>(null);
     const [isPolicyOpen, setIsPolicyOpen] = useState(false);
     const [isPolicyUpdating, setIsPolicyUpdating] = useState(false);
@@ -960,6 +977,8 @@ function AgentPanel() {
     const recentTurns = agentTurns.length > 0 ? [...agentTurns].slice(-5).reverse() : [];
     const activePlan = previewTurn ?? pendingAgentTurn;
     const pendingApprovalBlock = isAgentTurnBlocked(pendingAgentTurn);
+    const plannerPackageRows = useMemo(() => getAtelierPlannerPackageRows(plannerPackage), [plannerPackage]);
+    const planContextRows = useMemo(() => getAtelierPlanContextRows(planContext), [planContext]);
     const currentPlanContext = useMemo(
         () => getAtelierAgentPlanContext(projectId ?? null, project?.updated_at ?? null, project?.nodes.length ?? 0, selectedNode?.id ?? null, selectedNode?.updated_at ?? null),
         [projectId, project?.updated_at, project?.nodes.length, selectedNode?.id, selectedNode?.updated_at]
@@ -974,7 +993,7 @@ function AgentPanel() {
 
     useEffect(() => {
         if (!isAtelierAgentPlanStale(plannedContextRef.current, currentPlanContext)) return;
-        clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls);
+        clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls, setPlannerPackage, setPlanContext);
         setAgentError(null);
         plannedContextRef.current = null;
     }, [currentPlanContext]);
@@ -983,24 +1002,43 @@ function AgentPanel() {
         const validation = validateAtelierAgentIntent(agentInput);
         if (validation.error) {
             setAgentError(validation.error);
-            setPlannedToolCalls([]);
+            clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls, setPlannerPackage, setPlanContext);
             plannedContextRef.current = currentPlanContext;
             return { toolCalls: [], error: validation.error };
         }
-        const plan = await planAgentTurn({
-            user_message: agentInput,
-            selected_node_id: selectedNode?.id ?? null,
-        });
-        if (plan.status === "blocked") {
-            setAgentError(plan.reason);
-            setPlannedToolCalls([]);
+        setPlannedToolCalls([]);
+        setPlannerPackage(null);
+        setPlanContext(null);
+        try {
+            const packageSnapshot = await buildPlannerPackage({
+                user_message: agentInput,
+                selected_node_id: selectedNode?.id ?? null,
+            });
+            setPlannerPackage(packageSnapshot);
+            const plan = await planAgentTurn({
+                user_message: agentInput,
+                selected_node_id: selectedNode?.id ?? null,
+            });
+            if (plan.status === "blocked") {
+                setAgentError(plan.reason);
+                setPlannedToolCalls([]);
+                setPlanContext(plan.context);
+                plannedContextRef.current = currentPlanContext;
+                return { toolCalls: [], error: plan.reason };
+            }
+            setAgentError(null);
+            setPlannedToolCalls(plan.tool_calls);
+            setPlanContext(plan.context);
             plannedContextRef.current = currentPlanContext;
-            return { toolCalls: [], error: plan.reason };
+            return { toolCalls: plan.tool_calls, error: null };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Agent planning failed";
+            setAgentError(message);
+            setPlannedToolCalls([]);
+            setPlanContext(null);
+            plannedContextRef.current = currentPlanContext;
+            return { toolCalls: [], error: message };
         }
-        setAgentError(null);
-        setPlannedToolCalls(plan.tool_calls);
-        plannedContextRef.current = currentPlanContext;
-        return { toolCalls: plan.tool_calls, error: null };
     };
 
     const updatePolicy = async (
@@ -1078,7 +1116,7 @@ function AgentPanel() {
                 setPreviewTurn(turn);
                 plannedContextRef.current = currentPlanContext;
             } else {
-                clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls);
+                clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls, setPlannerPackage, setPlanContext);
                 plannedContextRef.current = null;
             }
         } catch (error) {
@@ -1097,7 +1135,7 @@ function AgentPanel() {
                 approve: true,
                 turn_id: pendingAgentTurn?.id,
             });
-            clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls);
+            clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls, setPlannerPackage, setPlanContext);
             plannedContextRef.current = null;
         } catch (error) {
             setAgentError(error instanceof Error ? error.message : "Agent approval failed");
@@ -1114,7 +1152,7 @@ function AgentPanel() {
                 deny: true,
                 turn_id: pendingAgentTurn.id,
             });
-            clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls);
+            clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls, setPlannerPackage, setPlanContext);
             plannedContextRef.current = null;
         } catch (error) {
             setAgentError(error instanceof Error ? error.message : "Agent denial failed");
@@ -1241,7 +1279,7 @@ function AgentPanel() {
                             value={agentInput}
                             onChange={(event) => {
                                 setAgentInput(event.target.value);
-                                clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls);
+                                clearPlannedAgentTurn(setPreviewTurn, setPlannedToolCalls, setPlannerPackage, setPlanContext);
                                 plannedContextRef.current = null;
                             }}
                             rows={4}
@@ -1272,6 +1310,34 @@ function AgentPanel() {
                     {agentError && (
                         <div className="rounded border border-red-400/30 bg-red-500/10 px-2 py-1.5 text-red-100">
                             {agentError}
+                        </div>
+                    )}
+                    {(plannerPackageRows.length > 0 || planContextRows.length > 0) && (
+                        <div className="space-y-2 rounded-md border border-white/10 bg-black/20 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-semibold uppercase tracking-wide text-primary/80">Planner trace</span>
+                                <span className="min-w-0 truncate text-[10px] text-text-muted">{plannerPackage?.project_snapshot.title ?? project?.title}</span>
+                            </div>
+                            {plannerPackageRows.length > 0 && (
+                                <div className="space-y-1">
+                                    {plannerPackageRows.map((row) => (
+                                        <div key={`package-${row.label}`} className="flex items-start justify-between gap-2 rounded border border-white/10 bg-white/[0.03] px-2 py-1">
+                                            <span className="shrink-0 text-[10px] text-text-muted">{row.label}</span>
+                                            <span className="min-w-0 truncate text-right text-[10px] text-text-secondary">{row.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {planContextRows.length > 0 && (
+                                <div className="space-y-1 border-t border-white/10 pt-2">
+                                    {planContextRows.map((row) => (
+                                        <div key={`context-${row.label}`} className="flex items-start justify-between gap-2 px-1">
+                                            <span className="shrink-0 text-[10px] text-text-muted">{row.label}</span>
+                                            <span className="min-w-0 truncate text-right text-[10px] text-text-secondary">{row.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
                     {pendingAgentTurn && (
