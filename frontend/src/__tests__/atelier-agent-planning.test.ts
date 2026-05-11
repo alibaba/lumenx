@@ -1,15 +1,85 @@
 import { describe, expect, it } from 'vitest';
-import type { AtelierAgentTurn } from '@/lib/api';
+import type {
+    AtelierAgentPlanContext as CoreAtelierAgentPlanContext,
+    AtelierAgentPlannerPackage,
+    AtelierAgentTurn,
+} from '@/lib/api';
 import {
+    getAtelierAgentPanelViewModel,
     getAtelierAgentSessionSummary,
     getAtelierAgentTurnSummaries,
     getAtelierPlanContextRows,
     getAtelierAgentPlanContext,
     getAtelierPlannerPackageRows,
+    getAtelierPlannerReadiness,
     isAgentTurnBlocked,
     isAtelierAgentPlanStale,
     validateAtelierAgentIntent,
 } from '@/lib/atelierAgentPlanning';
+
+const plannerPackageFixture: AtelierAgentPlannerPackage = {
+    project_id: 'atelier-1',
+    user_message: 'Generate candidates',
+    selected_node_id: 'video-1',
+    planner_schema_version: 'atelier.agent.planner.v1',
+    tool_schema_version: 'atelier.tools.v1',
+    output_contract: {},
+    tool_schemas: [
+        {
+            name: 'create_video_node',
+            description: 'Create a video node',
+            input_schema: {},
+            required_permission: 'canvas_write',
+            mutates_canvas: true,
+            max_count_cost: 1,
+            requires_approval: true,
+        },
+    ],
+    project_snapshot: {
+        id: 'atelier-1',
+        title: 'Atelier Test',
+        description: '',
+        node_count: 1,
+        nodes: [],
+    },
+    selected_node_snapshot: {
+        id: 'video-1',
+        project_id: 'atelier-1',
+        type: 'video',
+        title: 'Shot A',
+        prompt: 'A long prompt should not appear in rows',
+        status: 'idle',
+        x: 0,
+        y: 0,
+        width: 320,
+        height: 220,
+        media_urls: [],
+        data: {},
+        created_by: 'user',
+        created_at: 1,
+        updated_at: 1,
+    },
+    policy_snapshot: {
+        approval_mode: 'untrusted',
+        allowed_tools: [],
+        max_nodes_per_action: 4,
+        updated_at: 1,
+    },
+    created_at: 1,
+};
+
+const plannerContextFixture: CoreAtelierAgentPlanContext = {
+    selected_node_id: 'video-1',
+    planner_schema_version: 'atelier.agent.planner.v1',
+    planner_adapter_name: 'unit-test-adapter',
+    tool_schema_version: 'atelier.tools.v1',
+    model_trace_id: 'trace-1',
+    planner_input: {
+        adapter_name: 'unit-test-adapter',
+        schema_version: 'atelier.agent.planner.v1',
+        tool_schema_version: 'atelier.tools.v1',
+    },
+};
 
 describe('atelier agent planning', () => {
     it('keeps local planning helpers limited to client-side intent validation', () => {
@@ -54,56 +124,7 @@ describe('atelier agent planning', () => {
     });
 
     it('summarizes planner packages without exposing raw canvas payloads', () => {
-        const rows = getAtelierPlannerPackageRows({
-            project_id: 'atelier-1',
-            user_message: 'Generate candidates',
-            selected_node_id: 'video-1',
-            planner_schema_version: 'atelier.agent.planner.v1',
-            tool_schema_version: 'atelier.tools.v1',
-            output_contract: {},
-            tool_schemas: [
-                {
-                    name: 'create_video_node',
-                    description: 'Create a video node',
-                    input_schema: {},
-                    required_permission: 'canvas_write',
-                    mutates_canvas: true,
-                    max_count_cost: 1,
-                    requires_approval: true,
-                },
-            ],
-            project_snapshot: {
-                id: 'atelier-1',
-                title: 'Atelier Test',
-                description: '',
-                node_count: 1,
-                nodes: [],
-            },
-            selected_node_snapshot: {
-                id: 'video-1',
-                project_id: 'atelier-1',
-                type: 'video',
-                title: 'Shot A',
-                prompt: 'A long prompt should not appear in rows',
-                status: 'idle',
-                x: 0,
-                y: 0,
-                width: 320,
-                height: 220,
-                media_urls: [],
-                data: {},
-                created_by: 'user',
-                created_at: 1,
-                updated_at: 1,
-            },
-            policy_snapshot: {
-                approval_mode: 'untrusted',
-                allowed_tools: [],
-                max_nodes_per_action: 4,
-                updated_at: 1,
-            },
-            created_at: 1,
-        });
+        const rows = getAtelierPlannerPackageRows(plannerPackageFixture);
 
         expect(rows).toContainEqual({ label: 'Tool scope', value: '1 registered' });
         expect(rows).toContainEqual({ label: 'Selected', value: 'Shot A · video' });
@@ -111,18 +132,7 @@ describe('atelier agent planning', () => {
     });
 
     it('summarizes redacted planner context keys instead of raw model input', () => {
-        const rows = getAtelierPlanContextRows({
-            selected_node_id: 'video-1',
-            planner_schema_version: 'atelier.agent.planner.v1',
-            planner_adapter_name: 'unit-test-adapter',
-            tool_schema_version: 'atelier.tools.v1',
-            model_trace_id: 'trace-1',
-            planner_input: {
-                adapter_name: 'unit-test-adapter',
-                schema_version: 'atelier.agent.planner.v1',
-                tool_schema_version: 'atelier.tools.v1',
-            },
-        });
+        const rows = getAtelierPlanContextRows(plannerContextFixture);
 
         expect(rows).toContainEqual({ label: 'Adapter', value: 'unit-test-adapter' });
         expect(rows).toContainEqual({ label: 'Model trace', value: 'trace-1' });
@@ -336,5 +346,76 @@ describe('atelier agent planning', () => {
                 turnId: 'turn-completed',
             },
         });
+    });
+
+    it('reports live planner readiness without invoking a live provider', () => {
+        expect(getAtelierPlannerReadiness(null, plannerContextFixture)).toMatchObject({
+            status: 'waiting_for_package',
+            label: 'Waiting for package',
+            plannerSchemaVersion: 'unknown',
+            toolSchemaVersion: 'unknown',
+            adapterName: 'unit-test-adapter',
+            modelTraceId: 'trace-1',
+        });
+
+        expect(getAtelierPlannerReadiness(plannerPackageFixture, plannerContextFixture)).toMatchObject({
+            status: 'ready',
+            label: 'Live planner contract ready',
+            plannerSchemaVersion: 'atelier.agent.planner.v1',
+            toolSchemaVersion: 'atelier.tools.v1',
+            adapterName: 'unit-test-adapter',
+            modelTraceId: 'trace-1',
+        });
+
+        expect(getAtelierPlannerReadiness(plannerPackageFixture, {
+            ...plannerContextFixture,
+            planner_schema_version: 'atelier.agent.planner.v2',
+        })).toMatchObject({
+            status: 'schema_mismatch',
+            label: 'Schema mismatch',
+        });
+    });
+
+    it('builds a redacted agent panel view model with focused history linkage', () => {
+        const turn = {
+            id: 'turn-1',
+            project_id: 'atelier-1',
+            user_message: 'Review this raw prompt without leaking it',
+            preview: false,
+            status: 'waiting_approval',
+            tool_calls: [
+                {
+                    call_id: 'call-1',
+                    tool_name: 'canvas.createVideoNode',
+                    arguments: { prompt: 'secret raw prompt' },
+                    status: 'approval_required',
+                    approval_required: true,
+                    approval_granted: false,
+                    result_snapshot: null,
+                    created_at: 1,
+                },
+            ],
+            created_at: 1,
+        } as AtelierAgentTurn;
+
+        const viewModel = getAtelierAgentPanelViewModel({
+            turns: [turn],
+            plannedCallCount: 1,
+            pendingTurn: turn,
+            isRunning: false,
+            plannerPackage: plannerPackageFixture,
+            planContext: plannerContextFixture,
+        });
+
+        expect(viewModel.session.status).toBe('waiting_approval');
+        expect(viewModel.focusedTurnId).toBe('turn-1');
+        expect(viewModel.history[0]).toMatchObject({
+            id: 'turn-1',
+            waitingApprovalCount: 1,
+        });
+        expect(viewModel.plannerReadiness.status).toBe('ready');
+        expect(viewModel.plannerPackageRows.length).toBeGreaterThan(0);
+        expect(viewModel.planContextRows.length).toBeGreaterThan(0);
+        expect(JSON.stringify(viewModel)).not.toContain('secret raw prompt');
     });
 });

@@ -15,15 +15,17 @@ import {
 import { buildReferenceLinks, findVideoDropTarget, getAtelierReferenceNodeIds as getReferenceNodeIds } from "@/lib/atelierCanvas";
 import {
     getAtelierAgentPlanContext,
-    getAtelierAgentSessionSummary,
-    getAtelierAgentTurnSummaries,
-    getAtelierPlanContextRows,
-    getAtelierPlannerPackageRows,
+    getAtelierAgentPanelViewModel,
     isAgentTurnBlocked,
     isAtelierAgentPlanStale,
     validateAtelierAgentIntent,
     type AtelierAgentPlanContext,
 } from "@/lib/atelierAgentPlanning";
+import {
+    AgentPanelHistoryList,
+    AgentPanelPlannerReadiness,
+    AgentPanelSessionOverview,
+} from "@/components/atelier/AgentPanelTrace";
 import { getAssetUrl } from "@/lib/utils";
 import { VIDEO_I2V_MODELS } from "@/lib/modelCatalog";
 import { useAtelierStore } from "@/store/atelierStore";
@@ -977,24 +979,24 @@ function AgentPanel() {
     const agentPolicy = project?.agent_policy;
     const allowedTools = agentPolicy?.allowed_tools ?? [];
     const allToolNames = agentTools.map((tool) => tool.name);
-    const recentTurnSummaries = useMemo(() => getAtelierAgentTurnSummaries(agentTurns, 5), [agentTurns]);
     const activePlan = previewTurn ?? pendingAgentTurn;
     const pendingApprovalBlock = isAgentTurnBlocked(pendingAgentTurn);
-    const agentSessionSummary = useMemo(
-        () => getAtelierAgentSessionSummary({
+    const agentPanelViewModel = useMemo(
+        () => getAtelierAgentPanelViewModel({
             turns: agentTurns,
             plannedCallCount: plannedToolCalls.length,
             pendingTurn: pendingAgentTurn,
             isRunning: isAgentRunning,
+            plannerPackage,
+            planContext,
         }),
-        [agentTurns, plannedToolCalls.length, pendingAgentTurn, isAgentRunning]
+        [agentTurns, plannedToolCalls.length, pendingAgentTurn, isAgentRunning, plannerPackage, planContext]
     );
-    const plannerPackageRows = useMemo(() => getAtelierPlannerPackageRows(plannerPackage), [plannerPackage]);
-    const planContextRows = useMemo(() => getAtelierPlanContextRows(planContext), [planContext]);
     const currentPlanContext = useMemo(
         () => getAtelierAgentPlanContext(projectId ?? null, project?.updated_at ?? null, project?.nodes.length ?? 0, selectedNode?.id ?? null, selectedNode?.updated_at ?? null),
         [projectId, project?.updated_at, project?.nodes.length, selectedNode?.id, selectedNode?.updated_at]
     );
+    const lastFocusedHistoryTurnIdRef = useRef<string | null>(null);
 
     useEffect(() => {
         if (!projectId) return;
@@ -1009,6 +1011,18 @@ function AgentPanel() {
         setAgentError(null);
         plannedContextRef.current = null;
     }, [currentPlanContext]);
+
+    useEffect(() => {
+        const focusedTurnId = agentPanelViewModel.focusedTurnId;
+        if (!focusedTurnId) {
+            lastFocusedHistoryTurnIdRef.current = null;
+            return;
+        }
+        if (lastFocusedHistoryTurnIdRef.current === focusedTurnId) return;
+        if (!agentPanelViewModel.history.some((turn) => turn.id === focusedTurnId)) return;
+        setExpandedHistoryTurnId(focusedTurnId);
+        lastFocusedHistoryTurnIdRef.current = focusedTurnId;
+    }, [agentPanelViewModel.focusedTurnId, agentPanelViewModel.history]);
 
     const planToolCalls = async () => {
         const validation = validateAtelierAgentIntent(agentInput);
@@ -1285,53 +1299,7 @@ function AgentPanel() {
                     )}
                 </div>
                 <div className="space-y-3 rounded-md border border-white/10 bg-white/[0.04] p-3">
-                    <div className="rounded-md border border-white/10 bg-black/20 p-2">
-                        <div className="mb-2 flex items-center justify-between gap-2">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-primary/80">Session</span>
-                            <span className="shrink-0 rounded border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] uppercase text-text-muted">
-                                {agentSessionSummary.status}
-                            </span>
-                        </div>
-                        <div className="mb-2 rounded border border-white/10 bg-white/[0.03] px-2 py-1.5">
-                            <div className="flex items-center justify-between gap-2">
-                                <span className="shrink-0 text-[10px] uppercase text-text-muted">Focus</span>
-                                <span className="min-w-0 truncate text-right text-[11px] font-semibold text-foreground">
-                                    {agentSessionSummary.focus.label}
-                                </span>
-                            </div>
-                            <div className="mt-0.5 truncate text-[10px] text-text-muted">
-                                {agentSessionSummary.focus.detail}
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-1">
-                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
-                                <div className="text-[10px] uppercase text-text-muted">Turns</div>
-                                <div className="text-sm font-semibold text-foreground">{agentSessionSummary.turnCount}</div>
-                            </div>
-                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
-                                <div className="text-[10px] uppercase text-text-muted">Planned</div>
-                                <div className="text-sm font-semibold text-foreground">{agentSessionSummary.plannedCallCount}</div>
-                            </div>
-                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
-                                <div className="text-[10px] uppercase text-text-muted">Waiting</div>
-                                <div className="text-sm font-semibold text-amber-100">{agentSessionSummary.waitingApprovalCount}</div>
-                            </div>
-                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
-                                <div className="text-[10px] uppercase text-text-muted">Done</div>
-                                <div className="text-sm font-semibold text-emerald-200">{agentSessionSummary.completedCallCount}</div>
-                            </div>
-                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
-                                <div className="text-[10px] uppercase text-text-muted">Failed</div>
-                                <div className="text-sm font-semibold text-red-100">{agentSessionSummary.failedCallCount}</div>
-                            </div>
-                            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
-                                <div className="text-[10px] uppercase text-text-muted">Modes</div>
-                                <div className="truncate text-[11px] font-semibold text-text-secondary">
-                                    {agentSessionSummary.previewTurnCount}p · {agentSessionSummary.executeTurnCount}e
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <AgentPanelSessionOverview summary={agentPanelViewModel.session} />
                     <div>
                         <div className="mb-1 text-[11px] uppercase tracking-wide text-primary/80">Intent</div>
                         <textarea
@@ -1371,15 +1339,16 @@ function AgentPanel() {
                             {agentError}
                         </div>
                     )}
-                    {(plannerPackageRows.length > 0 || planContextRows.length > 0) && (
+                    {(agentPanelViewModel.plannerPackageRows.length > 0 || agentPanelViewModel.planContextRows.length > 0) && (
                         <div className="space-y-2 rounded-md border border-white/10 bg-black/20 p-2">
                             <div className="flex items-center justify-between gap-2">
                                 <span className="text-[11px] font-semibold uppercase tracking-wide text-primary/80">Planner trace</span>
                                 <span className="min-w-0 truncate text-[10px] text-text-muted">{plannerPackage?.project_snapshot.title ?? project?.title}</span>
                             </div>
-                            {plannerPackageRows.length > 0 && (
+                            <AgentPanelPlannerReadiness readiness={agentPanelViewModel.plannerReadiness} />
+                            {agentPanelViewModel.plannerPackageRows.length > 0 && (
                                 <div className="space-y-1">
-                                    {plannerPackageRows.map((row) => (
+                                    {agentPanelViewModel.plannerPackageRows.map((row) => (
                                         <div key={`package-${row.label}`} className="flex items-start justify-between gap-2 rounded border border-white/10 bg-white/[0.03] px-2 py-1">
                                             <span className="shrink-0 text-[10px] text-text-muted">{row.label}</span>
                                             <span className="min-w-0 truncate text-right text-[10px] text-text-secondary">{row.value}</span>
@@ -1387,9 +1356,9 @@ function AgentPanel() {
                                     ))}
                                 </div>
                             )}
-                            {planContextRows.length > 0 && (
+                            {agentPanelViewModel.planContextRows.length > 0 && (
                                 <div className="space-y-1 border-t border-white/10 pt-2">
-                                    {planContextRows.map((row) => (
+                                    {agentPanelViewModel.planContextRows.map((row) => (
                                         <div key={`context-${row.label}`} className="flex items-start justify-between gap-2 px-1">
                                             <span className="shrink-0 text-[10px] text-text-muted">{row.label}</span>
                                             <span className="min-w-0 truncate text-right text-[10px] text-text-secondary">{row.value}</span>
@@ -1440,56 +1409,12 @@ function AgentPanel() {
                             </div>
                         </div>
                     )}
-                    {recentTurnSummaries.length > 0 && (
-                        <div>
-                            <div className="mb-1 text-[11px] font-medium text-text-secondary">History</div>
-                            <div className="space-y-1">
-                                {recentTurnSummaries.map((turn) => (
-                                    <div key={turn.id} className="rounded border border-white/10 bg-black/20 px-2 py-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => setExpandedHistoryTurnId((current) => (current === turn.id ? null : turn.id))}
-                                            className="w-full text-left"
-                                        >
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="min-w-0 flex-1 truncate text-foreground">{turn.title}</span>
-                                                <span className="shrink-0 uppercase text-text-muted">{turn.status}</span>
-                                            </div>
-                                            <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-text-muted">
-                                                <span className="min-w-0 truncate">{turn.mode} · {turn.callCount} calls</span>
-                                                <span className="shrink-0">
-                                                    {turn.completedCount} ok · {turn.failedCount} failed
-                                                </span>
-                                            </div>
-                                            {turn.resultSummary && (
-                                                <div className="mt-1 truncate text-[11px] text-text-secondary">{turn.resultSummary}</div>
-                                            )}
-                                        </button>
-                                        {expandedHistoryTurnId === turn.id && (
-                                            <div className="mt-2 space-y-1 border-t border-white/10 pt-2">
-                                                {turn.waitingApprovalCount > 0 && (
-                                                    <div className="rounded border border-amber-300/25 bg-amber-300/10 px-2 py-1 text-[10px] text-amber-100">
-                                                        {turn.waitingApprovalCount} waiting approval
-                                                    </div>
-                                                )}
-                                                {turn.toolCalls.map((call) => (
-                                                    <div key={call.callId} className="rounded border border-white/10 bg-white/[0.03] px-2 py-1">
-                                                        <div className="flex items-center justify-between gap-2">
-                                                            <span className="min-w-0 flex-1 truncate text-[11px] text-foreground">{call.toolName}</span>
-                                                            <span className="shrink-0 text-[10px] uppercase text-text-muted">{call.status}</span>
-                                                        </div>
-                                                        {call.result && (
-                                                            <div className="mt-0.5 truncate text-[10px] text-text-muted">{call.result}</div>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    <AgentPanelHistoryList
+                        summaries={agentPanelViewModel.history}
+                        focusedTurnId={agentPanelViewModel.focusedTurnId}
+                        expandedTurnId={expandedHistoryTurnId}
+                        onToggleTurn={(turnId) => setExpandedHistoryTurnId((current) => (current === turnId ? null : turnId))}
+                    />
                 </div>
                 <div className="rounded-md border border-white/10 bg-white/[0.04] p-3">
                     Project: <span className="text-foreground">{project?.title || "Loading"}</span>

@@ -59,6 +59,25 @@ export interface AtelierAgentSessionSummary {
     executeTurnCount: number;
 }
 
+export interface AtelierAgentPlannerReadiness {
+    status: "waiting_for_package" | "ready" | "schema_mismatch";
+    label: string;
+    detail: string;
+    plannerSchemaVersion: string;
+    toolSchemaVersion: string;
+    adapterName: string;
+    modelTraceId: string | null;
+}
+
+export interface AtelierAgentPanelViewModel {
+    session: AtelierAgentSessionSummary;
+    plannerReadiness: AtelierAgentPlannerReadiness;
+    plannerPackageRows: AtelierAgentTraceRow[];
+    planContextRows: AtelierAgentTraceRow[];
+    history: AtelierAgentTurnSummary[];
+    focusedTurnId: string | null;
+}
+
 export function validateAtelierAgentIntent(intent: string): AtelierAgentPlanResult {
     const prompt = intent.trim();
     if (!prompt) {
@@ -135,6 +154,57 @@ export function getAtelierPlanContextRows(
         { label: "Tool schema", value: context.tool_schema_version ?? "unknown" },
         { label: "Context keys", value: plannerInputKeys.length > 0 ? plannerInputKeys.join(", ") : "none" },
     ];
+}
+
+export function getAtelierPlannerReadiness(
+    plannerPackage: AtelierAgentPlannerPackage | null,
+    context: CoreAtelierAgentPlanContext | null
+): AtelierAgentPlannerReadiness {
+    if (!plannerPackage) {
+        return {
+            status: "waiting_for_package",
+            label: "Waiting for package",
+            detail: "Build a planner package before connecting a live planner adapter.",
+            plannerSchemaVersion: "unknown",
+            toolSchemaVersion: "unknown",
+            adapterName: context?.planner_adapter_name ?? "none",
+            modelTraceId: context?.model_trace_id ?? null,
+        };
+    }
+
+    const packagePlannerSchema = plannerPackage.planner_schema_version;
+    const packageToolSchema = plannerPackage.tool_schema_version;
+    const contextPlannerSchema = context?.planner_schema_version ?? packagePlannerSchema;
+    const contextToolSchema = context?.tool_schema_version ?? packageToolSchema;
+    const adapterName = context?.planner_adapter_name ?? "pending_adapter_context";
+    const modelTraceId = context?.model_trace_id ?? null;
+    const hasSchemaMismatch =
+        contextPlannerSchema !== packagePlannerSchema ||
+        contextToolSchema !== packageToolSchema;
+
+    if (hasSchemaMismatch) {
+        return {
+            status: "schema_mismatch",
+            label: "Schema mismatch",
+            detail: `Package ${packagePlannerSchema}/${packageToolSchema} does not match context ${contextPlannerSchema}/${contextToolSchema}.`,
+            plannerSchemaVersion: packagePlannerSchema,
+            toolSchemaVersion: packageToolSchema,
+            adapterName,
+            modelTraceId,
+        };
+    }
+
+    return {
+        status: "ready",
+        label: context ? "Live planner contract ready" : "Planner package ready",
+        detail: context
+            ? `Adapter ${adapterName} returned a schema-compatible plan context.`
+            : "Planner package is schema-ready; adapter context will attach after planning.",
+        plannerSchemaVersion: packagePlannerSchema,
+        toolSchemaVersion: packageToolSchema,
+        adapterName,
+        modelTraceId,
+    };
 }
 
 function summarizeToolCallResult(call: AtelierAgentToolCall): string | null {
@@ -252,5 +322,39 @@ export function getAtelierAgentSessionSummary({
         failedCallCount,
         previewTurnCount,
         executeTurnCount,
+    };
+}
+
+export function getAtelierAgentPanelViewModel({
+    turns,
+    plannedCallCount,
+    pendingTurn,
+    isRunning,
+    plannerPackage,
+    planContext,
+    historyLimit = 5,
+}: {
+    turns: AtelierAgentTurn[];
+    plannedCallCount: number;
+    pendingTurn: AtelierAgentTurn | null;
+    isRunning: boolean;
+    plannerPackage: AtelierAgentPlannerPackage | null;
+    planContext: CoreAtelierAgentPlanContext | null;
+    historyLimit?: number;
+}): AtelierAgentPanelViewModel {
+    const session = getAtelierAgentSessionSummary({
+        turns,
+        plannedCallCount,
+        pendingTurn,
+        isRunning,
+    });
+
+    return {
+        session,
+        plannerReadiness: getAtelierPlannerReadiness(plannerPackage, planContext),
+        plannerPackageRows: getAtelierPlannerPackageRows(plannerPackage),
+        planContextRows: getAtelierPlanContextRows(planContext),
+        history: getAtelierAgentTurnSummaries(turns, historyLimit),
+        focusedTurnId: session.focus.turnId,
     };
 }
