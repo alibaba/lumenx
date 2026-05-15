@@ -75,4 +75,74 @@ describe("v3 MediaNode", () => {
     fireEvent.pointerDown(screen.getByRole("button"));
     expect(onSelect).toHaveBeenCalledWith("n5");
   });
+
+  it("calls onSelect on Enter key", () => {
+    const onSelect = vi.fn();
+    render(
+      <MediaNode
+        id="n6"
+        kind="image"
+        src="https://example.com/a.png"
+        status="completed"
+        x={0}
+        y={0}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith("n6");
+  });
+
+  it("calls onSelect on Space key", () => {
+    const onSelect = vi.fn();
+    render(
+      <MediaNode
+        id="n7"
+        kind="image"
+        src="https://example.com/a.png"
+        status="completed"
+        x={0}
+        y={0}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("button"), { key: " " });
+    expect(onSelect).toHaveBeenCalledWith("n7");
+  });
+
+  it("stops propagation on pointerDown", () => {
+    const parent = vi.fn();
+    render(
+      <div onPointerDown={parent}>
+        <MediaNode
+          id="n8"
+          kind="image"
+          src="https://example.com/a.png"
+          status="completed"
+          x={0}
+          y={0}
+        />
+      </div>,
+    );
+    fireEvent.pointerDown(screen.getByRole("button"));
+    expect(parent).not.toHaveBeenCalled();
+  });
+
+  it("clamps negative width and height to a positive minimum", () => {
+    const { container } = render(
+      <MediaNode
+        id="n9"
+        kind="image"
+        src="https://example.com/a.png"
+        status="completed"
+        x={0}
+        y={0}
+        width={-50}
+        height={-50}
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(parseInt(root.style.width)).toBeGreaterThanOrEqual(40);
+    expect(parseInt(root.style.height)).toBeGreaterThanOrEqual(24);
+  });
 });

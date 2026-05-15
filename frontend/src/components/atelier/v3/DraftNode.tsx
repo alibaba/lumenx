@@ -40,11 +40,24 @@ export function DraftNode({
     ? "ring-2 ring-primary border-primary/50"
     : STATUS_BORDER[status];
 
+  const VISIBLE_REFS = 4;
+  const visibleRefs = refs ? refs.slice(0, VISIBLE_REFS) : [];
+  const overflowCount = refs ? Math.max(0, refs.length - VISIBLE_REFS) : 0;
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onPointerDown={() => onSelect?.(id)}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onSelect?.(id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect?.(id);
+        }
+      }}
       style={{ transform: `translate(${x}px, ${y}px)` }}
       className={`group absolute w-[240px] rounded-md border bg-elevated/85 backdrop-blur-md ${borderClass}`}
     >
@@ -64,26 +77,38 @@ export function DraftNode({
         </div>
         {refs && refs.length > 0 ? (
           <div className="mt-1.5 flex items-center gap-1">
-            {refs.map((r, i) => (
+            {visibleRefs.map((r, i) => (
               <img
                 key={i}
                 src={r}
-                alt=""
-                role="img"
+                alt={`Reference ${i + 1}`}
+                loading="lazy"
+                decoding="async"
                 className="h-6 w-6 rounded border border-white/10 object-cover"
               />
             ))}
-            <span className="ml-1 font-mono text-[10px] text-text-muted">
-              {refs.length} ref
-            </span>
+            {overflowCount > 0 ? (
+              <span className="grid h-6 min-w-[1.5rem] place-items-center rounded border border-white/10 bg-white/[0.04] px-1 text-[10px] font-mono text-text-muted">
+                +{overflowCount}
+              </span>
+            ) : null}
+            {overflowCount === 0 ? (
+              <span className="ml-1 font-mono text-[10px] text-text-muted">
+                {refs.length} ref
+              </span>
+            ) : null}
           </div>
         ) : null}
       </div>
       {status === "draft" ? (
         <span
+          role="status"
+          aria-label="Awaiting approval"
           className="btn-tip absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-amber-300"
           data-tip="Awaiting approval"
-        />
+        >
+          <span className="sr-only">Awaiting approval</span>
+        </span>
       ) : null}
     </div>
   );

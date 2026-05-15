@@ -84,8 +84,8 @@ export function MediaNode({
   onSelect,
 }: Props) {
   const def = DEFAULT_SIZE[kind];
-  const w = Math.min(width ?? def.w, MAX_WIDTH);
-  const h = height ?? def.h;
+  const w = Math.max(40, Math.min(width ?? def.w, MAX_WIDTH));
+  const h = Math.max(24, height ?? def.h);
   const ring = ringClass(status, selected, selectedAsTake);
   const showProcessing = status === "processing" || status === "pending";
   const showFailed = status === "failed";
@@ -94,7 +94,16 @@ export function MediaNode({
     <div
       role="button"
       tabIndex={0}
-      onPointerDown={() => onSelect?.(id)}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onSelect?.(id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect?.(id);
+        }
+      }}
       className={`group absolute overflow-hidden bg-black/40 ${ring}`}
       style={{
         transform: `translate(${x}px, ${y}px)`,

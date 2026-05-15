@@ -100,4 +100,93 @@ describe("DraftNode", () => {
     fireEvent.pointerDown(screen.getByRole("button"));
     expect(onSelect).toHaveBeenCalledWith("d6");
   });
+
+  it("calls onSelect on Enter key", () => {
+    const onSelect = vi.fn();
+    render(
+      <DraftNode
+        id="d7"
+        status="draft"
+        intent="X"
+        modelLabel="M"
+        configSummary="—"
+        x={0}
+        y={0}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith("d7");
+  });
+
+  it("calls onSelect on Space key", () => {
+    const onSelect = vi.fn();
+    render(
+      <DraftNode
+        id="d8"
+        status="draft"
+        intent="X"
+        modelLabel="M"
+        configSummary="—"
+        x={0}
+        y={0}
+        onSelect={onSelect}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("button"), { key: " " });
+    expect(onSelect).toHaveBeenCalledWith("d8");
+  });
+
+  it("stops propagation on pointerDown", () => {
+    const parent = vi.fn();
+    render(
+      <div onPointerDown={parent}>
+        <DraftNode
+          id="d9"
+          status="draft"
+          intent="X"
+          modelLabel="M"
+          configSummary="—"
+          x={0}
+          y={0}
+        />
+      </div>,
+    );
+    fireEvent.pointerDown(screen.getByRole("button"));
+    expect(parent).not.toHaveBeenCalled();
+  });
+
+  it("caps visible refs at 4 and shows +N overflow", () => {
+    render(
+      <DraftNode
+        id="d10"
+        status="draft"
+        intent="X"
+        modelLabel="M"
+        configSummary="—"
+        refs={["a", "b", "c", "d", "e", "f", "g"]}
+        x={0}
+        y={0}
+      />,
+    );
+    expect(screen.getAllByAltText(/^Reference/)).toHaveLength(4);
+    expect(screen.getByText("+3")).toBeInTheDocument();
+  });
+
+  it("shows status dot with accessible label when status=draft", () => {
+    render(
+      <DraftNode
+        id="d11"
+        status="draft"
+        intent="X"
+        modelLabel="M"
+        configSummary="—"
+        x={0}
+        y={0}
+      />,
+    );
+    expect(
+      screen.getByRole("status", { name: /awaiting approval/i }),
+    ).toBeInTheDocument();
+  });
 });

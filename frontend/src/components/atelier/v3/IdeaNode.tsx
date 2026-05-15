@@ -1,3 +1,4 @@
+"use client";
 import * as React from "react";
 
 interface Props {
@@ -17,7 +18,16 @@ export function IdeaNode({ id, body, selected, x, y, onSelect }: Props) {
     <div
       role="button"
       tabIndex={0}
-      onPointerDown={() => onSelect?.(id)}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onSelect?.(id);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect?.(id);
+        }
+      }}
       style={{ transform: `translate(${x}px, ${y}px)` }}
       className={`group absolute w-[220px] rounded-md border bg-amber-400/[0.04] backdrop-blur-md ${borderClass}`}
     >
@@ -25,7 +35,9 @@ export function IdeaNode({ id, body, selected, x, y, onSelect }: Props) {
         💡 idea
       </span>
       <div className="px-3 py-2.5">
-        <p className="text-[13px] leading-relaxed text-foreground/90">{body}</p>
+        <p className="line-clamp-6 text-[13px] leading-relaxed text-foreground/90">
+          {body}
+        </p>
       </div>
     </div>
   );
