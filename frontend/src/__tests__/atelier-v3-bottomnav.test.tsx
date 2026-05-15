@@ -49,6 +49,20 @@ describe("BottomNavRail", () => {
     render(<BottomNavRail zoom={100} minimapOpen onZoomChange={() => {}} onFit={() => {}} onToggleMinimap={() => {}} />);
     expect(screen.getByLabelText("Toggle minimap").className).toMatch(/bg-hover-bg/);
   });
+
+  it("minimap toggle exposes aria-pressed reflecting state", () => {
+    const { rerender } = render(<BottomNavRail zoom={100} onZoomChange={() => {}} onFit={() => {}} onToggleMinimap={() => {}} />);
+    expect(screen.getByLabelText("Toggle minimap")).toHaveAttribute("aria-pressed", "false");
+    rerender(<BottomNavRail zoom={100} minimapOpen onZoomChange={() => {}} onFit={() => {}} onToggleMinimap={() => {}} />);
+    expect(screen.getByLabelText("Toggle minimap")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("zoom-button no-op when already at clamp boundary", () => {
+    const onZoomChange = vi.fn();
+    render(<BottomNavRail zoom={25} onZoomChange={onZoomChange} onFit={() => {}} onToggleMinimap={() => {}} />);
+    fireEvent.click(screen.getByLabelText("Zoom out"));
+    expect(onZoomChange).toHaveBeenCalledWith(25);
+  });
 });
 
 describe("Minimap", () => {

@@ -53,7 +53,7 @@ const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
   audio: ["play", "useAsRef", "addToSequence", "divider", "delete"],
   image: ["useAsRef", "branch", "divider", "delete"],
   draft: ["regenerate", "branch", "divider", "delete"],
-  idea: ["divider", "delete"],
+  idea: ["delete"],
 };
 
 function buttonClass(variant: ActionDef["variant"]): string {
@@ -73,7 +73,7 @@ export function SelectionActionBar({ kind, x, y, width, onAct }: Props) {
   return (
     <div
       className="absolute z-40 inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-glass-border bg-elevated/95 px-1 py-1 shadow-2xl shadow-black/40 backdrop-blur-md"
-      style={{ left: x + width / 2, top: y - 40 }}
+      style={{ left: x + width / 2, top: Math.max(8, y - 40) }}
     >
       {items.map((item, idx) => {
         if (item === "divider") {

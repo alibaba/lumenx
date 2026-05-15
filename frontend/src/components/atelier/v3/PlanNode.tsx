@@ -2,6 +2,8 @@
 
 import { Bot } from "lucide-react";
 
+const VISIBLE_BULLETS = 5;
+
 interface Props {
   id: string;
   title: string;
@@ -16,6 +18,9 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect }: Props
   const borderClass = selected
     ? "ring-2 ring-primary border-primary/50"
     : "border-primary/30";
+
+  const visibleBullets = bullets.slice(0, VISIBLE_BULLETS);
+  const overflowBullets = Math.max(0, bullets.length - VISIBLE_BULLETS);
 
   return (
     <div
@@ -41,12 +46,17 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect }: Props
         <span className="truncate">{title}</span>
       </div>
       <ul className="space-y-0.5 text-[11px] text-text-secondary">
-        {bullets.map((b, i) => (
-          <li key={i}>
-            <span className="mr-1 text-text-muted">·</span>
+        {visibleBullets.map((b, i) => (
+          <li key={i} className="line-clamp-2">
+            <span aria-hidden="true" className="mr-1 text-text-muted">·</span>
             {b}
           </li>
         ))}
+        {overflowBullets > 0 && (
+          <li className="text-text-muted">
+            <span aria-hidden="true" className="mr-1">·</span>+{overflowBullets} more
+          </li>
+        )}
       </ul>
       <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-text-muted">
         PLAN · by Agent

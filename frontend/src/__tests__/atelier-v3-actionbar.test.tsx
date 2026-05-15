@@ -65,4 +65,19 @@ describe("SelectionActionBar", () => {
     expect(screen.getByLabelText("Branch")).toBeInTheDocument();
     expect(screen.getByLabelText("Re-generate")).toBeInTheDocument();
   });
+
+  it("clamps top to >= 8 when node is near canvas top", () => {
+    const { container } = render(<SelectionActionBar kind="video" x={0} y={20} width={200} onAct={() => {}} />);
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.style.top).toBe("8px");
+  });
+
+  it("idea kind shows only Delete (no leading divider)", () => {
+    const { container } = render(<SelectionActionBar kind="idea" x={0} y={100} width={200} onAct={() => {}} />);
+    const buttons = container.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].getAttribute("aria-label")).toBe("Delete");
+    const dividers = container.querySelectorAll(".bg-glass-border");
+    expect(dividers).toHaveLength(0);
+  });
 });

@@ -30,6 +30,7 @@ export function BottomNavRail({
       <button
         type="button"
         aria-label="Toggle minimap"
+        aria-pressed={!!minimapOpen}
         data-tip="Toggle minimap"
         onClick={onToggleMinimap}
         className={minimapClass}
@@ -74,7 +75,7 @@ export function BottomNavRail({
       >
         <ZoomIn size={14} />
       </button>
-      <span className="font-mono text-[10px] text-text-muted w-9 text-right">{zoom}%</span>
+      <span aria-hidden="true" className="font-mono text-[10px] text-text-muted w-9 text-right">{zoom}%</span>
     </div>
   );
 }
