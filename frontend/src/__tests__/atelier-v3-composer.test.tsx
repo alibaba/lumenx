@@ -49,6 +49,51 @@ describe("Composer", () => {
     }));
   });
 
+  it("submits the user-typed prompt, not the initial prop", () => {
+    const onSubmit = vi.fn();
+    render(<Composer activeTab="I2V" prompt="" onSubmit={onSubmit} />);
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "actual user input" } });
+    fireEvent.click(screen.getByLabelText("Submit"));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ prompt: "actual user input" }));
+  });
+
+  it("syncs draft when prompt prop changes", () => {
+    const { rerender } = render(<Composer activeTab="I2V" prompt="first" />);
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe("first");
+    rerender(<Composer activeTab="I2V" prompt="second" />);
+    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe("second");
+  });
+
+  it("ArrowRight on active tab activates the next tab", () => {
+    const onTabChange = vi.fn();
+    render(<Composer activeTab="I2V" onTabChange={onTabChange} />);
+    fireEvent.keyDown(screen.getByRole("tab", { name: "I2V" }), { key: "ArrowRight" });
+    expect(onTabChange).toHaveBeenCalledWith("R2V");
+  });
+
+  it("ArrowLeft on first tab wraps to the last (Audio)", () => {
+    const onTabChange = vi.fn();
+    render(<Composer activeTab="T2I" onTabChange={onTabChange} />);
+    fireEvent.keyDown(screen.getByRole("tab", { name: "T2I" }), { key: "ArrowLeft" });
+    expect(onTabChange).toHaveBeenCalledWith("Audio");
+  });
+
+  it("Home/End jump to first/last tab", () => {
+    const onTabChange = vi.fn();
+    render(<Composer activeTab="I2V" onTabChange={onTabChange} />);
+    fireEvent.keyDown(screen.getByRole("tab", { name: "I2V" }), { key: "End" });
+    expect(onTabChange).toHaveBeenCalledWith("Audio");
+    onTabChange.mockClear();
+    fireEvent.keyDown(screen.getByRole("tab", { name: "I2V" }), { key: "Home" });
+    expect(onTabChange).toHaveBeenCalledWith("T2I");
+  });
+
+  it("inactive tabs are tabIndex=-1 and active is 0", () => {
+    render(<Composer activeTab="R2V" />);
+    expect(screen.getByRole("tab", { name: "R2V" })).toHaveAttribute("tabIndex", "0");
+    expect(screen.getByRole("tab", { name: "T2I" })).toHaveAttribute("tabIndex", "-1");
+  });
+
   it("calls onClose when X is clicked", () => {
     const onClose = vi.fn();
     render(<Composer activeTab="I2V" onClose={onClose} />);

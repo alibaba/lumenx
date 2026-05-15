@@ -16,8 +16,8 @@ interface Props {
 
 const STATUS_DOT: Record<AgentRailStatus, string> = {
   active: "bg-emerald-400",
-  thinking: "bg-blue-300 animate-pulse",
-  waiting: "bg-amber-300 animate-pulse",
+  thinking: "bg-blue-300 animate-pulse motion-reduce:animate-none",
+  waiting: "bg-amber-300 animate-pulse motion-reduce:animate-none",
   failed: "bg-red-300",
 };
 
@@ -51,6 +51,18 @@ function PermissionSegmented({
   value: PermissionMode;
   onChange?: (m: PermissionMode) => void;
 }) {
+  const idx = PERMISSION_ORDER.indexOf(value);
+  const handleKey = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    let next: PermissionMode | null = null;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = PERMISSION_ORDER[(idx + 1) % PERMISSION_ORDER.length];
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = PERMISSION_ORDER[(idx - 1 + PERMISSION_ORDER.length) % PERMISSION_ORDER.length];
+    else if (event.key === "Home") next = PERMISSION_ORDER[0];
+    else if (event.key === "End") next = PERMISSION_ORDER[PERMISSION_ORDER.length - 1];
+    if (next != null) {
+      event.preventDefault();
+      onChange?.(next);
+    }
+  };
   return (
     <div
       role="radiogroup"
@@ -64,7 +76,9 @@ function PermissionSegmented({
           role="radio"
           aria-checked={value === m}
           aria-label={PERMISSION_LABELS[m]}
+          tabIndex={value === m ? 0 : -1}
           onClick={() => onChange?.(m)}
+          onKeyDown={handleKey}
           className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
             value === m ? "bg-primary text-white" : "text-text-muted hover:text-foreground"
           }`}

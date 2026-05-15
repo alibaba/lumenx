@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Settings, Wand2, X, Plus } from "lucide-react";
 import { CapabilityIcon } from "./CapabilityIcon";
 import { ChipDropdown } from "./ChipDropdown";
@@ -67,6 +67,23 @@ export function Composer({
     return {};
   }, [anchor, viewport, style]);
 
+  const [draft, setDraft] = useState(prompt);
+  useEffect(() => { setDraft(prompt); }, [prompt]);
+
+  const tabIndexOf = (t: ComposerTab) => TABS.indexOf(t);
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, t: ComposerTab) => {
+    const i = tabIndexOf(t);
+    let next: ComposerTab | null = null;
+    if (event.key === "ArrowRight") next = TABS[(i + 1) % TABS.length];
+    else if (event.key === "ArrowLeft") next = TABS[(i - 1 + TABS.length) % TABS.length];
+    else if (event.key === "Home") next = TABS[0];
+    else if (event.key === "End") next = TABS[TABS.length - 1];
+    if (next != null) {
+      event.preventDefault();
+      onTabChange?.(next);
+    }
+  };
+
   return (
     <section
       role="dialog"
@@ -83,7 +100,9 @@ export function Composer({
               type="button"
               role="tab"
               aria-selected={t === activeTab}
+              tabIndex={t === activeTab ? 0 : -1}
               onClick={() => onTabChange?.(t)}
+              onKeyDown={(e) => handleTabKeyDown(e, t)}
               className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
                 t === activeTab ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground hover:bg-hover-bg"
               }`}>
@@ -127,7 +146,9 @@ export function Composer({
         <textarea
           aria-label="Prompt"
           rows={3}
-          defaultValue={prompt}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          autoFocus
           placeholder="Describe what you want to generate. Use @ to mention a canvas node."
           className="w-full resize-none rounded-md border border-glass-border bg-input-bg px-2.5 py-2 text-[13px] text-foreground placeholder:text-text-muted outline-none focus:border-primary/60"
         />
@@ -150,7 +171,7 @@ export function Composer({
           aria-label="Submit"
           data-tip="Submit (⌘⏎)"
           disabled={showCapabilityMismatch}
-          onClick={() => onSubmit?.({ tab: activeTab, prompt, modelLabel, aspect, duration, count, refs })}
+          onClick={() => onSubmit?.({ tab: activeTab, prompt: draft, modelLabel, aspect, duration, count, refs })}
           className={`btn-tip grid h-7 w-7 place-items-center rounded-full transition ${
             showCapabilityMismatch
               ? "bg-primary/40 text-white/70 cursor-not-allowed"

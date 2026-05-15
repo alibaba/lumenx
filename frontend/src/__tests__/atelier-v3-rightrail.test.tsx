@@ -72,4 +72,36 @@ describe("RightRailV3", () => {
     render(<RightRailV3 mode="never" agentStatus="active"><div /></RightRailV3>);
     expect(screen.getByText(/Run allowed tools within hard limits/i)).toBeInTheDocument();
   });
+
+  it("permission radio group: only the checked radio is tabIndex=0", () => {
+    render(<RightRailV3 mode="on_request" agentStatus="active"><div /></RightRailV3>);
+    expect(screen.getByLabelText("On request")).toHaveAttribute("tabIndex", "0");
+    expect(screen.getByLabelText("Untrusted")).toHaveAttribute("tabIndex", "-1");
+    expect(screen.getByLabelText("On failure")).toHaveAttribute("tabIndex", "-1");
+    expect(screen.getByLabelText("Never")).toHaveAttribute("tabIndex", "-1");
+  });
+
+  it("ArrowRight in radiogroup moves selection forward and wraps", () => {
+    const onModeChange = vi.fn();
+    render(<RightRailV3 mode="never" agentStatus="active" onModeChange={onModeChange}><div /></RightRailV3>);
+    fireEvent.keyDown(screen.getByLabelText("Never"), { key: "ArrowRight" });
+    expect(onModeChange).toHaveBeenCalledWith("untrusted");
+  });
+
+  it("ArrowLeft in radiogroup moves selection backward and wraps", () => {
+    const onModeChange = vi.fn();
+    render(<RightRailV3 mode="untrusted" agentStatus="active" onModeChange={onModeChange}><div /></RightRailV3>);
+    fireEvent.keyDown(screen.getByLabelText("Untrusted"), { key: "ArrowLeft" });
+    expect(onModeChange).toHaveBeenCalledWith("never");
+  });
+
+  it("Home/End jump to first/last permission mode", () => {
+    const onModeChange = vi.fn();
+    render(<RightRailV3 mode="on_failure" agentStatus="active" onModeChange={onModeChange}><div /></RightRailV3>);
+    fireEvent.keyDown(screen.getByLabelText("On failure"), { key: "End" });
+    expect(onModeChange).toHaveBeenCalledWith("never");
+    onModeChange.mockClear();
+    fireEvent.keyDown(screen.getByLabelText("On failure"), { key: "Home" });
+    expect(onModeChange).toHaveBeenCalledWith("untrusted");
+  });
 });
