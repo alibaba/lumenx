@@ -1,0 +1,107 @@
+"use client";
+import { Play, Settings, Link2, GitBranch, Check, Scissors, Trash2 } from "lucide-react";
+
+export type ActionKey =
+  | "play"
+  | "regenerate"
+  | "useAsRef"
+  | "branch"
+  | "selectTake"
+  | "addToSequence"
+  | "delete";
+
+interface Props {
+  kind: "image" | "video" | "audio" | "draft" | "idea";
+  x: number;
+  y: number;
+  width: number;
+  onAct: (action: ActionKey) => void;
+}
+
+type IconComponent = typeof Play;
+
+interface ActionDef {
+  key: ActionKey;
+  label: string;
+  Icon: IconComponent;
+  variant?: "default" | "danger" | "select";
+}
+
+const ACTIONS: Record<ActionKey, ActionDef> = {
+  play: { key: "play", label: "Play", Icon: Play },
+  regenerate: { key: "regenerate", label: "Re-generate", Icon: Settings },
+  useAsRef: { key: "useAsRef", label: "Use as reference", Icon: Link2 },
+  branch: { key: "branch", label: "Branch", Icon: GitBranch },
+  selectTake: { key: "selectTake", label: "Select as take", Icon: Check, variant: "select" },
+  addToSequence: { key: "addToSequence", label: "Add to Sequence", Icon: Scissors },
+  delete: { key: "delete", label: "Delete", Icon: Trash2, variant: "danger" },
+};
+
+type LayoutItem = ActionKey | "divider";
+
+const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
+  video: [
+    "play",
+    "regenerate",
+    "useAsRef",
+    "branch",
+    "selectTake",
+    "addToSequence",
+    "divider",
+    "delete",
+  ],
+  audio: ["play", "useAsRef", "addToSequence", "divider", "delete"],
+  image: ["useAsRef", "branch", "divider", "delete"],
+  draft: ["regenerate", "branch", "divider", "delete"],
+  idea: ["divider", "delete"],
+};
+
+function buttonClass(variant: ActionDef["variant"]): string {
+  const base = "btn-tip rounded-full p-1.5";
+  if (variant === "danger") {
+    return `${base} text-text-secondary hover:bg-red-400/20 hover:text-red-200`;
+  }
+  if (variant === "select") {
+    return `${base} text-emerald-200 hover:bg-emerald-400/15`;
+  }
+  return `${base} text-text-secondary hover:bg-hover-bg hover:text-foreground`;
+}
+
+export function SelectionActionBar({ kind, x, y, width, onAct }: Props) {
+  const items = LAYOUTS[kind];
+
+  return (
+    <div
+      className="absolute z-40 inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-glass-border bg-elevated/95 px-1 py-1 shadow-2xl shadow-black/40 backdrop-blur-md"
+      style={{ left: x + width / 2, top: y - 40 }}
+    >
+      {items.map((item, idx) => {
+        if (item === "divider") {
+          return (
+            <span
+              key={`divider-${idx}`}
+              className="mx-0.5 h-4 w-px bg-glass-border"
+            />
+          );
+        }
+        const def = ACTIONS[item];
+        const Icon = def.Icon;
+        return (
+          <button
+            key={def.key}
+            type="button"
+            aria-label={def.label}
+            data-tip={def.label}
+            onClick={(event) => {
+              event.stopPropagation();
+              onAct(def.key);
+            }}
+            className={buttonClass(def.variant)}
+          >
+            <Icon size={13} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
