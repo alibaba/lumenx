@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
+import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import {
   MediaNode,
   DraftNode,
@@ -260,6 +261,28 @@ function renderCandidatesAsMediaNodes(
 function renderEdges(project: AtelierProject | null): React.ReactNode {
   if (!project) return null;
   const edges: React.ReactNode[] = [];
+
+  // Reference-image → video edges (muted, dotted).
+  const refLinks = buildReferenceLinks(project.nodes);
+  for (const link of refLinks) {
+    const x1 = link.from.x + (link.from.width || 180);
+    const y1 = link.from.y + (link.from.height || 180) / 2;
+    const x2 = link.to.x;
+    const y2 = link.to.y + (link.to.height || 110) / 2;
+    const dx = Math.max(40, Math.abs(x2 - x1) * 0.3);
+    edges.push(
+      <path
+        key={`ref-${link.from.id}-${link.to.id}-${link.url.slice(-12)}`}
+        d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
+        fill="none"
+        stroke="rgba(156,163,175,0.35)"
+        strokeWidth="1.5"
+        strokeDasharray="2 4"
+      />,
+    );
+  }
+
+  // Parent-video → candidate edges (primary).
   for (const node of project.nodes) {
     if (node.type !== "video") continue;
     const candidates = readCandidates(node);
@@ -311,16 +334,43 @@ export function AtelierShellV3() {
   const [minimapOpen, setMinimapOpen] = useState(false);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
 
-  // Selection lookup
-  const selectedNode = useMemo<AtelierNode | undefined>(
-    () => project?.nodes.find((n) => n.id === selectedNodeId),
-    [project, selectedNodeId],
-  );
+  // Selection lookup. selectedNodeId may be a real node id OR a virtual
+  // candidate id (parent::cand::cid). For virtual ids we synthesize a
+  // stand-in AtelierNode so SelectionActionBar / action wiring can anchor
+  // to the candidate's bounding box and operate on its candidate id.
+  const selectedNode = useMemo<AtelierNode | undefined>(() => {
+    if (!selectedNodeId || !project) return undefined;
+    const real = project.nodes.find((n) => n.id === selectedNodeId);
+    if (real) return real;
+    const parsed = parseCandidateNodeId(selectedNodeId);
+    if (!parsed) return undefined;
+    const parent = project.nodes.find((n) => n.id === parsed.parentId);
+    if (!parent) return undefined;
+    const cands = readCandidates(parent);
+    const idx = cands.findIndex((c) => c.id === parsed.candidateId);
+    if (idx < 0) return undefined;
+    const { x, y } = candidatePosition(parent, idx);
+    // Synthesize a virtual node — we spread the parent's required scalar
+    // fields then override identity, geometry, and status. The `as
+    // AtelierNode` cast is intentional: this object only ever flows into
+    // SelectionActionBar / Composer / handleActionBar, none of which read
+    // server-side fields like project_id beyond what we set explicitly.
+    return {
+      ...parent,
+      id: selectedNodeId,
+      type: "video",
+      x,
+      y,
+      width: CAND_WIDTH,
+      height: CAND_HEIGHT,
+      status: cands[idx].status,
+    } as AtelierNode;
+  }, [project, selectedNodeId]);
 
-  // Composer anchor: only show below a selected draft or video.
+  // Composer anchor: only show below a selected draft. Re-generation from
+  // a completed take or candidate is invoked via SelectionActionBar.
   const composerAnchor =
-    selectedNode &&
-    (isDraftVideo(selectedNode) || selectedNode.type === "video")
+    selectedNode && isDraftVideo(selectedNode)
       ? {
           x: selectedNode.x,
           y: selectedNode.y,
