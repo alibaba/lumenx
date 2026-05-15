@@ -24,6 +24,11 @@ const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDia
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const AtelierShell = dynamic(() => import("@/components/atelier/AtelierShell"), { ssr: false });
+const AtelierShellV3 = dynamic(
+  () => import("@/components/atelier/v3/AtelierShellV3").then((m) => ({ default: m.AtelierShellV3 })),
+  { ssr: false },
+);
+import { useAtelierVariant } from "@/components/atelier/v3";
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -376,6 +381,7 @@ export default function Home() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
   const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'atelier'>('home');
+  const atelierVariant = useAtelierVariant();
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [seriesId, setSeriesId] = useState<string | null>(null);
@@ -544,7 +550,7 @@ export default function Home() {
   }
 
   if (currentView === 'atelier') {
-    return <AtelierShell />;
+    return atelierVariant === "v3" ? <AtelierShellV3 /> : <AtelierShell />;
   }
 
   // Filter standalone projects (not belonging to any series)
