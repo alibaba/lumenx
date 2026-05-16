@@ -593,6 +593,17 @@ export function AtelierShellV3() {
   } | null>(null);
   const panDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
 
+  // Group drag — when the user starts dragging a node that's part of a
+  // multi-selection (size > 1), every other real node in the selection moves
+  // with the same delta. Virtual candidates are excluded; their positions
+  // are derived from their parent.
+  const groupDragRef = useRef<{
+    members: Array<{ nodeId: string; startWorldX: number; startWorldY: number }>;
+    startPointerX: number;
+    startPointerY: number;
+    moved: boolean;
+  } | null>(null);
+
   // Marquee box-select. Activated by Shift + drag on empty canvas.
   // Tracks both screen-coord rect (for the visible overlay) and uses
   // pan/zoom to map back to world coords on release.
@@ -670,6 +681,18 @@ export function AtelierShellV3() {
       setPanY(panDragRef.current.startPanY + dy);
       return;
     }
+    // Group drag (multi-selection)
+    if (groupDragRef.current) {
+      const dx = event.clientX - groupDragRef.current.startPointerX;
+      const dy = event.clientY - groupDragRef.current.startPointerY;
+      if (Math.abs(dx) + Math.abs(dy) > 3) groupDragRef.current.moved = true;
+      const wd = screenDeltaToWorld(dx, dy);
+      const store = useAtelierStore.getState();
+      for (const m of groupDragRef.current.members) {
+        store.moveNodeLocal(m.nodeId, Math.round(m.startWorldX + wd.x), Math.round(m.startWorldY + wd.y));
+      }
+      return;
+    }
     // Node drag
     if (nodeDragRef.current) {
       const dx = event.clientX - nodeDragRef.current.startPointerX;
@@ -731,6 +754,21 @@ export function AtelierShellV3() {
     }
     if (panDragRef.current) {
       panDragRef.current = null;
+      return;
+    }
+    if (groupDragRef.current) {
+      const drag = groupDragRef.current;
+      groupDragRef.current = null;
+      if (drag.moved) {
+        const store = useAtelierStore.getState();
+        const proj = store.currentProject;
+        for (const m of drag.members) {
+          const real = proj?.nodes.find((n) => n.id === m.nodeId);
+          if (real) {
+            void store.commitNodePosition(m.nodeId, real.x, real.y).catch(() => {});
+          }
+        }
+      }
       return;
     }
     if (nodeDragRef.current) {
@@ -847,14 +885,50 @@ export function AtelierShellV3() {
       return;
     }
 
-    // Plain click: drop extras so the user gets a fresh single-selection.
+    // Don't initiate drag on textareas / inputs / buttons inside the node.
+    const tag = (event.target as HTMLElement).tagName;
+    if (tag === "TEXTAREA" || tag === "INPUT" || tag === "BUTTON") return;
+
+    // Plain click on a node that's already in a multi-selection (size > 1):
+    // preserve the selection and start a *group* drag. If the clicked node
+    // wasn't the primary, promote it to primary (and demote the old primary
+    // into extras) so the action bar would anchor here on click-release.
+    if (allSelectedIds.size > 1 && allSelectedIds.has(node.id)) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (node.id !== selectedNodeId && selectedNodeId) {
+        const oldPrimary = selectedNodeId;
+        setExtraSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(node.id);
+          next.add(oldPrimary);
+          return next;
+        });
+        selectNode(node.id);
+      }
+      const proj = useAtelierStore.getState().currentProject;
+      const members: Array<{ nodeId: string; startWorldX: number; startWorldY: number }> = [];
+      for (const id of Array.from(allSelectedIds)) {
+        if (parseCandidateNodeId(id)) continue; // skip virtual candidates
+        const n = proj?.nodes.find((x) => x.id === id);
+        if (!n) continue;
+        members.push({ nodeId: n.id, startWorldX: n.x, startWorldY: n.y });
+      }
+      if (members.length === 0) return;
+      groupDragRef.current = {
+        members,
+        startPointerX: event.clientX,
+        startPointerY: event.clientY,
+        moved: false,
+      };
+      return;
+    }
+
+    // Plain click on something else: drop extras for a fresh single-selection.
     if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
 
     // Don't drag virtual candidates (they're derived); selection still fires.
     if (parseCandidateNodeId(node.id)) return;
-    // Don't initiate drag on textareas / inputs / buttons inside the node.
-    const tag = (event.target as HTMLElement).tagName;
-    if (tag === "TEXTAREA" || tag === "INPUT" || tag === "BUTTON") return;
     nodeDragRef.current = {
       nodeId: node.id,
       startWorldX: node.x,
