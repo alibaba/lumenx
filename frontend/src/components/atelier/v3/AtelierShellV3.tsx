@@ -803,10 +803,24 @@ export function AtelierShellV3() {
     }
 
     if (action === "useAsRef") {
-      pushToast("info", "Use-as-reference: drag onto a draft (coming next).");
+      // Open the per-action picker that lets the user choose which draft
+      // to attach this image as a reference to. (Drag-to-attach is a v1.1
+      // affordance; this dropdown is the v1 baseline.)
+      if (node.type !== "image") {
+        pushToast("info", "Use-as-reference is for image nodes.");
+        return;
+      }
+      if (!node.media_urls || node.media_urls.length === 0) {
+        pushToast("info", "Upload the image first, then attach it as reference.");
+        return;
+      }
+      setUseAsRefSourceId(node.id);
       return;
     }
   };
+
+  // Track which image node is choosing a target for "Use as reference".
+  const [useAsRefSourceId, setUseAsRefSourceId] = useState<string | null>(null);
 
   // Sequence is a simple client-side list of {parentId, candidateId} for now.
   const [sequence, setSequence] = useState<Array<{ parentId: string; candidateId: string }>>([]);
@@ -1199,6 +1213,76 @@ export function AtelierShellV3() {
           </div>
         )}
       </div>
+
+      {/* Use-as-reference picker modal */}
+      {useAsRefSourceId ? (() => {
+        const source = project?.nodes.find((n) => n.id === useAsRefSourceId);
+        const drafts = (project?.nodes ?? []).filter((n) => n.type === "video" && n.status === "draft");
+        if (!source) {
+          // Source vanished — close.
+          setTimeout(() => setUseAsRefSourceId(null), 0);
+          return null;
+        }
+        return (
+          <div
+            className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm"
+            onClick={() => setUseAsRefSourceId(null)}
+            role="dialog"
+            aria-label="Pick a target draft to attach this reference"
+          >
+            <div
+              className="w-[420px] rounded-xl border border-glass-border bg-elevated p-3 shadow-2xl shadow-black/40"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <div className="font-display text-sm font-semibold text-foreground">Use as reference</div>
+                <button onClick={() => setUseAsRefSourceId(null)} className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground" aria-label="Close">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-border-subtle bg-glass p-2">
+                {source.media_urls?.[0] ? (
+                  <img src={getAssetUrl(source.media_urls[0])} alt="" className="h-10 w-10 rounded object-cover" />
+                ) : null}
+                <div className="text-[12px] text-text-secondary truncate">
+                  Attach <span className="text-foreground font-medium">{source.title || "this image"}</span> to a draft as reference
+                </div>
+              </div>
+              {drafts.length === 0 ? (
+                <div className="rounded-md border border-dashed border-glass-border bg-glass p-4 text-center text-[12px] text-text-muted">
+                  No draft video nodes yet. Create one (press <span className="font-mono text-text-secondary">V</span>) and try again.
+                </div>
+              ) : (
+                <ul className="max-h-[280px] space-y-1 overflow-y-auto">
+                  {drafts.map((d) => {
+                    const intent = (d.data as { intent?: string })?.intent ?? d.title ?? "Untitled draft";
+                    const model = (d.data as { model?: string })?.model ?? "";
+                    return (
+                      <li key={d.id}>
+                        <button
+                          onClick={() => {
+                            setUseAsRefSourceId(null);
+                            void useAtelierStore.getState().attachReferenceNode(d.id, source.id)
+                              .then(() => pushToast("success", `Attached to ${intent}`))
+                              .catch((err: unknown) => pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`));
+                          }}
+                          className="flex w-full items-center justify-between gap-2 rounded-md border border-glass-border bg-glass px-3 py-2 text-left hover:bg-hover-bg"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-[13px] font-medium text-foreground">{intent}</div>
+                            <div className="font-mono text-[10px] text-text-muted">{model}</div>
+                          </div>
+                          <span className="rounded bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">attach</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        );
+      })() : null}
 
       {/* preview video modal */}
       {previewVideoUrl ? (
