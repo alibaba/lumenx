@@ -703,6 +703,10 @@ export function AtelierShellV3() {
 
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       switch (e.key.toLowerCase()) {
+        case "?":
+          e.preventDefault();
+          setShowHelp((s) => !s);
+          break;
         case "v":
           e.preventDefault();
           void handleCreateVideo();
@@ -734,6 +738,11 @@ export function AtelierShellV3() {
           });
           break;
         case "escape":
+          if (showHelp) {
+            e.preventDefault();
+            setShowHelp(false);
+            break;
+          }
           if (contextMenu) {
             e.preventDefault();
             setContextMenu(null);
@@ -1424,6 +1433,9 @@ export function AtelierShellV3() {
 
   // Track which image node is choosing a target for "Use as reference".
   const [useAsRefSourceId, setUseAsRefSourceId] = useState<string | null>(null);
+
+  // Keyboard shortcut help overlay — press '?' to open.
+  const [showHelp, setShowHelp] = useState(false);
 
   // Right-click context menu. Holds the cursor position (screen coords)
   // plus the node it was opened on (real or virtual). Closed by outside
@@ -2282,6 +2294,65 @@ export function AtelierShellV3() {
             >
               <X size={14} />
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Keyboard shortcut help overlay (press '?'). Outside-click + Esc
+          to close. Production-grade learning surface — a glance is enough. */}
+      {showHelp ? (
+        <div
+          role="dialog"
+          aria-label="Keyboard shortcuts"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="w-[520px] max-w-[92vw] rounded-xl border border-glass-border bg-elevated p-4 shadow-2xl shadow-black/40"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div className="font-display text-base font-semibold text-foreground">Shortcuts</div>
+              <button
+                type="button"
+                onClick={() => setShowHelp(false)}
+                aria-label="Close"
+                className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12px]">
+              {[
+                ["V", "New Video Node"],
+                ["I", "New Image Node"],
+                ["T", "New Idea Node"],
+                ["F", "Fit view"],
+                ["/", "Focus Agent composer"],
+                ["?", "Toggle this help"],
+                ["Esc", "Clear selection / close menus"],
+                ["Del / Backspace", "Delete selected"],
+                ["Shift + Click", "Add to selection"],
+                ["⌘ / Ctrl + Click", "Toggle in selection"],
+                ["Shift + Drag empty", "Box-select (marquee)"],
+                ["Drag empty", "Pan canvas"],
+                ["Shift + Drag node", "Snap to 8px grid"],
+                ["⌘ / Ctrl + A", "Select all"],
+                ["⌘ / Ctrl + C", "Copy selection"],
+                ["⌘ / Ctrl + V", "Paste"],
+                ["⌘ / Ctrl + D", "Duplicate"],
+                ["⌘ / Ctrl + Wheel", "Zoom"],
+                ["Drag image handle → draft", "Attach as reference"],
+                ["Right-click node", "Context menu"],
+              ].map(([keys, label]) => (
+                <div key={keys} className="flex items-center justify-between gap-3 py-0.5">
+                  <span className="text-text-secondary">{label}</span>
+                  <kbd className="shrink-0 rounded border border-glass-border bg-glass px-1.5 py-0.5 font-mono text-[10px] text-foreground">
+                    {keys}
+                  </kbd>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}

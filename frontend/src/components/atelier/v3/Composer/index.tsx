@@ -102,6 +102,11 @@ export function Composer({
   useEffect(() => setD(duration),   [duration]);
   useEffect(() => setC(count),      [count]);
 
+  const submit = () => {
+    if (showCapabilityMismatch) return;
+    onSubmit?.({ tab: activeTab, prompt: draft, modelLabel: m, aspect: a, duration: d, count: c, refs });
+  };
+
   const tabIndexOf = (t: ComposerTab) => TABS.indexOf(t);
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, t: ComposerTab) => {
     const i = tabIndexOf(t);
@@ -196,6 +201,12 @@ export function Composer({
           rows={3}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              submit();
+            }
+          }}
           autoFocus
           placeholder="Describe what you want to generate. Use @ to mention a canvas node."
           className="w-full resize-none rounded-md border border-glass-border bg-input-bg px-2.5 py-2 text-[13px] text-foreground placeholder:text-text-muted outline-none focus:border-primary/60"
@@ -229,7 +240,7 @@ export function Composer({
           aria-label="Submit"
           data-tip="Submit (⌘⏎)"
           disabled={showCapabilityMismatch}
-          onClick={() => onSubmit?.({ tab: activeTab, prompt: draft, modelLabel: m, aspect: a, duration: d, count: c, refs })}
+          onClick={submit}
           className={`btn-tip grid h-7 w-7 place-items-center rounded-full transition ${
             showCapabilityMismatch
               ? "bg-primary/40 text-white/70 cursor-not-allowed"
