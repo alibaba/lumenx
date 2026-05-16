@@ -373,18 +373,19 @@ export function AtelierShellV3() {
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editingIdeaBody, setEditingIdeaBody] = useState("");
 
-  // First-load auto-fit: once project has nodes, fit them in viewport.
+  // First-load auto-fit: once a project loads with at least one node, fit
+  // them in viewport. One-shot per browser session — user is in control of
+  // pan/zoom after the first paint.
   const didInitialFitRef = useRef(false);
   useEffect(() => {
     if (didInitialFitRef.current) return;
     if (!project || project.nodes.length === 0) return;
     if (!mainRef.current) return;
     didInitialFitRef.current = true;
-    // Defer one tick so layout is settled.
     const t = window.setTimeout(() => handleFitView(), 50);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project?.id, project?.nodes.length === 0]);
+  }, [project?.id]);
 
   // Keyboard shortcuts (PRD §12.5): V / I / T / F / Esc / Delete / / (focus agent).
   // Skip when typing in an input/textarea or contenteditable.
@@ -907,11 +908,15 @@ export function AtelierShellV3() {
 
   const handleCreateVideo = async () => {
     try {
+      const before = project?.nodes.length ?? 0;
       const node = await createVideoNode();
-      const variant = draftVariations[(project?.nodes.length ?? 0) % draftVariations.length];
+      const variant = draftVariations[before % draftVariations.length];
       const rect = mainRef.current?.getBoundingClientRect();
-      const cx = rect ? (rect.width / 2 - panX) / zoomFactor - 120 : node.x;
-      const cy = rect ? (rect.height / 2 - panY) / zoomFactor - 55 : node.y;
+      // Offset consecutive creates by up to 4×24 px so they don't stack on
+      // the same pixel when user clicks "New Video" repeatedly.
+      const jitter = (before % 6) * 28;
+      const cx = rect ? (rect.width / 2 - panX) / zoomFactor - 120 + jitter : node.x;
+      const cy = rect ? (rect.height / 2 - panY) / zoomFactor - 55 + jitter : node.y;
       await useAtelierStore.getState().updateNode(node.id, {
         status: "draft",
         x: Math.round(cx),
@@ -929,6 +934,37 @@ export function AtelierShellV3() {
       });
     } catch (err: unknown) {
       pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Drag-and-drop image files onto the canvas → quick reference upload.
+  // Drop on a draft → attach as ref to that draft (future: needs hit-test).
+  // For v1: every drop creates a new image node at drop position.
+  const [isDraggingFileOver, setIsDraggingFileOver] = useState(false);
+  const handleDragOver = (event: React.DragEvent) => {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    if (!isDraggingFileOver) setIsDraggingFileOver(true);
+  };
+  const handleDragLeave = (event: React.DragEvent) => {
+    if (event.target === event.currentTarget) setIsDraggingFileOver(false);
+  };
+  const handleDrop = async (event: React.DragEvent) => {
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    setIsDraggingFileOver(false);
+    const files = Array.from(event.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) {
+      pushToast("info", "Only image files can be dropped onto the canvas.");
+      return;
+    }
+    for (const file of files) {
+      try {
+        await createImageNode(file);
+        pushToast("success", `Added "${file.name}" as reference`);
+      } catch (err: unknown) {
+        pushToast("error", `Upload failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   };
 
@@ -982,8 +1018,8 @@ export function AtelierShellV3() {
       {/* Canvas surface — receives pan + zoom + node-drag pointer events */}
       <main
         ref={mainRef}
-        className="absolute inset-0 cursor-default touch-none select-none"
-        style={{ cursor: panDragRef.current ? "grabbing" : "default" }}
+        className={`absolute inset-0 cursor-default select-none ${isDraggingFileOver ? "ring-4 ring-inset ring-primary/40" : ""}`}
+        style={{ cursor: panDragRef.current ? "grabbing" : "default", touchAction: "none" }}
         onPointerDown={handleMainPointerDown}
         onPointerMove={handleMainPointerMove}
         onPointerUp={handleMainPointerUp}
@@ -991,6 +1027,9 @@ export function AtelierShellV3() {
           panDragRef.current = null;
           nodeDragRef.current = null;
         }}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         {/* loading skeleton (in screen coords) */}
         {isBootingProject ? (
