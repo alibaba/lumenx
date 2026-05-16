@@ -10,6 +10,7 @@ interface Props {
   duration?: string;
   status: "draft" | "pending" | "processing" | "completed" | "failed";
   progress?: number;
+  etaSeconds?: number;
   selected?: boolean;
   selectedAsTake?: boolean;
   x: number;
@@ -75,6 +76,7 @@ export function MediaNode({
   duration,
   status,
   progress,
+  etaSeconds,
   selected,
   selectedAsTake,
   x,
@@ -157,12 +159,27 @@ export function MediaNode({
       ) : null}
 
       {showProcessing ? (
-        <div className="absolute inset-0 grid place-items-center bg-blue-400/[0.18] backdrop-blur-[1px]">
-          <Loader2 className="animate-spin text-blue-100" size={20} />
+        <>
+          <div className="absolute inset-0 grid place-items-center bg-blue-400/[0.18] backdrop-blur-[1px]">
+            <div className="flex flex-col items-center gap-1">
+              <Loader2 className="animate-spin text-blue-100" size={20} />
+              {typeof progress === "number" ? (
+                <span className="font-mono text-[11px] font-semibold text-blue-50">{Math.round(progress)}%</span>
+              ) : null}
+              {typeof etaSeconds === "number" && etaSeconds > 0 ? (
+                <span className="font-mono text-[9px] text-blue-100/85">~{etaSeconds}s left</span>
+              ) : null}
+            </div>
+          </div>
           {typeof progress === "number" ? (
-            <span className="font-mono text-[10px] text-blue-100">{progress}%</span>
+            <div className="absolute inset-x-0 bottom-0 h-[3px] bg-black/40">
+              <div
+                className="h-full bg-blue-300 transition-[width] duration-300"
+                style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
+              />
+            </div>
           ) : null}
-        </div>
+        </>
       ) : null}
 
       {showFailed ? (

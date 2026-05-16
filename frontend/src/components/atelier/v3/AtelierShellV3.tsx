@@ -181,6 +181,9 @@ function renderNode(
       const configSummary =
         readString(node.data?.config_summary) ?? "1280×720 · 5s · 4×";
       const refs = readStringArray(node.data?.reference_image_urls);
+      const cands = readCandidates(node);
+      const candidatesReady = cands.filter((c) => c.status === "completed").length;
+      const candidatesTotal = cands.length;
       return (
         <DraftNode
           key={node.id}
@@ -190,6 +193,8 @@ function renderNode(
           modelLabel={modelLabel}
           configSummary={configSummary}
           refs={refs}
+          candidatesReady={candidatesTotal > 0 ? candidatesReady : undefined}
+          candidatesTotal={candidatesTotal > 0 ? candidatesTotal : undefined}
           selected={isSelected}
           x={node.x}
           y={node.y}
@@ -271,10 +276,32 @@ function renderCandidatesAsMediaNodes(
   return candidates.map((c, i) => {
     const { x, y } = candidatePosition(node, i);
     const candKey = candidateNodeId(node.id, c.id);
+    const params = (c.params ?? {}) as Record<string, unknown>;
     const progress =
-      typeof (c.params as { progress?: unknown })?.progress === "number"
-        ? ((c.params as { progress: number }).progress)
-        : undefined;
+      typeof params.progress === "number" ? params.progress : undefined;
+    // Prefer backend-supplied ETA; fall back to a heuristic from
+    // attempt_started_at + progress so the user gets *some* signal.
+    const etaSeconds = (() => {
+      const explicit = [
+        params.eta_seconds,
+        params.estimated_seconds_remaining,
+        params.eta,
+      ].find((v): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0);
+      if (explicit !== undefined) return Math.round(explicit);
+      if (
+        typeof progress === "number" &&
+        progress > 5 &&
+        typeof c.attempt_started_at === "number" &&
+        c.attempt_started_at > 0
+      ) {
+        const elapsedMs = Date.now() - c.attempt_started_at * 1000;
+        if (elapsedMs > 0) {
+          const eta = (elapsedMs / 1000) * (100 - progress) / progress;
+          if (eta > 0 && eta < 600) return Math.round(eta);
+        }
+      }
+      return undefined;
+    })();
     return (
       <MediaNode
         key={candKey}
@@ -284,6 +311,7 @@ function renderCandidatesAsMediaNodes(
         filename={c.label || c.id.slice(0, 8)}
         status={c.status}
         progress={progress}
+        etaSeconds={etaSeconds}
         selectedAsTake={selectedTakeId === c.id}
         selected={selectedId === candKey}
         x={x}

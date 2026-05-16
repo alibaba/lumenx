@@ -11,6 +11,8 @@ interface Props {
   modelLabel: string;
   configSummary: string;
   refs?: string[];
+  candidatesReady?: number;
+  candidatesTotal?: number;
   selected?: boolean;
   x: number;
   y: number;
@@ -31,6 +33,8 @@ export function DraftNode({
   modelLabel,
   configSummary,
   refs,
+  candidatesReady,
+  candidatesTotal,
   selected,
   x,
   y,
@@ -65,6 +69,18 @@ export function DraftNode({
         <div className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
           <Sparkles size={12} className="text-primary shrink-0" />
           <span className="truncate">{intent}</span>
+          {typeof candidatesTotal === "number" && candidatesTotal > 0 ? (
+            <span
+              className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] font-semibold ${
+                (candidatesReady ?? 0) >= candidatesTotal
+                  ? "bg-emerald-400/15 text-emerald-200"
+                  : "bg-blue-400/15 text-blue-200"
+              }`}
+              aria-label={`${candidatesReady ?? 0} of ${candidatesTotal} candidates ready`}
+            >
+              {candidatesReady ?? 0}/{candidatesTotal} ready
+            </span>
+          ) : null}
         </div>
         <div className="mt-1 flex items-center gap-1.5 text-[11px] text-text-secondary">
           <span className="rounded bg-primary/15 px-1.5 py-0.5 font-semibold text-primary">
