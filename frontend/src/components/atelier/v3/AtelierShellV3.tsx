@@ -325,7 +325,6 @@ export function AtelierShellV3() {
   const selectedNodeId = useAtelierStore((s) => s.selectedNodeId);
   const ensureProject = useAtelierStore((s) => s.ensureProject);
   const selectNode = useAtelierStore((s) => s.selectNode);
-  const createVideoNode = useAtelierStore((s) => s.createVideoNode);
   const createImageNode = useAtelierStore((s) => s.createImageNode);
   const createIdeaNode = useAtelierStore((s) => s.createIdeaNode);
   const deleteAtelierNode = useAtelierStore((s) => s.deleteAtelierNode);
@@ -908,23 +907,29 @@ export function AtelierShellV3() {
 
   const handleCreateVideo = async () => {
     try {
-      const before = project?.nodes.length ?? 0;
-      const node = await createVideoNode();
+      const proj = await ensureProject();
+      const before = proj.nodes.length;
       const variant = draftVariations[before % draftVariations.length];
       const rect = mainRef.current?.getBoundingClientRect();
-      // Offset consecutive creates by up to 4×24 px so they don't stack on
-      // the same pixel when user clicks "New Video" repeatedly.
+      // Offset consecutive creates by up to 6×28 px so repeated "New Video"
+      // clicks don't stack on the same pixel.
       const jitter = (before % 6) * 28;
-      const cx = rect ? (rect.width / 2 - panX) / zoomFactor - 120 + jitter : node.x;
-      const cy = rect ? (rect.height / 2 - panY) / zoomFactor - 55 + jitter : node.y;
-      await useAtelierStore.getState().updateNode(node.id, {
+      const cx = rect ? (rect.width / 2 - panX) / zoomFactor - 120 + jitter : 200;
+      const cy = rect ? (rect.height / 2 - panY) / zoomFactor - 55 + jitter : 200;
+      // Single-shot create: full draft fields in one POST. Avoids the brief
+      // black-MediaNode flicker (or terminal stuck-state if the second PATCH
+      // fails) of the two-step pattern. Render path requires
+      // status="draft" + data.intent (string) for DraftNode to win.
+      const node = await api.createAtelierNode(proj.id, {
+        type: "video",
+        title: `Video Node ${before + 1}`,
+        prompt: "",
         status: "draft",
         x: Math.round(cx),
         y: Math.round(cy),
         width: 240,
         height: 110,
         data: {
-          ...(node.data ?? {}),
           intent: variant.intent,
           model: variant.model,
           config_summary: "1280×720 · 5s · 4×",
@@ -932,6 +937,8 @@ export function AtelierShellV3() {
           candidates: [],
         },
       });
+      await refreshCurrentProject();
+      selectNode(node.id);
     } catch (err: unknown) {
       pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -1065,12 +1072,16 @@ export function AtelierShellV3() {
             {renderEdges(project ?? null)}
           </svg>
 
-          {/* nodes — each wrapped in a drag-aware div */}
+          {/* nodes — each wrapped in a drag-aware div. Use *Capture* phase
+              because v3 leaf nodes stopPropagation in their own onPointerDown
+              (Wave A polish), so a normal bubble-phase parent handler never
+              fires. Capture lets us start the drag tracking before the child
+              consumes the event; the child still selects the node on click. */}
           {project?.nodes.map((node) => (
             <div
               key={node.id}
               data-atelier-node={node.id}
-              onPointerDown={(e) => handleNodePointerDown(e, node)}
+              onPointerDownCapture={(e) => handleNodePointerDown(e, node)}
               style={{ touchAction: "none" }}
             >
               {renderNode(node, selectedNodeId, selectNode)}

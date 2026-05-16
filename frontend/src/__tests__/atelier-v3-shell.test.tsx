@@ -262,14 +262,43 @@ describe("AtelierShellV3", () => {
     ).toBeNull();
   });
 
-  it("Toolbar create-video calls store.createVideoNode", async () => {
-    const store = await getStoreState();
+  it("Toolbar create-video posts a draft node via api.createAtelierNode", async () => {
+    // We bypass store.createVideoNode and call api directly to land a draft
+    // in one network round-trip (status='draft' + data.intent set so the
+    // DraftNode renderer wins immediately, no MediaNode flicker).
+    const apiMod = await import("@/lib/api");
+    const spy = vi.spyOn(apiMod.api, "createAtelierNode").mockResolvedValue({
+      id: "n-new",
+      project_id: "p1",
+      type: "video",
+      title: "Video Node 3",
+      prompt: "",
+      status: "draft",
+      x: 100,
+      y: 100,
+      width: 240,
+      height: 110,
+      media_urls: [],
+      data: { intent: "Cinematic interpretation" },
+      created_by: "user",
+      created_at: 0,
+      updated_at: 0,
+    });
     const { AtelierShellV3 } = await import(
       "@/components/atelier/v3/AtelierShellV3"
     );
     render(<AtelierShellV3 />);
     fireEvent.click(screen.getByLabelText("New Video Node"));
-    expect(store.createVideoNode).toHaveBeenCalledTimes(1);
+    // Allow the async promise chain in handleCreateVideo to schedule.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [, payload] = spy.mock.calls[0];
+    expect(payload).toMatchObject({
+      type: "video",
+      status: "draft",
+    });
+    expect((payload.data as { intent: string }).intent).toMatch(/.+/);
+    spy.mockRestore();
   });
 
   it("Permission mode change calls store.updateAgentPolicy", async () => {
