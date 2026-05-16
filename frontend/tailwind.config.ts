@@ -37,6 +37,18 @@ const config: Config = {
         "gradient-conic":
           "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
       },
+      keyframes: {
+        // Subtle entry for canvas nodes — soft fade with a tiny pop. Anchors
+        // to the leaf's own coordinate system so it doesn't fight the
+        // absolute translate(x, y) the node already applies.
+        "atelier-node-in": {
+          "0%": { opacity: "0", filter: "blur(2px)" },
+          "100%": { opacity: "1", filter: "blur(0)" },
+        },
+      },
+      animation: {
+        "atelier-node-in": "atelier-node-in 220ms ease-out both",
+      },
     },
   },
   plugins: [],

@@ -1695,7 +1695,7 @@ export function AtelierShellV3() {
                 key={node.id}
                 data-atelier-node={node.id}
                 onPointerDownCapture={(e) => handleNodePointerDown(e, node)}
-                className={`group/node ${isSelected ? "" : "cursor-pointer"}`}
+                className={`group/node animate-atelier-node-in motion-reduce:animate-none ${isSelected ? "" : "cursor-pointer"}`}
                 style={{
                   touchAction: "none",
                   cursor: isBeingDragged ? "grabbing" : undefined,
