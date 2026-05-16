@@ -504,6 +504,22 @@ export function AtelierShellV3() {
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+
+      // Modifier-bearing shortcuts come *before* the no-modifier guard.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+        const key = e.key.toLowerCase();
+        if (key === "a") {
+          e.preventDefault();
+          const proj = useAtelierStore.getState().currentProject;
+          const nodes = proj?.nodes ?? [];
+          if (nodes.length === 0) return;
+          const [first, ...rest] = nodes;
+          selectNode(first.id);
+          setExtraSelectedIds(new Set(rest.map((n) => n.id)));
+          return;
+        }
+      }
+
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       switch (e.key.toLowerCase()) {
         case "v":
@@ -1489,7 +1505,14 @@ export function AtelierShellV3() {
                 data-atelier-node={node.id}
                 onPointerDownCapture={(e) => handleNodePointerDown(e, node)}
                 className={`group/node ${isSelected ? "" : "cursor-pointer"}`}
-                style={{ touchAction: "none", cursor: nodeDragRef.current?.nodeId === node.id ? "grabbing" : undefined }}
+                style={{
+                  touchAction: "none",
+                  cursor: nodeDragRef.current?.nodeId === node.id || groupDragRef.current?.members.some((m) => m.nodeId === node.id) ? "grabbing" : undefined,
+                  // Selected nodes lift above unselected so they don't get
+                  // visually overlapped by neighbors. Stays below the screen-
+                  // coord overlays (z-30+) which sit outside the world.
+                  zIndex: isSelected ? 20 : 10,
+                }}
               >
                 {renderNode(node, allSelectedIds, selectNode)}
               </div>
