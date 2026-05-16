@@ -1,4 +1,5 @@
 "use client";
+import { useRef } from "react";
 import { AlertTriangle, Check, ImageIcon, Loader2, Play, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
 
@@ -92,6 +93,34 @@ export function MediaNode({
   const showProcessing = status === "processing" || status === "pending";
   const showFailed = status === "failed";
 
+  // Hover-to-preview for completed video takes — pause-on-leave + 250ms
+  // dwell delay so a quick hover-pass doesn't trigger flicker. Mute + loop
+  // + playsinline keep it sotto voce.
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const enterTimerRef = useRef<number | null>(null);
+  const handleMouseEnter = () => {
+    if (kind !== "video" || !src || status !== "completed") return;
+    if (enterTimerRef.current) window.clearTimeout(enterTimerRef.current);
+    enterTimerRef.current = window.setTimeout(() => {
+      const v = videoRef.current;
+      if (!v) return;
+      v.play().catch(() => {
+        /* autoplay can be blocked; silently ignore */
+      });
+    }, 250);
+  };
+  const handleMouseLeave = () => {
+    if (enterTimerRef.current) {
+      window.clearTimeout(enterTimerRef.current);
+      enterTimerRef.current = null;
+    }
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      try { v.currentTime = 0; } catch { /* ignore */ }
+    }
+  };
+
   return (
     <div
       role="button"
@@ -106,7 +135,9 @@ export function MediaNode({
           onSelect?.(id);
         }
       }}
-      className={`group absolute overflow-hidden rounded-md bg-black/40 shadow-2xl shadow-black/40 ${
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`group absolute overflow-hidden rounded-md bg-black/40 shadow-2xl shadow-black/40 transition-shadow duration-200 ${
         // When media is missing, give the box a visible frame so it doesn't
         // melt into the canvas. With media (image/video src) we let the
         // image dominate; the ring/shadow still keep edges legible.
@@ -126,9 +157,21 @@ export function MediaNode({
 
       {kind === "video" && src ? (
         <>
-          <img src={src} alt={filename ?? ""} className="h-full w-full object-cover" />
+          <video
+            ref={videoRef}
+            src={src}
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-label={filename ?? "video preview"}
+            className="h-full w-full object-cover"
+          />
           {status === "completed" ? (
-            <span className="pointer-events-none absolute left-1/2 top-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white/95 opacity-60 group-hover:opacity-100">
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/55 text-white/95 opacity-90 transition-opacity duration-200 group-hover:opacity-0"
+            >
               <Play size={16} />
             </span>
           ) : null}

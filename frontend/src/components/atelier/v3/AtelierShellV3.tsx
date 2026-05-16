@@ -1833,7 +1833,14 @@ export function AtelierShellV3() {
                 aria-label={`Play ${parent.title}, clip ${i + 1}`}
               >
                 {cand.video_url ? (
-                  <img src={getAssetUrl(cand.video_url)} alt="" className="h-full w-full object-cover" />
+                  <video
+                    src={getAssetUrl(cand.video_url)}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    aria-label={`${parent.title} thumbnail`}
+                    className="h-full w-full object-cover"
+                  />
                 ) : null}
                 <span className="pointer-events-none absolute inset-0 m-auto grid h-7 w-7 place-items-center rounded-full bg-black/55 text-white/95 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
                   <Play size={12} />
