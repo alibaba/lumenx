@@ -709,6 +709,7 @@ export function AtelierShellV3() {
         case "?":
           e.preventDefault();
           setShowHelp((s) => !s);
+          dismissOnboarding();
           break;
         case "v":
           e.preventDefault();
@@ -1439,6 +1440,27 @@ export function AtelierShellV3() {
 
   // Keyboard shortcut help overlay — press '?' to open.
   const [showHelp, setShowHelp] = useState(false);
+
+  // First-run onboarding hint pointing to '?'. Persists "seen" across
+  // refreshes via localStorage so we don't nag returning users.
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const seen = window.localStorage.getItem("atelier-v3-onboarding-seen");
+      if (!seen) {
+        // Wait for project to load + auto-fit settle, then surface.
+        const t = window.setTimeout(() => setShowOnboarding(true), 1200);
+        return () => window.clearTimeout(t);
+      }
+    } catch {
+      /* localStorage may be unavailable; fall back to no hint */
+    }
+  }, []);
+  const dismissOnboarding = () => {
+    setShowOnboarding(false);
+    try { window.localStorage.setItem("atelier-v3-onboarding-seen", "1"); } catch { /* ignore */ }
+  };
 
   // Right-click context menu. Holds the cursor position (screen coords)
   // plus the node it was opened on (real or virtual). Closed by outside
@@ -2303,6 +2325,43 @@ export function AtelierShellV3() {
               <X size={14} />
             </button>
           </div>
+        </div>
+      ) : null}
+
+      {/* First-run onboarding hint — slides in once, points to '?' help. */}
+      {showOnboarding && !showHelp ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute bottom-[120px] left-4 z-30 max-w-[280px] animate-atelier-node-in motion-reduce:animate-none rounded-xl border border-primary/40 bg-elevated px-3 py-2.5 shadow-2xl shadow-black/40 backdrop-blur-md"
+        >
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-primary/85">Welcome</span>
+            <button
+              type="button"
+              onClick={dismissOnboarding}
+              aria-label="Dismiss tip"
+              className="rounded p-0.5 text-text-muted hover:bg-hover-bg hover:text-foreground"
+            >
+              <X size={11} />
+            </button>
+          </div>
+          <p className="text-[12px] leading-relaxed text-text-secondary">
+            Drop a seed with{" "}
+            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">V</kbd>,{" "}
+            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">I</kbd>, or{" "}
+            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">T</kbd>.
+            Press{" "}
+            <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">?</kbd>{" "}
+            anytime to see every shortcut.
+          </p>
+          <button
+            type="button"
+            onClick={() => { setShowHelp(true); dismissOnboarding(); }}
+            className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/25"
+          >
+            View shortcuts
+          </button>
         </div>
       ) : null}
 
