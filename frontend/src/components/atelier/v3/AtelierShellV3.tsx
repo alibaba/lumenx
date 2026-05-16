@@ -1482,12 +1482,12 @@ export function AtelierShellV3() {
   };
 
   // Right-click context menu. Holds the cursor position (screen coords)
-  // plus the node it was opened on (real or virtual). Closed by outside
-  // click, Esc, or selecting a menu item.
+  // plus an optional node it was opened on. Closed by outside click,
+  // Esc, or selecting a menu item. Node-less entries are canvas menus.
   const [contextMenu, setContextMenu] = useState<{
     screenX: number;
     screenY: number;
-    node: AtelierNode;
+    node: AtelierNode | null;
   } | null>(null);
 
   // Sequence is a simple client-side list of {parentId, candidateId} for now.
@@ -1714,6 +1714,14 @@ export function AtelierShellV3() {
         onPointerDown={handleMainPointerDown}
         onPointerMove={handleMainPointerMove}
         onPointerUp={handleMainPointerUp}
+        onContextMenu={(e) => {
+          // Empty canvas right-click → canvas-level menu (Paste / Select all).
+          // The node-wrapper handler stops propagation so this only fires when
+          // the user clicked truly empty space.
+          if ((e.target as HTMLElement).closest("[data-atelier-node],[role=\"dialog\"],[role=\"toolbar\"],[role=\"region\"]")) return;
+          e.preventDefault();
+          setContextMenu({ screenX: e.clientX, screenY: e.clientY, node: null });
+        }}
         onPointerCancel={() => {
           panDragRef.current = null;
           nodeDragRef.current = null;
@@ -2185,9 +2193,36 @@ export function AtelierShellV3() {
       {/* Right-click context menu — closes on outside click + Esc. */}
       {contextMenu ? (() => {
         const node = contextMenu.node;
-        const kind = selectionKindOf(node);
         const items: Array<{ label: string; onClick: () => void; danger?: boolean; disabled?: boolean }> = [];
         const close = () => setContextMenu(null);
+        if (!node) {
+          // Canvas (empty) menu.
+          items.push({
+            label: "Paste",
+            onClick: () => {
+              void pasteClipboard().catch((err: unknown) => {
+                pushToast("error", `Paste failed: ${err instanceof Error ? err.message : String(err)}`);
+              });
+              close();
+            },
+            disabled: clipboardRef.current.length === 0,
+          });
+          items.push({
+            label: "Select all",
+            onClick: () => {
+              const proj = useAtelierStore.getState().currentProject;
+              const nodes = proj?.nodes ?? [];
+              if (nodes.length > 0) {
+                const [first, ...rest] = nodes;
+                selectNode(first.id);
+                setExtraSelectedIds(new Set(rest.map((n) => n.id)));
+              }
+              close();
+            },
+            disabled: (project?.nodes.length ?? 0) === 0,
+          });
+        } else {
+        const kind = selectionKindOf(node);
         if (kind === "draft") {
           items.push({ label: "Edit prompt", onClick: () => { selectNode(node.id); close(); } });
           items.push({ label: "Duplicate", onClick: () => { copySelection(); void pasteClipboard(); close(); } });
@@ -2215,6 +2250,7 @@ export function AtelierShellV3() {
         } else if (kind === "audio") {
           items.push({ label: "Duplicate", onClick: () => { copySelection(); void pasteClipboard(); close(); } });
           items.push({ label: "Delete", onClick: () => { void deleteSelection(); close(); }, danger: true });
+        }
         }
         return (
           <>
