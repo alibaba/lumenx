@@ -22,6 +22,7 @@ import {
 import {
   api,
   type AtelierNode,
+  type AtelierNodePayload,
   type AtelierProject,
   type AtelierVideoCandidate,
   type AtelierApprovalMode,
@@ -463,6 +464,90 @@ export function AtelierShellV3() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
 
+  // Snapshot the currently selected real nodes into the clipboard. Virtual
+  // candidates (parent::cand::cid) are excluded because their lifecycle is
+  // owned by their parent. Video drafts have their `candidates` stripped so
+  // a paste starts a fresh iteration rather than carrying over takes.
+  const copySelection = (): number => {
+    const proj = useAtelierStore.getState().currentProject;
+    if (!proj) return 0;
+    const ids = Array.from(allSelectedIds).filter((id) => !parseCandidateNodeId(id));
+    if (ids.length === 0) return 0;
+    const entries: Array<{ payload: AtelierNodePayload; originX: number; originY: number }> = [];
+    for (const id of ids) {
+      const n = proj.nodes.find((x) => x.id === id);
+      if (!n) continue;
+      const data: Record<string, unknown> = { ...(n.data ?? {}) };
+      if (n.type === "video") {
+        // Don't carry takes into the copy — paste should be an empty draft
+        // ready to iterate.
+        delete (data as { candidates?: unknown }).candidates;
+        delete (data as { selected_candidate_id?: unknown }).selected_candidate_id;
+      }
+      entries.push({
+        payload: {
+          type: n.type,
+          title: n.title,
+          prompt: n.prompt,
+          // Reset draft-ish nodes to draft so paste is editable.
+          status: n.type === "video" ? "draft" : n.status,
+          width: n.width,
+          height: n.height,
+          source_project_id: n.source_project_id ?? null,
+          frame_id: n.frame_id ?? null,
+          asset_id: n.asset_id ?? null,
+          video_task_id: n.video_task_id ?? null,
+          media_urls: [...(n.media_urls ?? [])],
+          data,
+        },
+        originX: n.x,
+        originY: n.y,
+      });
+    }
+    clipboardRef.current = entries;
+    pasteOffsetRef.current = { x: 24, y: 24 };
+    return entries.length;
+  };
+
+  // Paste the clipboard at originX/Y + offset, preserving relative spacing.
+  // Each successive paste increments the offset so stacks don't overlap.
+  const pasteClipboard = async (): Promise<number> => {
+    const entries = clipboardRef.current;
+    if (entries.length === 0) return 0;
+    const proj = await ensureProject();
+    const { x: offX, y: offY } = pasteOffsetRef.current;
+    const created: AtelierNode[] = [];
+    let failed = 0;
+    for (const entry of entries) {
+      try {
+        const node = await api.createAtelierNode(proj.id, {
+          ...entry.payload,
+          x: Math.round(entry.originX + offX),
+          y: Math.round(entry.originY + offY),
+        });
+        created.push(node);
+      } catch {
+        failed += 1;
+      }
+    }
+    pasteOffsetRef.current = { x: offX + 24, y: offY + 24 };
+    if (created.length > 0) {
+      await refreshCurrentProject();
+      const [first, ...rest] = created;
+      selectNode(first.id);
+      setExtraSelectedIds(new Set(rest.map((n) => n.id)));
+    }
+    if (failed > 0) {
+      pushToast("error", `${failed} of ${entries.length} pastes failed`);
+    } else if (created.length > 0) {
+      pushToast(
+        "success",
+        created.length === 1 ? "Pasted 1 node" : `Pasted ${created.length} nodes`,
+      );
+    }
+    return created.length;
+  };
+
   // Delete every node in the multi-selection. Real nodes go through the
   // store's deleteAtelierNode; virtual candidate ids (parent::cand::cid)
   // route to deleteCandidate. Confirm once for the whole batch.
@@ -516,6 +601,46 @@ export function AtelierShellV3() {
           const [first, ...rest] = nodes;
           selectNode(first.id);
           setExtraSelectedIds(new Set(rest.map((n) => n.id)));
+          return;
+        }
+        if (key === "c") {
+          // Copy to private clipboard (not OS clipboard — node payloads
+          // aren't useful there). Quiet on success: the next paste is the
+          // signal users want.
+          e.preventDefault();
+          const count = copySelection();
+          if (count === 0) {
+            pushToast("info", "Nothing to copy.");
+          } else {
+            pushToast("info", count === 1 ? "1 node copied" : `${count} nodes copied`);
+          }
+          return;
+        }
+        if (key === "v") {
+          e.preventDefault();
+          if (clipboardRef.current.length === 0) {
+            pushToast("info", "Clipboard is empty.");
+            return;
+          }
+          void pasteClipboard().catch((err: unknown) => {
+            pushToast("error", `Paste failed: ${err instanceof Error ? err.message : String(err)}`);
+          });
+          return;
+        }
+        if (key === "d") {
+          // Cmd+D = duplicate. Snapshot now (overwriting the visible
+          // clipboard is intentional — that's the cost of reusing copy
+          // for duplicate; users who do explicit Cmd+C / Cmd+V can stack
+          // separate buffers per-session).
+          e.preventDefault();
+          const count = copySelection();
+          if (count === 0) {
+            pushToast("info", "Select a node to duplicate.");
+            return;
+          }
+          void pasteClipboard().catch((err: unknown) => {
+            pushToast("error", `Duplicate failed: ${err instanceof Error ? err.message : String(err)}`);
+          });
           return;
         }
       }
@@ -619,6 +744,13 @@ export function AtelierShellV3() {
     startPointerY: number;
     moved: boolean;
   } | null>(null);
+
+  // Clipboard for copy / paste / duplicate. Each entry is a paste-ready
+  // payload + the source's world coords so we can preserve relative layout
+  // when pasting more than one node.
+  const clipboardRef = useRef<Array<{ payload: AtelierNodePayload; originX: number; originY: number }>>([]);
+  // Stacking offset so consecutive pastes don't sit on top of each other.
+  const pasteOffsetRef = useRef<{ x: number; y: number }>({ x: 24, y: 24 });
 
   // Marquee box-select. Activated by Shift + drag on empty canvas.
   // Tracks both screen-coord rect (for the visible overlay) and uses
