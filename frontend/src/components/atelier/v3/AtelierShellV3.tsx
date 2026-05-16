@@ -879,6 +879,12 @@ export function AtelierShellV3() {
       setPanY(panDragRef.current.startPanY + dy);
       return;
     }
+    // Snap-to-grid helper. When Shift is held during a drag the resulting
+    // world coords lock to the nearest GRID multiple — useful for tidy
+    // alignment on the fly without manual nudging.
+    const GRID = 8;
+    const snap = (v: number) => (event.shiftKey ? Math.round(v / GRID) * GRID : Math.round(v));
+
     // Group drag (multi-selection)
     if (groupDragRef.current) {
       const dx = event.clientX - groupDragRef.current.startPointerX;
@@ -887,7 +893,7 @@ export function AtelierShellV3() {
       const wd = screenDeltaToWorld(dx, dy);
       const store = useAtelierStore.getState();
       for (const m of groupDragRef.current.members) {
-        store.moveNodeLocal(m.nodeId, Math.round(m.startWorldX + wd.x), Math.round(m.startWorldY + wd.y));
+        store.moveNodeLocal(m.nodeId, snap(m.startWorldX + wd.x), snap(m.startWorldY + wd.y));
       }
       return;
     }
@@ -896,8 +902,8 @@ export function AtelierShellV3() {
       const dx = event.clientX - nodeDragRef.current.startPointerX;
       const dy = event.clientY - nodeDragRef.current.startPointerY;
       const wd = screenDeltaToWorld(dx, dy);
-      const newX = Math.round(nodeDragRef.current.startWorldX + wd.x);
-      const newY = Math.round(nodeDragRef.current.startWorldY + wd.y);
+      const newX = snap(nodeDragRef.current.startWorldX + wd.x);
+      const newY = snap(nodeDragRef.current.startWorldY + wd.y);
       if (Math.abs(dx) + Math.abs(dy) > 3) nodeDragRef.current.moved = true;
       // Optimistic local update
       useAtelierStore.getState().moveNodeLocal(nodeDragRef.current.nodeId, newX, newY);
@@ -1681,6 +1687,9 @@ export function AtelierShellV3() {
               consumes the event; the child still selects the node on click. */}
           {project?.nodes.map((node) => {
             const isSelected = allSelectedIds.has(node.id);
+            const isBeingDragged =
+              nodeDragRef.current?.nodeId === node.id ||
+              groupDragRef.current?.members.some((m) => m.nodeId === node.id);
             return (
               <div
                 key={node.id}
@@ -1689,11 +1698,18 @@ export function AtelierShellV3() {
                 className={`group/node ${isSelected ? "" : "cursor-pointer"}`}
                 style={{
                   touchAction: "none",
-                  cursor: nodeDragRef.current?.nodeId === node.id || groupDragRef.current?.members.some((m) => m.nodeId === node.id) ? "grabbing" : undefined,
+                  cursor: isBeingDragged ? "grabbing" : undefined,
                   // Selected nodes lift above unselected so they don't get
                   // visually overlapped by neighbors. Stays below the screen-
                   // coord overlays (z-30+) which sit outside the world.
-                  zIndex: isSelected ? 20 : 10,
+                  // Mid-drag we go higher still so the moving card visually
+                  // clears anything it crosses over.
+                  zIndex: isBeingDragged ? 25 : isSelected ? 20 : 10,
+                  // Subtle drag ghost: 85% opacity while moving. Transition
+                  // makes hover-grab and release feel intentional rather
+                  // than snappy.
+                  opacity: isBeingDragged ? 0.88 : undefined,
+                  transition: "opacity 140ms ease-out",
                 }}
               >
                 {renderNode(node, allSelectedIds, selectNode)}
