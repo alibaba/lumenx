@@ -593,6 +593,17 @@ export function AtelierShellV3() {
   } | null>(null);
   const panDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
 
+  // Marquee box-select. Activated by Shift + drag on empty canvas.
+  // Tracks both screen-coord rect (for the visible overlay) and uses
+  // pan/zoom to map back to world coords on release.
+  const marqueeDragRef = useRef<{
+    startScreenX: number;
+    startScreenY: number;
+    currentScreenX: number;
+    currentScreenY: number;
+  } | null>(null);
+  const [marqueeTick, setMarqueeTick] = useState(0);
+
   // Connect drag (image → draft attach-as-reference). Live updates via tick
   // since refs don't trigger re-render — we want the dashed bezier overlay
   // to follow the cursor and the hovered target ring to repaint.
@@ -616,9 +627,25 @@ export function AtelierShellV3() {
     // Start pan only when clicking the canvas background (not a node / overlay).
     if (event.target !== event.currentTarget && (event.target as HTMLElement).closest('[data-atelier-node],[role="dialog"],[role="toolbar"],[role="region"]')) return;
     if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    // Shift + drag on empty canvas = marquee box-select. Don't clear the
+    // existing selection until the user actually drags (pure shift-click on
+    // empty is a no-op, not a deselect).
+    if (event.shiftKey) {
+      marqueeDragRef.current = {
+        startScreenX: event.clientX,
+        startScreenY: event.clientY,
+        currentScreenX: event.clientX,
+        currentScreenY: event.clientY,
+      };
+      setMarqueeTick((v) => v + 1);
+      return;
+    }
+
+    // Plain empty-canvas click clears any selection.
     selectNode(null);
     if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
-    event.currentTarget.setPointerCapture(event.pointerId);
     panDragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -628,6 +655,13 @@ export function AtelierShellV3() {
   };
 
   const handleMainPointerMove = (event: React.PointerEvent) => {
+    // Marquee — update rect; don't pan or drag.
+    if (marqueeDragRef.current) {
+      marqueeDragRef.current.currentScreenX = event.clientX;
+      marqueeDragRef.current.currentScreenY = event.clientY;
+      setMarqueeTick((v) => v + 1);
+      return;
+    }
     // Pan
     if (panDragRef.current) {
       const dx = event.clientX - panDragRef.current.startX;
@@ -650,6 +684,51 @@ export function AtelierShellV3() {
   };
 
   const handleMainPointerUp = () => {
+    if (marqueeDragRef.current) {
+      const m = marqueeDragRef.current;
+      marqueeDragRef.current = null;
+      // Map screen-coord rect back to world coords.
+      const x1 = Math.min(m.startScreenX, m.currentScreenX);
+      const x2 = Math.max(m.startScreenX, m.currentScreenX);
+      const y1 = Math.min(m.startScreenY, m.currentScreenY);
+      const y2 = Math.max(m.startScreenY, m.currentScreenY);
+      // Ignore dribbles — treat as a click (do nothing).
+      if (x2 - x1 < 4 && y2 - y1 < 4) {
+        setMarqueeTick((v) => v + 1);
+        return;
+      }
+      const rect = mainRef.current?.getBoundingClientRect();
+      const offX = rect?.left ?? 0;
+      const offY = rect?.top ?? 0;
+      const wx1 = (x1 - offX - panX) / zoomFactor;
+      const wy1 = (y1 - offY - panY) / zoomFactor;
+      const wx2 = (x2 - offX - panX) / zoomFactor;
+      const wy2 = (y2 - offY - panY) / zoomFactor;
+      // Hit-test real nodes (use bbox intersection, not strict containment,
+      // which feels more permissive and matches Figma).
+      const proj = useAtelierStore.getState().currentProject;
+      const hits: string[] = [];
+      if (proj) {
+        for (const n of proj.nodes) {
+          const nx2 = n.x + (n.width || 240);
+          const ny2 = n.y + (n.height || 110);
+          const intersects = !(nx2 < wx1 || n.x > wx2 || ny2 < wy1 || n.y > wy2);
+          if (intersects) hits.push(n.id);
+        }
+      }
+      if (hits.length === 0) {
+        // Empty drag — clear selection like a plain canvas click would.
+        selectNode(null);
+        setExtraSelectedIds(new Set());
+        setMarqueeTick((v) => v + 1);
+        return;
+      }
+      const [first, ...rest] = hits;
+      selectNode(first);
+      setExtraSelectedIds(new Set(rest));
+      setMarqueeTick((v) => v + 1);
+      return;
+    }
     if (panDragRef.current) {
       panDragRef.current = null;
       return;
@@ -1528,6 +1607,23 @@ export function AtelierShellV3() {
           >
             <Link2 size={9} aria-hidden="true" />
           </button>
+        );
+      })() : null}
+
+      {/* Marquee box-select overlay (screen coords). */}
+      {marqueeDragRef.current ? (() => {
+        const m = marqueeDragRef.current!;
+        const x = Math.min(m.startScreenX, m.currentScreenX);
+        const y = Math.min(m.startScreenY, m.currentScreenY);
+        const w = Math.abs(m.currentScreenX - m.startScreenX);
+        const h = Math.abs(m.currentScreenY - m.startScreenY);
+        return (
+          <div
+            key={`marquee-${marqueeTick}`}
+            aria-hidden="true"
+            className="pointer-events-none fixed z-[44] rounded-sm border border-primary/70 bg-primary/[0.08]"
+            style={{ left: x, top: y, width: w, height: h }}
+          />
         );
       })() : null}
 
