@@ -94,6 +94,12 @@ vi.mock("@/store/atelierStore", () => {
     ensureProject: ReturnType<typeof vi.fn>;
     selectNode: ReturnType<typeof vi.fn>;
     createVideoNode: ReturnType<typeof vi.fn>;
+    createImageNode: ReturnType<typeof vi.fn>;
+    createIdeaNode: ReturnType<typeof vi.fn>;
+    deleteAtelierNode: ReturnType<typeof vi.fn>;
+    branchFromCandidate: ReturnType<typeof vi.fn>;
+    updateNode: ReturnType<typeof vi.fn>;
+    refreshCurrentProject: ReturnType<typeof vi.fn>;
     updateAgentPolicy: ReturnType<typeof vi.fn>;
     createVideoCandidates: ReturnType<typeof vi.fn>;
     selectCandidate: ReturnType<typeof vi.fn>;
@@ -106,6 +112,12 @@ vi.mock("@/store/atelierStore", () => {
     ensureProject: vi.fn(),
     selectNode: vi.fn(),
     createVideoNode: vi.fn(),
+    createImageNode: vi.fn(),
+    createIdeaNode: vi.fn(),
+    deleteAtelierNode: vi.fn(),
+    branchFromCandidate: vi.fn(),
+    updateNode: vi.fn(),
+    refreshCurrentProject: vi.fn(),
     updateAgentPolicy: vi.fn(),
     createVideoCandidates: vi.fn(),
     selectCandidate: vi.fn(),
@@ -114,6 +126,16 @@ vi.mock("@/store/atelierStore", () => {
     deleteCandidate: vi.fn(),
   };
   state.ensureProject.mockImplementation(async () => state.currentProject);
+  // All store actions return resolved Promises by default so chain `.then()` /
+  // `.catch()` calls inside AtelierShellV3 don't throw on undefined.
+  for (const key of [
+    "createVideoNode", "createImageNode", "createIdeaNode", "deleteAtelierNode",
+    "branchFromCandidate", "updateNode", "refreshCurrentProject", "updateAgentPolicy",
+    "createVideoCandidates", "selectCandidate", "regenerateVideoCandidates",
+    "retryCandidate", "deleteCandidate",
+  ] as const) {
+    (state[key] as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  }
   return {
     useAtelierStore: Object.assign(
       vi.fn((selector?: (s: typeof state) => unknown) =>
@@ -133,6 +155,12 @@ async function getStoreState() {
     ensureProject: ReturnType<typeof vi.fn>;
     selectNode: ReturnType<typeof vi.fn>;
     createVideoNode: ReturnType<typeof vi.fn>;
+    createImageNode: ReturnType<typeof vi.fn>;
+    createIdeaNode: ReturnType<typeof vi.fn>;
+    deleteAtelierNode: ReturnType<typeof vi.fn>;
+    branchFromCandidate: ReturnType<typeof vi.fn>;
+    updateNode: ReturnType<typeof vi.fn>;
+    refreshCurrentProject: ReturnType<typeof vi.fn>;
     updateAgentPolicy: ReturnType<typeof vi.fn>;
     createVideoCandidates: ReturnType<typeof vi.fn>;
     selectCandidate: ReturnType<typeof vi.fn>;
@@ -203,10 +231,10 @@ describe("AtelierShellV3", () => {
       "@/components/atelier/v3/AtelierShellV3"
     );
     render(<AtelierShellV3 />);
-    // draft layout: Re-generate, Branch, Delete
-    expect(screen.getByLabelText("Branch")).toBeInTheDocument();
-    expect(screen.getByLabelText("Re-generate")).toBeInTheDocument();
+    // draft layout (v0.3.1+): only Delete — Composer is the editor for drafts.
     expect(screen.getByLabelText("Delete")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Branch")).toBeNull();
+    expect(screen.queryByLabelText("Re-generate")).toBeNull();
   });
 
   it("renders Composer below a selected draft", async () => {

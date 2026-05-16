@@ -58,12 +58,15 @@ describe("SelectionActionBar", () => {
     expect(root.style.top).toBe("160px");
   });
 
-  it("renders fewer icons for kind=draft (no Play, no SelectTake)", () => {
-    render(<SelectionActionBar kind="draft" x={0} y={100} width={200} onAct={() => {}} />);
+  it("draft kind shows ONLY Delete (Composer is the editor for drafts)", () => {
+    const { container } = render(<SelectionActionBar kind="draft" x={0} y={100} width={200} onAct={() => {}} />);
     expect(screen.queryByLabelText("Play")).toBeNull();
     expect(screen.queryByLabelText("Select as take")).toBeNull();
-    expect(screen.getByLabelText("Branch")).toBeInTheDocument();
-    expect(screen.getByLabelText("Re-generate")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Branch")).toBeNull();
+    expect(screen.queryByLabelText("Re-generate")).toBeNull();
+    expect(screen.getByLabelText("Delete")).toBeInTheDocument();
+    // Only one button on draft kind.
+    expect(container.querySelectorAll("button")).toHaveLength(1);
   });
 
   it("clamps top to >= 8 when node is near canvas top", () => {

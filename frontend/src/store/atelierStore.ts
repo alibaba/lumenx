@@ -43,6 +43,10 @@ interface AtelierStore {
     ) => Promise<AtelierProject>;
     runAgentTurn: (payload: RunAtelierAgentTurnPayload) => Promise<AtelierAgentTurn>;
     createVideoNode: () => Promise<AtelierNode>;
+    createImageNode: (file: File) => Promise<AtelierNode>;
+    createIdeaNode: (body?: string) => Promise<AtelierNode>;
+    deleteAtelierNode: (nodeId: string) => Promise<void>;
+    branchFromCandidate: (parentId: string, candidateId: string) => Promise<AtelierNode>;
     updateNode: (nodeId: string, patch: Partial<AtelierNode>) => Promise<AtelierNode>;
     uploadReferenceImage: (nodeId: string, file: File) => Promise<AtelierNode>;
     attachReferenceNode: (videoNodeId: string, imageNodeId: string) => Promise<AtelierNode>;
@@ -59,6 +63,7 @@ interface AtelierStore {
 }
 
 function replaceNode(project: AtelierProject, node: AtelierNode): AtelierProject {
+    if (node.project_id !== project.id) return project;
     return {
         ...project,
         nodes: project.nodes.map((candidate) => (candidate.id === node.id ? node : candidate)),
@@ -105,11 +110,22 @@ function getReferenceNodeIds(node: AtelierNode): string[] {
 }
 
 function replaceNodes(project: AtelierProject, nodes: AtelierNode[]): AtelierProject {
-    const nodeMap = new Map(nodes.map((node) => [node.id, node]));
+    const nodeMap = new Map(
+        nodes
+            .filter((node) => node.project_id === project.id)
+            .map((node) => [node.id, node])
+    );
     return {
         ...project,
         nodes: project.nodes.map((node) => nodeMap.get(node.id) ?? node),
     };
+}
+
+let ensureProjectRequest: Promise<AtelierProject> | null = null;
+let createProjectRequest: Promise<AtelierProject> | null = null;
+
+function isNodeInProject(project: AtelierProject, nodeId: string): boolean {
+    return project.nodes.some((node) => node.id === nodeId);
 }
 
 export const useAtelierStore = create<AtelierStore>((set, get) => ({
@@ -146,14 +162,39 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
     ensureProject: async () => {
         const existing = get().currentProject;
         if (existing) return existing;
-        await get().loadProjects();
-        const loaded = get().currentProject;
-        if (loaded) return loaded;
-        return get().createProject();
+        if (ensureProjectRequest) return ensureProjectRequest;
+        ensureProjectRequest = (async () => {
+            await get().loadProjects();
+            const loaded = get().currentProject;
+            if (loaded) return loaded;
+            return get().createProject();
+        })();
+        try {
+            return await ensureProjectRequest;
+        } finally {
+            ensureProjectRequest = null;
+        }
     },
 
     createProject: async (title = "Atelier Exploration") => {
-        const project = await api.createAtelierProject(title, "Freeform AI video exploration");
+        if (createProjectRequest) {
+            const project = await createProjectRequest;
+            set((state) => ({
+                projects: replaceProject(state.projects, project),
+                currentProject: state.currentProject ?? project,
+                selectedNodeId: state.currentProject ? state.selectedNodeId : null,
+                agentTurns: state.currentProject ? state.agentTurns : project.agent_turns ?? [],
+                pendingAgentTurn: state.currentProject ? state.pendingAgentTurn : getPendingAgentTurn(project.agent_turns),
+            }));
+            return project;
+        }
+        createProjectRequest = api.createAtelierProject(title, "Freeform AI video exploration");
+        let project: AtelierProject;
+        try {
+            project = await createProjectRequest;
+        } finally {
+            createProjectRequest = null;
+        }
         set((state) => ({
             projects: [project, ...state.projects],
             currentProject: project,
@@ -234,7 +275,111 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             },
         });
         set((state) => ({
-            currentProject: state.currentProject
+            currentProject: state.currentProject?.id === node.project_id
+                ? { ...state.currentProject, nodes: [...state.currentProject.nodes, node] }
+                : state.currentProject,
+            selectedNodeId: state.currentProject?.id === node.project_id ? node.id : state.selectedNodeId,
+        }));
+        return node;
+    },
+
+    createImageNode: async (file) => {
+        const project = await get().ensureProject();
+        const upload = await api.uploadFile(file);
+        const url = upload.url as string;
+        // Place near the right of the existing nodes so it doesn't overlap.
+        const offset = project.nodes.length * 24;
+        const node = await api.createAtelierNode(project.id, {
+            type: "image",
+            title: file.name || `Reference ${project.nodes.length + 1}`,
+            status: "completed",
+            x: 80 + offset,
+            y: 200 + offset,
+            width: 220,
+            height: 220,
+            media_urls: [url],
+            data: { filename: file.name },
+        });
+        set((state) => ({
+            currentProject: state.currentProject?.id === node.project_id
+                ? { ...state.currentProject, nodes: [...state.currentProject.nodes, node] }
+                : state.currentProject,
+            selectedNodeId: node.id,
+        }));
+        return node;
+    },
+
+    createIdeaNode: async (body) => {
+        const project = await get().ensureProject();
+        const offset = project.nodes.length * 24;
+        const node = await api.createAtelierNode(project.id, {
+            type: "idea",
+            title: "Idea",
+            prompt: body ?? "",
+            status: "draft",
+            x: 80 + offset,
+            y: 480 + offset,
+            width: 240,
+            height: 120,
+            data: { body: body ?? "Click to edit." },
+        });
+        set((state) => ({
+            currentProject: state.currentProject?.id === node.project_id
+                ? { ...state.currentProject, nodes: [...state.currentProject.nodes, node] }
+                : state.currentProject,
+            selectedNodeId: node.id,
+        }));
+        return node;
+    },
+
+    deleteAtelierNode: async (nodeId) => {
+        const project = await get().ensureProject();
+        if (!isNodeInProject(project, nodeId)) return;
+        await api.deleteAtelierNode(project.id, nodeId);
+        set((state) => {
+            if (!state.currentProject || state.currentProject.id !== project.id) return state;
+            return {
+                ...state,
+                currentProject: {
+                    ...state.currentProject,
+                    nodes: state.currentProject.nodes.filter((n) => n.id !== nodeId),
+                },
+                selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
+            };
+        });
+    },
+
+    branchFromCandidate: async (parentId, candidateId) => {
+        const project = await get().ensureProject();
+        const parent = project.nodes.find((n) => n.id === parentId);
+        if (!parent) throw new Error("Parent node not found");
+        const cands = (parent.data as { candidates?: unknown })?.candidates;
+        if (!Array.isArray(cands)) throw new Error("Parent has no candidates");
+        const cand = cands.find((c): c is { id: string; prompt?: string; model?: string; video_url?: string } =>
+            !!c && typeof c === "object" && "id" in c && (c as { id: unknown }).id === candidateId
+        );
+        if (!cand) throw new Error("Candidate not found");
+        // Branch = a fresh draft video node anchored to the right of the take.
+        const node = await api.createAtelierNode(project.id, {
+            type: "video",
+            title: `${parent.title} · branch`,
+            prompt: cand.prompt ?? parent.prompt ?? "",
+            status: "draft",
+            x: parent.x + (parent.width || 240) + 320,
+            y: parent.y + 24,
+            width: 240,
+            height: 110,
+            data: {
+                intent: `Branched from ${parent.title}`,
+                model: cand.model ?? "Wan 2.7",
+                config_summary: "1280×720 · 5s · 4×",
+                reference_image_urls: cand.video_url ? [cand.video_url] : [],
+                branched_from: { parent_id: parentId, candidate_id: candidateId },
+                candidates: [],
+            },
+        });
+        set((state) => ({
+            currentProject: state.currentProject?.id === node.project_id
                 ? { ...state.currentProject, nodes: [...state.currentProject.nodes, node] }
                 : state.currentProject,
             selectedNodeId: node.id,
@@ -244,6 +389,7 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
 
     updateNode: async (nodeId, patch) => {
         const project = await get().ensureProject();
+        if (!isNodeInProject(project, nodeId)) throw new Error("Atelier node not found in current project");
         const node = await api.updateAtelierNode(project.id, nodeId, patch);
         set((state) => ({
             currentProject: state.currentProject ? replaceNode(state.currentProject, node) : state.currentProject,

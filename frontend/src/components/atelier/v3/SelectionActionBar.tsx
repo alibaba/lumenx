@@ -52,7 +52,10 @@ const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
   ],
   audio: ["play", "useAsRef", "addToSequence", "divider", "delete"],
   image: ["useAsRef", "branch", "divider", "delete"],
-  draft: ["regenerate", "branch", "divider", "delete"],
+  // Drafts use the floating Composer as their editor — no "regenerate"
+  // (would silently 400 without payload). Branch is meaningless on an
+  // intent (you branch FROM a take). Just Delete.
+  draft: ["delete"],
   idea: ["delete"],
 };
 

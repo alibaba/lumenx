@@ -1,7 +1,9 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
+import { getAssetUrl } from "@/lib/utils";
+import { Play, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -311,6 +313,10 @@ function renderEdges(project: AtelierProject | null): React.ReactNode {
 
 // ── Shell ────────────────────────────────────────────────────────────────────
 
+// Lightweight in-memory toast queue. Could move to a store later.
+type Toast = { id: number; kind: "info" | "error" | "success"; text: string };
+let toastSeq = 0;
+
 export function AtelierShellV3() {
   // Store (selectors)
   const project = useAtelierStore((s) => s.currentProject);
@@ -318,21 +324,49 @@ export function AtelierShellV3() {
   const ensureProject = useAtelierStore((s) => s.ensureProject);
   const selectNode = useAtelierStore((s) => s.selectNode);
   const createVideoNode = useAtelierStore((s) => s.createVideoNode);
+  const createImageNode = useAtelierStore((s) => s.createImageNode);
+  const createIdeaNode = useAtelierStore((s) => s.createIdeaNode);
+  const deleteAtelierNode = useAtelierStore((s) => s.deleteAtelierNode);
+  const branchFromCandidate = useAtelierStore((s) => s.branchFromCandidate);
   const updateAgentPolicy = useAtelierStore((s) => s.updateAgentPolicy);
+  const refreshCurrentProject = useAtelierStore((s) => s.refreshCurrentProject);
 
   const policy = project?.agent_policy;
 
+  // Toast queue
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const pushToast = (kind: Toast["kind"], text: string) => {
+    const id = ++toastSeq;
+    setToasts((t) => [...t, { id, kind, text }]);
+    window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4500);
+  };
+
   // Bootstrap
   useEffect(() => {
-    void ensureProject().catch(() => {
-      // TODO: surface ensureProject errors via store.error toast surface.
+    void ensureProject().catch((err: unknown) => {
+      pushToast("error", `Failed to open Atelier: ${err instanceof Error ? err.message : String(err)}`);
     });
   }, [ensureProject]);
+
+  // Poll for in-flight candidates so the canvas updates without manual refresh.
+  useEffect(() => {
+    const hasRunning = (project?.nodes ?? []).some((node) => {
+      const cands = readCandidates(node);
+      return cands.some((c) => c.status === "pending" || c.status === "processing");
+    });
+    if (!hasRunning) return;
+    const t = window.setInterval(() => {
+      void refreshCurrentProject().catch(() => {});
+    }, 3000);
+    return () => window.clearInterval(t);
+  }, [project, refreshCurrentProject]);
 
   // Local view state
   const [zoom, setZoom] = useState(100);
   const [minimapOpen, setMinimapOpen] = useState(false);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
+  const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Selection lookup. selectedNodeId may be a real node id OR a virtual
   // candidate id (parent::cand::cid). For virtual ids we synthesize a
@@ -395,70 +429,202 @@ export function AtelierShellV3() {
         (node.data as { reference_image_urls?: unknown })?.reference_image_urls,
       );
       const batch = parseInt(payload.count, 10);
-      void useAtelierStore.getState().createVideoCandidates(node.id, {
-        prompt: payload.prompt,
-        model: payload.modelLabel,
-        reference_image_urls: refs,
-        batch_size: Number.isFinite(batch) && batch > 0 ? batch : 4,
-        params: {},
-      });
+      void useAtelierStore.getState()
+        .createVideoCandidates(node.id, {
+          prompt: payload.prompt,
+          model: payload.modelLabel,
+          reference_image_urls: refs,
+          batch_size: Number.isFinite(batch) && batch > 0 ? batch : 4,
+          params: {},
+        })
+        .then(() => pushToast("success", `Generating ${batch || 4} candidates…`))
+        .catch((err: unknown) => pushToast("error", `Generate failed: ${err instanceof Error ? err.message : String(err)}`));
+      return;
     }
-    // TODO: image/audio submit paths require store actions for image/audio
-    // candidate generation that don't exist yet.
+    pushToast("info", `Tab "${payload.tab}" submission isn't wired yet — use I2V/R2V drafts for now.`);
   };
 
   const handleActionBar = (action: string, node: AtelierNode) => {
     const store = useAtelierStore.getState();
+
     if (action === "selectTake") {
       const parsed = parseCandidateNodeId(node.id);
-      if (parsed) void store.selectCandidate(parsed.parentId, parsed.candidateId);
+      if (parsed) {
+        void store.selectCandidate(parsed.parentId, parsed.candidateId)
+          .then(() => pushToast("success", "Selected as take"))
+          .catch((err: unknown) => pushToast("error", `Select failed: ${err instanceof Error ? err.message : String(err)}`));
+      }
       return;
     }
+
     if (action === "delete") {
       const parsed = parseCandidateNodeId(node.id);
       if (parsed) {
-        void store.deleteCandidate(parsed.parentId, parsed.candidateId);
+        void store.deleteCandidate(parsed.parentId, parsed.candidateId)
+          .then(() => pushToast("info", "Candidate deleted"))
+          .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
         return;
       }
-      // TODO: deleting a top-level AtelierNode requires a store action that
-      // does not exist yet (no `deleteNode` on the store). Punt until added.
+      // Top-level node delete with confirmation
+      const ok = window.confirm(`Delete this ${node.type} node?`);
+      if (!ok) return;
+      void deleteAtelierNode(node.id)
+        .then(() => pushToast("info", "Node deleted"))
+        .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
       return;
     }
+
     if (action === "regenerate") {
-      // For drafts: re-run the candidate batch with current data. For
-      // candidate media: retry the single candidate.
+      // Only candidate-level retry is sensible without payload. Drafts go
+      // through the floating Composer; non-candidate "regenerate" on top-
+      // level video opens a confirm + re-runs with current node data.
       const parsed = parseCandidateNodeId(node.id);
       if (parsed) {
-        void store.retryCandidate(parsed.parentId, parsed.candidateId);
+        void store.retryCandidate(parsed.parentId, parsed.candidateId)
+          .then(() => pushToast("info", "Retrying take…"))
+          .catch((err: unknown) => pushToast("error", `Retry failed: ${err instanceof Error ? err.message : String(err)}`));
         return;
       }
-      if (node.type === "video" && node.status === "draft") {
-        void store.regenerateVideoCandidates(node.id);
-      }
+      pushToast("info", "Use the Composer below the draft to re-run generation.");
       return;
     }
-    // TODO: play / useAsRef / branch / addToSequence wiring requires either
-    // a media-preview surface or store actions that don't exist yet.
+
+    if (action === "play") {
+      const parsed = parseCandidateNodeId(node.id);
+      if (parsed && project) {
+        const parent = project.nodes.find((n) => n.id === parsed.parentId);
+        const cand = parent ? readCandidates(parent).find((c) => c.id === parsed.candidateId) : undefined;
+        if (cand?.video_url) {
+          setPreviewVideoUrl(cand.video_url);
+          return;
+        }
+      }
+      const url = node.media_urls?.[0];
+      if (url) {
+        setPreviewVideoUrl(url);
+        return;
+      }
+      pushToast("info", "Nothing to play yet.");
+      return;
+    }
+
+    if (action === "branch") {
+      const parsed = parseCandidateNodeId(node.id);
+      if (parsed) {
+        void branchFromCandidate(parsed.parentId, parsed.candidateId)
+          .then(() => pushToast("success", "Branched · new draft created"))
+          .catch((err: unknown) => pushToast("error", `Branch failed: ${err instanceof Error ? err.message : String(err)}`));
+        return;
+      }
+      pushToast("info", "Branch from a take (candidate) — select a candidate first.");
+      return;
+    }
+
+    if (action === "addToSequence") {
+      const parsed = parseCandidateNodeId(node.id);
+      const parentId = parsed?.parentId ?? node.id;
+      const cid = parsed?.candidateId;
+      if (cid) {
+        // Add to local sequence list (client-side state).
+        setSequence((prev) => {
+          if (prev.some((s) => s.parentId === parentId && s.candidateId === cid)) return prev;
+          return [...prev, { parentId, candidateId: cid }];
+        });
+        pushToast("success", "Added to Sequence");
+        return;
+      }
+      pushToast("info", "Add to Sequence works on a selected take.");
+      return;
+    }
+
+    if (action === "useAsRef") {
+      pushToast("info", "Use-as-reference: drag onto a draft (coming next).");
+      return;
+    }
   };
+
+  // Sequence is a simple client-side list of {parentId, candidateId} for now.
+  const [sequence, setSequence] = useState<Array<{ parentId: string; candidateId: string }>>([]);
+
+  // Resolve sequence entries against current project candidates so we can
+  // render thumbnails + handle stale entries (parent or candidate gone).
+  const sequenceEntries = useMemo(() => {
+    if (!project) return [];
+    return sequence
+      .map((entry) => {
+        const parent = project.nodes.find((n) => n.id === entry.parentId);
+        if (!parent) return null;
+        const cand = readCandidates(parent).find((c) => c.id === entry.candidateId);
+        if (!cand || cand.status !== "completed") return null;
+        return { entry, parent, cand };
+      })
+      .filter(<T,>(x: T): x is NonNullable<T> => x != null);
+  }, [project, sequence]);
+
+  const handleFilePicked = (file: File | undefined) => {
+    if (!file) return;
+    void createImageNode(file)
+      .then(() => pushToast("success", "Reference uploaded"))
+      .catch((err: unknown) => pushToast("error", `Upload failed: ${err instanceof Error ? err.message : String(err)}`));
+  };
+
+  const isBootingProject = !project;
+  const projectIsEmpty = !!project && project.nodes.length === 0;
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background text-foreground">
       <ToolbarV3
         onCreate={(kind) => {
           if (kind === "video") {
-            void createVideoNode();
+            void createVideoNode()
+              .then((node) => {
+                // Mark new video as a draft with intent so it renders as DraftNode
+                // with the Composer below.
+                void useAtelierStore.getState().updateNode(node.id, {
+                  status: "draft",
+                  data: {
+                    ...(node.data ?? {}),
+                    intent: "Cinematic interpretation",
+                    model: "Wan 2.7",
+                    config_summary: "1280×720 · 5s · 4×",
+                    reference_image_urls: [],
+                    candidates: [],
+                  },
+                  width: 240,
+                  height: 110,
+                });
+              })
+              .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+            return;
           }
-          // TODO: image/idea creation requires store actions
-          // (`createImageNode`, `createIdeaNode`) that don't exist yet.
+          if (kind === "image") {
+            fileInputRef.current?.click();
+            return;
+          }
+          if (kind === "idea") {
+            void createIdeaNode()
+              .then(() => pushToast("info", "Idea added — click it to edit."))
+              .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+            return;
+          }
         }}
         onAskAgent={() => {
-          // TODO: focus right-rail conversation composer when wired.
+          setAgentCollapsed(false);
+          // TODO: also focus the conversation composer once wired.
         }}
-        onUndo={() => {
-          // TODO: undo/redo requires a history store; not implemented.
-        }}
-        onRedo={() => {
-          // TODO: undo/redo requires a history store; not implemented.
+        onUndo={() => pushToast("info", "Undo isn't wired yet.")}
+        onRedo={() => pushToast("info", "Redo isn't wired yet.")}
+      />
+
+      {/* Hidden file input for "New Image Node" */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          handleFilePicked(e.target.files?.[0]);
+          e.target.value = "";
         }}
       />
 
@@ -471,6 +637,26 @@ export function AtelierShellV3() {
         >
           {renderEdges(project ?? null)}
         </svg>
+
+        {/* loading skeleton */}
+        {isBootingProject ? (
+          <div className="absolute inset-0 grid place-items-center">
+            <div className="rounded-md border border-glass-border bg-glass px-4 py-2 text-[12px] text-text-secondary backdrop-blur-md">
+              Loading Atelier…
+            </div>
+          </div>
+        ) : null}
+
+        {/* empty canvas hint (DESIGN.md §11.1) */}
+        {projectIsEmpty ? (
+          <div className="absolute inset-0 grid place-items-center pointer-events-none">
+            <div className="font-display text-[15px] text-text-muted">
+              Drop a seed. Press <span className="font-mono text-text-secondary">V</span> for video,
+              {" "}<span className="font-mono text-text-secondary">I</span> for image,
+              {" "}<span className="font-mono text-text-secondary">T</span> for idea.
+            </div>
+          </div>
+        ) : null}
 
         {/* nodes */}
         {project?.nodes.map((node) =>
@@ -510,13 +696,14 @@ export function AtelierShellV3() {
         agentStatus="active"
         mode={(policy?.approval_mode as AtelierApprovalMode) ?? "untrusted"}
         onModeChange={(m) => {
-          void updateAgentPolicy({ approval_mode: m });
+          void updateAgentPolicy({ approval_mode: m })
+            .catch((err: unknown) => pushToast("error", `Policy save failed: ${err instanceof Error ? err.message : String(err)}`));
         }}
         collapsed={agentCollapsed}
         onCollapse={() => setAgentCollapsed((c) => !c)}
       >
         <div className="flex-1 overflow-y-auto p-3 text-[12px] text-text-muted">
-          <p>Agent conversation goes here. (Full wiring lands in a follow-up.)</p>
+          <p>Agent conversation will land here. For now, set permission above + use the Composer below the selected draft to submit a generation.</p>
         </div>
       </RightRailV3>
 
@@ -535,6 +722,97 @@ export function AtelierShellV3() {
           nodes={project.nodes.map((n) => ({ x: n.x, y: n.y }))}
           viewport={{ x: 0, y: 0, w: 1440, h: 900 }}
         />
+      ) : null}
+
+      {/* sequence strip (bottom, between left edge and right rail) */}
+      <div
+        className="absolute bottom-4 left-[280px] z-20 rounded-2xl border border-glass-border bg-glass p-2 backdrop-blur-md"
+        style={{ right: agentCollapsed ? 88 : 412 }}
+      >
+        <div className="mb-1.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-text-muted">
+          <span>Sequence Strip · {sequenceEntries.length} clip{sequenceEntries.length === 1 ? "" : "s"}</span>
+          {sequenceEntries.length > 0 ? <button onClick={() => setSequence([])} className="text-text-muted hover:text-foreground">clear</button> : null}
+        </div>
+        {sequenceEntries.length === 0 ? (
+          <div className="px-2 py-2 text-[11px] text-text-muted">Select a completed take, then "Add to Sequence" from its action bar.</div>
+        ) : (
+          <div className="flex items-center gap-2 overflow-x-auto">
+            {sequenceEntries.map(({ entry, parent, cand }, i) => (
+              <div key={`${entry.parentId}-${entry.candidateId}`} className="group relative h-[68px] w-[140px] shrink-0 overflow-hidden rounded-md border border-glass-border bg-elevated/80">
+                {cand.video_url ? (
+                  <img src={getAssetUrl(cand.video_url)} alt="" className="h-full w-full object-cover" />
+                ) : null}
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-black/60 px-1.5 py-1 backdrop-blur-sm">
+                  <span className="truncate text-[10px] text-foreground">{parent.title}</span>
+                  <span className="font-mono text-[9px] text-text-muted">#{i + 1}</span>
+                </div>
+                <button
+                  onClick={() => setSequence((prev) => prev.filter((s) => !(s.parentId === entry.parentId && s.candidateId === entry.candidateId)))}
+                  className="absolute right-1 top-1 rounded bg-black/55 p-0.5 text-white/80 opacity-0 hover:bg-red-500/70 group-hover:opacity-100"
+                  aria-label={`Remove ${parent.title} from sequence`}
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* preview video modal */}
+      {previewVideoUrl ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setPreviewVideoUrl(null)}
+          role="dialog"
+          aria-label="Video preview"
+        >
+          <div className="relative max-h-[80vh] max-w-[80vw] overflow-hidden rounded-xl border border-glass-border bg-elevated shadow-2xl shadow-black/40" onClick={(e) => e.stopPropagation()}>
+            <video src={getAssetUrl(previewVideoUrl)} controls autoPlay className="block max-h-[80vh] max-w-[80vw]" />
+            <button
+              onClick={() => setPreviewVideoUrl(null)}
+              className="absolute right-2 top-2 rounded-full bg-black/55 p-1.5 text-white/90 hover:bg-black/75"
+              aria-label="Close preview"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* toast queue (top-center) */}
+      {toasts.length > 0 ? (
+        <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 flex-col gap-2">
+          {toasts.map((t) => {
+            const tone =
+              t.kind === "error" ? "border-red-400/60 bg-red-400/15 text-red-100" :
+              t.kind === "success" ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100" :
+              "border-glass-border bg-elevated text-foreground";
+            return (
+              <div
+                key={t.id}
+                role="status"
+                className={`pointer-events-auto rounded-md border px-3 py-2 text-[12px] backdrop-blur-md shadow-2xl shadow-black/40 ${tone}`}
+              >
+                {t.text}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {/* play / preview button affordance for selected video media (in addition
+          to action bar's Play). Helps demonstrate clickable preview when nothing
+          is selected. */}
+      {selectedNode && selectedNode.type === "video" && !isDraftVideo(selectedNode) && selectedNode.media_urls?.[0] ? (
+        <button
+          onClick={() => setPreviewVideoUrl(selectedNode.media_urls[0])}
+          className="absolute z-30 grid h-9 w-9 place-items-center rounded-full bg-primary text-white shadow-2xl shadow-black/40 hover:bg-primary/90"
+          style={{ left: selectedNode.x + (selectedNode.width || 200) / 2 - 18, top: selectedNode.y + (selectedNode.height || 113) / 2 - 18 }}
+          aria-label="Play preview"
+        >
+          <Play size={14} />
+        </button>
       ) : null}
     </div>
   );
