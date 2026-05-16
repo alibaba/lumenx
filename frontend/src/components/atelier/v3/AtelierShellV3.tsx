@@ -94,14 +94,14 @@ function candidatePosition(
 
 function renderNode(
   node: AtelierNode,
-  selectedId: string | null,
+  selectedIds: Set<string>,
   select: (id: string | null) => void,
 ): React.ReactNode {
-  const isSelected = node.id === selectedId;
+  const isSelected = selectedIds.has(node.id);
   const onSelect = () => select(node.id);
 
   if (node.type === "image") {
-    const view = toMediaNodeView(node, { selectedNodeId: selectedId });
+    const view = toMediaNodeView(node, { selectedNodeId: null });
     if (!view) return null;
     return (
       <MediaNode
@@ -111,7 +111,7 @@ function renderNode(
         src={view.src}
         filename={view.filename ?? node.title}
         status={view.status}
-        selected={view.selected}
+        selected={isSelected}
         x={view.x}
         y={view.y}
         width={view.width}
@@ -122,7 +122,7 @@ function renderNode(
   }
 
   if (node.type === "audio") {
-    const view = toMediaNodeView(node, { selectedNodeId: selectedId });
+    const view = toMediaNodeView(node, { selectedNodeId: null });
     if (!view) return null;
     return (
       <MediaNode
@@ -132,7 +132,7 @@ function renderNode(
         filename={view.filename ?? node.title}
         duration={view.duration}
         status={view.status}
-        selected={view.selected}
+        selected={isSelected}
         x={view.x}
         y={view.y}
         width={view.width}
@@ -202,7 +202,7 @@ function renderNode(
         />
       );
     }
-    const view = toMediaNodeView(node, { selectedNodeId: selectedId });
+    const view = toMediaNodeView(node, { selectedNodeId: null });
     const candidateCount = readCandidates(node).length;
     // Empty-video fallback: a video node without media (no `media_urls`,
     // no candidates), and not recognized as a draft, would otherwise render
@@ -263,7 +263,7 @@ function renderNode(
 
 function renderCandidatesAsMediaNodes(
   node: AtelierNode,
-  selectedId: string | null,
+  selectedIds: Set<string>,
   select: (id: string | null) => void,
 ): React.ReactNode[] {
   if (node.type !== "video") return [];
@@ -313,7 +313,7 @@ function renderCandidatesAsMediaNodes(
         progress={progress}
         etaSeconds={etaSeconds}
         selectedAsTake={selectedTakeId === c.id}
-        selected={selectedId === candKey}
+        selected={selectedIds.has(candKey)}
         x={x}
         y={y}
         onSelect={() => select(candKey)}
@@ -426,6 +426,23 @@ export function AtelierShellV3() {
   const [zoom, setZoom] = useState(100);          // percent, 25..300
   const [panX, setPanX] = useState(0);            // world translate x (px in CSS)
   const [panY, setPanY] = useState(0);            // world translate y
+
+  // Multi-selection layer. Store keeps a single primary `selectedNodeId`
+  // (which anchors the action bar / composer / inspector); the shell
+  // tracks *additional* secondary selections in this set. The union is the
+  // visual selection users see. Plain click clears extras; Shift/Cmd-click
+  // toggles a node into the extras (a "promote second" gesture); marquee
+  // (Sprint 4 next commit) writes both primary + extras at once.
+  const [extraSelectedIds, setExtraSelectedIds] = useState<Set<string>>(() => new Set());
+
+  // Computed union — passed to renderNode/renderCandidatesAsMediaNodes so
+  // every node in the multi-selection paints its primary ring.
+  const allSelectedIds = useMemo(() => {
+    const set = new Set(extraSelectedIds);
+    if (selectedNodeId) set.add(selectedNodeId);
+    return set;
+  }, [extraSelectedIds, selectedNodeId]);
+  const isMultiSelect = allSelectedIds.size > 1;
   const [minimapOpen, setMinimapOpen] = useState(false);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
@@ -445,6 +462,40 @@ export function AtelierShellV3() {
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
+
+  // Delete every node in the multi-selection. Real nodes go through the
+  // store's deleteAtelierNode; virtual candidate ids (parent::cand::cid)
+  // route to deleteCandidate. Confirm once for the whole batch.
+  const deleteSelection = async () => {
+    const ids = Array.from(allSelectedIds);
+    if (ids.length === 0) return;
+    const ok = window.confirm(
+      ids.length === 1 ? "Delete this node?" : `Delete ${ids.length} nodes?`,
+    );
+    if (!ok) return;
+    const store = useAtelierStore.getState();
+    let ok_count = 0;
+    let fail_count = 0;
+    for (const id of ids) {
+      const parsed = parseCandidateNodeId(id);
+      try {
+        if (parsed) {
+          await store.deleteCandidate(parsed.parentId, parsed.candidateId);
+        } else {
+          await deleteAtelierNode(id);
+        }
+        ok_count += 1;
+      } catch {
+        fail_count += 1;
+      }
+    }
+    setExtraSelectedIds(new Set());
+    if (fail_count === 0) {
+      pushToast("info", `${ok_count} node${ok_count === 1 ? "" : "s"} deleted`);
+    } else {
+      pushToast("error", `${fail_count} of ${ids.length} deletes failed`);
+    }
+  };
 
   // Keyboard shortcuts (PRD §12.5): V / I / T / F / Esc / Delete / / (focus agent).
   // Skip when typing in an input/textarea or contenteditable.
@@ -486,26 +537,18 @@ export function AtelierShellV3() {
           });
           break;
         case "escape":
-          if (selectedNodeId) {
+          if (selectedNodeId || extraSelectedIds.size > 0) {
             e.preventDefault();
             selectNode(null);
+            if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
           }
           break;
         case "delete":
         case "backspace":
-          if (selectedNodeId && (e.target as HTMLElement)?.tagName !== "BODY") return;
-          if (selectedNodeId) {
-            e.preventDefault();
-            const node = project?.nodes.find((n) => n.id === selectedNodeId);
-            if (node) {
-              const ok = window.confirm(`Delete this ${node.type} node?`);
-              if (ok) {
-                void deleteAtelierNode(node.id)
-                  .then(() => pushToast("info", "Node deleted"))
-                  .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
-              }
-            }
-          }
+          if (allSelectedIds.size === 0) break;
+          if ((e.target as HTMLElement)?.tagName !== "BODY") return;
+          e.preventDefault();
+          void deleteSelection();
           break;
       }
     };
@@ -574,6 +617,7 @@ export function AtelierShellV3() {
     if (event.target !== event.currentTarget && (event.target as HTMLElement).closest('[data-atelier-node],[role="dialog"],[role="toolbar"],[role="region"]')) return;
     if (event.button !== 0) return;
     selectNode(null);
+    if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
     event.currentTarget.setPointerCapture(event.pointerId);
     panDragRef.current = {
       startX: event.clientX,
@@ -691,6 +735,42 @@ export function AtelierShellV3() {
 
   const handleNodePointerDown = (event: React.PointerEvent, node: AtelierNode) => {
     if (event.button !== 0) return;
+
+    // Multi-select: Shift / Cmd / Ctrl click toggles the node into the extras
+    // set *without* changing the primary. We consume the event in the
+    // capture phase so the leaf's own onPointerDown — which would call
+    // select(id) and reset the primary — never fires.
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      // Virtual candidates aren't first-class nodes; allow them in extras
+      // for now (a future commit can decide whether to filter them out
+      // from group ops).
+      setExtraSelectedIds((prev) => {
+        const next = new Set(prev);
+        if (node.id === selectedNodeId) {
+          // Clicking the current primary with a modifier: demote it.
+          // Promote first extra to primary, or clear entirely if no extras.
+          const survivor = next.values().next().value;
+          if (survivor !== undefined) {
+            next.delete(survivor);
+            window.setTimeout(() => selectNode(survivor), 0);
+          } else {
+            window.setTimeout(() => selectNode(null), 0);
+          }
+        } else if (next.has(node.id)) {
+          next.delete(node.id);
+        } else {
+          next.add(node.id);
+        }
+        return next;
+      });
+      return;
+    }
+
+    // Plain click: drop extras so the user gets a fresh single-selection.
+    if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
+
     // Don't drag virtual candidates (they're derived); selection still fires.
     if (parseCandidateNodeId(node.id)) return;
     // Don't initiate drag on textareas / inputs / buttons inside the node.
@@ -1249,7 +1329,7 @@ export function AtelierShellV3() {
               fires. Capture lets us start the drag tracking before the child
               consumes the event; the child still selects the node on click. */}
           {project?.nodes.map((node) => {
-            const isSelected = node.id === selectedNodeId;
+            const isSelected = allSelectedIds.has(node.id);
             return (
               <div
                 key={node.id}
@@ -1258,14 +1338,14 @@ export function AtelierShellV3() {
                 className={`group/node ${isSelected ? "" : "cursor-pointer"}`}
                 style={{ touchAction: "none", cursor: nodeDragRef.current?.nodeId === node.id ? "grabbing" : undefined }}
               >
-                {renderNode(node, selectedNodeId, selectNode)}
+                {renderNode(node, allSelectedIds, selectNode)}
               </div>
             );
           })}
 
           {/* virtual candidate media nodes (no drag — derived) */}
           {project?.nodes.flatMap((node) =>
-            renderCandidatesAsMediaNodes(node, selectedNodeId, selectNode),
+            renderCandidatesAsMediaNodes(node, allSelectedIds, selectNode),
           )}
 
           {/* Connect-drag target highlight: while dragging from an image's
@@ -1357,8 +1437,9 @@ export function AtelierShellV3() {
 
       {/* SelectionActionBar — rendered OUTSIDE the world transform so it
           stays a fixed screen size while still anchored above the selected
-          node. Coordinates converted: screen = pan + world * zoom. */}
-      {selectedNode ? (
+          node. Coordinates converted: screen = pan + world * zoom.
+          Hidden in multi-select mode; the multi-select chip takes over. */}
+      {selectedNode && !isMultiSelect ? (
         <div className="pointer-events-none absolute inset-0 z-30">
           <div className="pointer-events-auto absolute" style={{ left: 0, top: 0 }}>
             <SelectionActionBar
@@ -1371,6 +1452,64 @@ export function AtelierShellV3() {
           </div>
         </div>
       ) : null}
+
+      {/* Multi-select chip: shows count + group Delete + Clear. Centered
+          above the bounding box of the selection (in screen coords). */}
+      {isMultiSelect && project ? (() => {
+        // Compute bounding rect of all selected nodes (real + virtual).
+        let minX = Infinity, minY = Infinity, maxX = -Infinity;
+        for (const id of Array.from(allSelectedIds)) {
+          const parsed = parseCandidateNodeId(id);
+          if (parsed) {
+            const parent = project.nodes.find((n) => n.id === parsed.parentId);
+            if (!parent) continue;
+            const idx = readCandidates(parent).findIndex((c) => c.id === parsed.candidateId);
+            if (idx < 0) continue;
+            const { x, y } = candidatePosition(parent, idx);
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x + CAND_WIDTH);
+          } else {
+            const n = project.nodes.find((nn) => nn.id === id);
+            if (!n) continue;
+            minX = Math.min(minX, n.x);
+            minY = Math.min(minY, n.y);
+            maxX = Math.max(maxX, n.x + (n.width || 240));
+          }
+        }
+        if (!Number.isFinite(minX)) return null;
+        const screenCx = panX + ((minX + maxX) / 2) * zoomFactor;
+        const screenY = panY + minY * zoomFactor - 38;
+        return (
+          <div
+            role="toolbar"
+            aria-label={`${allSelectedIds.size} nodes selected`}
+            className="pointer-events-auto absolute z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-glass-border bg-elevated px-2.5 py-1 text-[12px] shadow-2xl shadow-black/40 backdrop-blur-md"
+            style={{ left: screenCx, top: Math.max(8, screenY) }}
+          >
+            <span className="font-mono text-text-secondary">{allSelectedIds.size} selected</span>
+            <button
+              type="button"
+              onClick={() => void deleteSelection()}
+              className="rounded-full bg-red-400/15 px-2 py-0.5 font-medium text-red-200 hover:bg-red-400/25"
+              aria-label="Delete selected nodes"
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setExtraSelectedIds(new Set());
+                selectNode(null);
+              }}
+              className="rounded-full px-2 py-0.5 text-text-muted hover:bg-hover-bg hover:text-foreground"
+              aria-label="Clear selection"
+            >
+              Clear
+            </button>
+          </div>
+        );
+      })() : null}
 
       {/* Connect handle: appears on right-middle of a selected image node
           that has media. Drag onto a draft to attach as reference. Sits in
@@ -1424,8 +1563,8 @@ export function AtelierShellV3() {
       })() : null}
 
       {/* Composer — also OUTSIDE world, anchored to selected draft via
-          screen-coord anchor + viewport. */}
-      {composerAnchor && selectedNode ? (
+          screen-coord anchor + viewport. Hidden in multi-select. */}
+      {composerAnchor && selectedNode && !isMultiSelect ? (
         <div className="pointer-events-none absolute inset-0 z-30">
           <div className="pointer-events-auto">
             <Composer
