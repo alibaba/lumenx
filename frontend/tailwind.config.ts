@@ -45,9 +45,16 @@ const config: Config = {
           "0%": { opacity: "0", filter: "blur(2px)" },
           "100%": { opacity: "1", filter: "blur(0)" },
         },
+        // Marching-ants: scrolls the dash-array on processing/pending edges
+        // so connections look "alive" while a generation is in flight.
+        "atelier-dash": {
+          from: { strokeDashoffset: "20" },
+          to:   { strokeDashoffset: "0" },
+        },
       },
       animation: {
         "atelier-node-in": "atelier-node-in 220ms ease-out both",
+        "atelier-dash": "atelier-dash 1.2s linear infinite",
       },
     },
   },

@@ -360,14 +360,20 @@ function renderEdges(project: AtelierProject | null): React.ReactNode {
       const x2 = cx;
       const y2 = cy + CAND_HEIGHT / 2;
       const dx = Math.max(40, Math.abs(x2 - x1) * 0.3);
+      const inflight = c.status === "pending" || c.status === "processing";
+      const failed = c.status === "failed";
+      const stroke = failed
+        ? "rgba(248,113,113,0.6)"   // red-400
+        : "rgba(100,108,255,0.55)";  // primary
       edges.push(
         <path
           key={`${node.id}-${c.id}`}
           d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
           fill="none"
-          stroke="rgba(100,108,255,0.55)"
+          stroke={stroke}
           strokeWidth="1.5"
           strokeDasharray={c.status === "completed" ? undefined : "6 4"}
+          className={inflight ? "animate-atelier-dash motion-reduce:animate-none" : undefined}
         />,
       );
     });
