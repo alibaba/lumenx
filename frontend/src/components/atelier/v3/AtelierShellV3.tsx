@@ -267,6 +267,7 @@ function renderCandidatesAsMediaNodes(
   node: AtelierNode,
   selectedIds: Set<string>,
   select: (id: string | null) => void,
+  onRetry: (parentId: string, candidateId: string) => void,
 ): React.ReactNode[] {
   if (node.type !== "video") return [];
   const candidates = readCandidates(node);
@@ -314,11 +315,13 @@ function renderCandidatesAsMediaNodes(
         status={c.status}
         progress={progress}
         etaSeconds={etaSeconds}
+        errorMessage={c.error ?? undefined}
         selectedAsTake={selectedTakeId === c.id}
         selected={selectedIds.has(candKey)}
         x={x}
         y={y}
         onSelect={() => select(candKey)}
+        onRetry={c.status === "failed" ? () => onRetry(node.id, c.id) : undefined}
       />
     );
   });
@@ -1762,7 +1765,12 @@ export function AtelierShellV3() {
 
           {/* virtual candidate media nodes (no drag — derived) */}
           {project?.nodes.flatMap((node) =>
-            renderCandidatesAsMediaNodes(node, allSelectedIds, selectNode),
+            renderCandidatesAsMediaNodes(node, allSelectedIds, selectNode, (parentId, candidateId) => {
+              void useAtelierStore.getState()
+                .retryCandidate(parentId, candidateId)
+                .then(() => pushToast("info", "Retrying take…"))
+                .catch((err: unknown) => pushToast("error", `Retry failed: ${err instanceof Error ? err.message : String(err)}`));
+            }),
           )}
 
           {/* Connect-drag target highlight: while dragging from an image's

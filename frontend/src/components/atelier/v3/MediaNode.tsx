@@ -1,6 +1,6 @@
 "use client";
 import { useRef } from "react";
-import { AlertTriangle, Check, ImageIcon, Loader2, Play, Video, Volume2 } from "lucide-react";
+import { AlertTriangle, Check, ImageIcon, Loader2, Play, RotateCw, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
   status: "draft" | "pending" | "processing" | "completed" | "failed";
   progress?: number;
   etaSeconds?: number;
+  errorMessage?: string;
   selected?: boolean;
   selectedAsTake?: boolean;
   x: number;
@@ -19,6 +20,8 @@ interface Props {
   width?: number;
   height?: number;
   onSelect?: (id: string) => void;
+  /** When provided on a failed node, an inline Retry button is shown. */
+  onRetry?: (id: string) => void;
 }
 
 const DEFAULT_SIZE: Record<MediaKind, { w: number; h: number }> = {
@@ -78,6 +81,7 @@ export function MediaNode({
   status,
   progress,
   etaSeconds,
+  errorMessage,
   selected,
   selectedAsTake,
   x,
@@ -85,6 +89,7 @@ export function MediaNode({
   width,
   height,
   onSelect,
+  onRetry,
 }: Props) {
   const def = DEFAULT_SIZE[kind];
   const w = Math.max(40, Math.min(width ?? def.w, MAX_WIDTH));
@@ -226,8 +231,26 @@ export function MediaNode({
       ) : null}
 
       {showFailed ? (
-        <div className="absolute inset-0 grid place-items-center bg-red-400/[0.18]">
-          <AlertTriangle size={18} className="text-red-200" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-red-400/[0.18] backdrop-blur-[1px]">
+          <AlertTriangle size={18} className="text-red-200" aria-hidden="true" />
+          <span className="font-mono text-[9px] uppercase tracking-wider text-red-100">
+            {errorMessage ? "Failed" : "Generation failed"}
+          </span>
+          {onRetry ? (
+            <button
+              type="button"
+              aria-label="Retry generation"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRetry(id);
+              }}
+              className="btn-tip mt-0.5 inline-flex items-center gap-1 rounded-full bg-red-400/25 px-2 py-0.5 text-[10px] font-semibold text-red-50 hover:bg-red-400/40"
+              data-tip={errorMessage || "Retry generation"}
+            >
+              <RotateCw size={10} aria-hidden="true" /> Retry
+            </button>
+          ) : null}
         </div>
       ) : null}
 
