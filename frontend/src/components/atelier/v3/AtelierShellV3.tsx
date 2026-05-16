@@ -373,6 +373,87 @@ export function AtelierShellV3() {
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editingIdeaBody, setEditingIdeaBody] = useState("");
 
+  // First-load auto-fit: once project has nodes, fit them in viewport.
+  const didInitialFitRef = useRef(false);
+  useEffect(() => {
+    if (didInitialFitRef.current) return;
+    if (!project || project.nodes.length === 0) return;
+    if (!mainRef.current) return;
+    didInitialFitRef.current = true;
+    // Defer one tick so layout is settled.
+    const t = window.setTimeout(() => handleFitView(), 50);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project?.id, project?.nodes.length === 0]);
+
+  // Keyboard shortcuts (PRD §12.5): V / I / T / F / Esc / Delete / / (focus agent).
+  // Skip when typing in an input/textarea or contenteditable.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      switch (e.key.toLowerCase()) {
+        case "v":
+          e.preventDefault();
+          void handleCreateVideo();
+          break;
+        case "i":
+          e.preventDefault();
+          void createEmptyImageDraft().catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+          break;
+        case "t":
+          e.preventDefault();
+          void createIdeaNode()
+            .then((node) => {
+              setEditingIdeaId(node.id);
+              setEditingIdeaBody((node.data as { body?: string })?.body ?? "");
+            })
+            .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+          break;
+        case "f":
+          e.preventDefault();
+          handleFitView();
+          break;
+        case "/":
+          e.preventDefault();
+          setAgentCollapsed(false);
+          // Best-effort: focus the Agent composer textarea if visible.
+          requestAnimationFrame(() => {
+            const ta = document.querySelector('[role="region"][aria-label="Atelier Agent"] textarea') as HTMLTextAreaElement | null;
+            ta?.focus();
+          });
+          break;
+        case "escape":
+          if (selectedNodeId) {
+            e.preventDefault();
+            selectNode(null);
+          }
+          break;
+        case "delete":
+        case "backspace":
+          if (selectedNodeId && (e.target as HTMLElement)?.tagName !== "BODY") return;
+          if (selectedNodeId) {
+            e.preventDefault();
+            const node = project?.nodes.find((n) => n.id === selectedNodeId);
+            if (node) {
+              const ok = window.confirm(`Delete this ${node.type} node?`);
+              if (ok) {
+                void deleteAtelierNode(node.id)
+                  .then(() => pushToast("info", "Node deleted"))
+                  .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
+              }
+            }
+          }
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId, project?.nodes]);
+
   // Auto-enter idea editing whenever an idea node becomes selected — saves
   // a click. The textarea overlay (rendered later in JSX) takes focus.
   useEffect(() => {
@@ -948,27 +1029,8 @@ export function AtelierShellV3() {
             renderCandidatesAsMediaNodes(node, selectedNodeId, selectNode),
           )}
 
-          {/* selection action bar (world coords; scales with zoom) */}
-          {selectedNode ? (
-            <SelectionActionBar
-              kind={selectionKindOf(selectedNode)}
-              x={selectedNode.x}
-              y={selectedNode.y}
-              width={selectedNode.width || 240}
-              onAct={(action) => handleActionBar(action, selectedNode)}
-            />
-          ) : null}
-
-          {/* composer below selected draft (world coords) */}
-          {composerAnchor && selectedNode ? (
-            <Composer
-              anchor={composerAnchor}
-              viewport={viewport}
-              prompt={selectedNode.prompt || ""}
-              onClose={() => selectNode(null)}
-              onSubmit={(payload) => handleComposerSubmit(payload, selectedNode)}
-            />
-          ) : null}
+          {/* selection action bar + composer moved OUT of world (screen coords)
+              so they stay readable at any zoom — see below. */}
 
           {/* Inline IdeaNode editor: when an idea is being edited, overlay a
               textarea on top of it in world coords. */}
@@ -1033,6 +1095,44 @@ export function AtelierShellV3() {
           ) : null}
         </div>
       </main>
+
+      {/* SelectionActionBar — rendered OUTSIDE the world transform so it
+          stays a fixed screen size while still anchored above the selected
+          node. Coordinates converted: screen = pan + world * zoom. */}
+      {selectedNode ? (
+        <div className="pointer-events-none absolute inset-0 z-30">
+          <div className="pointer-events-auto absolute" style={{ left: 0, top: 0 }}>
+            <SelectionActionBar
+              kind={selectionKindOf(selectedNode)}
+              x={panX + selectedNode.x * zoomFactor}
+              y={panY + selectedNode.y * zoomFactor}
+              width={(selectedNode.width || 240) * zoomFactor}
+              onAct={(action) => handleActionBar(action, selectedNode)}
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Composer — also OUTSIDE world, anchored to selected draft via
+          screen-coord anchor + viewport. */}
+      {composerAnchor && selectedNode ? (
+        <div className="pointer-events-none absolute inset-0 z-30">
+          <div className="pointer-events-auto">
+            <Composer
+              anchor={{
+                x: panX + composerAnchor.x * zoomFactor,
+                y: panY + composerAnchor.y * zoomFactor,
+                width: composerAnchor.width * zoomFactor,
+                height: composerAnchor.height * zoomFactor,
+              }}
+              viewport={viewport}
+              prompt={selectedNode.prompt || ""}
+              onClose={() => selectNode(null)}
+              onSubmit={(payload) => handleComposerSubmit(payload, selectedNode)}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {/* right rail (Agent-only) */}
       <RightRailV3
