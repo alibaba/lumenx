@@ -853,14 +853,28 @@ export function AtelierShellV3() {
     }
 
     if (action === "regenerate") {
-      // Only candidate-level retry is sensible without payload. Drafts go
-      // through the floating Composer; non-candidate "regenerate" on top-
-      // level video opens a confirm + re-runs with current node data.
+      // Re-generate on a take = "use this take as the starting point for a
+      // new iteration". Prefill the parent draft's Composer with the take's
+      // prompt + model, then select the parent so the Composer pops up.
+      // User tweaks → submit creates new candidates. (Plain retry of an
+      // identical candidate is rarely what the user actually wants — the
+      // floating Composer is the iteration affordance.)
       const parsed = parseCandidateNodeId(node.id);
       if (parsed) {
-        void store.retryCandidate(parsed.parentId, parsed.candidateId)
-          .then(() => pushToast("info", "Retrying take…"))
-          .catch((err: unknown) => pushToast("error", `Retry failed: ${err instanceof Error ? err.message : String(err)}`));
+        const proj = store.currentProject;
+        const parent = proj?.nodes.find((n) => n.id === parsed.parentId);
+        const cand = parent
+          ? readCandidates(parent).find((c) => c.id === parsed.candidateId)
+          : undefined;
+        if (!parent || !cand) return;
+        void store.updateNode(parent.id, {
+          data: {
+            ...(parent.data ?? {}),
+            prompt: cand.prompt,
+            model: cand.model,
+          },
+        }).catch(() => {});
+        selectNode(parent.id);
         return;
       }
       pushToast("info", "Use the Composer below the draft to re-run generation.");
