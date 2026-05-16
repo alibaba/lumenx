@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Play, X } from "lucide-react";
+import { Link2, Play, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -522,6 +522,19 @@ export function AtelierShellV3() {
   } | null>(null);
   const panDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
 
+  // Connect drag (image → draft attach-as-reference). Live updates via tick
+  // since refs don't trigger re-render — we want the dashed bezier overlay
+  // to follow the cursor and the hovered target ring to repaint.
+  const connectDragRef = useRef<{
+    sourceNodeId: string;
+    startScreenX: number;
+    startScreenY: number;
+    currentScreenX: number;
+    currentScreenY: number;
+  } | null>(null);
+  const [connectDragTick, setConnectDragTick] = useState(0);
+  const [hoveredConnectTargetId, setHoveredConnectTargetId] = useState<string | null>(null);
+
   const zoomFactor = zoom / 100;
 
   // Helper: translate a screen-space delta to world-space (just divide by zoom).
@@ -579,6 +592,73 @@ export function AtelierShellV3() {
         }
       }
     }
+  };
+
+  // Drag-to-connect: from a selected image's right-edge handle, draw a
+  // dashed bezier following the cursor. Drop on a draft (orange) video node
+  // to attach the image as a reference. Cancel drops elsewhere.
+  // Uses window-level pointermove/up so the gesture survives leaving the
+  // canvas bounds and doesn't fight main's pan handlers.
+  const handleConnectHandlePointerDown = (
+    event: React.PointerEvent,
+    sourceNodeId: string,
+    handleScreenX: number,
+    handleScreenY: number,
+  ) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    event.preventDefault();
+    connectDragRef.current = {
+      sourceNodeId,
+      startScreenX: handleScreenX,
+      startScreenY: handleScreenY,
+      currentScreenX: event.clientX,
+      currentScreenY: event.clientY,
+    };
+    setConnectDragTick((v) => v + 1);
+
+    const onMove = (ev: PointerEvent) => {
+      if (!connectDragRef.current) return;
+      connectDragRef.current.currentScreenX = ev.clientX;
+      connectDragRef.current.currentScreenY = ev.clientY;
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const nodeEl = el?.closest("[data-atelier-node]") as HTMLElement | null;
+      const targetId = nodeEl?.dataset.atelierNode ?? null;
+      const valid = (() => {
+        if (!targetId || targetId === sourceNodeId) return null;
+        const target = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === targetId);
+        if (!target || !isDraftVideo(target)) return null;
+        return target.id;
+      })();
+      setHoveredConnectTargetId(valid);
+      setConnectDragTick((v) => v + 1);
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      const drag = connectDragRef.current;
+      connectDragRef.current = null;
+      setHoveredConnectTargetId(null);
+      setConnectDragTick((v) => v + 1);
+      if (!drag) return;
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+      const nodeEl = el?.closest("[data-atelier-node]") as HTMLElement | null;
+      const targetId = nodeEl?.dataset.atelierNode ?? null;
+      if (!targetId || targetId === drag.sourceNodeId) return;
+      const target = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === targetId);
+      if (!target || !isDraftVideo(target)) {
+        pushToast("info", "Drop on a draft video node to attach as reference.");
+        return;
+      }
+      void useAtelierStore.getState()
+        .attachReferenceNode(target.id, drag.sourceNodeId)
+        .then(() => pushToast("success", "Reference attached"))
+        .catch((err: unknown) => pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`));
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   };
 
   const handleNodePointerDown = (event: React.PointerEvent, node: AtelierNode) => {
@@ -1146,6 +1226,26 @@ export function AtelierShellV3() {
             renderCandidatesAsMediaNodes(node, selectedNodeId, selectNode),
           )}
 
+          {/* Connect-drag target highlight: while dragging from an image's
+              connect handle, glow the draft under the cursor (in world coords
+              so the ring scales with zoom). */}
+          {connectDragRef.current && hoveredConnectTargetId ? (() => {
+            const target = project?.nodes.find((n) => n.id === hoveredConnectTargetId);
+            if (!target) return null;
+            return (
+              <div
+                key={`connect-target-ring-${connectDragTick}`}
+                className="pointer-events-none absolute z-[36] rounded-md ring-2 ring-primary"
+                style={{
+                  left: target.x - 4,
+                  top: target.y - 4,
+                  width: (target.width || 240) + 8,
+                  height: (target.height || 110) + 8,
+                }}
+              />
+            );
+          })() : null}
+
           {/* selection action bar + composer moved OUT of world (screen coords)
               so they stay readable at any zoom — see below. */}
 
@@ -1229,6 +1329,57 @@ export function AtelierShellV3() {
           </div>
         </div>
       ) : null}
+
+      {/* Connect handle: appears on right-middle of a selected image node
+          that has media. Drag onto a draft to attach as reference. Sits in
+          screen coords so it stays a fixed 16px button at any zoom. */}
+      {selectedNode && selectedNode.type === "image" && (selectedNode.media_urls?.length ?? 0) > 0 ? (() => {
+        const handleScreenX = panX + (selectedNode.x + (selectedNode.width || 180)) * zoomFactor;
+        const handleScreenY = panY + (selectedNode.y + (selectedNode.height || 180) / 2) * zoomFactor;
+        return (
+          <button
+            type="button"
+            aria-label="Drag to attach this image as a reference to a draft"
+            data-tip="Drag to a draft to attach as reference"
+            onPointerDown={(e) => handleConnectHandlePointerDown(e, selectedNode.id, handleScreenX, handleScreenY)}
+            className="btn-tip absolute z-40 grid h-4 w-4 -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/40 bg-primary text-white shadow-[0_0_0_3px_rgba(100,108,255,0.18)] hover:scale-110 active:cursor-grabbing"
+            style={{ left: handleScreenX, top: handleScreenY }}
+          >
+            <Link2 size={9} aria-hidden="true" />
+          </button>
+        );
+      })() : null}
+
+      {/* Connect-drag bezier overlay (screen coords). Dashed primary line
+          from the handle origin to the cursor. */}
+      {connectDragRef.current ? (() => {
+        const drag = connectDragRef.current!;
+        const x1 = drag.startScreenX;
+        const y1 = drag.startScreenY;
+        const x2 = drag.currentScreenX;
+        const y2 = drag.currentScreenY;
+        const dx = Math.max(40, Math.abs(x2 - x1) * 0.4);
+        const isOverTarget = !!hoveredConnectTargetId;
+        return (
+          <svg
+            key={`connect-svg-${connectDragTick}`}
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 z-[45]"
+            width="100%"
+            height="100%"
+          >
+            <path
+              d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
+              fill="none"
+              stroke={isOverTarget ? "rgba(100,108,255,0.95)" : "rgba(100,108,255,0.7)"}
+              strokeWidth={isOverTarget ? 2.5 : 2}
+              strokeDasharray="6 4"
+              strokeLinecap="round"
+            />
+            <circle cx={x2} cy={y2} r={isOverTarget ? 5 : 3.5} fill="rgba(100,108,255,0.95)" />
+          </svg>
+        );
+      })() : null}
 
       {/* Composer — also OUTSIDE world, anchored to selected draft via
           screen-coord anchor + viewport. */}
