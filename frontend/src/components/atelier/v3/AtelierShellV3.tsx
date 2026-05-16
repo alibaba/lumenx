@@ -372,6 +372,27 @@ export function AtelierShellV3() {
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editingIdeaBody, setEditingIdeaBody] = useState("");
+
+  // Auto-enter idea editing whenever an idea node becomes selected — saves
+  // a click. The textarea overlay (rendered later in JSX) takes focus.
+  useEffect(() => {
+    if (!project || !selectedNodeId) {
+      // Selection cleared — close any open editor (and persist on close).
+      if (editingIdeaId) setEditingIdeaId(null);
+      return;
+    }
+    const sel = project.nodes.find((n) => n.id === selectedNodeId);
+    if (!sel || sel.type !== "idea") {
+      if (editingIdeaId && editingIdeaId !== selectedNodeId) setEditingIdeaId(null);
+      return;
+    }
+    if (editingIdeaId !== sel.id) {
+      setEditingIdeaId(sel.id);
+      const body = (sel.data as { body?: unknown })?.body;
+      setEditingIdeaBody(typeof body === "string" ? body : sel.prompt ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedNodeId, project?.nodes]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageNodeIdForUploadRef = useRef<string | null>(null); // when set, the upload writes to this node
   const mainRef = useRef<HTMLElement>(null);
