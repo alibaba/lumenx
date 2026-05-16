@@ -14,6 +14,7 @@ import {
   Minimap,
   ToolbarV3,
   RightRailV3,
+  AgentPanelV3,
   Composer,
   toMediaNodeView,
   type ComposerSubmitPayload,
@@ -1023,9 +1024,7 @@ export function AtelierShellV3() {
         collapsed={agentCollapsed}
         onCollapse={() => setAgentCollapsed((c) => !c)}
       >
-        <div className="flex-1 overflow-y-auto p-3 text-[12px] text-text-muted">
-          <p>Agent conversation will land here. For now, set permission above + use the Composer below the selected draft to submit a generation.</p>
-        </div>
+        <AgentPanelV3 pushToast={pushToast} />
       </RightRailV3>
 
       {/* bottom nav rail */}
