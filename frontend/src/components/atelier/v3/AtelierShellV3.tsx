@@ -198,6 +198,37 @@ function renderNode(
       );
     }
     const view = toMediaNodeView(node, { selectedNodeId: selectedId });
+    const candidateCount = readCandidates(node).length;
+    // Empty-video fallback: a video node without media (no `media_urls`,
+    // no candidates), and not recognized as a draft, would otherwise render
+    // as a giant black MediaNode. Show a clearer placeholder card.
+    if (!view?.src && candidateCount === 0) {
+      return (
+        <div
+          key={node.id}
+          className={`absolute w-[240px] rounded-md border bg-elevated/85 backdrop-blur-md ${
+            isSelected ? "ring-2 ring-primary border-primary/50" : "border-glass-border"
+          }`}
+          style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
+          role="button"
+          tabIndex={0}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          <div className="px-3 py-3">
+            <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
+              <Play size={11} className="text-primary" />
+              <span className="truncate">{node.title || "Video Node"}</span>
+            </div>
+            <div className="text-[11px] text-text-muted leading-relaxed">
+              No media yet. Use the Composer below to generate, or attach a reference image.
+            </div>
+          </div>
+        </div>
+      );
+    }
     if (view) {
       return (
         <MediaNode
@@ -213,8 +244,9 @@ function renderNode(
           selectedAsTake={view.selectedAsTake}
           x={view.x}
           y={view.y}
-          width={view.width}
-          height={view.height}
+          // Clamp legacy nodes' bloated default 420x560 to v0.3 sizes.
+          width={view.width ? Math.min(view.width, 240) : undefined}
+          height={view.height ? Math.min(view.height, 136) : undefined}
           onSelect={onSelect}
         />
       );
@@ -1005,8 +1037,12 @@ export function AtelierShellV3() {
           }
         }}
         onAskAgent={() => setAgentCollapsed(false)}
-        onUndo={() => pushToast("info", "Undo isn't wired yet.")}
-        onRedo={() => pushToast("info", "Redo isn't wired yet.")}
+        onUndo={() => {}}
+        onRedo={() => {}}
+        // Honest disabled state — better than fake-clickable buttons that
+        // toast "not implemented" each time. Reads "Coming soon" via tooltip.
+        canUndo={false}
+        canRedo={false}
       />
 
       {/* Hidden file input shared by Toolbar (legacy direct upload) and the
@@ -1077,16 +1113,20 @@ export function AtelierShellV3() {
               (Wave A polish), so a normal bubble-phase parent handler never
               fires. Capture lets us start the drag tracking before the child
               consumes the event; the child still selects the node on click. */}
-          {project?.nodes.map((node) => (
-            <div
-              key={node.id}
-              data-atelier-node={node.id}
-              onPointerDownCapture={(e) => handleNodePointerDown(e, node)}
-              style={{ touchAction: "none" }}
-            >
-              {renderNode(node, selectedNodeId, selectNode)}
-            </div>
-          ))}
+          {project?.nodes.map((node) => {
+            const isSelected = node.id === selectedNodeId;
+            return (
+              <div
+                key={node.id}
+                data-atelier-node={node.id}
+                onPointerDownCapture={(e) => handleNodePointerDown(e, node)}
+                className={`group/node ${isSelected ? "" : "cursor-pointer"}`}
+                style={{ touchAction: "none", cursor: nodeDragRef.current?.nodeId === node.id ? "grabbing" : undefined }}
+              >
+                {renderNode(node, selectedNodeId, selectNode)}
+              </div>
+            );
+          })}
 
           {/* virtual candidate media nodes (no drag — derived) */}
           {project?.nodes.flatMap((node) =>
@@ -1357,7 +1397,7 @@ export function AtelierShellV3() {
 
       {/* toast queue (top-center) */}
       {toasts.length > 0 ? (
-        <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 flex-col gap-2">
+        <div className="fixed left-1/2 top-4 z-[60] flex -translate-x-1/2 flex-col gap-2">
           {toasts.map((t) => {
             const tone =
               t.kind === "error" ? "border-red-400/60 bg-red-400/15 text-red-100" :
