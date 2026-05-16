@@ -734,6 +734,11 @@ export function AtelierShellV3() {
           });
           break;
         case "escape":
+          if (contextMenu) {
+            e.preventDefault();
+            setContextMenu(null);
+            break;
+          }
           if (selectedNodeId || extraSelectedIds.size > 0) {
             e.preventDefault();
             selectNode(null);
@@ -1420,6 +1425,15 @@ export function AtelierShellV3() {
   // Track which image node is choosing a target for "Use as reference".
   const [useAsRefSourceId, setUseAsRefSourceId] = useState<string | null>(null);
 
+  // Right-click context menu. Holds the cursor position (screen coords)
+  // plus the node it was opened on (real or virtual). Closed by outside
+  // click, Esc, or selecting a menu item.
+  const [contextMenu, setContextMenu] = useState<{
+    screenX: number;
+    screenY: number;
+    node: AtelierNode;
+  } | null>(null);
+
   // Sequence is a simple client-side list of {parentId, candidateId} for now.
   const [sequence, setSequence] = useState<Array<{ parentId: string; candidateId: string }>>([]);
 
@@ -1701,6 +1715,17 @@ export function AtelierShellV3() {
                 key={node.id}
                 data-atelier-node={node.id}
                 onPointerDownCapture={(e) => handleNodePointerDown(e, node)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  // Right-click also selects the node so the menu actions
+                  // anchor on a stable selection.
+                  if (!allSelectedIds.has(node.id)) {
+                    selectNode(node.id);
+                    if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
+                  }
+                  setContextMenu({ screenX: e.clientX, screenY: e.clientY, node });
+                }}
                 className={`group/node animate-atelier-node-in motion-reduce:animate-none ${isSelected ? "" : "cursor-pointer"}`}
                 style={{
                   touchAction: "none",
@@ -2093,6 +2118,82 @@ export function AtelierShellV3() {
           </div>
         )}
       </div>
+
+      {/* Right-click context menu — closes on outside click + Esc. */}
+      {contextMenu ? (() => {
+        const node = contextMenu.node;
+        const kind = selectionKindOf(node);
+        const items: Array<{ label: string; onClick: () => void; danger?: boolean; disabled?: boolean }> = [];
+        const close = () => setContextMenu(null);
+        if (kind === "draft") {
+          items.push({ label: "Edit prompt", onClick: () => { selectNode(node.id); close(); } });
+          items.push({ label: "Duplicate", onClick: () => { copySelection(); void pasteClipboard(); close(); } });
+          items.push({ label: "Delete", onClick: () => { void deleteSelection(); close(); }, danger: true });
+        } else if (kind === "image") {
+          const hasMedia = (node.media_urls?.length ?? 0) > 0;
+          items.push({ label: "Use as reference…", onClick: () => { handleActionBar("useAsRef", node); close(); }, disabled: !hasMedia });
+          items.push({ label: "Duplicate", onClick: () => { copySelection(); void pasteClipboard(); close(); } });
+          items.push({ label: "Delete", onClick: () => { void deleteSelection(); close(); }, danger: true });
+        } else if (kind === "idea") {
+          items.push({ label: "Edit", onClick: () => {
+            selectNode(node.id);
+            const body = (node.data as { body?: string })?.body ?? node.prompt ?? "";
+            setEditingIdeaId(node.id);
+            setEditingIdeaBody(body);
+            close();
+          } });
+          items.push({ label: "Duplicate", onClick: () => { copySelection(); void pasteClipboard(); close(); } });
+          items.push({ label: "Delete", onClick: () => { void deleteSelection(); close(); }, danger: true });
+        } else if (kind === "video") {
+          const url = node.media_urls?.[0];
+          items.push({ label: "Play", onClick: () => { if (url) setPreviewVideoUrl(url); else pushToast("info", "Nothing to play yet."); close(); }, disabled: !url });
+          items.push({ label: "Duplicate", onClick: () => { copySelection(); void pasteClipboard(); close(); } });
+          items.push({ label: "Delete", onClick: () => { void deleteSelection(); close(); }, danger: true });
+        } else if (kind === "audio") {
+          items.push({ label: "Duplicate", onClick: () => { copySelection(); void pasteClipboard(); close(); } });
+          items.push({ label: "Delete", onClick: () => { void deleteSelection(); close(); }, danger: true });
+        }
+        return (
+          <>
+            <div
+              aria-hidden="true"
+              className="fixed inset-0 z-[55]"
+              onClick={close}
+              onContextMenu={(e) => { e.preventDefault(); close(); }}
+            />
+            <ul
+              role="menu"
+              aria-label="Node context menu"
+              onContextMenu={(e) => e.preventDefault()}
+              className="fixed z-[56] min-w-[180px] rounded-md border border-glass-border bg-elevated p-1 text-[12px] shadow-2xl shadow-black/50 backdrop-blur-md"
+              style={{
+                left: Math.min(contextMenu.screenX, window.innerWidth - 200),
+                top: Math.min(contextMenu.screenY, window.innerHeight - 200),
+              }}
+            >
+              {items.map((item) => (
+                <li key={item.label} role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={item.disabled}
+                    onClick={item.disabled ? undefined : item.onClick}
+                    className={`block w-full rounded px-2.5 py-1.5 text-left transition-colors ${
+                      item.disabled
+                        ? "text-text-muted/60 cursor-not-allowed"
+                        : item.danger
+                        ? "text-red-200 hover:bg-red-400/15"
+                        : "text-foreground hover:bg-hover-bg"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        );
+      })() : null}
 
       {/* Use-as-reference picker modal */}
       {useAsRefSourceId ? (() => {
