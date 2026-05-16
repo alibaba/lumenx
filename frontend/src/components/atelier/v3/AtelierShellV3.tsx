@@ -18,11 +18,12 @@ import {
   toMediaNodeView,
   type ComposerSubmitPayload,
 } from "@/components/atelier/v3";
-import type {
-  AtelierNode,
-  AtelierProject,
-  AtelierVideoCandidate,
-  AtelierApprovalMode,
+import {
+  api,
+  type AtelierNode,
+  type AtelierProject,
+  type AtelierVideoCandidate,
+  type AtelierApprovalMode,
 } from "@/lib/api";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -362,11 +363,172 @@ export function AtelierShellV3() {
   }, [project, refreshCurrentProject]);
 
   // Local view state
-  const [zoom, setZoom] = useState(100);
+  const [zoom, setZoom] = useState(100);          // percent, 25..300
+  const [panX, setPanX] = useState(0);            // world translate x (px in CSS)
+  const [panY, setPanY] = useState(0);            // world translate y
   const [minimapOpen, setMinimapOpen] = useState(false);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
   const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+  const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
+  const [editingIdeaBody, setEditingIdeaBody] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageNodeIdForUploadRef = useRef<string | null>(null); // when set, the upload writes to this node
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Drag refs (for nodes) + pan ref (for background).
+  const nodeDragRef = useRef<{
+    nodeId: string;
+    startWorldX: number;     // node's world coord at drag start
+    startWorldY: number;
+    startPointerX: number;
+    startPointerY: number;
+    moved: boolean;
+  } | null>(null);
+  const panDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
+
+  const zoomFactor = zoom / 100;
+
+  // Helper: translate a screen-space delta to world-space (just divide by zoom).
+  const screenDeltaToWorld = (dx: number, dy: number) => ({ x: dx / zoomFactor, y: dy / zoomFactor });
+
+  // ── Pan + zoom handlers ────────────────────────────────────────────────────
+  const handleMainPointerDown = (event: React.PointerEvent) => {
+    // Start pan only when clicking the canvas background (not a node / overlay).
+    if (event.target !== event.currentTarget && (event.target as HTMLElement).closest('[data-atelier-node],[role="dialog"],[role="toolbar"],[role="region"]')) return;
+    if (event.button !== 0) return;
+    selectNode(null);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    panDragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startPanX: panX,
+      startPanY: panY,
+    };
+  };
+
+  const handleMainPointerMove = (event: React.PointerEvent) => {
+    // Pan
+    if (panDragRef.current) {
+      const dx = event.clientX - panDragRef.current.startX;
+      const dy = event.clientY - panDragRef.current.startY;
+      setPanX(panDragRef.current.startPanX + dx);
+      setPanY(panDragRef.current.startPanY + dy);
+      return;
+    }
+    // Node drag
+    if (nodeDragRef.current) {
+      const dx = event.clientX - nodeDragRef.current.startPointerX;
+      const dy = event.clientY - nodeDragRef.current.startPointerY;
+      const wd = screenDeltaToWorld(dx, dy);
+      const newX = Math.round(nodeDragRef.current.startWorldX + wd.x);
+      const newY = Math.round(nodeDragRef.current.startWorldY + wd.y);
+      if (Math.abs(dx) + Math.abs(dy) > 3) nodeDragRef.current.moved = true;
+      // Optimistic local update
+      useAtelierStore.getState().moveNodeLocal(nodeDragRef.current.nodeId, newX, newY);
+    }
+  };
+
+  const handleMainPointerUp = () => {
+    if (panDragRef.current) {
+      panDragRef.current = null;
+      return;
+    }
+    if (nodeDragRef.current) {
+      const drag = nodeDragRef.current;
+      nodeDragRef.current = null;
+      if (drag.moved) {
+        const real = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === drag.nodeId);
+        if (real) {
+          void useAtelierStore.getState().commitNodePosition(drag.nodeId, real.x, real.y).catch(() => {});
+        }
+      }
+    }
+  };
+
+  const handleNodePointerDown = (event: React.PointerEvent, node: AtelierNode) => {
+    if (event.button !== 0) return;
+    // Don't drag virtual candidates (they're derived); selection still fires.
+    if (parseCandidateNodeId(node.id)) return;
+    // Don't initiate drag on textareas / inputs / buttons inside the node.
+    const tag = (event.target as HTMLElement).tagName;
+    if (tag === "TEXTAREA" || tag === "INPUT" || tag === "BUTTON") return;
+    nodeDragRef.current = {
+      nodeId: node.id,
+      startWorldX: node.x,
+      startWorldY: node.y,
+      startPointerX: event.clientX,
+      startPointerY: event.clientY,
+      moved: false,
+    };
+  };
+
+  const handleWheel = (event: React.WheelEvent) => {
+    if (!event.ctrlKey && !event.metaKey && Math.abs(event.deltaX) === 0 && Math.abs(event.deltaY) < 1) return;
+    // Zoom only when Ctrl/Cmd held (matches Figma); otherwise trackpad two-finger pan.
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const rect = mainRef.current?.getBoundingClientRect();
+      const cx = event.clientX - (rect?.left ?? 0);
+      const cy = event.clientY - (rect?.top ?? 0);
+      // World coords under cursor before zoom
+      const wxBefore = (cx - panX) / zoomFactor;
+      const wyBefore = (cy - panY) / zoomFactor;
+      const next = Math.max(25, Math.min(300, Math.round(zoom * (event.deltaY < 0 ? 1.1 : 0.9))));
+      const nextFactor = next / 100;
+      // Adjust pan so cursor stays anchored
+      setZoom(next);
+      setPanX(cx - wxBefore * nextFactor);
+      setPanY(cy - wyBefore * nextFactor);
+    } else {
+      // Two-finger pan
+      setPanX((p) => p - event.deltaX);
+      setPanY((p) => p - event.deltaY);
+    }
+  };
+
+  const handleFitView = () => {
+    const nodes = project?.nodes ?? [];
+    const rect = mainRef.current?.getBoundingClientRect();
+    if (nodes.length === 0 || !rect) {
+      setZoom(100);
+      setPanX(0);
+      setPanY(0);
+      return;
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of nodes) {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x + (n.width || 240));
+      maxY = Math.max(maxY, n.y + (n.height || 200));
+    }
+    const padding = 80;
+    const worldW = (maxX - minX) + padding * 2;
+    const worldH = (maxY - minY) + padding * 2;
+    const fitZoom = Math.min(rect.width / worldW, rect.height / worldH, 1) * 100;
+    const next = Math.max(25, Math.min(300, Math.round(fitZoom)));
+    const nextFactor = next / 100;
+    setZoom(next);
+    setPanX((rect.width - (maxX - minX) * nextFactor) / 2 - minX * nextFactor);
+    setPanY((rect.height - (maxY - minY) * nextFactor) / 2 - minY * nextFactor);
+  };
+
+  const handleZoomChange = (z: number) => {
+    // Zoom around the canvas center.
+    const rect = mainRef.current?.getBoundingClientRect();
+    if (!rect) {
+      setZoom(z);
+      return;
+    }
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const wxBefore = (cx - panX) / zoomFactor;
+    const wyBefore = (cy - panY) / zoomFactor;
+    const nextFactor = z / 100;
+    setZoom(z);
+    setPanX(cx - wxBefore * nextFactor);
+    setPanY(cy - wyBefore * nextFactor);
+  };
 
   // Selection lookup. selectedNodeId may be a real node id OR a virtual
   // candidate id (parent::cand::cid). For virtual ids we synthesize a
@@ -563,60 +725,132 @@ export function AtelierShellV3() {
 
   const handleFilePicked = (file: File | undefined) => {
     if (!file) return;
+    const targetNodeId = imageNodeIdForUploadRef.current;
+    imageNodeIdForUploadRef.current = null;
+    if (targetNodeId) {
+      // Upload into an existing image-draft node: replace its media_urls + status.
+      const proj = useAtelierStore.getState().currentProject;
+      const target = proj?.nodes.find((n) => n.id === targetNodeId);
+      if (!proj || !target) {
+        pushToast("error", "Target image node disappeared.");
+        return;
+      }
+      void api
+        .uploadFile(file)
+        .then((r) => {
+          const url = r.url as string;
+          return useAtelierStore.getState().updateNode(targetNodeId, {
+            status: "completed",
+            media_urls: [url],
+            data: { ...(target.data ?? {}), filename: file.name },
+          });
+        })
+        .then(() => pushToast("success", "Image uploaded"))
+        .catch((err: unknown) => pushToast("error", `Upload failed: ${err instanceof Error ? err.message : String(err)}`));
+      return;
+    }
     void createImageNode(file)
       .then(() => pushToast("success", "Reference uploaded"))
       .catch((err: unknown) => pushToast("error", `Upload failed: ${err instanceof Error ? err.message : String(err)}`));
   };
 
+  // Create an empty image-draft node first, then user selects "Upload" or
+  // "Generate" via the action bar. Position around current viewport center.
+  const createEmptyImageDraft = async () => {
+    const proj = await ensureProject();
+    const rect = mainRef.current?.getBoundingClientRect();
+    const centerX = rect ? (rect.width / 2 - panX) / zoomFactor : 200;
+    const centerY = rect ? (rect.height / 2 - panY) / zoomFactor : 200;
+    const node = await api.createAtelierNode(proj.id, {
+      type: "image",
+      title: "Image (empty)",
+      status: "draft",
+      x: Math.round(centerX - 90),
+      y: Math.round(centerY - 90),
+      width: 180,
+      height: 180,
+      media_urls: [],
+      data: {},
+    });
+    // Refresh project so the new node appears, then select it.
+    await refreshCurrentProject();
+    selectNode(node.id);
+  };
+
   const isBootingProject = !project;
   const projectIsEmpty = !!project && project.nodes.length === 0;
 
+  // Variation pool so each new draft has a different intent + model spread.
+  const draftVariations = [
+    { intent: "Cinematic interpretation", model: "Wan 2.7" },
+    { intent: "Anime stylization", model: "HappyHorse R2V" },
+    { intent: "Documentary handheld", model: "Wan 2.7" },
+    { intent: "Wildcard direction", model: "Vidu Q3" },
+  ];
+
+  const handleCreateVideo = async () => {
+    try {
+      const node = await createVideoNode();
+      const variant = draftVariations[(project?.nodes.length ?? 0) % draftVariations.length];
+      const rect = mainRef.current?.getBoundingClientRect();
+      const cx = rect ? (rect.width / 2 - panX) / zoomFactor - 120 : node.x;
+      const cy = rect ? (rect.height / 2 - panY) / zoomFactor - 55 : node.y;
+      await useAtelierStore.getState().updateNode(node.id, {
+        status: "draft",
+        x: Math.round(cx),
+        y: Math.round(cy),
+        width: 240,
+        height: 110,
+        data: {
+          ...(node.data ?? {}),
+          intent: variant.intent,
+          model: variant.model,
+          config_summary: "1280×720 · 5s · 4×",
+          reference_image_urls: [],
+          candidates: [],
+        },
+      });
+    } catch (err: unknown) {
+      pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-background text-foreground">
+    <div
+      className="relative h-screen w-screen overflow-hidden bg-background text-foreground"
+      onWheel={handleWheel as unknown as React.WheelEventHandler<HTMLDivElement>}
+    >
       <ToolbarV3
         onCreate={(kind) => {
           if (kind === "video") {
-            void createVideoNode()
-              .then((node) => {
-                // Mark new video as a draft with intent so it renders as DraftNode
-                // with the Composer below.
-                void useAtelierStore.getState().updateNode(node.id, {
-                  status: "draft",
-                  data: {
-                    ...(node.data ?? {}),
-                    intent: "Cinematic interpretation",
-                    model: "Wan 2.7",
-                    config_summary: "1280×720 · 5s · 4×",
-                    reference_image_urls: [],
-                    candidates: [],
-                  },
-                  width: 240,
-                  height: 110,
-                });
-              })
-              .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+            void handleCreateVideo();
             return;
           }
           if (kind === "image") {
-            fileInputRef.current?.click();
+            // v0.3.2+: create an empty image-draft node; user uploads or
+            // generates from its action bar. (PRD §6 / user request.)
+            void createEmptyImageDraft()
+              .then(() => pushToast("info", "Image node added — select Upload from its action bar."))
+              .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
             return;
           }
           if (kind === "idea") {
             void createIdeaNode()
-              .then(() => pushToast("info", "Idea added — click it to edit."))
+              .then((node) => {
+                setEditingIdeaId(node.id);
+                setEditingIdeaBody((node.data as { body?: string })?.body ?? "");
+              })
               .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
             return;
           }
         }}
-        onAskAgent={() => {
-          setAgentCollapsed(false);
-          // TODO: also focus the conversation composer once wired.
-        }}
+        onAskAgent={() => setAgentCollapsed(false)}
         onUndo={() => pushToast("info", "Undo isn't wired yet.")}
         onRedo={() => pushToast("info", "Redo isn't wired yet.")}
       />
 
-      {/* Hidden file input for "New Image Node" */}
+      {/* Hidden file input shared by Toolbar (legacy direct upload) and the
+          per-node "Upload" action bar entry (via imageNodeIdForUploadRef). */}
       <input
         ref={fileInputRef}
         type="file"
@@ -628,17 +862,20 @@ export function AtelierShellV3() {
         }}
       />
 
-      {/* Canvas surface */}
-      <main className="absolute inset-0">
-        {/* edges layer */}
-        <svg
-          className="pointer-events-none absolute inset-0 h-full w-full"
-          style={{ zIndex: 5 }}
-        >
-          {renderEdges(project ?? null)}
-        </svg>
-
-        {/* loading skeleton */}
+      {/* Canvas surface — receives pan + zoom + node-drag pointer events */}
+      <main
+        ref={mainRef}
+        className="absolute inset-0 cursor-default touch-none select-none"
+        style={{ cursor: panDragRef.current ? "grabbing" : "default" }}
+        onPointerDown={handleMainPointerDown}
+        onPointerMove={handleMainPointerMove}
+        onPointerUp={handleMainPointerUp}
+        onPointerCancel={() => {
+          panDragRef.current = null;
+          nodeDragRef.current = null;
+        }}
+      >
+        {/* loading skeleton (in screen coords) */}
         {isBootingProject ? (
           <div className="absolute inset-0 grid place-items-center">
             <div className="rounded-md border border-glass-border bg-glass px-4 py-2 text-[12px] text-text-secondary backdrop-blur-md">
@@ -649,7 +886,7 @@ export function AtelierShellV3() {
 
         {/* empty canvas hint (DESIGN.md §11.1) */}
         {projectIsEmpty ? (
-          <div className="absolute inset-0 grid place-items-center pointer-events-none">
+          <div className="pointer-events-none absolute inset-0 grid place-items-center">
             <div className="font-display text-[15px] text-text-muted">
               Drop a seed. Press <span className="font-mono text-text-secondary">V</span> for video,
               {" "}<span className="font-mono text-text-secondary">I</span> for image,
@@ -658,37 +895,121 @@ export function AtelierShellV3() {
           </div>
         ) : null}
 
-        {/* nodes */}
-        {project?.nodes.map((node) =>
-          renderNode(node, selectedNodeId, selectNode),
-        )}
+        {/* World — everything in canvas space lives here. Transformed by zoom + pan. */}
+        <div
+          className="absolute left-0 top-0 origin-top-left"
+          style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoomFactor})` }}
+        >
+          {/* edges layer (in world coords) */}
+          <svg
+            className="pointer-events-none absolute"
+            style={{ left: -10000, top: -10000, width: 20000, height: 20000, zIndex: 5 }}
+            viewBox="-10000 -10000 20000 20000"
+          >
+            {renderEdges(project ?? null)}
+          </svg>
 
-        {/* virtual candidate media nodes for each draft's data.candidates */}
-        {project?.nodes.flatMap((node) =>
-          renderCandidatesAsMediaNodes(node, selectedNodeId, selectNode),
-        )}
+          {/* nodes — each wrapped in a drag-aware div */}
+          {project?.nodes.map((node) => (
+            <div
+              key={node.id}
+              data-atelier-node={node.id}
+              onPointerDown={(e) => handleNodePointerDown(e, node)}
+              style={{ touchAction: "none" }}
+            >
+              {renderNode(node, selectedNodeId, selectNode)}
+            </div>
+          ))}
 
-        {/* selection action bar */}
-        {selectedNode ? (
-          <SelectionActionBar
-            kind={selectionKindOf(selectedNode)}
-            x={selectedNode.x}
-            y={selectedNode.y}
-            width={selectedNode.width || 240}
-            onAct={(action) => handleActionBar(action, selectedNode)}
-          />
-        ) : null}
+          {/* virtual candidate media nodes (no drag — derived) */}
+          {project?.nodes.flatMap((node) =>
+            renderCandidatesAsMediaNodes(node, selectedNodeId, selectNode),
+          )}
 
-        {/* composer below selected draft / video */}
-        {composerAnchor && selectedNode ? (
-          <Composer
-            anchor={composerAnchor}
-            viewport={viewport}
-            prompt={selectedNode.prompt || ""}
-            onClose={() => selectNode(null)}
-            onSubmit={(payload) => handleComposerSubmit(payload, selectedNode)}
-          />
-        ) : null}
+          {/* selection action bar (world coords; scales with zoom) */}
+          {selectedNode ? (
+            <SelectionActionBar
+              kind={selectionKindOf(selectedNode)}
+              x={selectedNode.x}
+              y={selectedNode.y}
+              width={selectedNode.width || 240}
+              onAct={(action) => handleActionBar(action, selectedNode)}
+            />
+          ) : null}
+
+          {/* composer below selected draft (world coords) */}
+          {composerAnchor && selectedNode ? (
+            <Composer
+              anchor={composerAnchor}
+              viewport={viewport}
+              prompt={selectedNode.prompt || ""}
+              onClose={() => selectNode(null)}
+              onSubmit={(payload) => handleComposerSubmit(payload, selectedNode)}
+            />
+          ) : null}
+
+          {/* Inline IdeaNode editor: when an idea is being edited, overlay a
+              textarea on top of it in world coords. */}
+          {editingIdeaId && project ? (() => {
+            const node = project.nodes.find((n) => n.id === editingIdeaId);
+            if (!node || node.type !== "idea") return null;
+            return (
+              <textarea
+                autoFocus
+                value={editingIdeaBody}
+                onChange={(e) => setEditingIdeaBody(e.target.value)}
+                onBlur={() => {
+                  void useAtelierStore.getState().updateNode(node.id, {
+                    prompt: editingIdeaBody,
+                    data: { ...(node.data ?? {}), body: editingIdeaBody },
+                  }).catch((err: unknown) => pushToast("error", `Save failed: ${err instanceof Error ? err.message : String(err)}`));
+                  setEditingIdeaId(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setEditingIdeaId(null);
+                  }
+                  if ((e.key === "Enter") && (e.metaKey || e.ctrlKey)) {
+                    (e.target as HTMLTextAreaElement).blur();
+                  }
+                }}
+                className="absolute z-30 w-[220px] resize-none rounded-md border border-primary/60 bg-amber-400/[0.06] px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none ring-2 ring-primary/30"
+                style={{ left: node.x, top: node.y, height: Math.max(80, (node.height || 120)) }}
+              />
+            );
+          })() : null}
+
+          {/* Upload affordance for empty image-draft nodes (selected) */}
+          {selectedNode && selectedNode.type === "image" && selectedNode.status === "draft" && (selectedNode.media_urls?.length ?? 0) === 0 ? (
+            <div
+              className="absolute z-30 grid w-[180px] place-items-center rounded-md border border-dashed border-primary/60 bg-primary/[0.04] p-3 text-center"
+              style={{ left: selectedNode.x, top: selectedNode.y, height: 180 }}
+            >
+              <div className="space-y-2">
+                <div className="text-[11px] font-mono uppercase tracking-wider text-primary/85">Image draft</div>
+                <button
+                  type="button"
+                  className="block w-full rounded-md bg-primary px-2 py-1.5 text-[12px] font-semibold text-white hover:bg-primary/90"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => {
+                    imageNodeIdForUploadRef.current = selectedNode.id;
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  Upload image
+                </button>
+                <button
+                  type="button"
+                  className="block w-full rounded-md border border-glass-border bg-glass px-2 py-1.5 text-[12px] text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => pushToast("info", "Generate from prompt (T2I) is coming next.")}
+                >
+                  Generate from prompt
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       </main>
 
       {/* right rail (Agent-only) */}
@@ -711,8 +1032,8 @@ export function AtelierShellV3() {
       <BottomNavRail
         zoom={zoom}
         minimapOpen={minimapOpen}
-        onZoomChange={setZoom}
-        onFit={() => setZoom(100)}
+        onZoomChange={handleZoomChange}
+        onFit={handleFitView}
         onToggleMinimap={() => setMinimapOpen((o) => !o)}
       />
 
