@@ -327,9 +327,17 @@ function renderCandidatesAsMediaNodes(
   });
 }
 
-function renderEdges(project: AtelierProject | null): React.ReactNode {
+function renderEdges(
+  project: AtelierProject | null,
+  hoveredNodeId: string | null,
+): React.ReactNode {
   if (!project) return null;
   const edges: React.ReactNode[] = [];
+  // When the user hovers a node, edges *connected* to that node stay full
+  // strength; everything else dims. Reads "relationship spotlight".
+  const dimUnrelated = !!hoveredNodeId;
+  const isRelated = (fromId: string, toId: string) =>
+    !hoveredNodeId || fromId === hoveredNodeId || toId === hoveredNodeId;
 
   // Reference-image → video edges (muted, dotted).
   const refLinks = buildReferenceLinks(project.nodes);
@@ -339,14 +347,17 @@ function renderEdges(project: AtelierProject | null): React.ReactNode {
     const x2 = link.to.x;
     const y2 = link.to.y + (link.to.height || 110) / 2;
     const dx = Math.max(40, Math.abs(x2 - x1) * 0.3);
+    const related = isRelated(link.from.id, link.to.id);
+    const opacity = dimUnrelated && !related ? 0.12 : 1;
     edges.push(
       <path
         key={`ref-${link.from.id}-${link.to.id}-${link.url.slice(-12)}`}
         d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
         fill="none"
         stroke="rgba(156,163,175,0.35)"
-        strokeWidth="1.5"
+        strokeWidth={related && hoveredNodeId ? 2 : 1.5}
         strokeDasharray="2 4"
+        style={{ opacity, transition: "opacity 180ms ease-out, stroke-width 180ms" }}
       />,
     );
   }
@@ -368,15 +379,19 @@ function renderEdges(project: AtelierProject | null): React.ReactNode {
       const stroke = failed
         ? "rgba(248,113,113,0.6)"   // red-400
         : "rgba(100,108,255,0.55)";  // primary
+      const candKey = candidateNodeId(node.id, c.id);
+      const related = isRelated(node.id, candKey);
+      const opacity = dimUnrelated && !related ? 0.12 : 1;
       edges.push(
         <path
           key={`${node.id}-${c.id}`}
           d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
           fill="none"
           stroke={stroke}
-          strokeWidth="1.5"
+          strokeWidth={related && hoveredNodeId ? 2 : 1.5}
           strokeDasharray={c.status === "completed" ? undefined : "6 4"}
           className={inflight ? "animate-atelier-dash motion-reduce:animate-none" : undefined}
+          style={{ opacity, transition: "opacity 180ms ease-out, stroke-width 180ms" }}
         />,
       );
     });
@@ -486,6 +501,10 @@ export function AtelierShellV3() {
   const [zoom, setZoom] = useState(100);          // percent, 25..300
   const [panX, setPanX] = useState(0);            // world translate x (px in CSS)
   const [panY, setPanY] = useState(0);            // world translate y
+
+  // Hovered node id for the edge-spotlight effect — when set, only edges
+  // touching this node stay full-strength; the rest fade.
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   // Multi-selection layer. Store keeps a single primary `selectedNodeId`
   // (which anchors the action bar / composer / inspector); the shell
@@ -1734,7 +1753,7 @@ export function AtelierShellV3() {
             style={{ left: -10000, top: -10000, width: 20000, height: 20000, zIndex: 5 }}
             viewBox="-10000 -10000 20000 20000"
           >
-            {renderEdges(project ?? null)}
+            {renderEdges(project ?? null, hoveredNodeId)}
           </svg>
 
           {/* nodes — each wrapped in a drag-aware div. Use *Capture* phase
@@ -1763,6 +1782,8 @@ export function AtelierShellV3() {
                   }
                   setContextMenu({ screenX: e.clientX, screenY: e.clientY, node });
                 }}
+                onMouseEnter={() => setHoveredNodeId(node.id)}
+                onMouseLeave={() => setHoveredNodeId((prev) => (prev === node.id ? null : prev))}
                 className={`group/node animate-atelier-node-in motion-reduce:animate-none ${isSelected ? "" : "cursor-pointer"}`}
                 style={{
                   touchAction: "none",
