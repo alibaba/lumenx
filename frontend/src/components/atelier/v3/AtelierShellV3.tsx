@@ -1,9 +1,10 @@
 "use client";
+import axios from "axios";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Link2, Play, X } from "lucide-react";
+import { Check, CloudUpload, Link2, Play, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -394,6 +395,55 @@ export function AtelierShellV3() {
   const refreshCurrentProject = useAtelierStore((s) => s.refreshCurrentProject);
 
   const policy = project?.agent_policy;
+
+  // Live save status — counts in-flight /atelier/* requests via axios
+  // interceptors and tracks the timestamp of the last successful response.
+  // Surfaces in a small chip so the user knows their work is persisted.
+  const [saveState, setSaveState] = useState<{ inflight: number; savedAt: number | null }>({ inflight: 0, savedAt: null });
+  useEffect(() => {
+    let inflight = 0;
+    let savedAt: number | null = null;
+    const isAtelier = (url: string | undefined) => !!url && url.includes("/atelier/");
+    const reqId = axios.interceptors.request.use((cfg) => {
+      if (isAtelier(cfg.url)) {
+        inflight += 1;
+        setSaveState({ inflight, savedAt });
+      }
+      return cfg;
+    });
+    const resId = axios.interceptors.response.use(
+      (res) => {
+        if (isAtelier(res.config.url)) {
+          inflight = Math.max(0, inflight - 1);
+          // Treat reads (GET) and writes (POST/PUT/DELETE) the same — any
+          // round-trip success is evidence the canvas state is in sync.
+          savedAt = Date.now();
+          setSaveState({ inflight, savedAt });
+        }
+        return res;
+      },
+      (err: unknown) => {
+        const cfg = (err as { config?: { url?: string } } | null)?.config;
+        if (isAtelier(cfg?.url)) {
+          inflight = Math.max(0, inflight - 1);
+          setSaveState({ inflight, savedAt });
+        }
+        return Promise.reject(err);
+      },
+    );
+    return () => {
+      axios.interceptors.request.eject(reqId);
+      axios.interceptors.response.eject(resId);
+    };
+  }, []);
+
+  // Tick once a minute so the "saved 2 min ago" label stays fresh without
+  // each save event tripping a re-render.
+  const [, setSaveLabelTick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setSaveLabelTick((v) => v + 1), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
 
   // Toast queue
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -2112,6 +2162,45 @@ export function AtelierShellV3() {
           </div>
         </div>
       ) : null}
+
+      {/* Save-state indicator — sits top-right, just inside the right rail.
+          Stays out of the way until something is happening. */}
+      {(() => {
+        const { inflight, savedAt } = saveState;
+        if (inflight === 0 && savedAt === null) return null;
+        const isSaving = inflight > 0;
+        let label: string;
+        if (isSaving) {
+          label = "Saving…";
+        } else if (savedAt) {
+          const ago = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+          if (ago < 5) label = "Saved";
+          else if (ago < 60) label = `Saved ${ago}s ago`;
+          else if (ago < 3600) label = `Saved ${Math.floor(ago / 60)}m ago`;
+          else label = `Saved ${Math.floor(ago / 3600)}h ago`;
+        } else {
+          label = "Saved";
+        }
+        return (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`absolute top-4 z-30 inline-flex items-center gap-1.5 rounded-full border bg-elevated/85 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider backdrop-blur-md shadow-2xl shadow-black/40 transition-opacity duration-300 ${
+              isSaving
+                ? "border-blue-400/40 text-blue-200"
+                : "border-emerald-400/30 text-emerald-200"
+            }`}
+            style={{ right: agentCollapsed ? 88 : 412 }}
+          >
+            {isSaving ? (
+              <CloudUpload size={10} className="animate-pulse" aria-hidden="true" />
+            ) : (
+              <Check size={10} aria-hidden="true" />
+            )}
+            <span>{label}</span>
+          </div>
+        );
+      })()}
 
       {/* toast queue (top-center) */}
       {toasts.length > 0 ? (
