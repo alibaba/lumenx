@@ -37,7 +37,7 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect }: Props
         }
       }}
       style={{ transform: `translate(${x}px, ${y}px)` }}
-      className={`group absolute w-[260px] rounded-md border bg-elevated/85 backdrop-blur-md ${borderClass} px-3 py-2.5`}
+      className={`group absolute w-[260px] rounded-md border bg-elevated shadow-2xl shadow-black/40 backdrop-blur-md transition-shadow hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)] ${borderClass} px-3 py-2.5`}
     >
       <div className="mb-1.5 inline-flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
         <span className="grid h-5 w-5 place-items-center rounded bg-primary/20 text-primary">

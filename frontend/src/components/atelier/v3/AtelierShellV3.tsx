@@ -508,6 +508,7 @@ export function AtelierShellV3() {
   }, [selectedNodeId, project?.nodes]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageNodeIdForUploadRef = useRef<string | null>(null); // when set, the upload writes to this node
+  const composerRefDraftIdRef = useRef<string | null>(null);   // when set, upload attaches to this draft as reference
   const mainRef = useRef<HTMLElement>(null);
 
   // Drag refs (for nodes) + pan ref (for background).
@@ -874,6 +875,18 @@ export function AtelierShellV3() {
 
   const handleFilePicked = (file: File | undefined) => {
     if (!file) return;
+    const composerDraftId = composerRefDraftIdRef.current;
+    composerRefDraftIdRef.current = null;
+    if (composerDraftId) {
+      // Upload as new reference attached to this draft. uploadReferenceImage
+      // creates an image-node sibling and patches the draft's
+      // reference_image_urls + reference_node_ids.
+      void useAtelierStore.getState()
+        .uploadReferenceImage(composerDraftId, file)
+        .then(() => pushToast("success", `Reference "${file.name}" attached`))
+        .catch((err: unknown) => pushToast("error", `Upload failed: ${err instanceof Error ? err.message : String(err)}`));
+      return;
+    }
     const targetNodeId = imageNodeIdForUploadRef.current;
     imageNodeIdForUploadRef.current = null;
     if (targetNodeId) {
@@ -1230,9 +1243,36 @@ export function AtelierShellV3() {
                 height: composerAnchor.height * zoomFactor,
               }}
               viewport={viewport}
-              prompt={selectedNode.prompt || ""}
+              prompt={
+                isDraftVideo(selectedNode)
+                  ? readString(selectedNode.data?.prompt) ?? selectedNode.prompt ?? ""
+                  : selectedNode.prompt ?? ""
+              }
+              modelLabel={readString(selectedNode.data?.model) ?? "Wan 2.7"}
+              refs={
+                readStringArray(
+                  (selectedNode.data as { reference_image_urls?: unknown })?.reference_image_urls,
+                ).map((src) => ({ src: getAssetUrl(src), role: "ref" }))
+              }
               onClose={() => selectNode(null)}
               onSubmit={(payload) => handleComposerSubmit(payload, selectedNode)}
+              onAddRef={() => {
+                imageNodeIdForUploadRef.current = null;
+                composerRefDraftIdRef.current = selectedNode.id;
+                fileInputRef.current?.click();
+              }}
+              onRemoveRef={(idx) => {
+                const refs = readStringArray(
+                  (selectedNode.data as { reference_image_urls?: unknown })?.reference_image_urls,
+                );
+                const removed = refs[idx];
+                if (!removed) return;
+                void useAtelierStore.getState()
+                  .detachReferenceNode(selectedNode.id, removed)
+                  .then(() => pushToast("info", "Reference removed"))
+                  .catch((err: unknown) => pushToast("error", `Remove failed: ${err instanceof Error ? err.message : String(err)}`));
+              }}
+              onAdvanced={() => pushToast("info", "Advanced params (seed / guidance / motion) coming next.")}
             />
           </div>
         </div>
@@ -1283,22 +1323,36 @@ export function AtelierShellV3() {
         ) : (
           <div className="flex items-center gap-2 overflow-x-auto">
             {sequenceEntries.map(({ entry, parent, cand }, i) => (
-              <div key={`${entry.parentId}-${entry.candidateId}`} className="group relative h-[68px] w-[140px] shrink-0 overflow-hidden rounded-md border border-glass-border bg-elevated/80">
+              <button
+                key={`${entry.parentId}-${entry.candidateId}`}
+                type="button"
+                onClick={() => cand.video_url && setPreviewVideoUrl(cand.video_url)}
+                className="group relative h-[68px] w-[140px] shrink-0 overflow-hidden rounded-md border border-glass-border bg-elevated/80 transition-shadow hover:border-primary/50 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)]"
+                aria-label={`Play ${parent.title}, clip ${i + 1}`}
+              >
                 {cand.video_url ? (
                   <img src={getAssetUrl(cand.video_url)} alt="" className="h-full w-full object-cover" />
                 ) : null}
+                <span className="pointer-events-none absolute inset-0 m-auto grid h-7 w-7 place-items-center rounded-full bg-black/55 text-white/95 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+                  <Play size={12} />
+                </span>
                 <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-black/60 px-1.5 py-1 backdrop-blur-sm">
                   <span className="truncate text-[10px] text-foreground">{parent.title}</span>
                   <span className="font-mono text-[9px] text-text-muted">#{i + 1}</span>
                 </div>
-                <button
-                  onClick={() => setSequence((prev) => prev.filter((s) => !(s.parentId === entry.parentId && s.candidateId === entry.candidateId)))}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSequence((prev) => prev.filter((s) => !(s.parentId === entry.parentId && s.candidateId === entry.candidateId)));
+                  }}
                   className="absolute right-1 top-1 rounded bg-black/55 p-0.5 text-white/80 opacity-0 hover:bg-red-500/70 group-hover:opacity-100"
                   aria-label={`Remove ${parent.title} from sequence`}
                 >
                   <X size={10} />
-                </button>
-              </div>
+                </span>
+              </button>
             ))}
           </div>
         )}

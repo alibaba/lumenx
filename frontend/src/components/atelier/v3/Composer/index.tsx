@@ -1,12 +1,18 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Settings, Wand2, X, Plus } from "lucide-react";
+import { Settings, Wand2, X, Plus, Trash2 } from "lucide-react";
 import { CapabilityIcon } from "./CapabilityIcon";
 import { ChipDropdown } from "./ChipDropdown";
 import { composerPlacement, type ComposerAnchor, type ComposerViewport } from "./positioning";
 
 const TABS = ["T2I", "I2I", "T2V", "I2V", "R2V", "V2V", "Audio"] as const;
 export type ComposerTab = typeof TABS[number];
+
+// Default option sets — parent can override via *Options props.
+const DEFAULT_MODELS = ["Wan 2.7", "HappyHorse R2V", "Vidu Q3", "Seedance 2.0"];
+const DEFAULT_ASPECTS = ["16:9 · 720p", "16:9 · 1080p", "9:16 · 720p", "1:1 · 720p"];
+const DEFAULT_DURATIONS = ["3s", "5s", "10s"];
+const DEFAULT_COUNTS = ["1×", "2×", "4×", "6×"];
 
 export interface ComposerSubmitPayload {
   tab: ComposerTab;
@@ -32,9 +38,16 @@ interface Props {
   aspect?: string;
   duration?: string;
   count?: string;
+  modelOptions?: string[];
+  aspectOptions?: string[];
+  durationOptions?: string[];
+  countOptions?: string[];
   showCapabilityMismatch?: boolean;
   onClose?: () => void;
   onSubmit?: (payload: ComposerSubmitPayload) => void;
+  onAddRef?: () => void;
+  onRemoveRef?: (index: number) => void;
+  onAdvanced?: () => void;
 
   // Position: either anchor + viewport, OR explicit style.
   anchor?: ComposerAnchor | null;
@@ -51,9 +64,16 @@ export function Composer({
   aspect = "16:9 · 720p",
   duration = "5s",
   count = "4×",
+  modelOptions = DEFAULT_MODELS,
+  aspectOptions = DEFAULT_ASPECTS,
+  durationOptions = DEFAULT_DURATIONS,
+  countOptions = DEFAULT_COUNTS,
   showCapabilityMismatch = false,
   onClose,
   onSubmit,
+  onAddRef,
+  onRemoveRef,
+  onAdvanced,
   anchor,
   viewport,
   style,
@@ -69,6 +89,18 @@ export function Composer({
 
   const [draft, setDraft] = useState(prompt);
   useEffect(() => { setDraft(prompt); }, [prompt]);
+
+  // Local controlled chip state — initialized from props, kept in sync if
+  // parent passes new values, but user picks update internal state which the
+  // submit payload reads.
+  const [m, setM] = useState(modelLabel);
+  const [a, setA] = useState(aspect);
+  const [d, setD] = useState(duration);
+  const [c, setC] = useState(count);
+  useEffect(() => setM(modelLabel), [modelLabel]);
+  useEffect(() => setA(aspect),     [aspect]);
+  useEffect(() => setD(duration),   [duration]);
+  useEffect(() => setC(count),      [count]);
 
   const tabIndexOf = (t: ComposerTab) => TABS.indexOf(t);
   const handleTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, t: ComposerTab) => {
@@ -126,18 +158,34 @@ export function Composer({
       {/* Reference row */}
       <div className="flex items-center gap-1.5 px-3 pt-2.5">
         {refs.map((r, i) => (
-          <div key={i} className="relative h-10 w-14 overflow-hidden rounded border border-white/10 bg-black/30">
+          <div key={i} className="group/ref relative h-10 w-14 overflow-hidden rounded border border-white/10 bg-black/30">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={r.src} alt={`Reference ${i + 1}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
             {r.role && <span aria-hidden="true" className="absolute right-0 top-0 rounded-bl bg-black/60 px-1 py-0.5 text-[9px] uppercase text-white/80">{r.role}</span>}
+            {onRemoveRef ? (
+              <button
+                type="button"
+                aria-label={`Remove reference ${i + 1}`}
+                onClick={() => onRemoveRef(i)}
+                className="absolute inset-0 grid place-items-center bg-black/65 text-red-200 opacity-0 transition-opacity hover:opacity-100 group-hover/ref:opacity-100"
+              >
+                <Trash2 size={14} />
+              </button>
+            ) : null}
           </div>
         ))}
-        <button type="button" aria-label="Add reference" data-tip="Add reference"
-                className="btn-tip grid h-10 w-10 place-items-center rounded border border-dashed border-glass-border text-text-muted hover:border-primary/60 hover:text-primary">
+        <button
+          type="button"
+          aria-label="Add reference"
+          data-tip="Add reference"
+          onClick={onAddRef}
+          disabled={!onAddRef}
+          className="btn-tip grid h-10 w-10 place-items-center rounded border border-dashed border-glass-border text-text-muted transition hover:border-primary/60 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
           <Plus size={14} aria-hidden="true" />
         </button>
         {refs.length > 0 && (
-          <span className="ml-1 font-mono text-[10px] text-text-muted">{refs.length} ref · drag to reorder</span>
+          <span className="ml-1 font-mono text-[10px] text-text-muted">{refs.length} ref{refs.length === 1 ? "" : "s"}</span>
         )}
       </div>
 
@@ -157,21 +205,31 @@ export function Composer({
       {/* Chip row */}
       <div className="flex items-center justify-between gap-1.5 px-3 pb-3 pt-2">
         <div className="flex items-center gap-1.5">
-          <ChipDropdown label="Model"    value={modelLabel} primary />
-          <ChipDropdown label="Aspect"   value={aspect} />
-          <ChipDropdown label="Duration" value={duration} />
+          <ChipDropdown label="Model"    value={m} primary
+            options={modelOptions.map((v) => ({ value: v, label: v }))}
+            onChange={(v) => setM(v)} />
+          <ChipDropdown label="Aspect"   value={a}
+            options={aspectOptions.map((v) => ({ value: v, label: v }))}
+            onChange={(v) => setA(v)} />
+          <ChipDropdown label="Duration" value={d}
+            options={durationOptions.map((v) => ({ value: v, label: v }))}
+            onChange={(v) => setD(v)} />
           <button type="button" aria-label="More params" data-tip="Seed / guidance / motion"
-                  className="btn-tip rounded-md border border-glass-border bg-glass p-1.5 text-text-secondary hover:bg-hover-bg hover:text-foreground">
+                  onClick={onAdvanced}
+                  disabled={!onAdvanced}
+                  className="btn-tip rounded-md border border-glass-border bg-glass p-1.5 text-text-secondary transition hover:bg-hover-bg hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">
             <Settings size={12} aria-hidden="true" />
           </button>
-          <ChipDropdown label="Count" value={count} />
+          <ChipDropdown label="Count" value={c}
+            options={countOptions.map((v) => ({ value: v, label: v }))}
+            onChange={(v) => setC(v)} />
         </div>
         <button
           type="button"
           aria-label="Submit"
           data-tip="Submit (⌘⏎)"
           disabled={showCapabilityMismatch}
-          onClick={() => onSubmit?.({ tab: activeTab, prompt: draft, modelLabel, aspect, duration, count, refs })}
+          onClick={() => onSubmit?.({ tab: activeTab, prompt: draft, modelLabel: m, aspect: a, duration: d, count: c, refs })}
           className={`btn-tip grid h-7 w-7 place-items-center rounded-full transition ${
             showCapabilityMismatch
               ? "bg-primary/40 text-white/70 cursor-not-allowed"

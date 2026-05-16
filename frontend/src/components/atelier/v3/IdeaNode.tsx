@@ -29,7 +29,7 @@ export function IdeaNode({ id, body, selected, x, y, onSelect }: Props) {
         }
       }}
       style={{ transform: `translate(${x}px, ${y}px)` }}
-      className={`group absolute w-[220px] rounded-md border bg-amber-400/[0.04] backdrop-blur-md ${borderClass}`}
+      className={`group absolute w-[220px] rounded-md border bg-amber-950/40 shadow-2xl shadow-black/40 backdrop-blur-md transition-shadow hover:shadow-[0_0_0_1px_rgba(252,211,77,0.18)] ${borderClass}`}
     >
       <span className="absolute left-1.5 top-1.5 hidden rounded bg-black/55 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-amber-200/85 group-hover:block">
         💡 idea

@@ -104,7 +104,14 @@ export function MediaNode({
           onSelect?.(id);
         }
       }}
-      className={`group absolute overflow-hidden bg-black/40 ${ring}`}
+      className={`group absolute overflow-hidden rounded-md bg-black/40 shadow-2xl shadow-black/40 ${
+        // When media is missing, give the box a visible frame so it doesn't
+        // melt into the canvas. With media (image/video src) we let the
+        // image dominate; the ring/shadow still keep edges legible.
+        !src && kind !== "audio"
+          ? "border border-dashed border-white/15 bg-white/[0.04]"
+          : "border border-white/10"
+      } ${ring}`}
       style={{
         transform: `translate(${x}px, ${y}px)`,
         width: `${w}px`,
@@ -127,6 +134,27 @@ export function MediaNode({
       ) : null}
 
       {kind === "audio" ? <AudioWaveform /> : null}
+
+      {/* Empty placeholder when image/video has no src — would otherwise be
+          an invisible box on the dark canvas. */}
+      {!src && kind === "image" && status !== "processing" && status !== "pending" && status !== "failed" ? (
+        <div className="grid h-full w-full place-items-center text-center">
+          <div className="space-y-1 px-3 text-text-muted">
+            <ImageIcon className="mx-auto" size={20} />
+            <div className="font-mono text-[10px] uppercase tracking-wider">image</div>
+            <div className="text-[10px] leading-tight">{filename || "no media yet"}</div>
+          </div>
+        </div>
+      ) : null}
+      {!src && kind === "video" && status !== "processing" && status !== "pending" && status !== "failed" ? (
+        <div className="grid h-full w-full place-items-center text-center">
+          <div className="space-y-1 px-3 text-text-muted">
+            <Video className="mx-auto" size={20} />
+            <div className="font-mono text-[10px] uppercase tracking-wider">video</div>
+            <div className="text-[10px] leading-tight">{filename || "no take yet"}</div>
+          </div>
+        </div>
+      ) : null}
 
       {showProcessing ? (
         <div className="absolute inset-0 grid place-items-center bg-blue-400/[0.18] backdrop-blur-[1px]">
