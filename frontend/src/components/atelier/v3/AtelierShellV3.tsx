@@ -550,16 +550,29 @@ export function AtelierShellV3() {
     });
   }, [ensureProject]);
 
-  // Poll for in-flight candidates so the canvas updates without manual refresh.
+  // Adaptive polling for in-flight candidates. Cadence shifts based on
+  // how recently the youngest pending/processing candidate started, so a
+  // user who just hit Generate sees fast updates while a long-running
+  // batch backs off and stops hammering the backend.
+  //
+  //   <  30s old  → 1500 ms  (perceived realtime)
+  //   <  120s old → 3000 ms  (default)
+  //   >= 120s old → 6000 ms  (deep generation)
   useEffect(() => {
-    const hasRunning = (project?.nodes ?? []).some((node) => {
-      const cands = readCandidates(node);
-      return cands.some((c) => c.status === "pending" || c.status === "processing");
-    });
-    if (!hasRunning) return;
+    const inflight = (project?.nodes ?? []).flatMap((node) =>
+      readCandidates(node).filter((c) => c.status === "pending" || c.status === "processing"),
+    );
+    if (inflight.length === 0) return;
+    const nowSec = Date.now() / 1000;
+    const youngestAgeSec = inflight.reduce((min, c) => {
+      const start = c.attempt_started_at ?? c.created_at ?? nowSec;
+      const age = nowSec - start;
+      return age < min ? age : min;
+    }, Number.POSITIVE_INFINITY);
+    const interval = youngestAgeSec < 30 ? 1500 : youngestAgeSec < 120 ? 3000 : 6000;
     const t = window.setInterval(() => {
       void refreshCurrentProject().catch(() => {});
-    }, 3000);
+    }, interval);
     return () => window.clearInterval(t);
   }, [project, refreshCurrentProject]);
 
