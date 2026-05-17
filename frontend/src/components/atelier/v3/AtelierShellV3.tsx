@@ -1217,6 +1217,104 @@ export function AtelierShellV3() {
     pushToast("info", "Redid last move");
   };
 
+  // Multi-selection alignment + distribution. Operates on the real-node
+  // members of allSelectedIds (virtual candidates skip — their bbox is
+  // derived). Each op routes through commitNodePosition so changes
+  // persist + share the move-history pipeline (Cmd+Z restores all at
+  // once). Distribution requires ≥3 nodes; alignment requires ≥2.
+  const [showAlignMenu, setShowAlignMenu] = useState(false);
+  const applyAlign = (op:
+    | "left" | "center-h" | "right"
+    | "top" | "center-v" | "bottom"
+    | "distribute-h" | "distribute-v"
+  ) => {
+    const proj = useAtelierStore.getState().currentProject;
+    if (!proj) return;
+    const ids = Array.from(allSelectedIds).filter((id) => !parseCandidateNodeId(id));
+    const members = ids
+      .map((id) => proj.nodes.find((n) => n.id === id))
+      .filter((n): n is AtelierNode => !!n);
+    if (members.length < 2) return;
+    if ((op === "distribute-h" || op === "distribute-v") && members.length < 3) {
+      pushToast("info", "Need at least 3 nodes to distribute.");
+      return;
+    }
+    let minX = Infinity, minY = Infinity, maxRight = -Infinity, maxBottom = -Infinity;
+    for (const n of members) {
+      const w = n.width || 240;
+      const h = n.height || 110;
+      if (n.x < minX) minX = n.x;
+      if (n.y < minY) minY = n.y;
+      if (n.x + w > maxRight) maxRight = n.x + w;
+      if (n.y + h > maxBottom) maxBottom = n.y + h;
+    }
+    const centerX = (minX + maxRight) / 2;
+    const centerY = (minY + maxBottom) / 2;
+    const entries: MoveEntry[] = [];
+    const targets: Array<{ id: string; x: number; y: number }> = [];
+
+    if (op === "distribute-h") {
+      // Sort by left edge, anchor the leftmost + rightmost, evenly space
+      // the cumulative gaps between the rest.
+      const sorted = [...members].sort((a, b) => a.x - b.x);
+      const totalSpan = sorted[sorted.length - 1].x - sorted[0].x;
+      const widthsSum = sorted.slice(1, -1).reduce((s, n) => s + (n.width || 240), 0);
+      const gapsCount = sorted.length - 1;
+      // Total content widths between first and last for distribution
+      const innerSpan = totalSpan;
+      // Equal-gap distribution: place each interior node so gaps between
+      // *rights* are equal — simpler approach: just distribute the x
+      // coordinates evenly between first.x and last.x.
+      void widthsSum;
+      void innerSpan;
+      void gapsCount;
+      const firstX = sorted[0].x;
+      const lastX = sorted[sorted.length - 1].x;
+      for (let i = 0; i < sorted.length; i++) {
+        const t = i / (sorted.length - 1);
+        const nx = Math.round(firstX + (lastX - firstX) * t);
+        targets.push({ id: sorted[i].id, x: nx, y: sorted[i].y });
+      }
+    } else if (op === "distribute-v") {
+      const sorted = [...members].sort((a, b) => a.y - b.y);
+      const firstY = sorted[0].y;
+      const lastY = sorted[sorted.length - 1].y;
+      for (let i = 0; i < sorted.length; i++) {
+        const t = i / (sorted.length - 1);
+        const ny = Math.round(firstY + (lastY - firstY) * t);
+        targets.push({ id: sorted[i].id, x: sorted[i].x, y: ny });
+      }
+    } else {
+      for (const n of members) {
+        const w = n.width || 240;
+        const h = n.height || 110;
+        let nx = n.x;
+        let ny = n.y;
+        switch (op) {
+          case "left":     nx = minX; break;
+          case "center-h": nx = Math.round(centerX - w / 2); break;
+          case "right":    nx = Math.round(maxRight - w); break;
+          case "top":      ny = minY; break;
+          case "center-v": ny = Math.round(centerY - h / 2); break;
+          case "bottom":   ny = Math.round(maxBottom - h); break;
+        }
+        targets.push({ id: n.id, x: nx, y: ny });
+      }
+    }
+
+    const store = useAtelierStore.getState();
+    for (const t of targets) {
+      const orig = members.find((m) => m.id === t.id);
+      if (!orig) continue;
+      if (orig.x === t.x && orig.y === t.y) continue;
+      entries.push({ nodeId: t.id, prevX: orig.x, prevY: orig.y, nextX: t.x, nextY: t.y });
+      store.moveNodeLocal(t.id, t.x, t.y);
+      void store.commitNodePosition(t.id, t.x, t.y).catch(() => {});
+    }
+    if (entries.length > 0) pushHistory({ kind: "move", entries });
+    setShowAlignMenu(false);
+  };
+
   // Marquee box-select. Activated by Shift + drag on empty canvas.
   // Tracks both screen-coord rect (for the visible overlay) and uses
   // pan/zoom to map back to world coords on release.
@@ -2771,6 +2869,60 @@ export function AtelierShellV3() {
             style={{ left: screenCx, top: Math.max(8, screenY) }}
           >
             <span className="font-mono text-text-secondary">{allSelectedIds.size} selected</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowAlignMenu((v) => !v)}
+                aria-expanded={showAlignMenu}
+                aria-haspopup="menu"
+                className="inline-flex items-center gap-1 rounded-full bg-glass px-2 py-0.5 font-medium text-text-secondary hover:bg-hover-bg hover:text-foreground"
+              >
+                Align
+                <ChevronDown size={10} aria-hidden="true" />
+              </button>
+              {showAlignMenu ? (
+                <>
+                  <div
+                    aria-hidden="true"
+                    className="fixed inset-0 z-[31]"
+                    onClick={() => setShowAlignMenu(false)}
+                  />
+                  <ul
+                    role="menu"
+                    aria-label="Align selection"
+                    className="absolute left-0 top-7 z-[32] w-[180px] rounded-md border border-glass-border bg-elevated p-1 shadow-2xl shadow-black/50 backdrop-blur-md"
+                  >
+                    {([
+                      { op: "left", label: "Align left" },
+                      { op: "center-h", label: "Align center horizontal" },
+                      { op: "right", label: "Align right" },
+                      { op: "divider", label: "" },
+                      { op: "top", label: "Align top" },
+                      { op: "center-v", label: "Align center vertical" },
+                      { op: "bottom", label: "Align bottom" },
+                      { op: "divider", label: "" },
+                      { op: "distribute-h", label: "Distribute horizontally" },
+                      { op: "distribute-v", label: "Distribute vertically" },
+                    ] as const).map((it, i) =>
+                      it.op === "divider" ? (
+                        <li key={`d-${i}`} role="none" className="my-1 mx-2 h-px bg-border-subtle" />
+                      ) : (
+                        <li key={it.op} role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => applyAlign(it.op)}
+                            className="block w-full rounded px-2.5 py-1.5 text-left text-[12px] text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                          >
+                            {it.label}
+                          </button>
+                        </li>
+                      ),
+                    )}
+                  </ul>
+                </>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={() => void deleteSelection()}
