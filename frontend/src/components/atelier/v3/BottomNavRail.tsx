@@ -17,15 +17,18 @@ export function BottomNavRail({
   onToggleMinimap,
   minimapOpen,
 }: BottomNavRailProps) {
+  const HIT =
+    "btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors";
+  const HIT_QUIET = `${HIT} text-text-secondary hover:bg-hover-bg hover:text-foreground`;
   const minimapClass = minimapOpen
-    ? "btn-tip inline-flex items-center justify-center rounded-md p-1.5 transition bg-hover-bg text-foreground"
-    : "btn-tip inline-flex items-center justify-center rounded-md p-1.5 text-text-secondary transition hover:bg-hover-bg hover:text-foreground";
+    ? `${HIT} bg-hover-bg text-foreground`
+    : HIT_QUIET;
 
   return (
     <div
       role="toolbar"
       aria-label="Canvas navigation"
-      className="absolute left-4 bottom-4 z-30 flex items-center gap-1 rounded-full border border-glass-border bg-glass p-1 backdrop-blur-md"
+      className="absolute left-4 bottom-4 z-30 flex h-9 items-center gap-0.5 rounded-full border border-white/8 bg-[#141416]/96 px-1 shadow-[0_14px_30px_-18px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
     >
       <button
         type="button"
@@ -35,26 +38,26 @@ export function BottomNavRail({
         onClick={onToggleMinimap}
         className={minimapClass}
       >
-        <Map size={14} />
+        <Map size={13} aria-hidden="true" />
       </button>
-      <span className="mx-1 h-5 w-px bg-glass-border" />
+      <span aria-hidden="true" className="mx-1 h-4 w-px bg-white/8" />
       <button
         type="button"
         aria-label="Fit view"
         data-tip="Fit view (F)"
         onClick={onFit}
-        className="btn-tip inline-flex items-center justify-center rounded-md p-1.5 text-text-secondary transition hover:bg-hover-bg hover:text-foreground"
+        className={HIT_QUIET}
       >
-        <Maximize size={14} />
+        <Maximize size={13} aria-hidden="true" />
       </button>
       <button
         type="button"
         aria-label="Zoom out"
         data-tip="Zoom out"
         onClick={() => onZoomChange(Math.max(25, zoom - 25))}
-        className="btn-tip inline-flex items-center justify-center rounded-md p-1.5 text-text-secondary transition hover:bg-hover-bg hover:text-foreground"
+        className={HIT_QUIET}
       >
-        <ZoomOut size={14} />
+        <ZoomOut size={13} aria-hidden="true" />
       </button>
       <input
         type="range"
@@ -64,23 +67,23 @@ export function BottomNavRail({
         value={zoom}
         aria-label="Zoom level"
         onChange={(e) => onZoomChange(Number(e.target.value))}
-        className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-white/10 accent-primary"
+        className="mx-0.5 h-1 w-24 cursor-pointer appearance-none rounded-full bg-white/8 accent-primary"
       />
       <button
         type="button"
         aria-label="Zoom in"
         data-tip="Zoom in"
         onClick={() => onZoomChange(Math.min(300, zoom + 25))}
-        className="btn-tip inline-flex items-center justify-center rounded-md p-1.5 text-text-secondary transition hover:bg-hover-bg hover:text-foreground"
+        className={HIT_QUIET}
       >
-        <ZoomIn size={14} />
+        <ZoomIn size={13} aria-hidden="true" />
       </button>
       <button
         type="button"
         aria-label="Reset zoom to 100%"
         data-tip="Reset to 100%"
         onClick={() => onZoomChange(100)}
-        className="btn-tip font-mono text-[10px] text-text-muted hover:text-foreground w-9 text-right"
+        className="btn-tip ml-0.5 inline-flex h-6 items-center justify-end rounded px-1.5 font-mono text-[10px] tracking-[0.08em] text-text-muted/85 transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-text-muted/85"
         disabled={zoom === 100}
       >
         {zoom}%

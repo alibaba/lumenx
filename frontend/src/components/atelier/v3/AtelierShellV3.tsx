@@ -1,10 +1,11 @@
 "use client";
 import axios from "axios";
+import * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, CloudUpload, FolderOpen, Link2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, FolderOpen, Link2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -2356,18 +2357,20 @@ export function AtelierShellV3() {
           current project; click opens a popover with the project list +
           a "New" CTA. Hidden when there are no projects loaded yet. */}
       {project ? (
-        <div className="absolute left-4 top-16 z-30">
+        <div className="absolute left-4 top-[60px] z-30">
           <button
             type="button"
             aria-label="Switch project"
             aria-expanded={showProjectPicker}
             onClick={() => setShowProjectPicker((v) => !v)}
-            className="btn-tip inline-flex items-center gap-1.5 rounded-full border border-glass-border bg-glass px-2.5 py-1 text-[12px] text-foreground hover:bg-hover-bg"
+            className="btn-tip inline-flex items-center gap-2 rounded-full border border-white/8 bg-[#141416]/92 px-2.5 py-[5px] text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors hover:bg-[#1a1a1d]"
             data-tip="Switch project"
           >
-            <FolderOpen size={12} className="text-text-muted" aria-hidden="true" />
-            <span className="max-w-[160px] truncate">{project.title || "Untitled"}</span>
-            <ChevronDown size={12} className="text-text-muted" aria-hidden="true" />
+            <FolderOpen size={11} className="text-text-muted/85" aria-hidden="true" />
+            <span className="max-w-[160px] truncate font-display text-[12px] font-medium tracking-[-0.005em]">
+              {project.title || "Untitled"}
+            </span>
+            <ChevronDown size={11} className="text-text-muted/70" aria-hidden="true" />
           </button>
           {showProjectPicker ? (
             <>
@@ -2986,15 +2989,19 @@ export function AtelierShellV3() {
           <div
             role="status"
             aria-label="Selected node details"
-            className="absolute z-30 inline-flex items-center gap-2 rounded-full border border-glass-border bg-elevated/85 px-2.5 py-1 font-mono text-[10px] backdrop-blur-md shadow-2xl shadow-black/40 animate-atelier-node-in motion-reduce:animate-none"
+            className="absolute z-30 inline-flex items-center gap-2.5 rounded-full border border-white/8 bg-[#141416]/92 px-3 py-[5px] font-mono text-[10px] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-node-in motion-reduce:animate-none"
             style={{ left: screenLeft, top: screenTop }}
           >
             {facts.map((f, i) => (
-              <span key={f.label} className="inline-flex items-center gap-1">
-                <span className="uppercase tracking-wider text-text-muted">{f.label}</span>
-                <span className="text-foreground">{f.value}</span>
-                {i < facts.length - 1 ? <span aria-hidden="true" className="text-text-muted">·</span> : null}
-              </span>
+              <React.Fragment key={f.label}>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="uppercase tracking-[0.2em] text-text-muted/85">{f.label}</span>
+                  <span className="text-foreground/95">{f.value}</span>
+                </span>
+                {i < facts.length - 1 ? (
+                  <span aria-hidden="true" className="h-3 w-px bg-white/8" />
+                ) : null}
+              </React.Fragment>
             ))}
           </div>
         );
@@ -3325,17 +3332,37 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* sequence strip (bottom, between left edge and right rail) */}
+      {/* Sequence Strip — bottom rail. Outer surface uses the cinematic
+          chrome vocabulary (1px white/8 hairline + inset top edge highlight
+          + layered shadow) so it reads as a real surface, not a glass card. */}
       <div
-        className="absolute bottom-4 left-[280px] z-20 rounded-2xl border border-glass-border bg-glass p-2 backdrop-blur-md"
+        className="absolute bottom-4 left-[280px] z-20 rounded-2xl border border-white/8 bg-[#0c0c10]/92 p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
         style={{ right: agentCollapsed ? 88 : 412 }}
       >
-        <div className="mb-1.5 flex items-center justify-between text-[10px] font-mono uppercase tracking-wider text-text-muted">
-          <span>Sequence Strip · {sequenceEntries.length} clip{sequenceEntries.length === 1 ? "" : "s"}</span>
-          {sequenceEntries.length > 0 ? <button onClick={() => setSequence([])} className="text-text-muted hover:text-foreground">clear</button> : null}
+        <div className="mb-2 flex items-center justify-between px-1 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/85">
+          <div className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-primary/70 shadow-[0_0_0_2px_rgba(100,108,255,0.16)]" />
+            <span>Sequence</span>
+            <span aria-hidden="true" className="text-text-muted/40">·</span>
+            <span className="text-foreground/85">
+              {sequenceEntries.length} clip{sequenceEntries.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          {sequenceEntries.length > 0 ? (
+            <button
+              onClick={() => setSequence([])}
+              className="rounded px-1.5 py-0.5 tracking-[0.2em] text-text-muted/70 transition-colors hover:bg-white/[0.06] hover:text-foreground"
+            >
+              Clear
+            </button>
+          ) : null}
         </div>
         {sequenceEntries.length === 0 ? (
-          <div className="px-2 py-2 text-[11px] text-text-muted">Select a completed take, then "Add to Sequence" from its action bar.</div>
+          <div className="px-2 py-2 text-[11px] text-text-muted/85">
+            Select a completed take, then{" "}
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/70">Add to Sequence</span>{" "}
+            from its action bar.
+          </div>
         ) : (
           <div className="flex items-center gap-2 overflow-x-auto">
             {sequenceEntries.map(({ entry, parent, cand }, i) => (
@@ -3379,12 +3406,12 @@ export function AtelierShellV3() {
                   setSeqDragOverIndex(null);
                 }}
                 onClick={() => cand.video_url && setPreviewVideoUrl(cand.video_url)}
-                className={`group relative h-[68px] w-[140px] shrink-0 cursor-grab overflow-hidden rounded-md border bg-elevated/80 transition-shadow hover:border-primary/50 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)] active:cursor-grabbing ${
+                className={`group relative h-[68px] w-[124px] shrink-0 cursor-grab overflow-hidden rounded-[5px] border transition-shadow hover:border-primary/45 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.22)] active:cursor-grabbing ${
                   seqDragFromIndex === i
-                    ? "opacity-50 border-primary/60"
+                    ? "opacity-45 border-primary/55"
                     : seqDragOverIndex === i && seqDragFromIndex !== null && seqDragFromIndex !== i
-                    ? "border-primary ring-2 ring-primary/40"
-                    : "border-glass-border"
+                    ? "border-primary ring-2 ring-primary/35"
+                    : "border-white/8 bg-[#141416]"
                 }`}
                 aria-label={`Play ${parent.title}, clip ${i + 1}`}
               >
@@ -3398,12 +3425,12 @@ export function AtelierShellV3() {
                     className="h-full w-full object-cover"
                   />
                 ) : null}
-                <span className="pointer-events-none absolute inset-0 m-auto grid h-7 w-7 place-items-center rounded-full bg-black/55 text-white/95 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
-                  <Play size={12} />
+                <span className="pointer-events-none absolute inset-0 m-auto grid h-7 w-7 place-items-center rounded-full bg-black/65 text-white/95 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
+                  <Play size={11} aria-hidden="true" />
                 </span>
-                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-black/60 px-1.5 py-1 backdrop-blur-sm">
-                  <span className="truncate text-[10px] text-foreground">{parent.title}</span>
-                  <span className="font-mono text-[9px] text-text-muted">#{i + 1}</span>
+                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-1.5 pb-1 pt-2.5">
+                  <span className="truncate text-[10px] text-foreground/95">{parent.title}</span>
+                  <span className="font-mono text-[9px] tracking-tight text-text-muted">{String(i + 1).padStart(2, "0")}</span>
                 </div>
                 <span
                   role="button"
@@ -3412,10 +3439,10 @@ export function AtelierShellV3() {
                     e.stopPropagation();
                     setSequence((prev) => prev.filter((s) => !(s.parentId === entry.parentId && s.candidateId === entry.candidateId)));
                   }}
-                  className="absolute right-1 top-1 rounded bg-black/55 p-0.5 text-white/80 opacity-0 hover:bg-red-500/70 group-hover:opacity-100"
+                  className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-black/65 text-white/85 opacity-0 transition-colors hover:bg-red-500/75 group-hover:opacity-100"
                   aria-label={`Remove ${parent.title} from sequence`}
                 >
-                  <X size={10} />
+                  <X size={9} aria-hidden="true" />
                 </span>
               </button>
             ))}
@@ -3899,25 +3926,24 @@ export function AtelierShellV3() {
         } else {
           label = "Saved";
         }
-        const tone = isSaving
-          ? "border-blue-400/40 text-blue-200"
+        const dotTone = isSaving
+          ? "bg-blue-300 shadow-[0_0_0_3px_rgba(96,165,250,0.18)] animate-pulse"
           : hasUnrecoveredFailure
-          ? "border-red-400/50 text-red-200"
-          : "border-emerald-400/30 text-emerald-200";
+          ? "bg-red-300 shadow-[0_0_0_3px_rgba(252,165,165,0.18)]"
+          : "bg-emerald-300 shadow-[0_0_0_3px_rgba(110,231,183,0.18)]";
+        const tone = isSaving
+          ? "text-blue-200/95"
+          : hasUnrecoveredFailure
+          ? "text-red-200/95"
+          : "text-emerald-200/95";
         return (
           <div
             role="status"
             aria-live="polite"
-            className={`absolute top-4 z-30 inline-flex items-center gap-1.5 rounded-full border bg-elevated/85 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider backdrop-blur-md shadow-2xl shadow-black/40 transition-opacity duration-300 ${tone}`}
+            className={`absolute top-4 z-30 inline-flex items-center gap-2 rounded-full border border-white/8 bg-[#141416]/92 px-2.5 py-[5px] font-mono text-[10px] uppercase tracking-[0.18em] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl transition-opacity duration-300 ${tone}`}
             style={{ right: agentCollapsed ? 88 : 412 }}
           >
-            {isSaving ? (
-              <CloudUpload size={10} className="animate-pulse" aria-hidden="true" />
-            ) : hasUnrecoveredFailure ? (
-              <CloudUpload size={10} aria-hidden="true" />
-            ) : (
-              <Check size={10} aria-hidden="true" />
-            )}
+            <span aria-hidden="true" className={`h-[5px] w-[5px] rounded-full ${dotTone}`} />
             <span>{label}</span>
             {hasUnrecoveredFailure && !isSaving ? (
               <button
