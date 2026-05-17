@@ -824,6 +824,14 @@ export function AtelierShellV3() {
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
 
+      // Cmd/Ctrl + \ = collapse / expand the Right Rail. Matches VS Code's
+      // sidebar toggle muscle memory.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key === "\\") {
+        e.preventDefault();
+        setAgentCollapsed((c) => !c);
+        return;
+      }
+
       // Cmd/Ctrl + Z = undo. Cmd/Ctrl + Shift + Z (or Cmd/Ctrl + Y) = redo.
       // Handled before the no-modifier guard. Keep the alt check loose so
       // OS-level chords don't get hijacked.
@@ -3420,6 +3428,7 @@ export function AtelierShellV3() {
                 ["⌘ / Ctrl + Z", "Undo move"],
                 ["⌘ / Ctrl + Shift + Z", "Redo move"],
                 ["⌘ / Ctrl + Wheel", "Zoom"],
+                ["⌘ / Ctrl + \\", "Toggle right rail"],
                 ["← ↑ → ↓", "Navigate to nearest node"],
                 ["Shift + ← ↑ → ↓", "Extend selection"],
                 ["← / → in Preview", "Prev / next take"],
