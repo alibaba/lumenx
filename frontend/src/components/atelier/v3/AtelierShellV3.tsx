@@ -509,6 +509,12 @@ export function AtelierShellV3() {
   // touching this node stay full-strength; the rest fade.
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
+  // Sequence drag-to-reorder: which clip index is currently being dragged
+  // (source) and which index the drop indicator is shown at (target). Both
+  // stored in shell because they only matter while a drag is in progress.
+  const [seqDragFromIndex, setSeqDragFromIndex] = useState<number | null>(null);
+  const [seqDragOverIndex, setSeqDragOverIndex] = useState<number | null>(null);
+
   // Multi-selection layer. Store keeps a single primary `selectedNodeId`
   // (which anchors the action bar / composer / inspector); the shell
   // tracks *additional* secondary selections in this set. The union is the
@@ -2467,8 +2473,50 @@ export function AtelierShellV3() {
               <button
                 key={`${entry.parentId}-${entry.candidateId}`}
                 type="button"
+                draggable
+                onDragStart={(e) => {
+                  setSeqDragFromIndex(i);
+                  e.dataTransfer.effectAllowed = "move";
+                  // Required by Firefox to actually start the drag.
+                  e.dataTransfer.setData("text/plain", String(i));
+                }}
+                onDragOver={(e) => {
+                  if (seqDragFromIndex === null) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (seqDragOverIndex !== i) setSeqDragOverIndex(i);
+                }}
+                onDragLeave={(e) => {
+                  // Only clear if leaving for somewhere outside this clip.
+                  if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                  setSeqDragOverIndex((prev) => (prev === i ? null : prev));
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const from = seqDragFromIndex;
+                  const to = i;
+                  setSeqDragFromIndex(null);
+                  setSeqDragOverIndex(null);
+                  if (from === null || from === to) return;
+                  setSequence((prev) => {
+                    const next = prev.slice();
+                    const [moved] = next.splice(from, 1);
+                    next.splice(to, 0, moved);
+                    return next;
+                  });
+                }}
+                onDragEnd={() => {
+                  setSeqDragFromIndex(null);
+                  setSeqDragOverIndex(null);
+                }}
                 onClick={() => cand.video_url && setPreviewVideoUrl(cand.video_url)}
-                className="group relative h-[68px] w-[140px] shrink-0 overflow-hidden rounded-md border border-glass-border bg-elevated/80 transition-shadow hover:border-primary/50 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)]"
+                className={`group relative h-[68px] w-[140px] shrink-0 cursor-grab overflow-hidden rounded-md border bg-elevated/80 transition-shadow hover:border-primary/50 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)] active:cursor-grabbing ${
+                  seqDragFromIndex === i
+                    ? "opacity-50 border-primary/60"
+                    : seqDragOverIndex === i && seqDragFromIndex !== null && seqDragFromIndex !== i
+                    ? "border-primary ring-2 ring-primary/40"
+                    : "border-glass-border"
+                }`}
                 aria-label={`Play ${parent.title}, clip ${i + 1}`}
               >
                 {cand.video_url ? (
