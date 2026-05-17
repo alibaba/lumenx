@@ -1228,6 +1228,24 @@ export function AtelierShellV3() {
   } | null>(null);
   const [marqueeTick, setMarqueeTick] = useState(0);
 
+  // Resize drag — selected media nodes (image / video, real not virtual)
+  // get four corner handles. Pointer-down on a handle starts a resize
+  // drag that updates width/height (and x/y when dragging from a top or
+  // left handle, since the opposite edge is anchored). Mirrors the
+  // {move,group}-drag patterns: optimistic local update + commit on up.
+  const resizeDragRef = useRef<{
+    nodeId: string;
+    corner: "tl" | "tr" | "bl" | "br";
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+    startPointerX: number;
+    startPointerY: number;
+    moved: boolean;
+  } | null>(null);
+  const [, setResizeTick] = useState(0);
+
   // Connect drag (image → draft attach-as-reference). Live updates via tick
   // since refs don't trigger re-render — we want the dashed bezier overlay
   // to follow the cursor and the hovered target ring to repaint.
@@ -2836,6 +2854,119 @@ export function AtelierShellV3() {
               </span>
             ))}
           </div>
+        );
+      })() : null}
+
+      {/* Resize handles — four corners on a selected image / video node
+          (real, not virtual, not draft). Drag a corner to resize the
+          node's bounds; opposite corner stays anchored. Constrained to
+          80×60 min and 800×600 max. Persists via commitNodeBounds on
+          release. */}
+      {selectedNode &&
+       !isMultiSelect &&
+       (selectedNode.type === "image" || (selectedNode.type === "video" && !isDraftVideo(selectedNode))) &&
+       !parseCandidateNodeId(selectedNode.id) &&
+       (selectedNode.media_urls?.length ?? 0) > 0 ? (() => {
+        const w = selectedNode.width || 180;
+        const h = selectedNode.height || 180;
+        const corners = [
+          { key: "tl" as const, sx: panX + selectedNode.x * zoomFactor, sy: panY + selectedNode.y * zoomFactor, cursor: "nwse-resize" },
+          { key: "tr" as const, sx: panX + (selectedNode.x + w) * zoomFactor, sy: panY + selectedNode.y * zoomFactor, cursor: "nesw-resize" },
+          { key: "bl" as const, sx: panX + selectedNode.x * zoomFactor, sy: panY + (selectedNode.y + h) * zoomFactor, cursor: "nesw-resize" },
+          { key: "br" as const, sx: panX + (selectedNode.x + w) * zoomFactor, sy: panY + (selectedNode.y + h) * zoomFactor, cursor: "nwse-resize" },
+        ];
+        const startResize = (corner: "tl" | "tr" | "bl" | "br") => (event: React.PointerEvent) => {
+          if (event.button !== 0) return;
+          event.stopPropagation();
+          event.preventDefault();
+          const node = selectedNode;
+          if (!node) return;
+          resizeDragRef.current = {
+            nodeId: node.id,
+            corner,
+            startX: node.x,
+            startY: node.y,
+            startW: node.width || 180,
+            startH: node.height || 180,
+            startPointerX: event.clientX,
+            startPointerY: event.clientY,
+            moved: false,
+          };
+          setResizeTick((v) => v + 1);
+          const MIN_W = 80, MIN_H = 60, MAX_W = 800, MAX_H = 600;
+          const onMove = (ev: PointerEvent) => {
+            const drag = resizeDragRef.current;
+            if (!drag) return;
+            const dx = (ev.clientX - drag.startPointerX) / zoomFactor;
+            const dy = (ev.clientY - drag.startPointerY) / zoomFactor;
+            if (Math.abs(dx) + Math.abs(dy) > 2) drag.moved = true;
+            let nx = drag.startX, ny = drag.startY, nw = drag.startW, nh = drag.startH;
+            if (drag.corner === "tl") {
+              nw = drag.startW - dx;
+              nh = drag.startH - dy;
+              nx = drag.startX + dx;
+              ny = drag.startY + dy;
+            } else if (drag.corner === "tr") {
+              nw = drag.startW + dx;
+              nh = drag.startH - dy;
+              ny = drag.startY + dy;
+            } else if (drag.corner === "bl") {
+              nw = drag.startW - dx;
+              nh = drag.startH + dy;
+              nx = drag.startX + dx;
+            } else { // br
+              nw = drag.startW + dx;
+              nh = drag.startH + dy;
+            }
+            // Clamp to min/max while keeping the opposite corner anchored.
+            if (nw < MIN_W) {
+              if (drag.corner === "tl" || drag.corner === "bl") nx = drag.startX + (drag.startW - MIN_W);
+              nw = MIN_W;
+            }
+            if (nw > MAX_W) {
+              if (drag.corner === "tl" || drag.corner === "bl") nx = drag.startX + (drag.startW - MAX_W);
+              nw = MAX_W;
+            }
+            if (nh < MIN_H) {
+              if (drag.corner === "tl" || drag.corner === "tr") ny = drag.startY + (drag.startH - MIN_H);
+              nh = MIN_H;
+            }
+            if (nh > MAX_H) {
+              if (drag.corner === "tl" || drag.corner === "tr") ny = drag.startY + (drag.startH - MAX_H);
+              nh = MAX_H;
+            }
+            useAtelierStore.getState().resizeNodeLocal(drag.nodeId, Math.round(nx), Math.round(ny), Math.round(nw), Math.round(nh));
+            setResizeTick((v) => v + 1);
+          };
+          const onUp = () => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            const drag = resizeDragRef.current;
+            resizeDragRef.current = null;
+            setResizeTick((v) => v + 1);
+            if (!drag || !drag.moved) return;
+            const real = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === drag.nodeId);
+            if (!real) return;
+            void useAtelierStore.getState()
+              .commitNodeBounds(drag.nodeId, real.x, real.y, real.width || drag.startW, real.height || drag.startH)
+              .catch(() => {/* save chip surfaces failures */});
+          };
+          window.addEventListener("pointermove", onMove);
+          window.addEventListener("pointerup", onUp);
+        };
+        return (
+          <>
+            {corners.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                aria-label={`Resize ${c.key}`}
+                onPointerDown={startResize(c.key)}
+                className="absolute z-40 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-white/60 bg-primary shadow-[0_0_0_2px_rgba(100,108,255,0.18)] hover:scale-125"
+                style={{ left: c.sx, top: c.sy, cursor: c.cursor }}
+              />
+            ))}
+          </>
         );
       })() : null}
 

@@ -59,7 +59,9 @@ interface AtelierStore {
     selectCandidate: (nodeId: string, candidateId: string) => Promise<AtelierNode>;
     deleteCandidate: (nodeId: string, candidateId: string) => Promise<AtelierNode>;
     moveNodeLocal: (nodeId: string, x: number, y: number) => void;
+    resizeNodeLocal: (nodeId: string, x: number, y: number, width: number, height: number) => void;
     commitNodePosition: (nodeId: string, x: number, y: number) => Promise<AtelierNode>;
+    commitNodeBounds: (nodeId: string, x: number, y: number, width: number, height: number) => Promise<AtelierNode>;
     refreshCurrentProject: () => Promise<void>;
     selectNode: (nodeId: string | null) => void;
 }
@@ -638,8 +640,25 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
         }));
     },
 
+    resizeNodeLocal: (nodeId, x, y, width, height) => {
+        set((state) => ({
+            currentProject: state.currentProject
+                ? {
+                    ...state.currentProject,
+                    nodes: state.currentProject.nodes.map((node) =>
+                        node.id === nodeId ? { ...node, x, y, width, height } : node
+                    ),
+                }
+                : state.currentProject,
+        }));
+    },
+
     commitNodePosition: async (nodeId, x, y) => {
         return get().updateNode(nodeId, { x, y });
+    },
+
+    commitNodeBounds: async (nodeId, x, y, width, height) => {
+        return get().updateNode(nodeId, { x, y, width, height });
     },
 
     refreshCurrentProject: async () => {
