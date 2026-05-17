@@ -10,6 +10,7 @@ export { type MediaKind, type MediaNodeView, toMediaNodeView } from "./types";
 export { MediaNode } from "./MediaNode";
 export { DraftNode } from "./DraftNode";
 export { IdeaNode } from "./IdeaNode";
+export { CommentNode } from "./CommentNode";
 
 // Wave B — plan + chrome
 export { PlanNode } from "./PlanNode";

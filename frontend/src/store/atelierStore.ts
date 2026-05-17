@@ -46,6 +46,7 @@ interface AtelierStore {
     createVideoNode: () => Promise<AtelierNode>;
     createImageNode: (file: File) => Promise<AtelierNode>;
     createIdeaNode: (body?: string) => Promise<AtelierNode>;
+    createCommentNode: (body?: string) => Promise<AtelierNode>;
     deleteAtelierNode: (nodeId: string) => Promise<void>;
     branchFromCandidate: (parentId: string, candidateId: string) => Promise<AtelierNode>;
     updateNode: (nodeId: string, patch: Partial<AtelierNode>) => Promise<AtelierNode>;
@@ -347,6 +348,29 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             width: 240,
             height: 120,
             data: { body: body ?? "Click to edit." },
+        });
+        set((state) => ({
+            currentProject: state.currentProject?.id === node.project_id
+                ? { ...state.currentProject, nodes: [...state.currentProject.nodes, node] }
+                : state.currentProject,
+            selectedNodeId: node.id,
+        }));
+        return node;
+    },
+
+    createCommentNode: async (body) => {
+        const project = await get().ensureProject();
+        const offset = project.nodes.length * 24;
+        const node = await api.createAtelierNode(project.id, {
+            type: "comment",
+            title: "Comment",
+            prompt: body ?? "",
+            status: "completed",
+            x: 80 + offset,
+            y: 720 + offset,
+            width: 220,
+            height: 100,
+            data: { body: body ?? "" },
         });
         set((state) => ({
             currentProject: state.currentProject?.id === node.project_id

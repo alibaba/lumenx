@@ -11,7 +11,7 @@ export type ActionKey =
   | "delete";
 
 interface Props {
-  kind: "image" | "video" | "audio" | "draft" | "idea";
+  kind: "image" | "video" | "audio" | "draft" | "idea" | "comment";
   x: number;
   y: number;
   width: number;
@@ -57,6 +57,9 @@ const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
   // intent (you branch FROM a take). Just Delete.
   draft: ["delete"],
   idea: ["delete"],
+  // Comments are sticky-note annotations — Delete only (body is edited
+  // inline on the canvas).
+  comment: ["delete"],
 };
 
 function buttonClass(variant: ActionDef["variant"]): string {

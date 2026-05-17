@@ -9,6 +9,7 @@ import {
   MediaNode,
   DraftNode,
   IdeaNode,
+  CommentNode,
   PlanNode,
   SelectionActionBar,
   BottomNavRail,
@@ -38,10 +39,11 @@ const CAND_GAP = 16;
 
 function selectionKindOf(
   node: AtelierNode,
-): "image" | "video" | "audio" | "draft" | "idea" {
+): "image" | "video" | "audio" | "draft" | "idea" | "comment" {
   if (node.type === "image") return "image";
   if (node.type === "audio") return "audio";
   if (node.type === "idea") return "idea";
+  if (node.type === "comment") return "comment";
   if (node.type === "video" && node.status === "draft") return "draft";
   return "video";
 }
@@ -151,6 +153,23 @@ function renderNode(
         key={node.id}
         id={node.id}
         body={body}
+        selected={isSelected}
+        x={node.x}
+        y={node.y}
+        onSelect={onSelect}
+      />
+    );
+  }
+
+  if (node.type === "comment") {
+    const body = readString(node.data?.body) ?? node.prompt ?? "";
+    const author = readString((node.data as { author?: unknown })?.author);
+    return (
+      <CommentNode
+        key={node.id}
+        id={node.id}
+        body={body}
+        author={author}
         selected={isSelected}
         x={node.x}
         y={node.y}
@@ -468,6 +487,7 @@ export function AtelierShellV3() {
   const selectNode = useAtelierStore((s) => s.selectNode);
   const createImageNode = useAtelierStore((s) => s.createImageNode);
   const createIdeaNode = useAtelierStore((s) => s.createIdeaNode);
+  const createCommentNode = useAtelierStore((s) => s.createCommentNode);
   const deleteAtelierNode = useAtelierStore((s) => s.deleteAtelierNode);
   const branchFromCandidate = useAtelierStore((s) => s.branchFromCandidate);
   const updateAgentPolicy = useAtelierStore((s) => s.updateAgentPolicy);
@@ -1039,6 +1059,15 @@ export function AtelierShellV3() {
             })
             .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
           break;
+        case "c":
+          e.preventDefault();
+          void createCommentNode()
+            .then((node) => {
+              setEditingIdeaId(node.id);
+              setEditingIdeaBody((node.data as { body?: string })?.body ?? "");
+            })
+            .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+          break;
         case "f":
           e.preventDefault();
           handleFitView();
@@ -1083,8 +1112,9 @@ export function AtelierShellV3() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedNodeId, project?.nodes]);
 
-  // Auto-enter idea editing whenever an idea node becomes selected — saves
-  // a click. The textarea overlay (rendered later in JSX) takes focus.
+  // Auto-enter idea/comment editing whenever a sticky-text node becomes
+  // selected — saves a click. The textarea overlay (rendered later in
+  // JSX) takes focus.
   useEffect(() => {
     if (!project || !selectedNodeId) {
       // Selection cleared — close any open editor (and persist on close).
@@ -1092,7 +1122,7 @@ export function AtelierShellV3() {
       return;
     }
     const sel = project.nodes.find((n) => n.id === selectedNodeId);
-    if (!sel || sel.type !== "idea") {
+    if (!sel || (sel.type !== "idea" && sel.type !== "comment")) {
       if (editingIdeaId && editingIdeaId !== selectedNodeId) setEditingIdeaId(null);
       return;
     }
@@ -2593,11 +2623,14 @@ export function AtelierShellV3() {
           {/* selection action bar + composer moved OUT of world (screen coords)
               so they stay readable at any zoom — see below. */}
 
-          {/* Inline IdeaNode editor: when an idea is being edited, overlay a
-              textarea on top of it in world coords. */}
+          {/* Inline editor for sticky-text nodes (idea + comment). Same
+              shape, different background tint by kind. */}
           {editingIdeaId && project ? (() => {
             const node = project.nodes.find((n) => n.id === editingIdeaId);
-            if (!node || node.type !== "idea") return null;
+            if (!node || (node.type !== "idea" && node.type !== "comment")) return null;
+            const tint = node.type === "comment"
+              ? "bg-violet-400/[0.06] border-violet-300/60 ring-violet-300/30"
+              : "bg-amber-400/[0.06] border-primary/60 ring-primary/30";
             return (
               <textarea
                 autoFocus
@@ -2618,7 +2651,7 @@ export function AtelierShellV3() {
                     (e.target as HTMLTextAreaElement).blur();
                   }
                 }}
-                className="absolute z-30 w-[220px] resize-none rounded-md border border-primary/60 bg-amber-400/[0.06] px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none ring-2 ring-primary/30"
+                className={`absolute z-30 w-[220px] resize-none rounded-md border px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none ring-2 ${tint}`}
                 style={{ left: node.x, top: node.y, height: Math.max(80, (node.height || 120)) }}
               />
             );
@@ -2755,7 +2788,7 @@ export function AtelierShellV3() {
           if (cands.length > 0) facts.push({ label: "takes", value: `${completed}/${cands.length}` });
           const url = node.media_urls?.[0];
           if (url) facts.push({ label: "media", value: "ready" });
-        } else if (node.type === "idea") {
+        } else if (node.type === "idea" || node.type === "comment") {
           const body = readString(node.data?.body) ?? node.prompt ?? "";
           const chars = body.length;
           facts.push({ label: "length", value: `${chars} char${chars === 1 ? "" : "s"}` });
@@ -3148,7 +3181,7 @@ export function AtelierShellV3() {
           items.push({ label: "Use as reference…", onClick: () => { handleActionBar("useAsRef", node); close(); }, disabled: !hasMedia });
           items.push({ label: "Duplicate", onClick: () => { copySelection(); void pasteClipboard(); close(); } });
           items.push({ label: "Delete", onClick: () => { void deleteSelection(); close(); }, danger: true });
-        } else if (kind === "idea") {
+        } else if (kind === "idea" || kind === "comment") {
           items.push({ label: "Edit", onClick: () => {
             selectNode(node.id);
             const body = (node.data as { body?: string })?.body ?? node.prompt ?? "";
@@ -3406,8 +3439,9 @@ export function AtelierShellV3() {
           <p className="text-[12px] leading-relaxed text-text-secondary">
             Drop a seed with{" "}
             <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">V</kbd>,{" "}
-            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">I</kbd>, or{" "}
-            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">T</kbd>.
+            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">I</kbd>,{" "}
+            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">T</kbd>, or{" "}
+            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">C</kbd>.
             Press{" "}
             <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">?</kbd>{" "}
             anytime to see every shortcut.
@@ -3451,6 +3485,7 @@ export function AtelierShellV3() {
                 ["V", "New Video Node"],
                 ["I", "New Image Node"],
                 ["T", "New Idea Node"],
+                ["C", "New Comment / annotation"],
                 ["F", "Fit view"],
                 ["/", "Focus Agent composer"],
                 ["?", "Toggle this help"],
