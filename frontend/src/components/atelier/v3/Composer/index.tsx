@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Settings, Wand2, X, Plus, Trash2 } from "lucide-react";
 import { CapabilityIcon } from "./CapabilityIcon";
 import { ChipDropdown } from "./ChipDropdown";
@@ -29,6 +29,12 @@ export interface ComposerRef {
   role?: string;     // "ref" | "ff" | "vid"
 }
 
+export interface ComposerMentionable {
+  id: string;
+  label: string;
+  kind?: "image" | "video" | "audio" | "draft" | "idea" | "plan";
+}
+
 interface Props {
   activeTab?: ComposerTab;
   onTabChange?: (tab: ComposerTab) => void;
@@ -51,6 +57,9 @@ interface Props {
   /** Called on textarea blur if the prompt changed since mount/last save —
    *  lets the parent persist the draft so typed content survives close. */
   onPromptCommit?: (next: string) => void;
+  /** Nodes available for @ mention. Typing @ in the prompt opens a picker
+   *  filtered against these labels; selecting inserts `@<label>`. */
+  mentionables?: ComposerMentionable[];
 
   // Position: either anchor + viewport, OR explicit style.
   anchor?: ComposerAnchor | null;
@@ -78,6 +87,7 @@ export function Composer({
   onRemoveRef,
   onAdvanced,
   onPromptCommit,
+  mentionables,
   anchor,
   viewport,
   style,
@@ -105,6 +115,74 @@ export function Composer({
   useEffect(() => setA(aspect),     [aspect]);
   useEffect(() => setD(duration),   [duration]);
   useEffect(() => setC(count),      [count]);
+
+  // ── @ mention picker ─────────────────────────────────────────────────
+  // When the user types `@` in the prompt, we surface a popover of
+  // matching nodes above the textarea. Tracks the @ position in the draft
+  // so Enter / click can replace from `@<query>` → `@<label> ` cleanly.
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const filteredMentionables = useMemo(() => {
+    if (!mention || !mentionables) return [];
+    const q = mention.query.toLowerCase();
+    if (q.length === 0) return mentionables.slice(0, 8);
+    return mentionables
+      .filter((m) => m.label.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [mention, mentionables]);
+  // Re-clamp the active index whenever the filtered list shrinks under it.
+  useEffect(() => {
+    if (filteredMentionables.length === 0) {
+      setMentionIndex(0);
+      return;
+    }
+    if (mentionIndex >= filteredMentionables.length) setMentionIndex(0);
+  }, [filteredMentionables, mentionIndex]);
+
+  const detectMention = (value: string, cursor: number) => {
+    if (!mentionables || mentionables.length === 0) {
+      setMention(null);
+      return;
+    }
+    const before = value.slice(0, cursor);
+    const at = before.lastIndexOf("@");
+    if (at < 0) {
+      setMention(null);
+      return;
+    }
+    // Must be at start of input or preceded by whitespace, not part of an
+    // email-ish token.
+    const prevChar = at > 0 ? before[at - 1] : "";
+    if (prevChar && !/\s/.test(prevChar)) {
+      setMention(null);
+      return;
+    }
+    const between = before.slice(at + 1);
+    if (/\s/.test(between)) {
+      setMention(null);
+      return;
+    }
+    setMention({ start: at, query: between });
+  };
+
+  const insertMention = (m: ComposerMentionable) => {
+    if (!mention) return;
+    const before = draft.slice(0, mention.start);
+    const tail = draft.slice(mention.start + 1 + mention.query.length);
+    const inserted = `@${m.label} `;
+    const next = `${before}${inserted}${tail}`;
+    setDraft(next);
+    setMention(null);
+    // Restore caret right after the inserted mention so the user keeps typing.
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const caret = before.length + inserted.length;
+      ta.focus();
+      ta.setSelectionRange(caret, caret);
+    });
+  };
 
   const submit = () => {
     if (showCapabilityMismatch) return;
@@ -199,23 +277,61 @@ export function Composer({
       </div>
 
       {/* Prompt */}
-      <div className="px-3 pt-2">
+      <div className="relative px-3 pt-2">
         <textarea
+          ref={textareaRef}
           aria-label="Prompt"
           rows={3}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            // Persist typed content even if the user doesn't click submit —
-            // closing the composer or selecting elsewhere would otherwise
-            // throw the draft away. Only fire when the value actually
-            // changed from what came in via props (avoids spurious writes
-            // on every focus shift).
+          onChange={(e) => {
+            const next = e.target.value;
+            setDraft(next);
+            detectMention(next, e.target.selectionStart ?? next.length);
+          }}
+          onSelect={(e) => {
+            const ta = e.currentTarget;
+            detectMention(ta.value, ta.selectionStart ?? ta.value.length);
+          }}
+          onBlur={(e) => {
+            // Don't dismiss the mention picker just because the textarea lost
+            // focus — clicks land on the picker before blur fully settles.
+            // The picker manages its own dismissal via outside-click.
             if (onPromptCommit && draft !== (prompt ?? "")) {
               onPromptCommit(draft);
             }
+            // Defer hiding so a click-on-item can still fire its onMouseDown.
+            const related = e.relatedTarget as HTMLElement | null;
+            if (related && related.closest('[role="listbox"][aria-label="Mention picker"]')) return;
+            setMention(null);
           }}
           onKeyDown={(e) => {
+            if (mention && filteredMentionables.length > 0) {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                setMentionIndex((i) => (i + 1) % filteredMentionables.length);
+                return;
+              }
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                setMentionIndex((i) => (i - 1 + filteredMentionables.length) % filteredMentionables.length);
+                return;
+              }
+              if (e.key === "Enter" && !(e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                insertMention(filteredMentionables[mentionIndex]);
+                return;
+              }
+              if (e.key === "Escape") {
+                e.preventDefault();
+                setMention(null);
+                return;
+              }
+              if (e.key === "Tab") {
+                e.preventDefault();
+                insertMention(filteredMentionables[mentionIndex]);
+                return;
+              }
+            }
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               submit();
@@ -225,6 +341,50 @@ export function Composer({
           placeholder="Describe what you want to generate. Use @ to mention a canvas node."
           className="w-full resize-none rounded-md border border-glass-border bg-input-bg px-2.5 py-2 text-[13px] text-foreground placeholder:text-text-muted outline-none focus:border-primary/60"
         />
+        {mention && filteredMentionables.length > 0 ? (
+          <ul
+            role="listbox"
+            aria-label="Mention picker"
+            className="absolute left-3 right-3 top-full z-10 mt-1 max-h-[180px] overflow-y-auto rounded-md border border-glass-border bg-elevated p-1 shadow-2xl shadow-black/50 backdrop-blur-md"
+          >
+            {filteredMentionables.map((m, i) => {
+              const active = i === mentionIndex;
+              const kindIconColor =
+                m.kind === "video" || m.kind === "draft" ? "text-primary" :
+                m.kind === "image" ? "text-amber-200" :
+                m.kind === "audio" ? "text-emerald-200" :
+                m.kind === "idea" ? "text-amber-300" :
+                m.kind === "plan" ? "text-blue-200" :
+                "text-text-muted";
+              return (
+                <li key={m.id} role="none">
+                  <button
+                    role="option"
+                    type="button"
+                    aria-selected={active}
+                    onMouseDown={(e) => {
+                      // mousedown so the click commits before the textarea's
+                      // blur path can dismiss the picker.
+                      e.preventDefault();
+                      insertMention(m);
+                    }}
+                    onMouseEnter={() => setMentionIndex(i)}
+                    className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-[12px] ${
+                      active ? "bg-hover-bg text-foreground" : "text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                    }`}
+                  >
+                    <span className="truncate">{m.label}</span>
+                    {m.kind ? (
+                      <span className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${kindIconColor}`}>
+                        {m.kind}
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
       </div>
 
       {/* Chip row */}

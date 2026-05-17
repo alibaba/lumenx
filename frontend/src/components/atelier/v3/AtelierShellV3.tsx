@@ -2915,6 +2915,13 @@ export function AtelierShellV3() {
                   })
                   .catch(() => {/* save chip surfaces failures */});
               }}
+              mentionables={(project?.nodes ?? [])
+                .filter((n) => n.id !== selectedNode.id)
+                .map((n) => ({
+                  id: n.id,
+                  label: n.title || readString((n.data as { intent?: unknown })?.intent) || readString((n.data as { body?: unknown })?.body)?.slice(0, 40) || n.type,
+                  kind: n.type === "video" && n.status === "draft" ? ("draft" as const) : (n.type as "image" | "video" | "audio" | "idea" | "plan"),
+                }))}
             />
           </div>
         </div>
