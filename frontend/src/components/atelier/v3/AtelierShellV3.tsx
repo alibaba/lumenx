@@ -724,6 +724,65 @@ export function AtelierShellV3() {
       }
 
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Arrow keys → navigate to the nearest node in that direction.
+      // Shift+arrow extends the multi-selection (adds the new pick to extras).
+      // Match Figma's pattern: pick the closest non-selected node whose center
+      // is "primarily" in that direction relative to the current primary's
+      // center. Falls back to no-op when the canvas is empty.
+      const arrowKey = (() => {
+        switch (e.key) {
+          case "ArrowRight": return "right" as const;
+          case "ArrowLeft":  return "left"  as const;
+          case "ArrowUp":    return "up"    as const;
+          case "ArrowDown":  return "down"  as const;
+          default: return null;
+        }
+      })();
+      if (arrowKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const proj = useAtelierStore.getState().currentProject;
+        const nodes = proj?.nodes ?? [];
+        if (nodes.length === 0) return;
+        e.preventDefault();
+        const center = (n: { x: number; y: number; width?: number; height?: number }) => ({
+          cx: n.x + (n.width || 240) / 2,
+          cy: n.y + (n.height || 110) / 2,
+        });
+        const anchor = nodes.find((n) => n.id === selectedNodeId) ?? nodes[0];
+        const ac = center(anchor);
+        let best: { node: typeof nodes[number]; score: number } | null = null;
+        for (const n of nodes) {
+          if (n.id === anchor.id) continue;
+          const c = center(n);
+          const dx = c.cx - ac.cx;
+          const dy = c.cy - ac.cy;
+          // Direction predicate + distance-with-perpendicular-penalty so we
+          // pick a *primarily* aligned neighbor (Figma's choice). Penalty
+          // factor 2 means a node 100px sideways needs to be ~200px closer
+          // along-axis to win over a more-aligned candidate.
+          let inDir = false; let primary = 0; let perp = 0;
+          if (arrowKey === "right") { inDir = dx > 0; primary = dx; perp = Math.abs(dy); }
+          else if (arrowKey === "left") { inDir = dx < 0; primary = -dx; perp = Math.abs(dy); }
+          else if (arrowKey === "up") { inDir = dy < 0; primary = -dy; perp = Math.abs(dx); }
+          else if (arrowKey === "down") { inDir = dy > 0; primary = dy; perp = Math.abs(dx); }
+          if (!inDir) continue;
+          const score = primary + perp * 2;
+          if (best === null || score < best.score) best = { node: n, score };
+        }
+        if (!best) return;
+        if (e.shiftKey) {
+          // Extend selection.
+          setExtraSelectedIds((prev) => {
+            const next = new Set(prev);
+            next.add(best!.node.id);
+            return next;
+          });
+        } else {
+          selectNode(best.node.id);
+          setExtraSelectedIds(new Set());
+        }
+        return;
+      }
+
       switch (e.key.toLowerCase()) {
         case "?":
           e.preventDefault();
@@ -2505,6 +2564,8 @@ export function AtelierShellV3() {
                 ["⌘ / Ctrl + V", "Paste"],
                 ["⌘ / Ctrl + D", "Duplicate"],
                 ["⌘ / Ctrl + Wheel", "Zoom"],
+                ["← ↑ → ↓", "Navigate to nearest node"],
+                ["Shift + ← ↑ → ↓", "Extend selection"],
                 ["Drag image handle → draft", "Attach as reference"],
                 ["Right-click node", "Context menu"],
               ].map(([keys, label]) => (
