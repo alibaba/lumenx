@@ -172,6 +172,12 @@ function renderNode(
         x={node.x}
         y={node.y}
         onSelect={onSelect}
+        onTitleCommit={(next) => {
+          void useAtelierStore.getState().updateNode(node.id, {
+            title: next,
+            data: { ...(node.data ?? {}), title: next },
+          }).catch(() => {/* save chip surfaces failures */});
+        }}
       />
     );
   }

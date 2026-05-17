@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Bot } from "lucide-react";
 
 const VISIBLE_BULLETS = 5;
@@ -12,9 +13,32 @@ interface Props {
   x: number;
   y: number;
   onSelect?: (id: string) => void;
+  /** Persist a renamed plan title. Wired by the shell to updateNode
+   *  patching data.title. When omitted, the title is read-only. */
+  onTitleCommit?: (next: string) => void;
 }
 
-export function PlanNode({ id, title, bullets, selected, x, y, onSelect }: Props) {
+export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitleCommit }: Props) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(title);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+  const startEditing = () => {
+    if (!onTitleCommit) return;
+    setDraft(title);
+    setEditing(true);
+  };
+  const commit = () => {
+    setEditing(false);
+    if (!onTitleCommit) return;
+    const next = draft.trim();
+    if (next && next !== title) onTitleCommit(next);
+  };
   const borderClass = selected
     ? "ring-2 ring-primary border-primary/50"
     : "border-primary/30";
@@ -43,7 +67,38 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect }: Props
         <span className="grid h-5 w-5 place-items-center rounded bg-primary/20 text-primary">
           <Bot size={11} />
         </span>
-        <span className="truncate">{title}</span>
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onPointerDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setEditing(false);
+                setDraft(title);
+              }
+            }}
+            className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 text-[13px] font-semibold text-foreground outline-none"
+            aria-label="Rename plan"
+          />
+        ) : (
+          <span
+            className={`truncate ${onTitleCommit ? "cursor-text" : ""}`}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              startEditing();
+            }}
+            title={onTitleCommit ? "Double-click to rename" : undefined}
+          >
+            {title}
+          </span>
+        )}
       </div>
       <ul className="space-y-0.5 text-[11px] text-text-secondary">
         {visibleBullets.map((b, i) => (
