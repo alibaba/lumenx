@@ -1675,6 +1675,13 @@ export function AtelierShellV3() {
   // Project picker popover.
   const [showProjectPicker, setShowProjectPicker] = useState(false);
 
+  // A11y: focus return-to-trigger across overlay open/close transitions.
+  // We capture activeElement when *any* tracked modal/overlay opens, and
+  // restore it when *all* are closed. Keyboard users land back on the
+  // element that invoked the modal instead of dropping at body.
+  const lastFocusedBeforeOverlayRef = useRef<HTMLElement | null>(null);
+  // Effect lives further below — declared after all overlay states.
+
   // First-run onboarding hint pointing to '?'. Persists "seen" across
   // refreshes via localStorage so we don't nag returning users.
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -1704,6 +1711,29 @@ export function AtelierShellV3() {
     screenY: number;
     node: AtelierNode | null;
   } | null>(null);
+
+  // A11y focus-restore effect (companion to lastFocusedBeforeOverlayRef
+  // declared near the top of the component). Captures focus on first open
+  // of any tracked modal/popover; restores it once all are closed.
+  useEffect(() => {
+    const anyOpen = !!(showHelp || preview || useAsRefSourceId || contextMenu || showProjectPicker);
+    if (anyOpen) {
+      if (!lastFocusedBeforeOverlayRef.current) {
+        const active = typeof document !== "undefined" ? document.activeElement : null;
+        lastFocusedBeforeOverlayRef.current = (active && active !== document.body)
+          ? (active as HTMLElement)
+          : null;
+      }
+      return;
+    }
+    const prev = lastFocusedBeforeOverlayRef.current;
+    lastFocusedBeforeOverlayRef.current = null;
+    if (prev && typeof prev.focus === "function" && document.contains(prev)) {
+      // RAF so React finishes unmounting the modal first; otherwise focus
+      // can land on the disappearing element and immediately fall to body.
+      requestAnimationFrame(() => prev.focus());
+    }
+  }, [showHelp, preview, useAsRefSourceId, contextMenu, showProjectPicker]);
 
   // Sequence ordering is stored in localStorage keyed on project id so it
   // survives refresh + back-nav. Server-side persistence (a dedicated
