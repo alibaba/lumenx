@@ -51,10 +51,59 @@ const config: Config = {
           from: { strokeDashoffset: "20" },
           to:   { strokeDashoffset: "0" },
         },
+        // Popover entrance — chip dropdowns, context menus, project picker.
+        // Translate-up + fade with cubic-bezier 'expo out' for a settled
+        // landing instead of a bounce.
+        "atelier-popover-in": {
+          "0%":   { opacity: "0", transform: "translateY(-4px) scale(0.97)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        // Modal entrance — overlay fade + content scale-up. Used by Help
+        // overlay, useAsRef picker, Preview modal.
+        "atelier-modal-overlay-in": {
+          "0%":   { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+        "atelier-modal-content-in": {
+          "0%":   { opacity: "0", transform: "translateY(8px) scale(0.96)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        // Toast entrance — slide from above. Quick (180ms) so the user sees
+        // the message land instead of watching it choreograph.
+        "atelier-toast-in": {
+          "0%":   { opacity: "0", transform: "translateY(-12px) scale(0.96)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        // Composer entrance — anchored slide-up + fade. Reads as 'editor
+        // attached itself to the selected node'.
+        "atelier-composer-in": {
+          "0%":   { opacity: "0", transform: "translateY(-6px) scale(0.985)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        // Soft pulse — primary action cue (e.g. submit button when prompt
+        // is non-empty + no mismatch). Halo breathes 2px at 1.5s; not a
+        // bounce, no scale change on the button itself.
+        "atelier-pulse-soft": {
+          "0%, 100%": { boxShadow: "0 0 0 0 rgba(100,108,255,0.0)" },
+          "50%":      { boxShadow: "0 0 0 6px rgba(100,108,255,0.12)" },
+        },
+        // Shimmer — used on skeleton loaders and saved-just-now flash on
+        // chips. Background-position sweep across the gradient.
+        "atelier-shimmer": {
+          "0%":   { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
       },
       animation: {
-        "atelier-node-in": "atelier-node-in 220ms ease-out both",
+        "atelier-node-in": "atelier-node-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both",
         "atelier-dash": "atelier-dash 1.2s linear infinite",
+        "atelier-popover-in": "atelier-popover-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "atelier-modal-overlay-in": "atelier-modal-overlay-in 200ms ease-out both",
+        "atelier-modal-content-in": "atelier-modal-content-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "atelier-toast-in": "atelier-toast-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "atelier-composer-in": "atelier-composer-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "atelier-pulse-soft": "atelier-pulse-soft 1.6s ease-in-out infinite",
+        "atelier-shimmer": "atelier-shimmer 2.4s linear infinite",
       },
     },
   },

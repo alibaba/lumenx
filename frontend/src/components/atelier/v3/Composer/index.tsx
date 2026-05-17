@@ -207,7 +207,7 @@ export function Composer({
     <section
       role="dialog"
       aria-label="Generation composer"
-      className="absolute z-40 w-[520px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-24px_rgba(0,0,0,0.85),0_8px_20px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
+      className="absolute z-40 w-[520px] origin-top overflow-hidden rounded-[14px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-24px_rgba(0,0,0,0.85),0_8px_20px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-composer-in motion-reduce:animate-none"
       style={computedStyle}
     >
       {/* Tabs — mono caps with spaced tracking gives the row a "transport
@@ -430,12 +430,14 @@ export function Composer({
           data-tip="Generate (⌘⏎)"
           disabled={showCapabilityMismatch}
           onClick={submit}
-          className={`btn-tip inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
+          className={`btn-tip inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-[0.94] ${
             showCapabilityMismatch
               ? "cursor-not-allowed bg-primary/30 text-white/50"
-              : "bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(100,108,255,0.55)] hover:bg-primary/92"
+              : `bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(100,108,255,0.55)] hover:bg-primary/92 hover:scale-[1.04] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_18px_-4px_rgba(100,108,255,0.65)] ${
+                  draft.trim().length > 0 ? "motion-safe:animate-atelier-pulse-soft" : ""
+                }`
           }`}>
-          <Wand2 size={13} aria-hidden="true" />
+          <Wand2 size={13} aria-hidden="true" className="transition-transform duration-200 group-hover:rotate-12" />
         </button>
       </div>
     </section>

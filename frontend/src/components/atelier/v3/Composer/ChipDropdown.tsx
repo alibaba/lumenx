@@ -5,7 +5,7 @@ import { ReactNode } from "react";
 interface Option { value: string; label: string; }
 
 interface Props {
-  label: string;        // accessible name + mono caps tag prepended to the chip
+  label: string;        // accessible name + tooltip; not visible in the chip itself
   value: string;        // displayed inside the chip
   options?: Option[];
   onChange?: (v: string) => void;
@@ -15,35 +15,30 @@ interface Props {
 }
 
 /**
- * ChipDropdown — pairs a small mono-caps label ('MODEL', 'ASPECT', etc) with
- * the active value in display weight. Reads as instrument readout, matches
- * the chrome metadata vocabulary used on save chip / inspector pill.
+ * ChipDropdown — compact value-first chip. The kind label ("Model", "Aspect"
+ * etc.) lives in the popover header + the data-tip tooltip, not on the chip
+ * face. Showing both label + value made narrow rows wrap mid-chip; this
+ * keeps the chrome row a single line at any reasonable Composer width.
  */
 export function ChipDropdown({ label, value, options, onChange, primary, disabled, children }: Props) {
-  const labelTone = primary ? "text-primary/85" : "text-text-muted/70";
   return (
-    <details className="relative inline-block">
+    <details className="relative inline-block shrink-0">
       <summary
-        className={`btn-tip inline-flex h-7 cursor-pointer list-none items-center gap-1.5 rounded-md border px-2 transition-colors ${
+        className={`btn-tip inline-flex h-7 shrink-0 cursor-pointer list-none items-center gap-1 whitespace-nowrap rounded-md border px-2 transition-all duration-150 active:scale-[0.98] ${
           primary
-            ? "border-primary/30 bg-primary/[0.06] text-foreground hover:border-primary/45 hover:bg-primary/[0.1]"
+            ? "border-primary/35 bg-primary/[0.08] text-primary hover:border-primary/55 hover:bg-primary/[0.12] hover:shadow-[0_0_0_1px_rgba(100,108,255,0.2)]"
             : disabled
             ? "border-white/8 bg-black/20 text-text-muted/60 cursor-not-allowed"
-            : "border-white/8 bg-black/25 text-text-secondary hover:border-white/14 hover:bg-white/[0.04] hover:text-foreground"
+            : "border-white/8 bg-black/25 text-foreground/95 hover:border-white/14 hover:bg-white/[0.05]"
         }`}
         aria-label={label}
         aria-disabled={disabled}
         data-tip={label}
       >
-        <span className={`font-mono text-[9px] font-medium uppercase tracking-[0.18em] ${labelTone}`}>
-          {label}
-        </span>
-        <span className={`text-[11.5px] tracking-tight ${primary ? "text-primary" : "text-foreground/95"}`}>
-          {value}
-        </span>
-        <ChevronDown size={9} className="text-text-muted/70" aria-hidden="true" />
+        <span className="text-[11.5px] tracking-tight">{value}</span>
+        <ChevronDown size={9} className="text-text-muted/70 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
       </summary>
-      <div className="absolute left-0 top-full z-50 mt-1.5 min-w-[180px] rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl">
+      <div className="absolute left-0 top-full z-50 mt-1.5 min-w-[180px] origin-top rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none">
         <div className="px-2 pb-1 pt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted/80">
           {label}
         </div>

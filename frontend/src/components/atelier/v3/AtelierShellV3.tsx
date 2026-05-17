@@ -2382,7 +2382,7 @@ export function AtelierShellV3() {
               <div
                 role="menu"
                 aria-label="Atelier projects"
-                className="absolute left-0 top-10 z-[35] w-[300px] rounded-md border border-white/8 bg-[#141416]/96 p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+                className="absolute left-0 top-10 z-[35] w-[300px] origin-top rounded-md border border-white/8 bg-[#141416]/96 p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
               >
                 <div className="flex items-center justify-between px-2 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/80">
                   <span>Projects</span>
@@ -2875,7 +2875,7 @@ export function AtelierShellV3() {
           <div
             role="toolbar"
             aria-label={`${allSelectedIds.size} nodes selected`}
-            className="pointer-events-auto absolute z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/96 px-3 py-[6px] text-[12px] shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
+            className="pointer-events-auto absolute z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/96 px-3 py-[6px] text-[12px] shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
             style={{ left: screenCx, top: Math.max(8, screenY) }}
           >
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-text-muted/85">
@@ -2904,7 +2904,7 @@ export function AtelierShellV3() {
                   <ul
                     role="menu"
                     aria-label="Align selection"
-                    className="absolute left-0 top-8 z-[32] w-[200px] rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+                    className="absolute left-0 top-8 z-[32] w-[200px] origin-top rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
                   >
                     <div className="px-2 pb-1 pt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted/80">
                       Align
@@ -3549,7 +3549,7 @@ export function AtelierShellV3() {
               role="menu"
               aria-label="Node context menu"
               onContextMenu={(e) => e.preventDefault()}
-              className="fixed z-[56] min-w-[200px] rounded-md border border-white/8 bg-[#141416]/96 p-1 text-[12px] shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+              className="fixed z-[56] min-w-[200px] origin-top-left rounded-md border border-white/8 bg-[#141416]/96 p-1 text-[12px] shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
               style={{
                 left: Math.min(contextMenu.screenX, window.innerWidth - 220),
                 top: Math.min(contextMenu.screenY, window.innerHeight - 220),
@@ -3590,13 +3590,13 @@ export function AtelierShellV3() {
         }
         return (
           <div
-            className="fixed inset-0 z-50 grid place-items-center bg-black/75 backdrop-blur-md"
+            className="fixed inset-0 z-50 grid place-items-center bg-black/75 backdrop-blur-md animate-atelier-modal-overlay-in motion-reduce:animate-none"
             onClick={() => setUseAsRefSourceId(null)}
             role="dialog"
             aria-label="Pick a target draft to attach this reference"
           >
             <div
-              className="w-[440px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_32px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+              className="w-[440px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_32px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] animate-atelier-modal-content-in motion-reduce:animate-none"
               onClick={(e) => e.stopPropagation()}
             >
               <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
@@ -3676,12 +3676,12 @@ export function AtelierShellV3() {
           parent && cand && (parent.data as { selected_candidate_id?: string })?.selected_candidate_id === cand.id;
         return (
           <div
-            className="fixed inset-0 z-50 grid place-items-center bg-black/85 backdrop-blur-md"
+            className="fixed inset-0 z-50 grid place-items-center bg-black/85 backdrop-blur-md animate-atelier-modal-overlay-in motion-reduce:animate-none"
             onClick={close}
             role="dialog"
             aria-label="Video preview"
           >
-            <div className="relative max-h-[88vh] max-w-[80vw] overflow-hidden rounded-[14px] border border-white/8 bg-[#0c0c10] shadow-[0_36px_70px_-30px_rgba(0,0,0,0.95),0_10px_24px_-8px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)]" onClick={(e) => e.stopPropagation()}>
+            <div className="relative max-h-[88vh] max-w-[80vw] overflow-hidden rounded-[14px] border border-white/8 bg-[#0c0c10] shadow-[0_36px_70px_-30px_rgba(0,0,0,0.95),0_10px_24px_-8px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] animate-atelier-modal-content-in motion-reduce:animate-none" onClick={(e) => e.stopPropagation()}>
               <video
                 src={getAssetUrl(ctx.url)}
                 controls
@@ -3873,7 +3873,7 @@ export function AtelierShellV3() {
                         advanceOnboarding();
                       }
                     }}
-                    className="rounded-full bg-primary px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_10px_-3px_rgba(100,108,255,0.5)] transition-colors hover:bg-primary/92"
+                    className="rounded-full bg-primary px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_10px_-3px_rgba(100,108,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-primary/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_14px_-3px_rgba(100,108,255,0.6)] active:scale-[0.96]"
                   >
                     {isLast ? "Shortcuts" : "Next"}
                   </button>
@@ -3949,11 +3949,11 @@ export function AtelierShellV3() {
           <div
             role="dialog"
             aria-label="Keyboard shortcuts"
-            className="fixed inset-0 z-50 grid place-items-center bg-black/75 backdrop-blur-md"
+            className="fixed inset-0 z-50 grid place-items-center bg-black/75 backdrop-blur-md animate-atelier-modal-overlay-in motion-reduce:animate-none"
             onClick={() => setShowHelp(false)}
           >
             <div
-              className="w-[640px] max-w-[92vw] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_36px_70px_-30px_rgba(0,0,0,0.95),0_10px_22px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
+              className="w-[640px] max-w-[92vw] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_36px_70px_-30px_rgba(0,0,0,0.95),0_10px_22px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-modal-content-in motion-reduce:animate-none"
               onClick={(e) => e.stopPropagation()}
             >
               <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
@@ -4082,7 +4082,7 @@ export function AtelierShellV3() {
               <div
                 key={t.id}
                 role="status"
-                className="pointer-events-auto inline-flex items-center gap-2.5 rounded-full border border-white/8 bg-[#141416]/95 px-3 py-[7px] text-[12px] shadow-[0_14px_30px_-18px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+                className="pointer-events-auto inline-flex items-center gap-2.5 rounded-full border border-white/8 bg-[#141416]/95 px-3 py-[7px] text-[12px] shadow-[0_14px_30px_-18px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-toast-in motion-reduce:animate-none"
               >
                 <span aria-hidden="true" className={`h-[5px] w-[5px] shrink-0 rounded-full ${dotTone}`} />
                 <span className={textTone}>{t.text}</span>

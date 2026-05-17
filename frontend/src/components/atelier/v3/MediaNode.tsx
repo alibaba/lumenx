@@ -236,7 +236,7 @@ export function MediaNode({
                 aria-label="Upload image"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); onUpload(id); }}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 font-display text-[12px] font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_4px_10px_-3px_rgba(100,108,255,0.5)] transition-colors hover:bg-primary/90"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 font-display text-[12px] font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_4px_10px_-3px_rgba(100,108,255,0.5)] transition-all duration-200 hover:bg-primary/92 hover:shadow-[0_1px_0_0_rgba(255,255,255,0.12)_inset,0_6px_14px_-3px_rgba(100,108,255,0.6)] active:scale-[0.97]"
               >
                 <Upload size={11} aria-hidden="true" />
                 Upload
@@ -248,7 +248,7 @@ export function MediaNode({
                 aria-label="Generate image from prompt"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); onGenerate(id); }}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-text-secondary transition-colors hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-text-secondary transition-all duration-200 hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground active:scale-[0.97]"
               >
                 <Sparkles size={11} aria-hidden="true" />
                 Generate

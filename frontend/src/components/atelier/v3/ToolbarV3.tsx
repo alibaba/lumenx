@@ -17,9 +17,9 @@ interface Props {
 // Cinematic toolbar capsule. Single 48-tall pill, mono caps for the only
 // labeled action ('VIDEO'), icon-only for everything else with consistent
 // 28×28 hit targets. Inset top edge highlight signs the surface as 'lit
-// from above'; hover bg/[0.06] is the only ambient motion.
+// from above'; hover bg/[0.06] + 150ms transitions on every hit target.
 const HIT_BASE =
-  "btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors";
+  "btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-[0.94]";
 const HIT_ENABLED = "text-text-secondary hover:bg-white/[0.06] hover:text-foreground";
 const HIT_DISABLED = "text-text-muted/50 cursor-not-allowed";
 
@@ -53,7 +53,7 @@ export function ToolbarV3({
         aria-label="New Video Node"
         data-tip="New Video Node (V)"
         onClick={() => onCreate("video")}
-        className="btn-tip inline-flex h-7 items-center gap-1.5 rounded-full bg-primary pl-2 pr-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.5)] transition-colors hover:bg-primary/92"
+        className="btn-tip inline-flex h-7 items-center gap-1.5 rounded-full bg-primary pl-2 pr-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-primary/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(100,108,255,0.6)] active:scale-[0.96]"
       >
         <Film size={12} aria-hidden="true" />
         Video

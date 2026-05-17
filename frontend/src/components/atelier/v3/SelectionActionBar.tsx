@@ -63,14 +63,14 @@ const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
 };
 
 function buttonClass(variant: ActionDef["variant"]): string {
-  const base = "btn-tip group/act inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors";
+  const base = "btn-tip group/act inline-flex h-7 w-7 items-center justify-center rounded-full transition-all duration-150 active:scale-[0.92]";
   if (variant === "danger") {
-    return `${base} text-text-secondary hover:bg-red-400/15 hover:text-red-200`;
+    return `${base} text-text-secondary hover:scale-[1.08] hover:bg-red-400/15 hover:text-red-200`;
   }
   if (variant === "select") {
-    return `${base} text-emerald-200/95 hover:bg-emerald-400/12`;
+    return `${base} text-emerald-200/95 hover:scale-[1.08] hover:bg-emerald-400/12`;
   }
-  return `${base} text-text-secondary hover:bg-white/[0.06] hover:text-foreground`;
+  return `${base} text-text-secondary hover:scale-[1.08] hover:bg-white/[0.06] hover:text-foreground`;
 }
 
 export function SelectionActionBar({ kind, x, y, width, onAct }: Props) {
@@ -78,7 +78,7 @@ export function SelectionActionBar({ kind, x, y, width, onAct }: Props) {
 
   return (
     <div
-      className="absolute z-40 inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/8 bg-[#141416]/96 px-1 py-1 shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
+      className="absolute z-40 inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/8 bg-[#141416]/96 px-1 py-1 shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
       style={{ left: x + width / 2, top: Math.max(8, y - 40) }}
     >
       {items.map((item, idx) => {
