@@ -4063,21 +4063,29 @@ export function AtelierShellV3() {
         );
       })()}
 
-      {/* toast queue (top-center) */}
+      {/* Toast queue — top-center stack with kind-tinted leading dot + chrome
+          surface vocab. Reads as a status readout, not a marketing notification. */}
       {toasts.length > 0 ? (
         <div className="fixed left-1/2 top-4 z-[60] flex -translate-x-1/2 flex-col gap-2">
           {toasts.map((t) => {
-            const tone =
-              t.kind === "error" ? "border-red-400/60 bg-red-400/15 text-red-100" :
-              t.kind === "success" ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-100" :
-              "border-glass-border bg-elevated text-foreground";
+            const dotTone =
+              t.kind === "error"
+                ? "bg-red-300 shadow-[0_0_0_3px_rgba(252,165,165,0.18)]"
+                : t.kind === "success"
+                ? "bg-emerald-300 shadow-[0_0_0_3px_rgba(110,231,183,0.18)]"
+                : "bg-primary shadow-[0_0_0_3px_rgba(100,108,255,0.18)]";
+            const textTone =
+              t.kind === "error" ? "text-red-100/95" :
+              t.kind === "success" ? "text-emerald-100/95" :
+              "text-foreground/95";
             return (
               <div
                 key={t.id}
                 role="status"
-                className={`pointer-events-auto rounded-md border px-3 py-2 text-[12px] backdrop-blur-md shadow-2xl shadow-black/40 ${tone}`}
+                className="pointer-events-auto inline-flex items-center gap-2.5 rounded-full border border-white/8 bg-[#141416]/95 px-3 py-[7px] text-[12px] shadow-[0_14px_30px_-18px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
               >
-                {t.text}
+                <span aria-hidden="true" className={`h-[5px] w-[5px] shrink-0 rounded-full ${dotTone}`} />
+                <span className={textTone}>{t.text}</span>
               </div>
             );
           })}

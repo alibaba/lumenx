@@ -15,15 +15,15 @@ interface Props {
 }
 
 const STATUS_DOT: Record<AgentRailStatus, string> = {
-  active: "bg-emerald-400",
-  thinking: "bg-blue-300 animate-pulse motion-reduce:animate-none",
-  waiting: "bg-amber-300 animate-pulse motion-reduce:animate-none",
-  failed: "bg-red-300",
+  active: "bg-emerald-300 shadow-[0_0_0_3px_rgba(110,231,183,0.18)]",
+  thinking: "bg-blue-300 shadow-[0_0_0_3px_rgba(96,165,250,0.18)] animate-pulse motion-reduce:animate-none",
+  waiting: "bg-amber-300 shadow-[0_0_0_3px_rgba(252,211,77,0.18)] animate-pulse motion-reduce:animate-none",
+  failed: "bg-red-300 shadow-[0_0_0_3px_rgba(252,165,165,0.18)]",
 };
 
 const STATUS_LABEL: Record<AgentRailStatus, string> = {
   active: "Active",
-  thinking: "Thinking…",
+  thinking: "Thinking",
   waiting: "Awaiting approval",
   failed: "Failed",
 };
@@ -67,7 +67,7 @@ function PermissionSegmented({
     <div
       role="radiogroup"
       aria-label="Permission mode"
-      className="inline-flex items-center gap-0.5 rounded-full border border-glass-border bg-glass p-0.5"
+      className="inline-flex items-center gap-px rounded-full border border-white/8 bg-black/30 p-[3px]"
     >
       {PERMISSION_ORDER.map((m) => (
         <button
@@ -79,8 +79,10 @@ function PermissionSegmented({
           tabIndex={value === m ? 0 : -1}
           onClick={() => onChange?.(m)}
           onKeyDown={handleKey}
-          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition ${
-            value === m ? "bg-primary text-white" : "text-text-muted hover:text-foreground"
+          className={`rounded-full px-2.5 py-[5px] font-mono text-[9px] font-medium uppercase tracking-[0.18em] transition-colors ${
+            value === m
+              ? "bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_2px_8px_-3px_rgba(100,108,255,0.45)]"
+              : "text-text-muted/80 hover:text-foreground"
           }`}
         >
           {PERMISSION_LABELS[m]}
@@ -103,18 +105,24 @@ export function RightRailV3({
       <aside
         role="region"
         aria-label="Atelier Agent (collapsed)"
-        className="absolute right-4 top-4 bottom-4 z-30 flex w-[56px] flex-col items-center justify-start gap-2 rounded-2xl border border-glass-border bg-surface backdrop-blur-md py-3"
+        className="absolute right-4 top-4 bottom-4 z-30 flex w-[56px] flex-col items-center justify-start gap-3 rounded-2xl border border-white/8 bg-[#0c0c10]/92 py-3 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
       >
         <button
           aria-label="Expand panel"
           onClick={onCollapse}
-          className="btn-tip rounded p-1.5 text-text-muted hover:bg-hover-bg hover:text-foreground"
+          className="btn-tip inline-flex h-7 w-7 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
           data-tip="Expand panel"
         >
-          <ChevronsLeft size={14} />
+          <ChevronsLeft size={14} aria-hidden="true" />
         </button>
-        <div className="grid h-9 w-9 place-items-center rounded-md bg-primary/20 text-primary">
-          <Bot size={16} />
+        <div className="relative">
+          <span className="grid h-9 w-9 place-items-center rounded-md bg-primary/15 text-primary ring-1 ring-inset ring-primary/25">
+            <Bot size={15} aria-hidden="true" />
+          </span>
+          <span
+            aria-hidden="true"
+            className={`absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full ring-2 ring-[#0c0c10] ${STATUS_DOT[agentStatus]}`}
+          />
         </div>
       </aside>
     );
@@ -124,39 +132,51 @@ export function RightRailV3({
     <aside
       role="region"
       aria-label="Atelier Agent"
-      className="absolute right-4 top-4 bottom-4 z-30 flex w-[380px] flex-col rounded-2xl border border-glass-border bg-surface backdrop-blur-md"
+      className="absolute right-4 top-4 bottom-4 z-30 flex w-[380px] flex-col overflow-hidden rounded-2xl border border-white/8 bg-[#0c0c10]/92 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
     >
-      <header className="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2.5">
-        <div className="flex items-center gap-2">
+      {/* Top accent — primary→transparent gradient hairline. Identifies the
+          rail as the "agent zone" without shouting. */}
+      <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-primary/85 via-primary/35 to-transparent" />
+
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/6 px-3.5 py-3">
+        <div className="flex items-center gap-2.5">
           <div className="relative">
-            <span className="grid h-9 w-9 place-items-center rounded-md bg-primary/20 text-primary">
-              <Bot size={16} />
+            <span className="grid h-9 w-9 place-items-center rounded-md bg-primary/15 text-primary ring-1 ring-inset ring-primary/25">
+              <Bot size={15} aria-hidden="true" />
             </span>
             <span
               data-testid="agent-status-dot"
               aria-hidden="true"
-              className={`absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full ring-2 ring-surface ${STATUS_DOT[agentStatus]}`}
+              className={`absolute -right-0.5 -bottom-0.5 h-2 w-2 rounded-full ring-2 ring-[#0c0c10] ${STATUS_DOT[agentStatus]}`}
             />
           </div>
-          <div>
-            <div className="font-display text-sm font-semibold text-foreground">Creative Agent</div>
-            <div className="text-[11px] text-text-muted">· {STATUS_LABEL[agentStatus]}</div>
+          <div className="leading-tight">
+            <div className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">
+              Creative Agent
+            </div>
+            <div className="mt-[2px] font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/85">
+              {STATUS_LABEL[agentStatus]}
+            </div>
           </div>
         </div>
         <button
           aria-label="Collapse panel"
           onClick={onCollapse}
-          className="btn-tip rounded p-1.5 text-text-muted hover:bg-hover-bg hover:text-foreground"
+          className="btn-tip inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
           data-tip="Collapse panel"
         >
-          <ChevronsRight size={12} />
+          <ChevronsRight size={12} aria-hidden="true" />
         </button>
       </header>
 
-      <div className="border-b border-border-subtle px-3 py-2">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-text-muted">Permission</span>
-          <span className="text-[10px] text-text-muted truncate ml-2">{PERMISSION_HINT[mode]}</span>
+      <div className="shrink-0 border-b border-white/6 px-3.5 py-2.5">
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-text-muted/80">
+            Permission
+          </span>
+          <span className="truncate text-[10.5px] leading-tight text-text-muted/85">
+            {PERMISSION_HINT[mode]}
+          </span>
         </div>
         <PermissionSegmented value={mode} onChange={onModeChange} />
       </div>
