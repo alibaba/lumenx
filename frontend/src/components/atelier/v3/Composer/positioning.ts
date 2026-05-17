@@ -13,7 +13,11 @@ export interface ComposerViewport {
 
 export interface ComposerSize {
   width: number;
-  gap?: number;     // px between anchor bottom and composer top; default 16
+  /** Approximate height used to decide whether the composer fits below the
+   *  anchor before flipping above. Default 320 covers the common 7-tab +
+   *  3-line textarea layout. */
+  height?: number;
+  gap?: number;     // px between anchor and composer; default 16
 }
 
 export interface ComposerPlacement {
@@ -27,15 +31,26 @@ export function composerPlacement(
   composer: ComposerSize = { width: 520 }
 ): ComposerPlacement {
   const gap = composer.gap ?? 16;
+  const height = composer.height ?? 320;
   if (!anchor) {
     return {
       left: Math.max(16, Math.round((viewport.width - composer.width) / 2)),
       top:  Math.max(16, Math.round(viewport.height / 3)),
     };
   }
+  // Horizontal: prefer aligning with anchor.x but avoid the right rail and
+  // the right edge of the viewport.
   const desiredLeft = anchor.x;
   const maxLeft     = viewport.width - viewport.rightRailWidth - composer.width - gap;
   const left = Math.max(16, Math.min(desiredLeft, maxLeft));
-  const top  = anchor.y + anchor.height + gap;
+  // Vertical: try below the anchor first; if it would overflow the viewport
+  // bottom, flip to above. Fall back to clamping inside the viewport when
+  // neither side fits cleanly (very tall anchor / very short viewport).
+  const belowTop = anchor.y + anchor.height + gap;
+  const aboveTop = anchor.y - height - gap;
+  let top: number;
+  if (belowTop + height <= viewport.height - 16) top = belowTop;
+  else if (aboveTop >= 16) top = aboveTop;
+  else top = Math.max(16, Math.min(belowTop, viewport.height - height - 16));
   return { left, top };
 }

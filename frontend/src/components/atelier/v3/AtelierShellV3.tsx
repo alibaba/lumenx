@@ -1508,11 +1508,22 @@ export function AtelierShellV3() {
         }
       : null;
 
-  const viewport = {
-    width: 1440,
-    height: 900,
-    rightRailWidth: agentCollapsed ? 56 + 16 : 380 + 16,
-  };
+  // Real viewport size, derived from the canvas main element. Falls back
+  // to 1440x900 in environments where the rect isn't available yet (first
+  // render, jsdom). Right-rail width is the only inset we need to subtract
+  // since toolbar/save chip sit at top edges and don't crowd the composer.
+  const viewport = useMemo(() => {
+    const rect = mainRef.current?.getBoundingClientRect();
+    return {
+      width: rect?.width ?? 1440,
+      height: rect?.height ?? 900,
+      rightRailWidth: agentCollapsed ? 56 + 16 : 380 + 16,
+    };
+    // Re-derive when the right rail collapses or when zoom/pan changes,
+    // which is a proxy for "user moved something" — the rect itself is
+    // stable but the dependencies cover the cases where we want a fresh
+    // measurement after layout settles.
+  }, [agentCollapsed, zoom, panX, panY]);
 
   // Action wiring
   const handleComposerSubmit = (
