@@ -327,9 +327,18 @@ function renderCandidatesAsMediaNodes(
   });
 }
 
+interface EdgeLabel {
+  key: string;
+  midX: number;
+  midY: number;
+  text: string;
+  tone: "neutral" | "primary" | "success" | "warning" | "error";
+}
+
 function renderEdges(
   project: AtelierProject | null,
   hoveredNodeId: string | null,
+  labelsOut?: EdgeLabel[],
 ): React.ReactNode {
   if (!project) return null;
   const edges: React.ReactNode[] = [];
@@ -360,6 +369,15 @@ function renderEdges(
         style={{ opacity, transition: "opacity 180ms ease-out, stroke-width 180ms" }}
       />,
     );
+    if (labelsOut && hoveredNodeId && related) {
+      labelsOut.push({
+        key: `ref-label-${link.from.id}-${link.to.id}-${link.url.slice(-12)}`,
+        midX: (x1 + x2) / 2,
+        midY: (y1 + y2) / 2,
+        text: "ref",
+        tone: "neutral",
+      });
+    }
   }
 
   // Parent-video → candidate edges (primary).
@@ -394,6 +412,29 @@ function renderEdges(
           style={{ opacity, transition: "opacity 180ms ease-out, stroke-width 180ms" }}
         />,
       );
+      if (labelsOut && hoveredNodeId && related) {
+        const text = c.status === "completed"
+          ? "take"
+          : c.status === "failed"
+          ? "failed"
+          : c.status === "processing"
+          ? "rendering"
+          : "queued";
+        const tone: EdgeLabel["tone"] = c.status === "completed"
+          ? "success"
+          : c.status === "failed"
+          ? "error"
+          : c.status === "processing"
+          ? "primary"
+          : "warning";
+        labelsOut.push({
+          key: `cand-label-${node.id}-${c.id}`,
+          midX: (x1 + x2) / 2,
+          midY: (y1 + y2) / 2,
+          text,
+          tone,
+        });
+      }
     });
   }
   return edges;
@@ -2147,14 +2188,42 @@ export function AtelierShellV3() {
           className="absolute left-0 top-0 origin-top-left"
           style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoomFactor})` }}
         >
-          {/* edges layer (in world coords) */}
-          <svg
-            className="pointer-events-none absolute"
-            style={{ left: -10000, top: -10000, width: 20000, height: 20000, zIndex: 5 }}
-            viewBox="-10000 -10000 20000 20000"
-          >
-            {renderEdges(project ?? null, hoveredNodeId)}
-          </svg>
+          {/* edges layer (in world coords). Labels are collected during the
+              same pass so the geometry math doesn't have to be duplicated;
+              we render the path SVG and the chip overlay separately. */}
+          {(() => {
+            const labels: EdgeLabel[] = [];
+            const paths = renderEdges(project ?? null, hoveredNodeId, labels);
+            return (
+              <>
+                <svg
+                  className="pointer-events-none absolute"
+                  style={{ left: -10000, top: -10000, width: 20000, height: 20000, zIndex: 5 }}
+                  viewBox="-10000 -10000 20000 20000"
+                >
+                  {paths}
+                </svg>
+                {labels.map((l) => {
+                  const tone =
+                    l.tone === "primary" ? "border-primary/40 bg-primary/15 text-primary" :
+                    l.tone === "success" ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-200" :
+                    l.tone === "error"   ? "border-red-400/40 bg-red-400/15 text-red-200" :
+                    l.tone === "warning" ? "border-amber-300/40 bg-amber-400/15 text-amber-200" :
+                    "border-glass-border bg-elevated/85 text-text-secondary";
+                  return (
+                    <div
+                      key={l.key}
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-1/2 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider backdrop-blur-md animate-atelier-node-in motion-reduce:animate-none ${tone}`}
+                      style={{ left: l.midX, top: l.midY }}
+                    >
+                      {l.text}
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
 
           {/* nodes — each wrapped in a drag-aware div. Use *Capture* phase
               because v3 leaf nodes stopPropagation in their own onPointerDown
