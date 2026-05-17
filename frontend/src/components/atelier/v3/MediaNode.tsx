@@ -1,6 +1,6 @@
 "use client";
 import { useRef } from "react";
-import { AlertTriangle, Check, ImageIcon, Loader2, Play, RotateCw, Video, Volume2 } from "lucide-react";
+import { AlertTriangle, Check, ImageIcon, Loader2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
 
 interface Props {
@@ -22,6 +22,11 @@ interface Props {
   onSelect?: (id: string) => void;
   /** When provided on a failed node, an inline Retry button is shown. */
   onRetry?: (id: string) => void;
+  /** When provided on an empty image node, the placeholder becomes a
+   *  unified actionable card with Upload + Generate buttons baked into the
+   *  same bordered box (no separate floating overlay). */
+  onUpload?: (id: string) => void;
+  onGenerate?: (id: string) => void;
 }
 
 const DEFAULT_SIZE: Record<MediaKind, { w: number; h: number }> = {
@@ -90,6 +95,8 @@ export function MediaNode({
   height,
   onSelect,
   onRetry,
+  onUpload,
+  onGenerate,
 }: Props) {
   const def = DEFAULT_SIZE[kind];
   const w = Math.max(40, Math.min(width ?? def.w, MAX_WIDTH));
@@ -97,6 +104,12 @@ export function MediaNode({
   const ring = ringClass(status, selected, selectedAsTake);
   const showProcessing = status === "processing" || status === "pending";
   const showFailed = status === "failed";
+  // An empty image node with upload/generate callbacks becomes a unified
+  // actionable card. We hide the bare placeholder + the hover TypeChip in
+  // that mode so the buttons don't compete with stacked chrome.
+  const isEmptyImageActionable =
+    kind === "image" && !src && !!(onUpload || onGenerate) &&
+    status !== "processing" && status !== "pending" && status !== "failed";
 
   // Hover-to-preview for completed video takes — pause-on-leave + 250ms
   // dwell delay so a quick hover-pass doesn't trigger flicker. Mute + loop
@@ -146,7 +159,13 @@ export function MediaNode({
         // When media is missing, give the box a visible frame so it doesn't
         // melt into the canvas. With media (image/video src) we let the
         // image dominate; the ring/shadow still keep edges legible.
-        !src && kind !== "audio"
+        // Actionable empty image draft: tint the bg/border so the upload
+        // card reads as a coherent unit (no separate floating overlay).
+        isEmptyImageActionable
+          ? selected
+            ? "border border-primary/50 bg-primary/[0.07]"
+            : "border border-dashed border-primary/30 bg-primary/[0.04]"
+          : !src && kind !== "audio"
           ? "border border-dashed border-white/15 bg-white/[0.04]"
           : "border border-white/10"
       } ${ring}`}
@@ -185,9 +204,46 @@ export function MediaNode({
 
       {kind === "audio" ? <AudioWaveform /> : null}
 
-      {/* Empty placeholder when image/video has no src — would otherwise be
-          an invisible box on the dark canvas. */}
-      {!src && kind === "image" && status !== "processing" && status !== "pending" && status !== "failed" ? (
+      {/* Empty image — three forms:
+          1. Actionable card (onUpload / onGenerate provided): unified
+             upload affordance built into the same bordered box.
+          2. Bare placeholder: subtle icon + label, used when the node
+             is empty but no actions wired (read-only contexts).
+          Audio + video have their own empty-state branches. */}
+      {isEmptyImageActionable ? (
+        <div className="flex h-full w-full flex-col items-stretch justify-center gap-2 px-3 py-3">
+          <div className={`flex items-center justify-center gap-1.5 font-mono text-[10px] uppercase tracking-wider ${
+            selected ? "text-primary" : "text-primary/70"
+          }`}>
+            <ImageIcon size={11} aria-hidden="true" />
+            <span>Image draft</span>
+          </div>
+          {onUpload ? (
+            <button
+              type="button"
+              aria-label="Upload image"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onUpload(id); }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary/90"
+            >
+              <Upload size={11} aria-hidden="true" />
+              Upload
+            </button>
+          ) : null}
+          {onGenerate ? (
+            <button
+              type="button"
+              aria-label="Generate image from prompt"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onGenerate(id); }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-glass-border bg-glass px-2 py-1.5 text-[12px] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
+            >
+              <Sparkles size={11} aria-hidden="true" />
+              Generate
+            </button>
+          ) : null}
+        </div>
+      ) : !src && kind === "image" && status !== "processing" && status !== "pending" && status !== "failed" ? (
         <div className="grid h-full w-full place-items-center text-center">
           <div className="space-y-1 px-3 text-text-muted">
             <ImageIcon className="mx-auto" size={20} />
@@ -254,9 +310,12 @@ export function MediaNode({
         </div>
       ) : null}
 
-      <TypeChip kind={kind} />
+      {/* Suppress the hover type chip + filename strip when the actionable
+          empty-image card is showing — they're redundant with the inline
+          'Image draft' label and would crowd the buttons. */}
+      {!isEmptyImageActionable ? <TypeChip kind={kind} /> : null}
 
-      {filename ? (
+      {filename && !isEmptyImageActionable ? (
         <span className="absolute right-1 bottom-1 hidden max-w-[70%] truncate bg-black/65 px-1.5 py-0.5 font-mono text-[10px] text-white/80 group-hover:block">
           {filename}
         </span>

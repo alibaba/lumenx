@@ -349,7 +349,10 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             y: 480 + offset,
             width: 240,
             height: 120,
-            data: { body: body ?? "Click to edit." },
+            // Leave body empty so the IdeaNode placeholder ('Empty idea —
+            // double-click to edit.') reads as a placeholder, not as
+            // literal user content.
+            data: { body: body ?? "" },
         });
         set((state) => ({
             currentProject: state.currentProject?.id === node.project_id

@@ -65,11 +65,11 @@ function readCandidates(node: AtelierNode): AtelierVideoCandidate[] {
 }
 
 function isDraftVideo(node: AtelierNode): boolean {
-  return (
-    node.type === "video" &&
-    node.status === "draft" &&
-    typeof (node.data as { intent?: unknown })?.intent === "string"
-  );
+  // Any draft-status video is a DraftNode candidate. The intent string is
+  // pulled from data.intent → title → "Untitled" further down so a node
+  // missing data.intent still renders as a draft (instead of falling to
+  // the wall-of-text empty-video card).
+  return node.type === "video" && node.status === "draft";
 }
 
 function candidateNodeId(parentId: string, candidateId: string): string {
@@ -100,6 +100,10 @@ function renderNode(
   node: AtelierNode,
   selectedIds: Set<string>,
   select: (id: string | null) => void,
+  imageActions?: {
+    onUpload: (id: string) => void;
+    onGenerate: (id: string) => void;
+  },
 ): React.ReactNode {
   const isSelected = selectedIds.has(node.id);
   const onSelect = () => select(node.id);
@@ -107,6 +111,9 @@ function renderNode(
   if (node.type === "image") {
     const view = toMediaNodeView(node, { selectedNodeId: null });
     if (!view) return null;
+    // Wire upload / generate actions only for empty image drafts — that's
+    // the only state where the actionable card replaces the placeholder.
+    const isEmptyDraft = !view.src;
     return (
       <MediaNode
         key={node.id}
@@ -121,6 +128,8 @@ function renderNode(
         width={view.width}
         height={view.height}
         onSelect={onSelect}
+        onUpload={isEmptyDraft && imageActions ? imageActions.onUpload : undefined}
+        onGenerate={isEmptyDraft && imageActions ? imageActions.onGenerate : undefined}
       />
     );
   }
@@ -203,7 +212,8 @@ function renderNode(
 
   if (node.type === "video") {
     if (isDraftVideo(node)) {
-      const intent = readString(node.data?.intent) ?? "Video";
+      const intent =
+        readString(node.data?.intent) ?? node.title ?? "Untitled draft";
       const modelLabel = readString(node.data?.model) ?? "Wan 2.7";
       const configSummary =
         readString(node.data?.config_summary) ?? "1280×720 · 5s · 4×";
@@ -236,14 +246,15 @@ function renderNode(
     }
     const view = toMediaNodeView(node, { selectedNodeId: null });
     const candidateCount = readCandidates(node).length;
-    // Empty-video fallback: a video node without media (no `media_urls`,
-    // no candidates), and not recognized as a draft, would otherwise render
-    // as a giant black MediaNode. Show a clearer placeholder card.
+    // Empty-video fallback: a non-draft video node with no media + no
+    // candidates. With the broadened isDraftVideo this is rare — only
+    // triggered by orphaned legacy nodes whose status was bumped past
+    // 'draft' before any media was attached.
     if (!view?.src && candidateCount === 0) {
       return (
         <div
           key={node.id}
-          className={`absolute w-[240px] rounded-md border bg-elevated/85 backdrop-blur-md ${
+          className={`absolute w-[200px] rounded-md border bg-elevated transition-shadow shadow-2xl shadow-black/40 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)] ${
             isSelected ? "ring-2 ring-primary border-primary/50" : "border-glass-border"
           }`}
           style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
@@ -254,13 +265,10 @@ function renderNode(
             onSelect();
           }}
         >
-          <div className="px-3 py-3">
-            <div className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-foreground">
-              <Play size={11} className="text-primary" />
-              <span className="truncate">{node.title || "Video Node"}</span>
-            </div>
-            <div className="text-[11px] text-text-muted leading-relaxed">
-              No media yet. Use the Composer below to generate, or attach a reference image.
+          <div className="flex flex-col items-center gap-1 px-3 py-3 text-center">
+            <Play size={14} className="text-text-muted" aria-hidden="true" />
+            <div className="font-mono text-[10px] uppercase tracking-wider text-text-muted">
+              {node.title || "Empty video"}
             </div>
           </div>
         </div>
@@ -2711,7 +2719,15 @@ export function AtelierShellV3() {
                   transition: "opacity 140ms ease-out",
                 }}
               >
-                {renderNode(node, allSelectedIds, selectNode)}
+                {renderNode(node, allSelectedIds, selectNode, {
+                  onUpload: (nodeId) => {
+                    imageNodeIdForUploadRef.current = nodeId;
+                    fileInputRef.current?.click();
+                  },
+                  onGenerate: () => {
+                    pushToast("info", "Generate from prompt (T2I) is coming next.");
+                  },
+                })}
               </div>
             );
           })}
@@ -2783,36 +2799,9 @@ export function AtelierShellV3() {
             );
           })() : null}
 
-          {/* Upload affordance for empty image-draft nodes (selected) */}
-          {selectedNode && selectedNode.type === "image" && selectedNode.status === "draft" && (selectedNode.media_urls?.length ?? 0) === 0 ? (
-            <div
-              className="absolute z-30 grid w-[180px] place-items-center rounded-md border border-dashed border-primary/60 bg-primary/[0.04] p-3 text-center"
-              style={{ left: selectedNode.x, top: selectedNode.y, height: 180 }}
-            >
-              <div className="space-y-2">
-                <div className="text-[11px] font-mono uppercase tracking-wider text-primary/85">Image draft</div>
-                <button
-                  type="button"
-                  className="block w-full rounded-md bg-primary px-2 py-1.5 text-[12px] font-semibold text-white hover:bg-primary/90"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => {
-                    imageNodeIdForUploadRef.current = selectedNode.id;
-                    fileInputRef.current?.click();
-                  }}
-                >
-                  Upload image
-                </button>
-                <button
-                  type="button"
-                  className="block w-full rounded-md border border-glass-border bg-glass px-2 py-1.5 text-[12px] text-text-secondary hover:bg-hover-bg hover:text-foreground"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => pushToast("info", "Generate from prompt (T2I) is coming next.")}
-                >
-                  Generate from prompt
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {/* Empty image upload affordance moved into MediaNode itself —
+              one bordered box, one style language, no stacked overlays.
+              See `onUpload` / `onGenerate` props on the renderNode call. */}
         </div>
       </main>
 
