@@ -550,6 +550,43 @@ export function AtelierShellV3() {
     });
   }, [ensureProject]);
 
+  // Status-transition notifications. When a candidate's status flips
+  // from pending/processing to completed or failed, fire a toast so the
+  // user gets a passive signal even when looking elsewhere on the canvas.
+  // First snapshot is silent (no toast on initial mount); only diffs
+  // produced by subsequent refreshes trigger notifications.
+  const prevCandStatusRef = useRef<Map<string, string>>(new Map());
+  const prevCandSeededRef = useRef(false);
+  useEffect(() => {
+    if (!project) return;
+    const next = new Map<string, string>();
+    for (const node of project.nodes) {
+      for (const c of readCandidates(node)) next.set(`${node.id}::${c.id}`, c.status);
+    }
+    if (!prevCandSeededRef.current) {
+      prevCandStatusRef.current = next;
+      prevCandSeededRef.current = true;
+      return;
+    }
+    const prev = prevCandStatusRef.current;
+    let completed = 0;
+    let failed = 0;
+    next.forEach((status, key) => {
+      const old = prev.get(key);
+      if (old === status) return;
+      if (status === "completed" && (old === "pending" || old === "processing")) completed += 1;
+      else if (status === "failed" && (old === "pending" || old === "processing")) failed += 1;
+    });
+    if (completed > 0) {
+      pushToast("success", completed === 1 ? "Take ready" : `${completed} takes ready`);
+    }
+    if (failed > 0) {
+      pushToast("error", failed === 1 ? "Take failed" : `${failed} takes failed`);
+    }
+    prevCandStatusRef.current = next;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project]);
+
   // Adaptive polling for in-flight candidates. Cadence shifts based on
   // how recently the youngest pending/processing candidate started, so a
   // user who just hit Generate sees fast updates while a long-running
