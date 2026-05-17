@@ -645,7 +645,29 @@ export function AtelierShellV3() {
   }, [extraSelectedIds, selectedNodeId]);
   const isMultiSelect = allSelectedIds.size > 1;
   const [minimapOpen, setMinimapOpen] = useState(false);
-  const [agentCollapsed, setAgentCollapsed] = useState(false);
+  // Right Rail collapsed pref — remembered across reloads. Lazy initial
+  // value so we don't read localStorage during SSR / first server render.
+  const [agentCollapsed, setAgentCollapsedRaw] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("atelier-v3-rail-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setAgentCollapsed: typeof setAgentCollapsedRaw = (next) => {
+    setAgentCollapsedRaw((prev) => {
+      const resolved = typeof next === "function"
+        ? (next as (p: boolean) => boolean)(prev)
+        : next;
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("atelier-v3-rail-collapsed", resolved ? "1" : "0");
+        }
+      } catch { /* ignore */ }
+      return resolved;
+    });
+  };
   // Preview modal state. Beyond the url, we carry the parent/candidate ids
   // when the source was a take so the modal can offer take-level actions
   // (select / branch / delete) inline. URL-only previews (Sequence Strip
