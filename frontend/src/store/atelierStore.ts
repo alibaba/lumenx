@@ -389,6 +389,44 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
     deleteAtelierNode: async (nodeId) => {
         const project = await get().ensureProject();
         if (!isNodeInProject(project, nodeId)) return;
+        const target = project.nodes.find((n) => n.id === nodeId);
+        // Cascade: if this is an image node, scan every video draft for a
+        // reference back to it (via reference_node_ids OR reference_image_urls
+        // matching the image's media_urls) and detach those references BEFORE
+        // calling delete on the server. Otherwise the draft is left holding
+        // dead URL pointers + stale node_id references that won't render but
+        // still ride along through generation requests.
+        if (target?.type === "image") {
+            const targetUrls = new Set(target.media_urls ?? []);
+            for (const node of project.nodes) {
+                if (node.type !== "video") continue;
+                const data = (node.data ?? {}) as Record<string, unknown>;
+                const refUrls = Array.isArray(data.reference_image_urls)
+                    ? (data.reference_image_urls as unknown[]).filter((u): u is string => typeof u === "string")
+                    : [];
+                const refIds = Array.isArray(data.reference_node_ids)
+                    ? (data.reference_node_ids as unknown[]).filter((id): id is string => typeof id === "string")
+                    : [];
+                const cleanedUrls = refUrls.filter((u) => !targetUrls.has(u));
+                const cleanedIds = refIds.filter((id) => id !== nodeId);
+                const urlsChanged = cleanedUrls.length !== refUrls.length;
+                const idsChanged = cleanedIds.length !== refIds.length;
+                if (!urlsChanged && !idsChanged) continue;
+                try {
+                    await api.updateAtelierNode(project.id, node.id, {
+                        data: {
+                            ...data,
+                            reference_image_urls: cleanedUrls,
+                            reference_node_ids: cleanedIds,
+                        },
+                    });
+                } catch {
+                    // Best-effort cleanup. Continue even if one detach fails;
+                    // the user-visible delete still proceeds and a refresh
+                    // will eventually reconcile.
+                }
+            }
+        }
         await api.deleteAtelierNode(project.id, nodeId);
         set((state) => {
             if (!state.currentProject || state.currentProject.id !== project.id) return state;
@@ -396,7 +434,26 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                 ...state,
                 currentProject: {
                     ...state.currentProject,
-                    nodes: state.currentProject.nodes.filter((n) => n.id !== nodeId),
+                    nodes: state.currentProject.nodes
+                        .filter((n) => n.id !== nodeId)
+                        .map((n) => {
+                            if (n.type !== "video" || target?.type !== "image") return n;
+                            const data = (n.data ?? {}) as Record<string, unknown>;
+                            const refUrls = Array.isArray(data.reference_image_urls)
+                                ? (data.reference_image_urls as unknown[]).filter((u): u is string => typeof u === "string")
+                                : [];
+                            const refIds = Array.isArray(data.reference_node_ids)
+                                ? (data.reference_node_ids as unknown[]).filter((id): id is string => typeof id === "string")
+                                : [];
+                            const targetUrls = new Set(target?.media_urls ?? []);
+                            const cleanedUrls = refUrls.filter((u) => !targetUrls.has(u));
+                            const cleanedIds = refIds.filter((id) => id !== nodeId);
+                            if (cleanedUrls.length === refUrls.length && cleanedIds.length === refIds.length) return n;
+                            return {
+                                ...n,
+                                data: { ...data, reference_image_urls: cleanedUrls, reference_node_ids: cleanedIds },
+                            };
+                        }),
                 },
                 selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
             };

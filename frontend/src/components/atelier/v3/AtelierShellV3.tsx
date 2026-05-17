@@ -624,23 +624,51 @@ export function AtelierShellV3() {
   //   <  30s old  → 1500 ms  (perceived realtime)
   //   <  120s old → 3000 ms  (default)
   //   >= 120s old → 6000 ms  (deep generation)
-  useEffect(() => {
+  //
+  // The previous implementation re-ran the effect on every `project`
+  // change, which meant every refresh tore down + recreated the interval —
+  // a 1500ms tick could be repeatedly cancelled before it ever fired.
+  // Now: keep `currentInterval` in a ref, and only restart the timer when
+  // the *cadence tier* changes (or in-flight count crosses zero).
+  const currentIntervalRef = useRef<number | null>(null);
+  const inflightCadenceTier = useMemo(() => {
     const inflight = (project?.nodes ?? []).flatMap((node) =>
       readCandidates(node).filter((c) => c.status === "pending" || c.status === "processing"),
     );
-    if (inflight.length === 0) return;
+    if (inflight.length === 0) return null;
     const nowSec = Date.now() / 1000;
     const youngestAgeSec = inflight.reduce((min, c) => {
       const start = c.attempt_started_at ?? c.created_at ?? nowSec;
       const age = nowSec - start;
       return age < min ? age : min;
     }, Number.POSITIVE_INFINITY);
-    const interval = youngestAgeSec < 30 ? 1500 : youngestAgeSec < 120 ? 3000 : 6000;
-    const t = window.setInterval(() => {
+    return youngestAgeSec < 30 ? 1500 : youngestAgeSec < 120 ? 3000 : 6000;
+  }, [project]);
+  useEffect(() => {
+    if (inflightCadenceTier === null) {
+      // No in-flight candidates; clear any pending tick.
+      if (currentIntervalRef.current !== null) {
+        window.clearInterval(currentIntervalRef.current);
+        currentIntervalRef.current = null;
+      }
+      return;
+    }
+    // (Re)start interval only when entering polling or when the cadence
+    // tier changed. Effect re-runs whenever inflightCadenceTier changes
+    // (memoized over `project`), so this fires once per tier transition.
+    if (currentIntervalRef.current !== null) {
+      window.clearInterval(currentIntervalRef.current);
+    }
+    currentIntervalRef.current = window.setInterval(() => {
       void refreshCurrentProject().catch(() => {});
-    }, interval);
-    return () => window.clearInterval(t);
-  }, [project, refreshCurrentProject]);
+    }, inflightCadenceTier);
+    return () => {
+      if (currentIntervalRef.current !== null) {
+        window.clearInterval(currentIntervalRef.current);
+        currentIntervalRef.current = null;
+      }
+    };
+  }, [inflightCadenceTier, refreshCurrentProject]);
 
   // Local view state
   const [zoom, setZoom] = useState(100);          // percent, 25..300
@@ -2652,16 +2680,38 @@ export function AtelierShellV3() {
         >
           {/* edges layer (in world coords). Labels are collected during the
               same pass so the geometry math doesn't have to be duplicated;
-              we render the path SVG and the chip overlay separately. */}
+              we render the path SVG and the chip overlay separately.
+              The SVG bbox is computed dynamically from project node bounds +
+              a generous pad — the previous hardcoded ±10000 viewBox would
+              clip edges once a node drifted past those world coordinates,
+              which Cmd+Arrow nudges or long drags could trigger trivially. */}
           {(() => {
             const labels: EdgeLabel[] = [];
             const paths = renderEdges(project ?? null, hoveredNodeId, labels);
+            // Compute bbox: every node's outer corners + a 4000px pad so
+            // edges curving outside the node bbox (cubic control points)
+            // never get clipped. Falls back to a 4000² box centered at 0,0
+            // when project is empty.
+            let edgeMinX = -2000, edgeMinY = -2000, edgeMaxX = 2000, edgeMaxY = 2000;
+            for (const n of project?.nodes ?? []) {
+              const w = n.width || 240;
+              const h = n.height || 110;
+              if (n.x < edgeMinX) edgeMinX = n.x;
+              if (n.y < edgeMinY) edgeMinY = n.y;
+              if (n.x + w > edgeMaxX) edgeMaxX = n.x + w;
+              if (n.y + h > edgeMaxY) edgeMaxY = n.y + h;
+            }
+            const PAD = 4000;
+            const svgX = edgeMinX - PAD;
+            const svgY = edgeMinY - PAD;
+            const svgW = (edgeMaxX - edgeMinX) + PAD * 2;
+            const svgH = (edgeMaxY - edgeMinY) + PAD * 2;
             return (
               <>
                 <svg
                   className="pointer-events-none absolute"
-                  style={{ left: -10000, top: -10000, width: 20000, height: 20000, zIndex: 5 }}
-                  viewBox="-10000 -10000 20000 20000"
+                  style={{ left: svgX, top: svgY, width: svgW, height: svgH, zIndex: 5 }}
+                  viewBox={`${svgX} ${svgY} ${svgW} ${svgH}`}
                 >
                   {paths}
                 </svg>
