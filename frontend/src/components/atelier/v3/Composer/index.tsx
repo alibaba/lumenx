@@ -4,6 +4,7 @@ import { Settings, Wand2, X, Plus, Trash2 } from "lucide-react";
 import { CapabilityIcon } from "./CapabilityIcon";
 import { ChipDropdown } from "./ChipDropdown";
 import { composerPlacement, type ComposerAnchor, type ComposerViewport } from "./positioning";
+import { validateAtelierRefs, type AtelierRefKind } from "@/lib/modelCatalog";
 
 const TABS = ["T2I", "I2I", "T2V", "I2V", "R2V", "V2V", "Audio"] as const;
 export type ComposerTab = typeof TABS[number];
@@ -27,6 +28,11 @@ export interface ComposerSubmitPayload {
 export interface ComposerRef {
   src: string;
   role?: string;     // "ref" | "ff" | "vid"
+  /** Source-node media type. Wired by the shell from each ref node so the
+   *  Composer can validate against the chosen model's accepted reference
+   *  types (e.g., I2V models reject video references). When omitted the
+   *  ref is treated as `image`. */
+  kind?: AtelierRefKind;
 }
 
 export interface ComposerMentionable {
@@ -48,6 +54,10 @@ interface Props {
   aspectOptions?: string[];
   durationOptions?: string[];
   countOptions?: string[];
+  /** External override. When `undefined`, the Composer derives the mismatch
+   *  state from `modelLabel` + ref `kind`s using the model catalog. Pass
+   *  `false` only when you want to force-suppress the banner (e.g., during
+   *  preview). */
   showCapabilityMismatch?: boolean;
   onClose?: () => void;
   onSubmit?: (payload: ComposerSubmitPayload) => void;
@@ -80,7 +90,7 @@ export function Composer({
   aspectOptions = DEFAULT_ASPECTS,
   durationOptions = DEFAULT_DURATIONS,
   countOptions = DEFAULT_COUNTS,
-  showCapabilityMismatch = false,
+  showCapabilityMismatch,
   onClose,
   onSubmit,
   onAddRef,
@@ -115,6 +125,24 @@ export function Composer({
   useEffect(() => setA(aspect),     [aspect]);
   useEffect(() => setD(duration),   [duration]);
   useEffect(() => setC(count),      [count]);
+
+  // ── Capability mismatch (real validation) ───────────────────────────
+  // Derived from the model catalog: each catalog entry declares its
+  // `inputs.reference_images.{max, reference_type}` contract. We honor the
+  // `showCapabilityMismatch` prop as an override (parent can force-clear
+  // during preview), otherwise compute from current chip + ref kinds. The
+  // banner shows the actual reason (e.g., "doesn't accept video references")
+  // rather than a generic "some refs don't match" — gives the creator a clear
+  // remediation path: swap model or detach the offending ref.
+  const capabilityCheck = useMemo(
+    () => validateAtelierRefs(m, refs.map((r) => ({ kind: r.kind }))),
+    [m, refs],
+  );
+  const mismatchActive =
+    typeof showCapabilityMismatch === "boolean"
+      ? showCapabilityMismatch
+      : !capabilityCheck.ok;
+  const mismatchReason = capabilityCheck.reason;
 
   // ── @ mention picker ─────────────────────────────────────────────────
   // When the user types `@` in the prompt, we surface a popover of
@@ -185,7 +213,7 @@ export function Composer({
   };
 
   const submit = () => {
-    if (showCapabilityMismatch) return;
+    if (mismatchActive) return;
     onSubmit?.({ tab: activeTab, prompt: draft, modelLabel: m, aspect: a, duration: d, count: c, refs });
   };
 
@@ -238,12 +266,13 @@ export function Composer({
         </button>
       </div>
 
-      {/* Capability mismatch banner */}
-      {showCapabilityMismatch && (
+      {/* Capability mismatch banner — shows the real catalog-derived reason
+          (e.g., "doesn't accept video references"), not a generic blurb. */}
+      {mismatchActive && (
         <div role="alert" className="mx-3 mt-3 rounded-md border border-amber-300/35 bg-amber-400/[0.05] px-2.5 py-2 text-[11px] leading-relaxed text-amber-100/95">
           <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-200/80">Mismatch</span>{" "}
-          <strong className="font-medium text-amber-100">{modelLabel}</strong>{" "}
-          doesn&apos;t accept some of the attached references.
+          <strong className="font-medium text-amber-100">{m}</strong>{" "}
+          {mismatchReason ?? "doesn’t accept some of the attached references"}.
         </div>
       )}
 
@@ -439,10 +468,10 @@ export function Composer({
           type="button"
           aria-label="Submit"
           data-tip="Generate (⌘⏎)"
-          disabled={showCapabilityMismatch}
+          disabled={mismatchActive}
           onClick={submit}
           className={`btn-tip inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-[0.94] ${
-            showCapabilityMismatch
+            mismatchActive
               ? "cursor-not-allowed bg-primary/30 text-white/50"
               : `bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(100,108,255,0.55)] hover:bg-primary/92 hover:scale-[1.04] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_18px_-4px_rgba(100,108,255,0.65)] ${
                   draft.trim().length > 0 ? "motion-safe:animate-atelier-pulse-soft" : ""

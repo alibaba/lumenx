@@ -3589,11 +3589,38 @@ export function AtelierShellV3() {
                   : selectedNode.prompt ?? ""
               }
               modelLabel={readString(selectedNode.data?.model) ?? "Wan 2.7"}
-              refs={
-                readStringArray(
+              refs={(() => {
+                // Build refs with source-node kind so the Composer can
+                // validate against the model catalog (e.g., I2V models
+                // refuse video references). Match each URL back to its
+                // origin node first by id list, then by URL membership.
+                const urls = readStringArray(
                   (selectedNode.data as { reference_image_urls?: unknown })?.reference_image_urls,
-                ).map((src) => ({ src: getAssetUrl(src), role: "ref" }))
-              }
+                );
+                const idList = readStringArray(
+                  (selectedNode.data as { reference_node_ids?: unknown })?.reference_node_ids,
+                );
+                const allNodes = project?.nodes ?? [];
+                const findKind = (url: string, idx: number): "image" | "video" | "audio" | undefined => {
+                  const idCandidate = idList[idx];
+                  if (idCandidate) {
+                    const byId = allNodes.find((n) => n.id === idCandidate);
+                    if (byId && (byId.type === "image" || byId.type === "video" || byId.type === "audio")) {
+                      return byId.type;
+                    }
+                  }
+                  const byUrl = allNodes.find((n) => Array.isArray(n.media_urls) && n.media_urls.includes(url));
+                  if (byUrl && (byUrl.type === "image" || byUrl.type === "video" || byUrl.type === "audio")) {
+                    return byUrl.type;
+                  }
+                  return undefined;
+                };
+                return urls.map((src, idx) => ({
+                  src: getAssetUrl(src),
+                  role: "ref",
+                  kind: findKind(src, idx),
+                }));
+              })()}
               onClose={() => selectNode(null)}
               onSubmit={(payload) => handleComposerSubmit(payload, selectedNode)}
               onAddRef={() => {

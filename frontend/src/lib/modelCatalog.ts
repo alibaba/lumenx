@@ -461,3 +461,91 @@ export function getR2vReferenceInputConfig(modelId: string): R2VReferenceInputCo
 export function isR2vImageBased(modelId: string): boolean {
     return getR2vReferenceInputConfig(modelId).type === 'image';
 }
+
+// ---------------------------------------------------------------------------
+// Atelier capability validation
+// ---------------------------------------------------------------------------
+
+/** Resolve a catalog model by its display_name (used by Atelier composer chips
+ *  which surface user-readable labels rather than canonical ids). */
+export function getModelByDisplayName(label: string):
+    | {
+          id: string;
+          display_name: string;
+          family: string;
+          capabilities: string[];
+          inputs?: CatalogModel['inputs'];
+      }
+    | undefined {
+    if (!label) return undefined;
+    const normalized = label.trim().toLowerCase();
+    for (const model of CATALOG_MODELS) {
+        if (model.display_name.trim().toLowerCase() === normalized) {
+            return {
+                id: model.id,
+                display_name: model.display_name,
+                family: model.family,
+                capabilities: model.capabilities,
+                inputs: model.inputs,
+            };
+        }
+    }
+    return undefined;
+}
+
+export type AtelierRefKind = 'image' | 'video' | 'audio';
+
+export interface AtelierCapabilityCheck {
+    ok: boolean;
+    /** Short, user-facing reason. Composer banner concatenates it after the
+     *  model display name, e.g. "Wan 2.7 doesn't accept video references." */
+    reason?: string;
+}
+
+/** Validate that `refs` are acceptable inputs for the model identified by
+ *  `displayLabel`. Returns `{ ok: true }` when:
+ *    - the label doesn't resolve to a catalog entry (we only enforce when we
+ *      have ground truth — never block on unknowns)
+ *    - the model declares no `reference_images` constraint AND refs is empty
+ *    - all constraints (max + reference_type) pass
+ *
+ *  Returns `{ ok: false, reason }` for the first violated constraint. */
+export function validateAtelierRefs(
+    displayLabel: string,
+    refs: ReadonlyArray<{ kind?: AtelierRefKind | string }>,
+): AtelierCapabilityCheck {
+    const model = getModelByDisplayName(displayLabel);
+    if (!model) return { ok: true };
+    const constraint = model.inputs?.reference_images;
+    if (!constraint) {
+        return refs.length > 0
+            ? { ok: false, reason: "doesn't accept references" }
+            : { ok: true };
+    }
+    if (typeof constraint.max === 'number' && refs.length > constraint.max) {
+        const noun = constraint.max === 1 ? 'reference' : 'references';
+        return {
+            ok: false,
+            reason: `accepts at most ${constraint.max} ${noun}`,
+        };
+    }
+    if (constraint.reference_type === 'image') {
+        const offender = refs.find((r) => r.kind === 'video' || r.kind === 'audio');
+        if (offender) {
+            return {
+                ok: false,
+                reason: `doesn't accept ${offender.kind} references`,
+            };
+        }
+    }
+    if (constraint.reference_type === 'video') {
+        const offender = refs.find((r) => r.kind === 'image' || r.kind === 'audio');
+        if (offender) {
+            return {
+                ok: false,
+                reason: `doesn't accept ${offender.kind} references`,
+            };
+        }
+    }
+    return { ok: true };
+}

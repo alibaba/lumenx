@@ -145,3 +145,88 @@ describe("CapabilityIcon", () => {
     expect(screen.getByRole("img", { name: /ff not supported/i })).toBeInTheDocument();
   });
 });
+
+// ── Capability mismatch (catalog-derived) ──────────────────────────────
+//
+// The Composer derives mismatch state from `modelLabel` + ref `kind`s using
+// the model catalog. The override prop wins when explicitly set; otherwise
+// the catalog answers. Rules under test mirror modelCatalog.validateAtelierRefs.
+
+describe("Composer capability mismatch (auto)", () => {
+  it("shows banner when refs exceed model max", () => {
+    // Kling V3 I2V accepts at most 1 reference image.
+    render(
+      <Composer
+        activeTab="I2V"
+        modelLabel="Kling V3 I2V"
+        refs={[
+          { src: "a.jpg", kind: "image" },
+          { src: "b.jpg", kind: "image" },
+        ]}
+      />,
+    );
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/Kling V3 I2V/);
+    expect(alert.textContent).toMatch(/at most 1 reference/);
+    expect(screen.getByLabelText("Submit")).toBeDisabled();
+  });
+
+  it("shows banner when video ref attached to image-only model", () => {
+    render(
+      <Composer
+        activeTab="I2V"
+        modelLabel="Kling V3 I2V"
+        refs={[{ src: "v.mp4", kind: "video" }]}
+      />,
+    );
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toMatch(/video references/);
+  });
+
+  it("no banner when refs satisfy catalog constraint", () => {
+    render(
+      <Composer
+        activeTab="I2V"
+        modelLabel="Kling V3 I2V"
+        refs={[{ src: "a.jpg", kind: "image" }]}
+      />,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByLabelText("Submit")).not.toBeDisabled();
+  });
+
+  it("no banner when model unknown to catalog (fail-open)", () => {
+    render(
+      <Composer
+        activeTab="I2V"
+        modelLabel="Wan 2.7"
+        refs={[{ src: "a.jpg", kind: "image" }]}
+      />,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("explicit prop override forces banner even without violations", () => {
+    render(
+      <Composer
+        activeTab="I2V"
+        modelLabel="Kling V3 I2V"
+        showCapabilityMismatch
+        refs={[{ src: "a.jpg", kind: "image" }]}
+      />,
+    );
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("explicit prop override=false suppresses catalog-derived mismatch", () => {
+    render(
+      <Composer
+        activeTab="I2V"
+        modelLabel="Kling V3 I2V"
+        showCapabilityMismatch={false}
+        refs={[{ src: "v.mp4", kind: "video" }]}
+      />,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
