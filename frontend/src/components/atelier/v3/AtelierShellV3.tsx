@@ -544,7 +544,16 @@ export function AtelierShellV3() {
   const isMultiSelect = allSelectedIds.size > 1;
   const [minimapOpen, setMinimapOpen] = useState(false);
   const [agentCollapsed, setAgentCollapsed] = useState(false);
-  const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+  // Preview modal state. Beyond the url, we carry the parent/candidate ids
+  // when the source was a take so the modal can offer take-level actions
+  // (select / branch / delete) inline. URL-only previews (Sequence Strip
+  // clicks, generic media node Play button) skip the action row.
+  const [preview, setPreview] = useState<{
+    url: string;
+    parentId?: string;
+    candidateId?: string;
+  } | null>(null);
+  const setPreviewVideoUrl = (url: string | null) => setPreview(url ? { url } : null);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editingIdeaBody, setEditingIdeaBody] = useState("");
 
@@ -1549,7 +1558,10 @@ export function AtelierShellV3() {
         const parent = project.nodes.find((n) => n.id === parsed.parentId);
         const cand = parent ? readCandidates(parent).find((c) => c.id === parsed.candidateId) : undefined;
         if (cand?.video_url) {
-          setPreviewVideoUrl(cand.video_url);
+          // Pass parent/candidate into the modal so it can offer
+          // take-level inline actions (select / branch / + sequence /
+          // delete) instead of being a bare video popup.
+          setPreview({ url: cand.video_url, parentId: parsed.parentId, candidateId: parsed.candidateId });
           return;
         }
       }
@@ -2788,26 +2800,110 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* preview video modal */}
-      {previewVideoUrl ? (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm"
-          onClick={() => setPreviewVideoUrl(null)}
-          role="dialog"
-          aria-label="Video preview"
-        >
-          <div className="relative max-h-[80vh] max-w-[80vw] overflow-hidden rounded-xl border border-glass-border bg-elevated shadow-2xl shadow-black/40" onClick={(e) => e.stopPropagation()}>
-            <video src={getAssetUrl(previewVideoUrl)} controls autoPlay className="block max-h-[80vh] max-w-[80vw]" />
-            <button
-              onClick={() => setPreviewVideoUrl(null)}
-              className="absolute right-2 top-2 rounded-full bg-black/55 p-1.5 text-white/90 hover:bg-black/75"
-              aria-label="Close preview"
-            >
-              <X size={14} />
-            </button>
+      {/* Preview modal — wraps the video, plus inline take actions when
+          the preview was launched from a candidate (select / branch /
+          delete / add to sequence). URL-only previews (sequence strip /
+          generic Play) get just the close button. */}
+      {preview ? (() => {
+        const ctx = preview;
+        const close = () => setPreview(null);
+        const parent = ctx.parentId ? project?.nodes.find((n) => n.id === ctx.parentId) : undefined;
+        const cand = parent && ctx.candidateId
+          ? readCandidates(parent).find((c) => c.id === ctx.candidateId)
+          : undefined;
+        const isTake = !!cand;
+        const isSelectedTake =
+          parent && cand && (parent.data as { selected_candidate_id?: string })?.selected_candidate_id === cand.id;
+        return (
+          <div
+            className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm"
+            onClick={close}
+            role="dialog"
+            aria-label="Video preview"
+          >
+            <div className="relative max-h-[88vh] max-w-[80vw] overflow-hidden rounded-xl border border-glass-border bg-elevated shadow-2xl shadow-black/40" onClick={(e) => e.stopPropagation()}>
+              <video
+                src={getAssetUrl(ctx.url)}
+                controls
+                autoPlay
+                className="block max-h-[80vh] max-w-[80vw]"
+              />
+              {isTake && parent && cand ? (
+                <div className="flex items-center justify-between gap-2 border-t border-border-subtle bg-elevated px-3 py-2">
+                  <div className="min-w-0 text-[11px]">
+                    <div className="truncate font-medium text-foreground">{parent.title}</div>
+                    <div className="font-mono text-[10px] text-text-muted">
+                      {cand.model} · {cand.label || cand.id.slice(0, 8)}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    {!isSelectedTake ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void useAtelierStore.getState().selectCandidate(parent.id, cand.id)
+                            .then(() => pushToast("success", "Selected as take"))
+                            .catch((err: unknown) => pushToast("error", `Select failed: ${err instanceof Error ? err.message : String(err)}`));
+                          close();
+                        }}
+                        className="rounded-full bg-primary px-2 py-0.5 font-medium text-white hover:bg-primary/90"
+                      >
+                        Select as take
+                      </button>
+                    ) : (
+                      <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 font-medium text-emerald-200">Selected</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void branchFromCandidate(parent.id, cand.id)
+                          .then(() => pushToast("success", "Branched · new draft created"))
+                          .catch((err: unknown) => pushToast("error", `Branch failed: ${err instanceof Error ? err.message : String(err)}`));
+                        close();
+                      }}
+                      className="rounded-full bg-glass px-2 py-0.5 text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                    >
+                      Branch
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSequence((prev) => {
+                          if (prev.some((s) => s.parentId === parent.id && s.candidateId === cand.id)) return prev;
+                          return [...prev, { parentId: parent.id, candidateId: cand.id }];
+                        });
+                        pushToast("success", "Added to Sequence");
+                      }}
+                      className="rounded-full bg-glass px-2 py-0.5 text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                    >
+                      + Sequence
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void useAtelierStore.getState().deleteCandidate(parent.id, cand.id)
+                          .then(() => pushToast("info", "Take deleted"))
+                          .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
+                        close();
+                      }}
+                      className="rounded-full bg-red-400/15 px-2 py-0.5 text-red-200 hover:bg-red-400/25"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <button
+                onClick={close}
+                className="absolute right-2 top-2 rounded-full bg-black/55 p-1.5 text-white/90 hover:bg-black/75"
+                aria-label="Close preview"
+              >
+                <X size={14} />
+              </button>
+            </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
 
       {/* First-run onboarding hint — slides in once, points to '?' help. */}
       {showOnboarding && !showHelp ? (
