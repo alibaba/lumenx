@@ -75,7 +75,16 @@ export function BottomNavRail({
       >
         <ZoomIn size={14} />
       </button>
-      <span aria-hidden="true" className="font-mono text-[10px] text-text-muted w-9 text-right">{zoom}%</span>
+      <button
+        type="button"
+        aria-label="Reset zoom to 100%"
+        data-tip="Reset to 100%"
+        onClick={() => onZoomChange(100)}
+        className="btn-tip font-mono text-[10px] text-text-muted hover:text-foreground w-9 text-right"
+        disabled={zoom === 100}
+      >
+        {zoom}%
+      </button>
     </div>
   );
 }
