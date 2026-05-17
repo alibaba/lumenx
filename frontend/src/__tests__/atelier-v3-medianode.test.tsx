@@ -39,7 +39,7 @@ describe("v3 MediaNode", () => {
         y={0}
       />,
     );
-    expect(screen.getByText(/Selected/)).toBeInTheDocument();
+    expect(screen.getByText(/selected/i)).toBeInTheDocument();
   });
 
   it("clamps width to <= 240 even if larger requested", () => {

@@ -24,10 +24,20 @@ interface Props {
 }
 
 const STATUS_BORDER: Record<DraftNodeStatus, string> = {
-  draft: "border-amber-300/40",
-  approved: "border-primary/40",
-  running: "border-blue-400/50",
-  completed: "border-glass-border opacity-80",
+  draft: "border-amber-300/35",
+  approved: "border-primary/35",
+  running: "border-blue-400/45",
+  completed: "border-glass-border",
+};
+
+// Status-specific accent rail (a 2px line down the left, full bleed). Reads
+// as a "color stripe" that's actually a single hairline — much cleaner than
+// a colored border-box. Hidden when selected (the primary ring takes over).
+const STATUS_RAIL: Record<DraftNodeStatus, string> = {
+  draft: "before:bg-amber-300/70",
+  approved: "before:bg-primary",
+  running: "before:bg-blue-400/80",
+  completed: "before:bg-emerald-400/40",
 };
 
 export function DraftNode({
@@ -53,10 +63,6 @@ export function DraftNode({
   const visibleRefs = refs ? refs.slice(0, VISIBLE_REFS) : [];
   const overflowCount = refs ? Math.max(0, refs.length - VISIBLE_REFS) : 0;
 
-  // Inline rename: dbl-click the intent label flips it to a text input.
-  // Enter or blur commits, Esc reverts. Intent prop drives the input's
-  // initial value each time editing starts so external updates don't get
-  // overwritten by a stale draft.
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(intent);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -78,6 +84,13 @@ export function DraftNode({
     if (next && next !== intent) onIntentCommit(next);
   };
 
+  // Cinematic surface vocabulary:
+  //   - Deeper bg (#141416 mix) keeps the card from melting into draft borders
+  //   - 1px white/[0.06] inset top edge highlight reads as "this card is
+  //     a real surface lit from above" — the signature detail, not a
+  //     decoration
+  //   - Status rail is a 2px hairline pinned to the left edge (via ::before),
+  //     replaces the border-color status hack on the whole box
   return (
     <div
       role="button"
@@ -92,12 +105,26 @@ export function DraftNode({
           onSelect?.(id);
         }
       }}
-      style={{ transform: `translate(${x}px, ${y}px)` }}
-      className={`group absolute w-[240px] rounded-md border bg-elevated shadow-2xl shadow-black/40 backdrop-blur-md transition-shadow hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)] ${borderClass}`}
+      style={{
+        transform: `translate(${x}px, ${y}px)`,
+        backgroundImage:
+          "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 32%)",
+      }}
+      className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-shadow duration-200 ${
+        // Status rail (left-edge 2px line). Hidden when selected so the
+        // primary ring owns the chromatic signal.
+        selected
+          ? ""
+          : `before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-r ${STATUS_RAIL[status]}`
+      } ${
+        status === "completed" && !selected ? "opacity-90" : ""
+      } ${borderClass}`}
     >
-      <div className="px-3 py-2.5">
-        <div className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
-          <Sparkles size={12} className="text-primary shrink-0" />
+      <div className="px-3.5 pb-2.5 pt-3">
+        {/* Title row — Sparkles 11px primary, intent in display font tighter
+            tracking, ready badge mono caps */}
+        <div className="flex items-center gap-1.5 text-foreground">
+          <Sparkles size={11} className="shrink-0 text-primary" aria-hidden="true" />
           {editing ? (
             <input
               ref={inputRef}
@@ -115,12 +142,12 @@ export function DraftNode({
                   setDraft(intent);
                 }
               }}
-              className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 text-[13px] font-semibold text-foreground outline-none"
+              className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 font-display text-[13px] font-medium tracking-[-0.005em] text-foreground outline-none"
               aria-label="Rename draft"
             />
           ) : (
             <span
-              className={`truncate ${onIntentCommit ? "cursor-text" : ""}`}
+              className={`truncate font-display text-[13px] font-medium tracking-[-0.005em] ${onIntentCommit ? "cursor-text" : ""}`}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 startEditing();
@@ -132,28 +159,35 @@ export function DraftNode({
           )}
           {typeof candidatesTotal === "number" && candidatesTotal > 0 ? (
             <span
-              className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] font-semibold ${
+              className={`ml-auto shrink-0 rounded-full px-1.5 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.12em] ${
                 (candidatesReady ?? 0) >= candidatesTotal
-                  ? "bg-emerald-400/15 text-emerald-200"
-                  : "bg-blue-400/15 text-blue-200"
+                  ? "bg-emerald-400/12 text-emerald-200/95"
+                  : "bg-blue-400/12 text-blue-200/95"
               }`}
               aria-label={`${candidatesReady ?? 0} of ${candidatesTotal} candidates ready`}
             >
-              {candidatesReady ?? 0}/{candidatesTotal} ready
+              {candidatesReady ?? 0}/{candidatesTotal}
             </span>
           ) : null}
         </div>
-        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-text-secondary">
-          <span className="rounded bg-primary/15 px-1.5 py-0.5 font-semibold text-primary">
+
+        {/* Meta row — model name in mono caps (signature detail), thin
+            divider dot, config summary in muted secondary, optional spinner */}
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] leading-none text-text-secondary">
+          <span className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-primary/95">
             {modelLabel}
           </span>
-          <span className="truncate">{configSummary}</span>
+          <span aria-hidden="true" className="text-text-muted/60">·</span>
+          <span className="truncate font-mono text-[10px] tracking-[0.04em] text-text-secondary/85">
+            {configSummary}
+          </span>
           {status === "running" ? (
-            <Loader2 size={11} className="ml-auto text-blue-200 animate-spin" />
+            <Loader2 size={11} className="ml-auto shrink-0 animate-spin text-blue-200" />
           ) : null}
         </div>
+
         {refs && refs.length > 0 ? (
-          <div className="mt-1.5 flex items-center gap-1">
+          <div className="mt-2 flex items-center gap-1">
             {visibleRefs.map((r, i) => (
               <img
                 key={i}
@@ -161,27 +195,30 @@ export function DraftNode({
                 alt={`Reference ${i + 1}`}
                 loading="lazy"
                 decoding="async"
-                className="h-6 w-6 rounded border border-white/10 object-cover"
+                className="h-[22px] w-[22px] rounded-[3px] border border-white/8 object-cover"
               />
             ))}
             {overflowCount > 0 ? (
-              <span className="grid h-6 min-w-[1.5rem] place-items-center rounded border border-white/10 bg-white/[0.04] px-1 text-[10px] font-mono text-text-muted">
+              <span className="grid h-[22px] min-w-[22px] place-items-center rounded-[3px] border border-white/8 bg-white/[0.03] px-1 font-mono text-[9px] tracking-tight text-text-muted">
                 +{overflowCount}
               </span>
-            ) : null}
-            {overflowCount === 0 ? (
-              <span className="ml-1 font-mono text-[10px] text-text-muted">
+            ) : (
+              <span className="ml-1 font-mono text-[9px] uppercase tracking-[0.16em] text-text-muted">
                 {refs.length} ref
               </span>
-            ) : null}
+            )}
           </div>
         ) : null}
       </div>
+
+      {/* Awaiting-approval indicator: stronger 5×5 dot with primary halo so
+          it actually reads at zoom-out. Replaces the previous near-invisible
+          1.5×1.5 amber speck. */}
       {status === "draft" ? (
         <span
           role="status"
           aria-label="Awaiting approval"
-          className="btn-tip absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-amber-300"
+          className="btn-tip absolute right-2.5 top-2.5 h-[5px] w-[5px] rounded-full bg-amber-300 shadow-[0_0_0_3px_rgba(252,211,77,0.18)]"
           data-tip="Awaiting approval"
         >
           <span className="sr-only">Awaiting approval</span>

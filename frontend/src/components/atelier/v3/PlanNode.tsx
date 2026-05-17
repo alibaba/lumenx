@@ -40,8 +40,8 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
     if (next && next !== title) onTitleCommit(next);
   };
   const borderClass = selected
-    ? "ring-2 ring-primary border-primary/50"
-    : "border-primary/30";
+    ? "ring-2 ring-primary border-primary/45"
+    : "border-glass-border";
 
   const visibleBullets = bullets.slice(0, VISIBLE_BULLETS);
   const overflowBullets = Math.max(0, bullets.length - VISIBLE_BULLETS);
@@ -60,61 +60,73 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
           onSelect?.(id);
         }
       }}
-      style={{ transform: `translate(${x}px, ${y}px)` }}
-      className={`group absolute w-[260px] rounded-md border bg-elevated shadow-2xl shadow-black/40 backdrop-blur-md transition-shadow hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)] ${borderClass} px-3 py-2.5`}
+      style={{
+        transform: `translate(${x}px, ${y}px)`,
+        backgroundImage:
+          "linear-gradient(to bottom, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 35%)",
+      }}
+      className={`group absolute w-[268px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-shadow duration-200 ${borderClass}`}
     >
-      <div className="mb-1.5 inline-flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
-        <span className="grid h-5 w-5 place-items-center rounded bg-primary/20 text-primary">
-          <Bot size={11} />
-        </span>
-        {editing ? (
-          <input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onPointerDown={(e) => e.stopPropagation()}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commit();
-              } else if (e.key === "Escape") {
-                e.preventDefault();
-                setEditing(false);
-                setDraft(title);
-              }
-            }}
-            className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 text-[13px] font-semibold text-foreground outline-none"
-            aria-label="Rename plan"
-          />
-        ) : (
-          <span
-            className={`truncate ${onTitleCommit ? "cursor-text" : ""}`}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              startEditing();
-            }}
-            title={onTitleCommit ? "Double-click to rename" : undefined}
-          >
-            {title}
+      <div className="px-4 pb-3 pt-3.5">
+        {/* Header — Bot avatar in primary tint, display-font title with
+            tighter tracking, no trailing chrome */}
+        <div className="mb-2 flex items-center gap-2 text-foreground">
+          <span className="grid h-[20px] w-[20px] shrink-0 place-items-center rounded-[5px] bg-primary/15 text-primary ring-1 ring-inset ring-primary/25">
+            <Bot size={11} aria-hidden="true" />
           </span>
-        )}
-      </div>
-      <ul className="space-y-0.5 text-[11px] text-text-secondary">
-        {visibleBullets.map((b, i) => (
-          <li key={i} className="line-clamp-2">
-            <span aria-hidden="true" className="mr-1 text-text-muted">·</span>
-            {b}
-          </li>
-        ))}
-        {overflowBullets > 0 && (
-          <li className="text-text-muted">
-            <span aria-hidden="true" className="mr-1">·</span>+{overflowBullets} more
-          </li>
-        )}
-      </ul>
-      <div className="mt-1.5 font-mono text-[10px] uppercase tracking-wider text-text-muted">
-        PLAN · by Agent
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditing(false);
+                  setDraft(title);
+                }
+              }}
+              className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 font-display text-[13px] font-medium tracking-[-0.005em] text-foreground outline-none"
+              aria-label="Rename plan"
+            />
+          ) : (
+            <span
+              className={`truncate font-display text-[13px] font-medium tracking-[-0.005em] ${onTitleCommit ? "cursor-text" : ""}`}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                startEditing();
+              }}
+              title={onTitleCommit ? "Double-click to rename" : undefined}
+            >
+              {title}
+            </span>
+          )}
+        </div>
+
+        {/* Bullets — vertical hairline indent in lieu of dots. Reads as a
+            quiet typographic device, not a list-item marker. */}
+        <ul className="space-y-1 border-l border-border-subtle pl-3 text-[11.5px] leading-[1.5] text-text-secondary/90">
+          {visibleBullets.map((b, i) => (
+            <li key={i} className="line-clamp-2">
+              {b}
+            </li>
+          ))}
+          {overflowBullets > 0 ? (
+            <li className="text-text-muted">+{overflowBullets} more</li>
+          ) : null}
+        </ul>
+
+        {/* Footer caption — mono caps, separator dot, agent attribution */}
+        <div className="mt-2.5 flex items-center gap-1.5 border-t border-border-subtle pt-2 font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted">
+          <span>Plan</span>
+          <span aria-hidden="true" className="text-text-muted/50">·</span>
+          <span>by Agent</span>
+        </div>
       </div>
     </div>
   );

@@ -48,7 +48,8 @@ describe("DraftNode", () => {
         y={0}
       />,
     );
-    expect(container.firstElementChild?.className).toMatch(/primary\/40/);
+    // Approved → primary tint somewhere on the box (border or rail).
+    expect(container.firstElementChild?.className).toMatch(/primary/);
   });
 
   it("renders ref thumbnails when refs provided", () => {

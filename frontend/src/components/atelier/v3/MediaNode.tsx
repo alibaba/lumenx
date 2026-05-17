@@ -50,9 +50,11 @@ function ringClass(
 
 function TypeChip({ kind }: { kind: MediaKind }) {
   const Icon = kind === "video" ? Video : kind === "audio" ? Volume2 : ImageIcon;
+  const label = kind === "image" ? "img" : kind === "video" ? "vid" : "aud";
   return (
-    <span className="absolute left-1 top-1 hidden bg-black/65 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-white/85 group-hover:block">
-      <Icon size={10} className="inline-block align-middle" /> {kind}
+    <span className="pointer-events-none absolute left-1.5 top-1.5 hidden items-center gap-1 rounded-[3px] bg-black/70 px-1.5 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-white/85 backdrop-blur-sm group-hover:inline-flex">
+      <Icon size={9} aria-hidden="true" className="text-primary/85" />
+      {label}
     </span>
   );
 }
@@ -155,19 +157,23 @@ export function MediaNode({
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`group absolute overflow-hidden rounded-md bg-black/40 shadow-2xl shadow-black/40 transition-shadow duration-200 ${
-        // When media is missing, give the box a visible frame so it doesn't
-        // melt into the canvas. With media (image/video src) we let the
-        // image dominate; the ring/shadow still keep edges legible.
-        // Actionable empty image draft: tint the bg/border so the upload
-        // card reads as a coherent unit (no separate floating overlay).
+      className={`group absolute overflow-hidden rounded-md bg-black/40 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.55)] transition-shadow duration-200 ${
+        // Three chrome modes:
+        //   1. Actionable empty image draft → primary-tinted hairline that
+        //      reads as 'this is editable, drop something here'
+        //   2. Empty (non-actionable) image / video → dashed hairline so
+        //      the box doesn't melt into the canvas
+        //   3. Filled media → no border, image / video dominates
+        //      (DESIGN.md §6.1 'default = content itself, no chrome')
+        // Audio is treated like filled media because the waveform fills the
+        // box on its own.
         isEmptyImageActionable
           ? selected
-            ? "border border-primary/50 bg-primary/[0.07]"
-            : "border border-dashed border-primary/30 bg-primary/[0.04]"
-          : !src && kind !== "audio"
-          ? "border border-dashed border-white/15 bg-white/[0.04]"
-          : "border border-white/10"
+            ? "border border-primary/45"
+            : "border border-dashed border-primary/22 hover:border-primary/35"
+          : !src && (kind === "image" || kind === "video")
+          ? "border border-dashed border-white/12"
+          : ""
       } ${ring}`}
       style={{
         transform: `translate(${x}px, ${y}px)`,
@@ -211,37 +217,44 @@ export function MediaNode({
              is empty but no actions wired (read-only contexts).
           Audio + video have their own empty-state branches. */}
       {isEmptyImageActionable ? (
-        <div className="flex h-full w-full flex-col items-stretch justify-center gap-2 px-3 py-3">
-          <div className={`flex items-center justify-center gap-1.5 font-mono text-[10px] uppercase tracking-wider ${
-            selected ? "text-primary" : "text-primary/70"
-          }`}>
-            <ImageIcon size={11} aria-hidden="true" />
-            <span>Image draft</span>
+        <div className="flex h-full w-full flex-col gap-2.5 px-3.5 py-3.5">
+          {/* Heading row: small mono caps + ImageIcon, anchored top */}
+          <div className="flex items-center gap-1.5">
+            <ImageIcon size={11} aria-hidden="true" className={selected ? "text-primary" : "text-primary/75"} />
+            <span className={`font-mono text-[9px] uppercase tracking-[0.22em] ${
+              selected ? "text-primary" : "text-primary/75"
+            }`}>
+              Image draft
+            </span>
           </div>
-          {onUpload ? (
-            <button
-              type="button"
-              aria-label="Upload image"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onUpload(id); }}
-              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1.5 text-[12px] font-semibold text-white transition-colors hover:bg-primary/90"
-            >
-              <Upload size={11} aria-hidden="true" />
-              Upload
-            </button>
-          ) : null}
-          {onGenerate ? (
-            <button
-              type="button"
-              aria-label="Generate image from prompt"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); onGenerate(id); }}
-              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-glass-border bg-glass px-2 py-1.5 text-[12px] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
-            >
-              <Sparkles size={11} aria-hidden="true" />
-              Generate
-            </button>
-          ) : null}
+          {/* Action stack pinned to bottom — the buttons feel placed on a
+              surface, not floating in a centered void. */}
+          <div className="mt-auto flex flex-col gap-1.5">
+            {onUpload ? (
+              <button
+                type="button"
+                aria-label="Upload image"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onUpload(id); }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 font-display text-[12px] font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_4px_10px_-3px_rgba(100,108,255,0.5)] transition-colors hover:bg-primary/90"
+              >
+                <Upload size={11} aria-hidden="true" />
+                Upload
+              </button>
+            ) : null}
+            {onGenerate ? (
+              <button
+                type="button"
+                aria-label="Generate image from prompt"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); onGenerate(id); }}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-text-secondary transition-colors hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground"
+              >
+                <Sparkles size={11} aria-hidden="true" />
+                Generate
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : !src && kind === "image" && status !== "processing" && status !== "pending" && status !== "failed" ? (
         <div className="grid h-full w-full place-items-center text-center">
@@ -316,17 +329,17 @@ export function MediaNode({
       {!isEmptyImageActionable ? <TypeChip kind={kind} /> : null}
 
       {filename && !isEmptyImageActionable ? (
-        <span className="absolute right-1 bottom-1 hidden max-w-[70%] truncate bg-black/65 px-1.5 py-0.5 font-mono text-[10px] text-white/80 group-hover:block">
+        <span className="pointer-events-none absolute right-1.5 bottom-1.5 hidden max-w-[70%] truncate rounded-[3px] bg-black/70 px-1.5 py-[3px] font-mono text-[9px] tracking-tight text-white/80 backdrop-blur-sm group-hover:inline-block">
           {filename}
         </span>
       ) : null}
 
       {selectedAsTake ? (
-        <span className="absolute left-1 bottom-1 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-white shadow-[0_0_0_2px_rgba(0,0,0,0.35)]">
-          <Check size={10} /> Selected
+        <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.16em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
+          <Check size={9} aria-hidden="true" /> selected
         </span>
       ) : duration ? (
-        <span className="absolute left-1 bottom-1 hidden max-w-[70%] truncate bg-black/65 px-1.5 py-0.5 font-mono text-[10px] text-white/80 group-hover:block">
+        <span className="pointer-events-none absolute left-1.5 bottom-1.5 hidden max-w-[70%] truncate rounded-[3px] bg-black/70 px-1.5 py-[3px] font-mono text-[9px] tracking-tight text-white/80 backdrop-blur-sm group-hover:inline-block">
           {duration}
         </span>
       ) : null}
