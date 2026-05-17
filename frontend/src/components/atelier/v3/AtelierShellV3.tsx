@@ -668,6 +668,24 @@ export function AtelierShellV3() {
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
 
+      // Cmd/Ctrl + Z = undo. Cmd/Ctrl + Shift + Z (or Cmd/Ctrl + Y) = redo.
+      // Handled before the no-modifier guard. Keep the alt check loose so
+      // OS-level chords don't get hijacked.
+      if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+        const key = e.key.toLowerCase();
+        if (key === "z") {
+          e.preventDefault();
+          if (e.shiftKey) redo();
+          else undo();
+          return;
+        }
+        if (key === "y" && !e.shiftKey) {
+          e.preventDefault();
+          redo();
+          return;
+        }
+      }
+
       // Modifier-bearing shortcuts come *before* the no-modifier guard.
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
         const key = e.key.toLowerCase();
@@ -904,6 +922,56 @@ export function AtelierShellV3() {
   // Stacking offset so consecutive pastes don't sit on top of each other.
   const pasteOffsetRef = useRef<{ x: number; y: number }>({ x: 24, y: 24 });
 
+  // Undo / redo history — position-move scope only for v1. Each entry is a
+  // batch of (nodeId, prevX, prevY, nextX, nextY) tuples, so a group drag
+  // and a single drag both round-trip through the same path. Capped at 50
+  // entries to bound memory; undoing past that is rare and probably wrong.
+  const HISTORY_CAP = 50;
+  type MoveEntry = { nodeId: string; prevX: number; prevY: number; nextX: number; nextY: number };
+  type HistoryItem = { kind: "move"; entries: MoveEntry[] };
+  const undoStackRef = useRef<HistoryItem[]>([]);
+  const redoStackRef = useRef<HistoryItem[]>([]);
+  // bump to repaint the toolbar's undo/redo enabled state.
+  const [, setHistoryTick] = useState(0);
+  const pushHistory = (item: HistoryItem) => {
+    undoStackRef.current.push(item);
+    if (undoStackRef.current.length > HISTORY_CAP) undoStackRef.current.shift();
+    // A new user action invalidates the redo lineage.
+    redoStackRef.current = [];
+    setHistoryTick((v) => v + 1);
+  };
+  const applyMoveEntries = async (entries: MoveEntry[], dir: "undo" | "redo") => {
+    const store = useAtelierStore.getState();
+    const proj = store.currentProject;
+    if (!proj) return;
+    const tasks: Array<Promise<unknown>> = [];
+    for (const e of entries) {
+      const x = dir === "undo" ? e.prevX : e.nextX;
+      const y = dir === "undo" ? e.prevY : e.nextY;
+      const exists = proj.nodes.some((n) => n.id === e.nodeId);
+      if (!exists) continue;
+      store.moveNodeLocal(e.nodeId, x, y);
+      tasks.push(store.commitNodePosition(e.nodeId, x, y).catch(() => {}));
+    }
+    await Promise.all(tasks);
+  };
+  const undo = () => {
+    const item = undoStackRef.current.pop();
+    if (!item) return;
+    void applyMoveEntries(item.entries, "undo");
+    redoStackRef.current.push(item);
+    setHistoryTick((v) => v + 1);
+    pushToast("info", "Undid last move");
+  };
+  const redo = () => {
+    const item = redoStackRef.current.pop();
+    if (!item) return;
+    void applyMoveEntries(item.entries, "redo");
+    undoStackRef.current.push(item);
+    setHistoryTick((v) => v + 1);
+    pushToast("info", "Redid last move");
+  };
+
   // Marquee box-select. Activated by Shift + drag on empty canvas.
   // Tracks both screen-coord rect (for the visible overlay) and uses
   // pan/zoom to map back to world coords on release.
@@ -1068,12 +1136,15 @@ export function AtelierShellV3() {
       if (drag.moved) {
         const store = useAtelierStore.getState();
         const proj = store.currentProject;
+        const entries: MoveEntry[] = [];
         for (const m of drag.members) {
           const real = proj?.nodes.find((n) => n.id === m.nodeId);
           if (real) {
+            entries.push({ nodeId: m.nodeId, prevX: m.startWorldX, prevY: m.startWorldY, nextX: real.x, nextY: real.y });
             void store.commitNodePosition(m.nodeId, real.x, real.y).catch(() => {});
           }
         }
+        if (entries.length > 0) pushHistory({ kind: "move", entries });
       }
       return;
     }
@@ -1083,6 +1154,10 @@ export function AtelierShellV3() {
       if (drag.moved) {
         const real = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === drag.nodeId);
         if (real) {
+          pushHistory({
+            kind: "move",
+            entries: [{ nodeId: drag.nodeId, prevX: drag.startWorldX, prevY: drag.startWorldY, nextX: real.x, nextY: real.y }],
+          });
           void useAtelierStore.getState().commitNodePosition(drag.nodeId, real.x, real.y).catch(() => {});
         }
       }
@@ -1783,12 +1858,10 @@ export function AtelierShellV3() {
           }
         }}
         onAskAgent={() => setAgentCollapsed(false)}
-        onUndo={() => {}}
-        onRedo={() => {}}
-        // Honest disabled state — better than fake-clickable buttons that
-        // toast "not implemented" each time. Reads "Coming soon" via tooltip.
-        canUndo={false}
-        canRedo={false}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={undoStackRef.current.length > 0}
+        canRedo={redoStackRef.current.length > 0}
       />
 
       {/* Hidden file input shared by Toolbar (legacy direct upload) and the
@@ -2563,6 +2636,8 @@ export function AtelierShellV3() {
                 ["⌘ / Ctrl + C", "Copy selection"],
                 ["⌘ / Ctrl + V", "Paste"],
                 ["⌘ / Ctrl + D", "Duplicate"],
+                ["⌘ / Ctrl + Z", "Undo move"],
+                ["⌘ / Ctrl + Shift + Z", "Redo move"],
                 ["⌘ / Ctrl + Wheel", "Zoom"],
                 ["← ↑ → ↓", "Navigate to nearest node"],
                 ["Shift + ← ↑ → ↓", "Extend selection"],
