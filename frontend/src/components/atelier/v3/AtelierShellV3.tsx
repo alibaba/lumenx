@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, CloudUpload, Link2, Play, X } from "lucide-react";
+import { Check, ChevronDown, CloudUpload, FolderOpen, Link2, Play, Plus, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -408,8 +408,11 @@ let toastSeq = 0;
 export function AtelierShellV3() {
   // Store (selectors)
   const project = useAtelierStore((s) => s.currentProject);
+  const projects = useAtelierStore((s) => s.projects);
   const selectedNodeId = useAtelierStore((s) => s.selectedNodeId);
   const ensureProject = useAtelierStore((s) => s.ensureProject);
+  const switchProject = useAtelierStore((s) => s.switchProject);
+  const createProject = useAtelierStore((s) => s.createProject);
   const selectNode = useAtelierStore((s) => s.selectNode);
   const createImageNode = useAtelierStore((s) => s.createImageNode);
   const createIdeaNode = useAtelierStore((s) => s.createIdeaNode);
@@ -1594,6 +1597,9 @@ export function AtelierShellV3() {
   // Keyboard shortcut help overlay — press '?' to open.
   const [showHelp, setShowHelp] = useState(false);
 
+  // Project picker popover.
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
+
   // First-run onboarding hint pointing to '?'. Persists "seen" across
   // refreshes via localStorage so we don't nag returning users.
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -1863,6 +1869,95 @@ export function AtelierShellV3() {
         canUndo={undoStackRef.current.length > 0}
         canRedo={redoStackRef.current.length > 0}
       />
+
+      {/* Project picker — sits below Toolbar (top-16 left-4). Pill shows
+          current project; click opens a popover with the project list +
+          a "New" CTA. Hidden when there are no projects loaded yet. */}
+      {project ? (
+        <div className="absolute left-4 top-16 z-30">
+          <button
+            type="button"
+            aria-label="Switch project"
+            aria-expanded={showProjectPicker}
+            onClick={() => setShowProjectPicker((v) => !v)}
+            className="btn-tip inline-flex items-center gap-1.5 rounded-full border border-glass-border bg-glass px-2.5 py-1 text-[12px] text-foreground hover:bg-hover-bg"
+            data-tip="Switch project"
+          >
+            <FolderOpen size={12} className="text-text-muted" aria-hidden="true" />
+            <span className="max-w-[160px] truncate">{project.title || "Untitled"}</span>
+            <ChevronDown size={12} className="text-text-muted" aria-hidden="true" />
+          </button>
+          {showProjectPicker ? (
+            <>
+              <div
+                aria-hidden="true"
+                className="fixed inset-0 z-[34]"
+                onClick={() => setShowProjectPicker(false)}
+              />
+              <div
+                role="menu"
+                aria-label="Atelier projects"
+                className="absolute left-0 top-9 z-[35] w-[280px] rounded-md border border-glass-border bg-elevated p-1 shadow-2xl shadow-black/50 backdrop-blur-md"
+              >
+                <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-text-muted">
+                  Projects · {projects.length}
+                </div>
+                <ul className="max-h-[260px] overflow-y-auto">
+                  {projects.map((p) => {
+                    const isCurrent = p.id === project.id;
+                    return (
+                      <li key={p.id} role="none">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            setShowProjectPicker(false);
+                            if (isCurrent) return;
+                            void switchProject(p.id)
+                              .then(() => pushToast("info", `Switched to "${p.title || "Untitled"}"`))
+                              .catch((err: unknown) => pushToast("error", `Switch failed: ${err instanceof Error ? err.message : String(err)}`));
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left transition-colors ${
+                            isCurrent ? "bg-primary/15 text-foreground" : "text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                          }`}
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate text-[13px] font-medium">{p.title || "Untitled"}</div>
+                            <div className="font-mono text-[10px] text-text-muted">
+                              {p.nodes.length} node{p.nodes.length === 1 ? "" : "s"}
+                            </div>
+                          </div>
+                          {isCurrent ? (
+                            <Check size={12} className="shrink-0 text-primary" aria-label="Current" />
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="mt-1 border-t border-border-subtle pt-1">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      const title = window.prompt("Project name?");
+                      if (!title) return;
+                      setShowProjectPicker(false);
+                      void createProject(title)
+                        .then(() => pushToast("success", `Created "${title}"`))
+                        .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+                    }}
+                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-[12px] font-medium text-primary hover:bg-primary/10"
+                  >
+                    <Plus size={12} aria-hidden="true" />
+                    New project
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Hidden file input shared by Toolbar (legacy direct upload) and the
           per-node "Upload" action bar entry (via imageNodeIdForUploadRef). */}

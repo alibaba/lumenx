@@ -25,6 +25,7 @@ interface AtelierStore {
     loadProjects: () => Promise<void>;
     ensureProject: () => Promise<AtelierProject>;
     createProject: (title?: string) => Promise<AtelierProject>;
+    switchProject: (projectId: string) => Promise<AtelierProject>;
     loadAgentTools: () => Promise<AtelierAgentToolSpec[]>;
     buildPlannerPackage: (payload: {
         user_message?: string;
@@ -203,6 +204,30 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             pendingAgentTurn: getPendingAgentTurn(project.agent_turns),
         }));
         return project;
+    },
+
+    switchProject: async (projectId: string) => {
+        const cached = get().projects.find((p) => p.id === projectId);
+        // Optimistic: flip currentProject to the cached snapshot if we have
+        // one, so the canvas re-renders immediately.
+        if (cached) {
+            set({
+                currentProject: cached,
+                selectedNodeId: null,
+                agentTurns: cached.agent_turns ?? [],
+                pendingAgentTurn: getPendingAgentTurn(cached.agent_turns),
+            });
+        }
+        // Then refetch authoritative state for fresh nodes/turns/policy.
+        const fresh = await api.getAtelierProject(projectId);
+        set((state) => ({
+            projects: replaceProject(state.projects, fresh),
+            currentProject: fresh,
+            selectedNodeId: null,
+            agentTurns: fresh.agent_turns ?? [],
+            pendingAgentTurn: getPendingAgentTurn(fresh.agent_turns),
+        }));
+        return fresh;
     },
 
     loadAgentTools: async () => {
