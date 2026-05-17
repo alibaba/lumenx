@@ -1490,8 +1490,47 @@ export function AtelierShellV3() {
     node: AtelierNode | null;
   } | null>(null);
 
-  // Sequence is a simple client-side list of {parentId, candidateId} for now.
+  // Sequence ordering is stored in localStorage keyed on project id so it
+  // survives refresh + back-nav. Server-side persistence (a dedicated
+  // backend field on AtelierProject) is the right v1.1 — for now this
+  // gives prod-grade durability without a schema change. Multi-device
+  // sync ships with the migration.
+  const sequenceStorageKey = (projectId: string) => `atelier-v3-seq:${projectId}`;
   const [sequence, setSequence] = useState<Array<{ parentId: string; candidateId: string }>>([]);
+  // Hydrate from localStorage when project id changes.
+  useEffect(() => {
+    if (!project?.id || typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(sequenceStorageKey(project.id));
+      if (!raw) {
+        setSequence([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // Defensively validate shape so a corrupted payload can't crash render.
+        const valid = parsed.filter(
+          (e): e is { parentId: string; candidateId: string } =>
+            !!e && typeof e === "object" && typeof (e as { parentId?: unknown }).parentId === "string" && typeof (e as { candidateId?: unknown }).candidateId === "string",
+        );
+        setSequence(valid);
+      } else {
+        setSequence([]);
+      }
+    } catch {
+      setSequence([]);
+    }
+  }, [project?.id]);
+  // Persist on every change. Coalesce to localStorage; the storage write is
+  // synchronous but cheap (<1ms for a few dozen entries).
+  useEffect(() => {
+    if (!project?.id || typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(sequenceStorageKey(project.id), JSON.stringify(sequence));
+    } catch {
+      /* quota exceeded / Safari private mode etc. — fall back to in-memory */
+    }
+  }, [project?.id, sequence]);
 
   // Resolve sequence entries against current project candidates so we can
   // render thumbnails + handle stale entries (parent or candidate gone).
