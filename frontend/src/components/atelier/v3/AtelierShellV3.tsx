@@ -619,6 +619,31 @@ export function AtelierShellV3() {
     candidateId?: string;
   } | null>(null);
   const setPreviewVideoUrl = (url: string | null) => setPreview(url ? { url } : null);
+
+  // Preview modal arrow-key nav: ← / → step through completed takes from
+  // the same parent. Wraps at edges (so the user can keep going). No-op
+  // when the preview was opened without parent/candidate context (sequence
+  // strip clicks, generic Play).
+  useEffect(() => {
+    if (!preview || !preview.parentId || !preview.candidateId) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const proj = useAtelierStore.getState().currentProject;
+      const parent = proj?.nodes.find((n) => n.id === preview.parentId);
+      if (!parent) return;
+      const cands = readCandidates(parent).filter((c) => c.video_url);
+      if (cands.length < 2) return;
+      e.preventDefault();
+      const idx = cands.findIndex((c) => c.id === preview.candidateId);
+      if (idx < 0) return;
+      const next = e.key === "ArrowRight"
+        ? cands[(idx + 1) % cands.length]
+        : cands[(idx - 1 + cands.length) % cands.length];
+      setPreview({ url: next.video_url!, parentId: parent.id, candidateId: next.id });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [preview]);
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editingIdeaBody, setEditingIdeaBody] = useState("");
 
@@ -840,7 +865,10 @@ export function AtelierShellV3() {
       // Shift+arrow extends the multi-selection (adds the new pick to extras).
       // Match Figma's pattern: pick the closest non-selected node whose center
       // is "primarily" in that direction relative to the current primary's
-      // center. Falls back to no-op when the canvas is empty.
+      // center. Falls back to no-op when the canvas is empty. Skipped when
+      // the preview modal is open with take context (it has its own ←/→
+      // handler for stepping between takes).
+      if (preview && preview.parentId && preview.candidateId && (e.key === "ArrowLeft" || e.key === "ArrowRight")) return;
       const arrowKey = (() => {
         switch (e.key) {
           case "ArrowRight": return "right" as const;
@@ -3243,6 +3271,7 @@ export function AtelierShellV3() {
                 ["⌘ / Ctrl + Wheel", "Zoom"],
                 ["← ↑ → ↓", "Navigate to nearest node"],
                 ["Shift + ← ↑ → ↓", "Extend selection"],
+                ["← / → in Preview", "Prev / next take"],
                 ["Drag image handle → draft", "Attach as reference"],
                 ["Right-click node", "Context menu"],
               ].map(([keys, label]) => (
