@@ -2022,13 +2022,62 @@ export function AtelierShellV3() {
           </div>
         ) : null}
 
-        {/* empty canvas hint (DESIGN.md §11.1) */}
+        {/* Empty-canvas welcome (DESIGN.md §11.1). Three clickable seed
+            cards beat a one-liner — production users land here cold and
+            need an obvious first action. */}
         {projectIsEmpty ? (
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
-            <div className="font-display text-[15px] text-text-muted">
-              Drop a seed. Press <span className="font-mono text-text-secondary">V</span> for video,
-              {" "}<span className="font-mono text-text-secondary">I</span> for image,
-              {" "}<span className="font-mono text-text-secondary">T</span> for idea.
+            <div className="pointer-events-auto flex flex-col items-center gap-6 text-center animate-atelier-node-in motion-reduce:animate-none">
+              <div className="space-y-1">
+                <div className="font-display text-[20px] font-semibold text-foreground">Drop a seed</div>
+                <div className="text-[13px] text-text-secondary">
+                  Pick a starting point. Everything you make connects from here.
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { kind: "video", key: "V", title: "Video Node", desc: "Compose with a model + refs.", primary: true },
+                  { kind: "image", key: "I", title: "Image Node", desc: "Upload or generate a reference.", primary: false },
+                  { kind: "idea",  key: "T", title: "Idea Note",  desc: "Capture a beat or a vibe.",     primary: false },
+                ] as const).map((card) => (
+                  <button
+                    key={card.kind}
+                    type="button"
+                    onClick={() => {
+                      if (card.kind === "video") void handleCreateVideo();
+                      else if (card.kind === "image") {
+                        void createEmptyImageDraft().catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+                      } else {
+                        void createIdeaNode()
+                          .then((node) => {
+                            setEditingIdeaId(node.id);
+                            setEditingIdeaBody((node.data as { body?: string })?.body ?? "");
+                          })
+                          .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+                      }
+                    }}
+                    className={`group flex w-[180px] flex-col items-start gap-1 rounded-xl border bg-elevated p-3 text-left shadow-2xl shadow-black/30 transition-all hover:-translate-y-0.5 ${
+                      card.primary
+                        ? "border-primary/40 hover:border-primary/70 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.4)]"
+                        : "border-glass-border hover:border-primary/40"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <span className={`text-[13px] font-semibold ${card.primary ? "text-primary" : "text-foreground"}`}>
+                        {card.title}
+                      </span>
+                      <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-text-muted">
+                        {card.key}
+                      </kbd>
+                    </div>
+                    <span className="text-[11px] text-text-muted leading-snug">{card.desc}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="text-[11px] text-text-muted">
+                Press <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">?</kbd> for shortcuts ·
+                Drop image files anywhere on the canvas
+              </div>
             </div>
           </div>
         ) : null}
