@@ -2297,13 +2297,63 @@ export function AtelierShellV3() {
         onToggleMinimap={() => setMinimapOpen((o) => !o)}
       />
 
-      {/* minimap floating widget */}
-      {minimapOpen && project ? (
-        <Minimap
-          nodes={project.nodes.map((n) => ({ x: n.x, y: n.y }))}
-          viewport={{ x: 0, y: 0, w: 1440, h: 900 }}
-        />
-      ) : null}
+      {/* minimap floating widget — viewport rect is the actual visible
+          world rect (derived from pan + zoom + main element size); world
+          bounds expand to fit all nodes + a 400px margin so nodes never
+          fall outside the minimap on small/large canvases. */}
+      {minimapOpen && project ? (() => {
+        const rect = mainRef.current?.getBoundingClientRect();
+        const screenW = rect?.width ?? 1440;
+        const screenH = rect?.height ?? 900;
+        // Visible world rect: top-left in world = (-pan)/zoom, size = screen/zoom.
+        const visibleX = -panX / zoomFactor;
+        const visibleY = -panY / zoomFactor;
+        const visibleW = screenW / zoomFactor;
+        const visibleH = screenH / zoomFactor;
+        // World bounds — encompass all nodes + the visible viewport so the
+        // user always sees their current view inside the minimap, even if
+        // they panned out into empty space.
+        let minX = visibleX, minY = visibleY;
+        let maxX = visibleX + visibleW, maxY = visibleY + visibleH;
+        for (const n of project.nodes) {
+          minX = Math.min(minX, n.x);
+          minY = Math.min(minY, n.y);
+          maxX = Math.max(maxX, n.x + (n.width || 240));
+          maxY = Math.max(maxY, n.y + (n.height || 110));
+        }
+        const PAD = 400;
+        const worldX = minX - PAD;
+        const worldY = minY - PAD;
+        const worldWidth = (maxX - minX) + PAD * 2;
+        const worldHeight = (maxY - minY) + PAD * 2;
+        return (
+          <Minimap
+            nodes={project.nodes.map((n) => ({
+              id: n.id,
+              x: n.x - worldX,
+              y: n.y - worldY,
+            }))}
+            viewport={{
+              x: visibleX - worldX,
+              y: visibleY - worldY,
+              w: visibleW,
+              h: visibleH,
+            }}
+            worldBounds={{ width: worldWidth, height: worldHeight }}
+            selectedIds={allSelectedIds}
+            onRecenter={(wx, wy) => {
+              // wx/wy are in *minimap-translated* world coords (already
+              // offset by worldX/Y because we passed translated nodes).
+              // Add back the offset to land in real world coords, then
+              // recenter screen on that world point.
+              const targetWorldX = wx + worldX;
+              const targetWorldY = wy + worldY;
+              setPanX(screenW / 2 - targetWorldX * zoomFactor);
+              setPanY(screenH / 2 - targetWorldY * zoomFactor);
+            }}
+          />
+        );
+      })() : null}
 
       {/* sequence strip (bottom, between left edge and right rail) */}
       <div
