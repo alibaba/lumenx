@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, CloudUpload, FolderOpen, Link2, Play, Plus, X } from "lucide-react";
+import { Check, ChevronDown, CloudUpload, FolderOpen, Link2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -1935,7 +1935,7 @@ export function AtelierShellV3() {
                   {projects.map((p) => {
                     const isCurrent = p.id === project.id;
                     return (
-                      <li key={p.id} role="none">
+                      <li key={p.id} role="none" className="group/proj relative">
                         <button
                           type="button"
                           role="menuitem"
@@ -1960,6 +1960,54 @@ export function AtelierShellV3() {
                             <Check size={12} className="shrink-0 text-primary" aria-label="Current" />
                           ) : null}
                         </button>
+                        {/* Hover-revealed rename + delete affordances. Only
+                            actionable on the current project (renaming a
+                            non-current project would surprise — we don't
+                            switch there, just rename). For non-current we
+                            still show but they'll switchProject first. */}
+                        <div className="pointer-events-none absolute right-1 top-1 hidden gap-0.5 group-hover/proj:flex">
+                          <button
+                            type="button"
+                            aria-label={`Rename ${p.title || "Untitled"}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const next = window.prompt("Rename project:", p.title || "");
+                              if (!next || next === p.title) return;
+                              void api
+                                .updateAtelierProject(p.id, { title: next })
+                                .then(async () => {
+                                  await useAtelierStore.getState().loadProjects();
+                                  pushToast("success", `Renamed to "${next}"`);
+                                })
+                                .catch((err: unknown) => pushToast("error", `Rename failed: ${err instanceof Error ? err.message : String(err)}`));
+                            }}
+                            className="pointer-events-auto rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
+                          >
+                            <Pencil size={11} />
+                          </button>
+                          {projects.length > 1 ? (
+                            <button
+                              type="button"
+                              aria-label={`Delete ${p.title || "Untitled"}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const ok = window.confirm(`Delete "${p.title || "Untitled"}" and all its nodes?\nThis cannot be undone.`);
+                                if (!ok) return;
+                                setShowProjectPicker(false);
+                                void api
+                                  .deleteAtelierProject(p.id)
+                                  .then(async () => {
+                                    await useAtelierStore.getState().loadProjects();
+                                    pushToast("info", `Deleted "${p.title || "Untitled"}"`);
+                                  })
+                                  .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
+                              }}
+                              className="pointer-events-auto rounded p-1 text-text-muted hover:bg-red-400/20 hover:text-red-200"
+                            >
+                              <Trash2 size={11} />
+                            </button>
+                          ) : null}
+                        </div>
                       </li>
                     );
                   })}
