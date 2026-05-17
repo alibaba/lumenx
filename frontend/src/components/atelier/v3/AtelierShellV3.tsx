@@ -2939,8 +2939,10 @@ export function AtelierShellV3() {
           one-line facts below the node so the user has context without a
           dedicated side panel. Drafts skip this because the Composer
           already exposes model + refs. Multi-selection skips so the
-          batch chip can claim that space. */}
-      {selectedNode && !isMultiSelect && !isDraftVideo(selectedNode) && !parseCandidateNodeId(selectedNode.id) ? (() => {
+          batch chip can claim that space. Empty image drafts skip too
+          because their actionable card already speaks for itself. */}
+      {selectedNode && !isMultiSelect && !isDraftVideo(selectedNode) && !parseCandidateNodeId(selectedNode.id)
+        && !(selectedNode.type === "image" && (selectedNode.media_urls?.length ?? 0) === 0) ? (() => {
         const facts: Array<{ label: string; value: string }> = [];
         const node = selectedNode;
         if (node.type === "image") {
