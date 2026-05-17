@@ -32,21 +32,41 @@ export function Minimap({
   selectedIds,
   onRecenter,
 }: MinimapProps) {
-  const handleClick: React.MouseEventHandler<HTMLDivElement> = (event) => {
+  // Click + drag both recenter the canvas — drag just keeps firing as the
+  // pointer moves, so the user can scrub through the world by holding.
+  const draggingRef = React.useRef(false);
+  const fireRecenter = (clientX: number, clientY: number, rect: DOMRect) => {
     if (!onRecenter) return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    const fx = (event.clientX - rect.left) / rect.width;
-    const fy = (event.clientY - rect.top) / rect.height;
+    const fx = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const fy = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
     onRecenter(fx * worldBounds.width, fy * worldBounds.height);
+  };
+  const handlePointerDown: React.PointerEventHandler<HTMLDivElement> = (event) => {
+    if (!onRecenter) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    draggingRef.current = true;
+    fireRecenter(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
+  };
+  const handlePointerMove: React.PointerEventHandler<HTMLDivElement> = (event) => {
+    if (!draggingRef.current) return;
+    fireRecenter(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
+  };
+  const handlePointerUp: React.PointerEventHandler<HTMLDivElement> = (event) => {
+    draggingRef.current = false;
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* ignore */ }
   };
   return (
     <div
-      className={`absolute bottom-16 left-4 z-30 h-[132px] w-[200px] overflow-hidden rounded-md border border-glass-border bg-elevated/85 backdrop-blur-md ${
+      className={`absolute bottom-16 left-4 z-30 h-[132px] w-[200px] overflow-hidden rounded-md border border-glass-border bg-elevated/85 backdrop-blur-md select-none ${
         onRecenter ? "cursor-crosshair" : ""
       }`}
-      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       role={onRecenter ? "button" : undefined}
-      aria-label={onRecenter ? "Recenter canvas — click any point" : undefined}
+      aria-label={onRecenter ? "Drag to pan canvas" : undefined}
     >
       <div className="absolute inset-0 dotted-canvas opacity-40" />
       {nodes.map((n, i) => {
