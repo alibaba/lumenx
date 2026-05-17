@@ -915,6 +915,32 @@ export function AtelierShellV3() {
           default: return null;
         }
       })();
+      // Cmd/Ctrl + Arrow: nudge every selected real node by 1px (or 8px
+      // with Shift). Tiny precision tool for aligning nodes by hand
+      // without dragging. Goes through the same move-history pipeline as
+      // a real drag so undo/redo restore atomically.
+      if (arrowKey && (e.metaKey || e.ctrlKey)) {
+        const proj = useAtelierStore.getState().currentProject;
+        if (!proj || allSelectedIds.size === 0) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 8 : 1;
+        const dx = arrowKey === "right" ? step : arrowKey === "left" ? -step : 0;
+        const dy = arrowKey === "down" ? step : arrowKey === "up" ? -step : 0;
+        const store = useAtelierStore.getState();
+        const entries: MoveEntry[] = [];
+        const ids = Array.from(allSelectedIds).filter((id) => !parseCandidateNodeId(id));
+        for (const id of ids) {
+          const n = proj.nodes.find((x) => x.id === id);
+          if (!n) continue;
+          const nextX = n.x + dx;
+          const nextY = n.y + dy;
+          entries.push({ nodeId: n.id, prevX: n.x, prevY: n.y, nextX, nextY });
+          store.moveNodeLocal(n.id, nextX, nextY);
+          void store.commitNodePosition(n.id, nextX, nextY).catch(() => {});
+        }
+        if (entries.length > 0) pushHistory({ kind: "move", entries });
+        return;
+      }
       if (arrowKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const proj = useAtelierStore.getState().currentProject;
         const nodes = proj?.nodes ?? [];
@@ -3397,6 +3423,8 @@ export function AtelierShellV3() {
                 ["← ↑ → ↓", "Navigate to nearest node"],
                 ["Shift + ← ↑ → ↓", "Extend selection"],
                 ["← / → in Preview", "Prev / next take"],
+                ["⌘ / Ctrl + ← ↑ → ↓", "Nudge selected by 1px"],
+                ["⌘ + Shift + ← ↑ → ↓", "Nudge selected by 8px"],
                 ["Drag image handle → draft", "Attach as reference"],
                 ["Right-click node", "Context menu"],
                 ["Double-click empty canvas", "Quick-add video draft"],
