@@ -2382,12 +2382,13 @@ export function AtelierShellV3() {
               <div
                 role="menu"
                 aria-label="Atelier projects"
-                className="absolute left-0 top-9 z-[35] w-[280px] rounded-md border border-glass-border bg-elevated p-1 shadow-2xl shadow-black/50 backdrop-blur-md"
+                className="absolute left-0 top-10 z-[35] w-[300px] rounded-md border border-white/8 bg-[#141416]/96 p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
               >
-                <div className="px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-text-muted">
-                  Projects · {projects.length}
+                <div className="flex items-center justify-between px-2 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/80">
+                  <span>Projects</span>
+                  <span className="text-text-muted/55">{projects.length}</span>
                 </div>
-                <ul className="max-h-[260px] overflow-y-auto">
+                <ul className="max-h-[280px] overflow-y-auto">
                   {projects.map((p) => {
                     const isCurrent = p.id === project.id;
                     return (
@@ -2402,18 +2403,24 @@ export function AtelierShellV3() {
                               .then(() => pushToast("info", `Switched to "${p.title || "Untitled"}"`))
                               .catch((err: unknown) => pushToast("error", `Switch failed: ${err instanceof Error ? err.message : String(err)}`));
                           }}
-                          className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left transition-colors ${
-                            isCurrent ? "bg-primary/15 text-foreground" : "text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                          className={`flex w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left transition-colors ${
+                            isCurrent
+                              ? "bg-primary/[0.08] text-foreground"
+                              : "text-text-secondary hover:bg-white/[0.04] hover:text-foreground"
                           }`}
                         >
                           <div className="min-w-0">
-                            <div className="truncate text-[13px] font-medium">{p.title || "Untitled"}</div>
-                            <div className="font-mono text-[10px] text-text-muted">
+                            <div className="truncate font-display text-[13px] font-medium tracking-[-0.005em]">
+                              {p.title || "Untitled"}
+                            </div>
+                            <div className="mt-[2px] font-mono text-[9px] uppercase tracking-[0.18em] text-text-muted/85">
                               {p.nodes.length} node{p.nodes.length === 1 ? "" : "s"}
                             </div>
                           </div>
                           {isCurrent ? (
-                            <Check size={12} className="shrink-0 text-primary" aria-label="Current" />
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-[2px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-primary/95">
+                              <Check size={9} aria-hidden="true" /> Current
+                            </span>
                           ) : null}
                         </button>
                         {/* Hover-revealed rename + delete affordances. Only
@@ -2468,7 +2475,7 @@ export function AtelierShellV3() {
                     );
                   })}
                 </ul>
-                <div className="mt-1 border-t border-border-subtle pt-1">
+                <div className="mt-1 border-t border-white/6 pt-1">
                   <button
                     type="button"
                     role="menuitem"
@@ -2480,9 +2487,9 @@ export function AtelierShellV3() {
                         .then(() => pushToast("success", `Created "${title}"`))
                         .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
                     }}
-                    className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-[12px] font-medium text-primary hover:bg-primary/10"
+                    className="flex w-full items-center gap-1.5 rounded px-2.5 py-2 text-left font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/10"
                   >
-                    <Plus size={12} aria-hidden="true" />
+                    <Plus size={11} aria-hidden="true" />
                     New project
                   </button>
                 </div>
@@ -2555,18 +2562,23 @@ export function AtelierShellV3() {
             need an obvious first action. */}
         {projectIsEmpty ? (
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
-            <div className="pointer-events-auto flex flex-col items-center gap-6 text-center animate-atelier-node-in motion-reduce:animate-none">
-              <div className="space-y-1">
-                <div className="font-display text-[20px] font-semibold text-foreground">Drop a seed</div>
-                <div className="text-[13px] text-text-secondary">
+            <div className="pointer-events-auto flex flex-col items-center gap-7 text-center animate-atelier-node-in motion-reduce:animate-none">
+              <div className="space-y-2.5">
+                <span className="font-mono text-[10px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
+                  Atelier · v0.3
+                </span>
+                <div className="font-display text-[28px] font-medium leading-[1.05] tracking-[-0.012em] text-foreground">
+                  Drop a seed.
+                </div>
+                <div className="max-w-[400px] text-[13px] leading-[1.55] text-text-secondary/95">
                   Pick a starting point. Everything you make connects from here.
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2.5">
                 {([
-                  { kind: "video", key: "V", title: "Video Node", desc: "Compose with a model + refs.", primary: true },
-                  { kind: "image", key: "I", title: "Image Node", desc: "Upload or generate a reference.", primary: false },
-                  { kind: "idea",  key: "T", title: "Idea Note",  desc: "Capture a beat or a vibe.",     primary: false },
+                  { kind: "video", key: "V", title: "Video", desc: "Compose with a model + refs", primary: true },
+                  { kind: "image", key: "I", title: "Image", desc: "Upload or generate a reference", primary: false },
+                  { kind: "idea",  key: "T", title: "Idea",  desc: "Capture a beat or a vibe",     primary: false },
                 ] as const).map((card) => (
                   <button
                     key={card.kind}
@@ -2584,27 +2596,33 @@ export function AtelierShellV3() {
                           .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
                       }
                     }}
-                    className={`group flex w-[180px] flex-col items-start gap-1 rounded-xl border bg-elevated p-3 text-left shadow-2xl shadow-black/30 transition-all hover:-translate-y-0.5 ${
+                    className={`group flex w-[176px] flex-col items-start gap-1.5 overflow-hidden rounded-lg border bg-[#141416] p-3.5 text-left shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-all hover:-translate-y-[1px] ${
                       card.primary
-                        ? "border-primary/40 hover:border-primary/70 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.4)]"
-                        : "border-glass-border hover:border-primary/40"
+                        ? "border-primary/35 hover:border-primary/55 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_18px_36px_-18px_rgba(100,108,255,0.4)]"
+                        : "border-white/8 hover:border-primary/35"
                     }`}
                   >
-                    <div className="flex items-center justify-between w-full">
-                      <span className={`text-[13px] font-semibold ${card.primary ? "text-primary" : "text-foreground"}`}>
+                    <div className="flex w-full items-center justify-between">
+                      <span className={`font-mono text-[10px] font-medium uppercase tracking-[0.22em] ${card.primary ? "text-primary" : "text-text-muted/85"}`}>
                         {card.title}
                       </span>
-                      <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-text-muted">
+                      <kbd className={`rounded-[3px] border px-1 py-[1px] font-mono text-[10px] tracking-tight ${
+                        card.primary
+                          ? "border-primary/30 bg-primary/10 text-primary"
+                          : "border-white/8 bg-black/35 text-text-muted/85"
+                      }`}>
                         {card.key}
                       </kbd>
                     </div>
-                    <span className="text-[11px] text-text-muted leading-snug">{card.desc}</span>
+                    <span className="text-[12px] leading-[1.4] text-text-secondary/90">{card.desc}</span>
                   </button>
                 ))}
               </div>
-              <div className="text-[11px] text-text-muted">
-                Press <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">?</kbd> for shortcuts ·
-                Drop image files anywhere on the canvas
+              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/75">
+                <kbd className="rounded-[3px] border border-primary/30 bg-primary/10 px-1.5 py-[1px] text-[10px] tracking-tight text-primary">?</kbd>
+                <span>shortcuts</span>
+                <span aria-hidden="true" className="h-3 w-px bg-white/8" />
+                <span>drop image files anywhere</span>
               </div>
             </div>
           </div>
@@ -2857,20 +2875,24 @@ export function AtelierShellV3() {
           <div
             role="toolbar"
             aria-label={`${allSelectedIds.size} nodes selected`}
-            className="pointer-events-auto absolute z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-glass-border bg-elevated px-2.5 py-1 text-[12px] shadow-2xl shadow-black/40 backdrop-blur-md"
+            className="pointer-events-auto absolute z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/96 px-3 py-[6px] text-[12px] shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
             style={{ left: screenCx, top: Math.max(8, screenY) }}
           >
-            <span className="font-mono text-text-secondary">{allSelectedIds.size} selected</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-text-muted/85">
+              <span className="text-foreground/95">{allSelectedIds.size}</span>{" "}
+              <span>selected</span>
+            </span>
+            <span aria-hidden="true" className="h-3.5 w-px bg-white/8" />
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowAlignMenu((v) => !v)}
                 aria-expanded={showAlignMenu}
                 aria-haspopup="menu"
-                className="inline-flex items-center gap-1 rounded-full bg-glass px-2 py-0.5 font-medium text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
               >
                 Align
-                <ChevronDown size={10} aria-hidden="true" />
+                <ChevronDown size={9} aria-hidden="true" />
               </button>
               {showAlignMenu ? (
                 <>
@@ -2882,8 +2904,11 @@ export function AtelierShellV3() {
                   <ul
                     role="menu"
                     aria-label="Align selection"
-                    className="absolute left-0 top-7 z-[32] w-[180px] rounded-md border border-glass-border bg-elevated p-1 shadow-2xl shadow-black/50 backdrop-blur-md"
+                    className="absolute left-0 top-8 z-[32] w-[200px] rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
                   >
+                    <div className="px-2 pb-1 pt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted/80">
+                      Align
+                    </div>
                     {([
                       { op: "left", label: "Align left" },
                       { op: "center-h", label: "Align center horizontal" },
@@ -2897,14 +2922,14 @@ export function AtelierShellV3() {
                       { op: "distribute-v", label: "Distribute vertically" },
                     ] as const).map((it, i) =>
                       it.op === "divider" ? (
-                        <li key={`d-${i}`} role="none" className="my-1 mx-2 h-px bg-border-subtle" />
+                        <li key={`d-${i}`} role="none" className="my-1 mx-2 h-px bg-white/6" />
                       ) : (
                         <li key={it.op} role="none">
                           <button
                             type="button"
                             role="menuitem"
                             onClick={() => applyAlign(it.op)}
-                            className="block w-full rounded px-2.5 py-1.5 text-left text-[12px] text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                            className="block w-full rounded px-2.5 py-[6px] text-left text-[12px] text-text-secondary transition-colors hover:bg-white/[0.05] hover:text-foreground"
                           >
                             {it.label}
                           </button>
@@ -2918,7 +2943,7 @@ export function AtelierShellV3() {
             <button
               type="button"
               onClick={() => void deleteSelection()}
-              className="rounded-full bg-red-400/15 px-2 py-0.5 font-medium text-red-200 hover:bg-red-400/25"
+              className="rounded-full bg-red-400/12 px-2 py-[3px] font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-red-200/95 transition-colors hover:bg-red-400/22"
               aria-label="Delete selected nodes"
             >
               Delete
@@ -2929,7 +2954,7 @@ export function AtelierShellV3() {
                 setExtraSelectedIds(new Set());
                 selectNode(null);
               }}
-              className="rounded-full px-2 py-0.5 text-text-muted hover:bg-hover-bg hover:text-foreground"
+              className="rounded-full px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/85 transition-colors hover:bg-hover-bg hover:text-foreground"
               aria-label="Clear selection"
             >
               Clear
@@ -3524,10 +3549,10 @@ export function AtelierShellV3() {
               role="menu"
               aria-label="Node context menu"
               onContextMenu={(e) => e.preventDefault()}
-              className="fixed z-[56] min-w-[180px] rounded-md border border-glass-border bg-elevated p-1 text-[12px] shadow-2xl shadow-black/50 backdrop-blur-md"
+              className="fixed z-[56] min-w-[200px] rounded-md border border-white/8 bg-[#141416]/96 p-1 text-[12px] shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
               style={{
-                left: Math.min(contextMenu.screenX, window.innerWidth - 200),
-                top: Math.min(contextMenu.screenY, window.innerHeight - 200),
+                left: Math.min(contextMenu.screenX, window.innerWidth - 220),
+                top: Math.min(contextMenu.screenY, window.innerHeight - 220),
               }}
             >
               {items.map((item) => (
@@ -3537,12 +3562,12 @@ export function AtelierShellV3() {
                     role="menuitem"
                     disabled={item.disabled}
                     onClick={item.disabled ? undefined : item.onClick}
-                    className={`block w-full rounded px-2.5 py-1.5 text-left transition-colors ${
+                    className={`block w-full rounded px-2.5 py-[6px] text-left transition-colors ${
                       item.disabled
-                        ? "text-text-muted/60 cursor-not-allowed"
+                        ? "cursor-not-allowed text-text-muted/55"
                         : item.danger
-                        ? "text-red-200 hover:bg-red-400/15"
-                        : "text-foreground hover:bg-hover-bg"
+                        ? "text-red-200 hover:bg-red-400/12"
+                        : "text-foreground/95 hover:bg-white/[0.05]"
                     }`}
                   >
                     {item.label}
@@ -3565,60 +3590,71 @@ export function AtelierShellV3() {
         }
         return (
           <div
-            className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm"
+            className="fixed inset-0 z-50 grid place-items-center bg-black/75 backdrop-blur-md"
             onClick={() => setUseAsRefSourceId(null)}
             role="dialog"
             aria-label="Pick a target draft to attach this reference"
           >
             <div
-              className="w-[420px] rounded-xl border border-glass-border bg-elevated p-3 shadow-2xl shadow-black/40"
+              className="w-[440px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_32px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="mb-2 flex items-center justify-between">
-                <div className="font-display text-sm font-semibold text-foreground">Use as reference</div>
-                <button onClick={() => setUseAsRefSourceId(null)} className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground" aria-label="Close">
-                  <X size={14} />
-                </button>
-              </div>
-              <div className="mb-3 flex items-center gap-2 rounded-md border border-border-subtle bg-glass p-2">
-                {source.media_urls?.[0] ? (
-                  <img src={getAssetUrl(source.media_urls[0])} alt="" className="h-10 w-10 rounded object-cover" />
-                ) : null}
-                <div className="text-[12px] text-text-secondary truncate">
-                  Attach <span className="text-foreground font-medium">{source.title || "this image"}</span> to a draft as reference
+              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
+              <div className="px-4 pb-3 pt-3.5">
+                <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-baseline gap-2.5">
+                    <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-primary/85">Reference</span>
+                    <span className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">Attach to a draft</span>
+                  </div>
+                  <button onClick={() => setUseAsRefSourceId(null)} className="inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground" aria-label="Close">
+                    <X size={13} aria-hidden="true" />
+                  </button>
                 </div>
-              </div>
-              {drafts.length === 0 ? (
-                <div className="rounded-md border border-dashed border-glass-border bg-glass p-4 text-center text-[12px] text-text-muted">
-                  No draft video nodes yet. Create one (press <span className="font-mono text-text-secondary">V</span>) and try again.
+                <div className="mb-3 flex items-center gap-2.5 rounded-md border border-white/6 bg-black/25 p-2">
+                  {source.media_urls?.[0] ? (
+                    <img src={getAssetUrl(source.media_urls[0])} alt="" className="h-10 w-10 rounded-[5px] border border-white/8 object-cover" />
+                  ) : null}
+                  <div className="min-w-0 text-[12px] text-text-secondary">
+                    <div className="truncate font-display text-[13px] font-medium text-foreground/95">{source.title || "Untitled image"}</div>
+                    <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted/80">Source</div>
+                  </div>
                 </div>
-              ) : (
-                <ul className="max-h-[280px] space-y-1 overflow-y-auto">
-                  {drafts.map((d) => {
-                    const intent = (d.data as { intent?: string })?.intent ?? d.title ?? "Untitled draft";
-                    const model = (d.data as { model?: string })?.model ?? "";
-                    return (
-                      <li key={d.id}>
-                        <button
-                          onClick={() => {
-                            setUseAsRefSourceId(null);
-                            void useAtelierStore.getState().attachReferenceNode(d.id, source.id)
-                              .then(() => pushToast("success", `Attached to ${intent}`))
-                              .catch((err: unknown) => pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`));
-                          }}
-                          className="flex w-full items-center justify-between gap-2 rounded-md border border-glass-border bg-glass px-3 py-2 text-left hover:bg-hover-bg"
-                        >
-                          <div className="min-w-0">
-                            <div className="truncate text-[13px] font-medium text-foreground">{intent}</div>
-                            <div className="font-mono text-[10px] text-text-muted">{model}</div>
-                          </div>
-                          <span className="rounded bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">attach</span>
+                {drafts.length === 0 ? (
+                  <div className="rounded-md border border-dashed border-white/10 bg-black/20 p-4 text-center text-[12px] text-text-muted/85">
+                    No draft video nodes yet. Press{" "}
+                    <kbd className="rounded border border-white/8 bg-black/35 px-1 py-[1px] font-mono text-[10px] text-foreground/95">V</kbd>{" "}
+                    to create one.
+                  </div>
+                ) : (
+                  <ul className="max-h-[300px] space-y-[3px] overflow-y-auto">
+                    {drafts.map((d) => {
+                      const intent = (d.data as { intent?: string })?.intent ?? d.title ?? "Untitled draft";
+                      const model = (d.data as { model?: string })?.model ?? "";
+                      return (
+                        <li key={d.id}>
+                          <button
+                            onClick={() => {
+                              setUseAsRefSourceId(null);
+                              void useAtelierStore.getState().attachReferenceNode(d.id, source.id)
+                                .then(() => pushToast("success", `Attached to ${intent}`))
+                                .catch((err: unknown) => pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`));
+                            }}
+                            className="group flex w-full items-center justify-between gap-2 rounded-md border border-white/6 bg-black/20 px-3 py-2 text-left transition-colors hover:border-primary/35 hover:bg-primary/[0.04]"
+                          >
+                            <div className="min-w-0">
+                              <div className="truncate font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">{intent}</div>
+                              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-text-muted/85">{model}</div>
+                            </div>
+                            <span className="rounded-full bg-primary/12 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-primary/95 transition-colors group-hover:bg-primary/20">
+                              Attach
+                            </span>
                         </button>
                       </li>
                     );
                   })}
                 </ul>
               )}
+              </div>
             </div>
           </div>
         );
@@ -3640,27 +3676,31 @@ export function AtelierShellV3() {
           parent && cand && (parent.data as { selected_candidate_id?: string })?.selected_candidate_id === cand.id;
         return (
           <div
-            className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 z-50 grid place-items-center bg-black/85 backdrop-blur-md"
             onClick={close}
             role="dialog"
             aria-label="Video preview"
           >
-            <div className="relative max-h-[88vh] max-w-[80vw] overflow-hidden rounded-xl border border-glass-border bg-elevated shadow-2xl shadow-black/40" onClick={(e) => e.stopPropagation()}>
+            <div className="relative max-h-[88vh] max-w-[80vw] overflow-hidden rounded-[14px] border border-white/8 bg-[#0c0c10] shadow-[0_36px_70px_-30px_rgba(0,0,0,0.95),0_10px_24px_-8px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)]" onClick={(e) => e.stopPropagation()}>
               <video
                 src={getAssetUrl(ctx.url)}
                 controls
                 autoPlay
-                className="block max-h-[80vh] max-w-[80vw]"
+                className="block max-h-[80vh] max-w-[80vw] bg-black"
               />
               {isTake && parent && cand ? (
-                <div className="flex items-center justify-between gap-2 border-t border-border-subtle bg-elevated px-3 py-2">
-                  <div className="min-w-0 text-[11px]">
-                    <div className="truncate font-medium text-foreground">{parent.title}</div>
-                    <div className="font-mono text-[10px] text-text-muted">
-                      {cand.model} · {cand.label || cand.id.slice(0, 8)}
+                <div className="flex items-center justify-between gap-3 border-t border-white/6 px-4 py-2.5">
+                  <div className="min-w-0">
+                    <div className="truncate font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">
+                      {parent.title}
+                    </div>
+                    <div className="mt-[2px] flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em]">
+                      <span className="text-primary/85">{cand.model}</span>
+                      <span aria-hidden="true" className="text-text-muted/50">·</span>
+                      <span className="text-text-muted/85">{cand.label || cand.id.slice(0, 8)}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[11px]">
+                  <div className="flex items-center gap-1">
                     {!isSelectedTake ? (
                       <button
                         type="button"
@@ -3670,12 +3710,14 @@ export function AtelierShellV3() {
                             .catch((err: unknown) => pushToast("error", `Select failed: ${err instanceof Error ? err.message : String(err)}`));
                           close();
                         }}
-                        className="rounded-full bg-primary px-2 py-0.5 font-medium text-white hover:bg-primary/90"
+                        className="rounded-full bg-primary px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_12px_-4px_rgba(100,108,255,0.5)] transition-colors hover:bg-primary/92"
                       >
                         Select as take
                       </button>
                     ) : (
-                      <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 font-medium text-emerald-200">Selected</span>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/12 px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-emerald-200/95">
+                        <Check size={10} aria-hidden="true" /> Selected
+                      </span>
                     )}
                     <button
                       type="button"
@@ -3685,7 +3727,7 @@ export function AtelierShellV3() {
                           .catch((err: unknown) => pushToast("error", `Branch failed: ${err instanceof Error ? err.message : String(err)}`));
                         close();
                       }}
-                      className="rounded-full bg-glass px-2 py-0.5 text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                      className="rounded-full px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
                     >
                       Branch
                     </button>
@@ -3698,7 +3740,7 @@ export function AtelierShellV3() {
                         });
                         pushToast("success", "Added to Sequence");
                       }}
-                      className="rounded-full bg-glass px-2 py-0.5 text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                      className="rounded-full px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
                     >
                       + Sequence
                     </button>
@@ -3710,7 +3752,7 @@ export function AtelierShellV3() {
                           .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
                         close();
                       }}
-                      className="rounded-full bg-red-400/15 px-2 py-0.5 text-red-200 hover:bg-red-400/25"
+                      className="rounded-full bg-red-400/12 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-red-200/95 transition-colors hover:bg-red-400/22"
                     >
                       Delete
                     </button>
@@ -3719,7 +3761,7 @@ export function AtelierShellV3() {
               ) : null}
               <button
                 onClick={close}
-                className="absolute right-2 top-2 rounded-full bg-black/55 p-1.5 text-white/90 hover:bg-black/75"
+                className="absolute right-2.5 top-2.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur transition-colors hover:bg-black/75"
                 aria-label="Close preview"
               >
                 <X size={14} />
@@ -3778,56 +3820,64 @@ export function AtelierShellV3() {
           <div
             role="status"
             aria-live="polite"
-            className="absolute bottom-[120px] left-4 z-30 max-w-[300px] animate-atelier-node-in motion-reduce:animate-none rounded-xl border border-primary/40 bg-elevated px-3.5 py-3 shadow-2xl shadow-black/40 backdrop-blur-md"
+            className="absolute bottom-[120px] left-4 z-30 max-w-[300px] overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-node-in motion-reduce:animate-none"
           >
-            <div className="mb-1.5 flex items-center justify-between gap-2">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-primary/85">{step.tag}</span>
-              <button
-                type="button"
-                onClick={dismissOnboarding}
-                aria-label="Dismiss tour"
-                className="rounded p-0.5 text-text-muted hover:bg-hover-bg hover:text-foreground"
-              >
-                <X size={11} />
-              </button>
-            </div>
-            <div className="mb-1 text-[13px] font-semibold text-foreground">{step.title}</div>
-            <div className="text-[12px] leading-relaxed text-text-secondary">{step.body}</div>
-            {/* Progress dots */}
-            <div className="mt-3 flex items-center justify-between">
-              <div className="flex items-center gap-1">
-                {steps.map((_, i) => (
-                  <span
-                    key={i}
-                    aria-hidden="true"
-                    className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                      i === tourStep ? "bg-primary" : i < tourStep ? "bg-primary/40" : "bg-white/15"
-                    }`}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5">
+            {/* Top accent rule — primary hairline gradient signs the card as
+                'instructional', not generic info card */}
+            <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
+            <div className="px-4 pb-3 pt-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-primary/85">
+                  {step.tag.replace(/Step (\d+) of (\d+)/, "Step $1 / $2")}
+                </span>
                 <button
                   type="button"
                   onClick={dismissOnboarding}
-                  className="rounded-full px-2 py-0.5 text-[11px] text-text-muted hover:bg-hover-bg hover:text-foreground"
+                  aria-label="Dismiss tour"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
                 >
-                  Skip
+                  <X size={11} aria-hidden="true" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isLast) {
-                      setShowHelp(true);
-                      dismissOnboarding();
-                    } else {
-                      advanceOnboarding();
-                    }
-                  }}
-                  className="rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-primary/90"
-                >
-                  {isLast ? "View shortcuts" : "Next"}
-                </button>
+              </div>
+              <div className="mb-1 font-display text-[14px] font-medium tracking-[-0.01em] text-foreground">
+                {step.title}
+              </div>
+              <div className="text-[12px] leading-[1.55] text-text-secondary/95">{step.body}</div>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/6 pt-2.5">
+                <div className="flex items-center gap-1">
+                  {steps.map((_, i) => (
+                    <span
+                      key={i}
+                      aria-hidden="true"
+                      className={`h-[3px] rounded-full transition-all ${
+                        i === tourStep ? "w-5 bg-primary" : i < tourStep ? "w-1.5 bg-primary/40" : "w-1.5 bg-white/12"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={dismissOnboarding}
+                    className="rounded-full px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/85 transition-colors hover:bg-hover-bg hover:text-foreground"
+                  >
+                    Skip
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isLast) {
+                        setShowHelp(true);
+                        dismissOnboarding();
+                      } else {
+                        advanceOnboarding();
+                      }
+                    }}
+                    className="rounded-full bg-primary px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_10px_-3px_rgba(100,108,255,0.5)] transition-colors hover:bg-primary/92"
+                  >
+                    {isLast ? "Shortcuts" : "Next"}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -3836,72 +3886,120 @@ export function AtelierShellV3() {
 
       {/* Keyboard shortcut help overlay (press '?'). Outside-click + Esc
           to close. Production-grade learning surface — a glance is enough. */}
-      {showHelp ? (
-        <div
-          role="dialog"
-          aria-label="Keyboard shortcuts"
-          className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-sm"
-          onClick={() => setShowHelp(false)}
-        >
+      {showHelp ? (() => {
+        // Grouped sections — turns the wall of bindings into a learnable
+        // map. Sections are uppercase mono captions; rows are label / kbd
+        // pairs at typographic minor scale.
+        const groups: Array<{ heading: string; items: Array<[string, string]> }> = [
+          {
+            heading: "Create",
+            items: [
+              ["V", "New Video Node"],
+              ["I", "New Image Node"],
+              ["T", "New Idea Node"],
+              ["C", "New Comment"],
+              ["Double-click canvas", "Quick-add video draft"],
+            ],
+          },
+          {
+            heading: "Selection",
+            items: [
+              ["Shift + Click", "Add to selection"],
+              ["⌘ / Ctrl + Click", "Toggle in selection"],
+              ["Shift + Drag empty", "Marquee box-select"],
+              ["⌘ / Ctrl + A", "Select all"],
+              ["Esc", "Clear selection / close menus"],
+            ],
+          },
+          {
+            heading: "Move & edit",
+            items: [
+              ["Drag node", "Move"],
+              ["Shift + Drag node", "Snap to 8px grid"],
+              ["⌘ / Ctrl + ← ↑ → ↓", "Nudge by 1px"],
+              ["⌘ + Shift + ← ↑ → ↓", "Nudge by 8px"],
+              ["⌘ / Ctrl + C / V / D", "Copy / Paste / Duplicate"],
+              ["⌘ / Ctrl + Z / ⇧Z", "Undo / Redo"],
+              ["Del / Backspace", "Delete selected"],
+            ],
+          },
+          {
+            heading: "Navigate",
+            items: [
+              ["← ↑ → ↓", "Nearest node"],
+              ["Shift + ← ↑ → ↓", "Extend selection"],
+              ["F", "Fit view"],
+              ["Drag empty", "Pan canvas"],
+              ["⌘ / Ctrl + Wheel", "Zoom"],
+              ["⌘ / Ctrl + \\", "Toggle right rail"],
+            ],
+          },
+          {
+            heading: "Generate",
+            items: [
+              ["⌘ + Enter (Composer)", "Generate"],
+              ["@ in prompt", "Mention canvas node"],
+              ["Drag image handle → draft", "Attach as reference"],
+              ["← / → in Preview", "Prev / next take"],
+              ["/", "Focus Agent composer"],
+            ],
+          },
+        ];
+        return (
           <div
-            className="w-[520px] max-w-[92vw] rounded-xl border border-glass-border bg-elevated p-4 shadow-2xl shadow-black/40"
-            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="Keyboard shortcuts"
+            className="fixed inset-0 z-50 grid place-items-center bg-black/75 backdrop-blur-md"
+            onClick={() => setShowHelp(false)}
           >
-            <div className="mb-3 flex items-center justify-between">
-              <div className="font-display text-base font-semibold text-foreground">Shortcuts</div>
-              <button
-                type="button"
-                onClick={() => setShowHelp(false)}
-                aria-label="Close"
-                className="rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[12px]">
-              {[
-                ["V", "New Video Node"],
-                ["I", "New Image Node"],
-                ["T", "New Idea Node"],
-                ["C", "New Comment / annotation"],
-                ["F", "Fit view"],
-                ["/", "Focus Agent composer"],
-                ["?", "Toggle this help"],
-                ["Esc", "Clear selection / close menus"],
-                ["Del / Backspace", "Delete selected"],
-                ["Shift + Click", "Add to selection"],
-                ["⌘ / Ctrl + Click", "Toggle in selection"],
-                ["Shift + Drag empty", "Box-select (marquee)"],
-                ["Drag empty", "Pan canvas"],
-                ["Shift + Drag node", "Snap to 8px grid"],
-                ["⌘ / Ctrl + A", "Select all"],
-                ["⌘ / Ctrl + C", "Copy selection"],
-                ["⌘ / Ctrl + V", "Paste"],
-                ["⌘ / Ctrl + D", "Duplicate"],
-                ["⌘ / Ctrl + Z", "Undo move"],
-                ["⌘ / Ctrl + Shift + Z", "Redo move"],
-                ["⌘ / Ctrl + Wheel", "Zoom"],
-                ["⌘ / Ctrl + \\", "Toggle right rail"],
-                ["← ↑ → ↓", "Navigate to nearest node"],
-                ["Shift + ← ↑ → ↓", "Extend selection"],
-                ["← / → in Preview", "Prev / next take"],
-                ["⌘ / Ctrl + ← ↑ → ↓", "Nudge selected by 1px"],
-                ["⌘ + Shift + ← ↑ → ↓", "Nudge selected by 8px"],
-                ["Drag image handle → draft", "Attach as reference"],
-                ["Right-click node", "Context menu"],
-                ["Double-click empty canvas", "Quick-add video draft"],
-              ].map(([keys, label]) => (
-                <div key={keys} className="flex items-center justify-between gap-3 py-0.5">
-                  <span className="text-text-secondary">{label}</span>
-                  <kbd className="shrink-0 rounded border border-glass-border bg-glass px-1.5 py-0.5 font-mono text-[10px] text-foreground">
-                    {keys}
-                  </kbd>
+            <div
+              className="w-[640px] max-w-[92vw] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_36px_70px_-30px_rgba(0,0,0,0.95),0_10px_22px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
+              <div className="px-5 pb-4 pt-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex items-baseline gap-3">
+                    <span className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-primary/85">
+                      Atelier
+                    </span>
+                    <span className="font-display text-[15px] font-medium tracking-[-0.005em] text-foreground">
+                      Shortcuts
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowHelp(false)}
+                    aria-label="Close"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
+                  >
+                    <X size={13} aria-hidden="true" />
+                  </button>
                 </div>
-              ))}
+                <div className="grid grid-cols-2 gap-x-7 gap-y-5">
+                  {groups.map((g) => (
+                    <div key={g.heading}>
+                      <div className="mb-2 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-text-muted/80">
+                        {g.heading}
+                      </div>
+                      <div className="space-y-1">
+                        {g.items.map(([keys, label]) => (
+                          <div key={keys} className="flex items-baseline justify-between gap-3 py-[2px]">
+                            <span className="text-[12px] text-text-secondary/95">{label}</span>
+                            <kbd className="shrink-0 rounded-[3px] border border-white/8 bg-black/35 px-1.5 py-[2px] font-mono text-[10px] tracking-tight text-foreground/95">
+                              {keys}
+                            </kbd>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
 
       {/* Save-state indicator — sits top-right, just inside the right rail.
           Three faces: blue saving / emerald saved-Ns-ago / red failed +
