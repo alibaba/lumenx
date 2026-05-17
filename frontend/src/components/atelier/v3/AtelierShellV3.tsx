@@ -2323,7 +2323,32 @@ export function AtelierShellV3() {
               (Wave A polish), so a normal bubble-phase parent handler never
               fires. Capture lets us start the drag tracking before the child
               consumes the event; the child still selects the node on click. */}
-          {project?.nodes.map((node) => {
+          {(() => {
+            // Viewport-cull invisible nodes — keeps the React tree small on
+            // big canvases. Always include selected, hovered, and currently-
+            // dragged nodes so a node won't pop out from under the user.
+            // Bypass culling when the canvas hasn't laid out yet (jsdom or
+            // very first render with rect dimensions still 0) — otherwise
+            // the empty viewport filters every node out.
+            const rect = mainRef.current?.getBoundingClientRect();
+            const screenW = rect?.width ?? 0;
+            const screenH = rect?.height ?? 0;
+            if (screenW < 32 || screenH < 32) return project?.nodes ?? [];
+            const PAD = 200;
+            const visMinX = -panX / zoomFactor - PAD;
+            const visMinY = -panY / zoomFactor - PAD;
+            const visMaxX = (screenW - panX) / zoomFactor + PAD;
+            const visMaxY = (screenH - panY) / zoomFactor + PAD;
+            const draggingIds = new Set<string>();
+            if (nodeDragRef.current) draggingIds.add(nodeDragRef.current.nodeId);
+            if (groupDragRef.current) for (const m of groupDragRef.current.members) draggingIds.add(m.nodeId);
+            return (project?.nodes ?? []).filter((n) => {
+              if (allSelectedIds.has(n.id) || hoveredNodeId === n.id || draggingIds.has(n.id)) return true;
+              const nx2 = n.x + (n.width || 240);
+              const ny2 = n.y + (n.height || 110);
+              return !(nx2 < visMinX || n.x > visMaxX || ny2 < visMinY || n.y > visMaxY);
+            });
+          })().map((node) => {
             const isSelected = allSelectedIds.has(node.id);
             const isBeingDragged =
               nodeDragRef.current?.nodeId === node.id ||
