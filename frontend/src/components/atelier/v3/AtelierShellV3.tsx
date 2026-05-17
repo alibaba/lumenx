@@ -1572,6 +1572,24 @@ export function AtelierShellV3() {
     // measurement after layout settles.
   }, [agentCollapsed, zoom, panX, panY]);
 
+  // Remember last-used model per project so the next new draft picks it up
+  // instead of always defaulting to "Wan 2.7". Stored in localStorage with
+  // the same key shape as the Sequence persistence — keeps user-side
+  // preferences scoped to each project.
+  const lastModelStorageKey = (projectId: string) => `atelier-v3-last-model:${projectId}`;
+  const getRememberedModel = (projectId: string | undefined): string | null => {
+    if (!projectId || typeof window === "undefined") return null;
+    try {
+      return window.localStorage.getItem(lastModelStorageKey(projectId));
+    } catch {
+      return null;
+    }
+  };
+  const rememberModel = (projectId: string | undefined, model: string) => {
+    if (!projectId || typeof window === "undefined") return;
+    try { window.localStorage.setItem(lastModelStorageKey(projectId), model); } catch { /* ignore */ }
+  };
+
   // Action wiring
   const handleComposerSubmit = (
     payload: ComposerSubmitPayload,
@@ -1582,6 +1600,10 @@ export function AtelierShellV3() {
         (node.data as { reference_image_urls?: unknown })?.reference_image_urls,
       );
       const batch = parseInt(payload.count, 10);
+      // Persist the chosen model before kicking off generation — even if
+      // the request fails, the user clearly intended this model and we
+      // shouldn't re-default to Wan 2.7 on the next draft.
+      rememberModel(project?.id, payload.modelLabel);
       void useAtelierStore.getState()
         .createVideoCandidates(node.id, {
           prompt: payload.prompt,
@@ -1940,6 +1962,7 @@ export function AtelierShellV3() {
       try {
         const proj = await ensureProject();
         const variant = draftVariations[(proj.nodes.length) % draftVariations.length];
+        const remembered = getRememberedModel(proj.id);
         const node = await api.createAtelierNode(proj.id, {
           type: "video",
           title: `Video Node ${proj.nodes.length + 1}`,
@@ -1951,7 +1974,7 @@ export function AtelierShellV3() {
           height: 110,
           data: {
             intent: variant.intent,
-            model: variant.model,
+            model: remembered ?? variant.model,
             config_summary: "1280×720 · 5s · 4×",
             reference_image_urls: [],
             candidates: [],
@@ -1970,6 +1993,7 @@ export function AtelierShellV3() {
       const proj = await ensureProject();
       const before = proj.nodes.length;
       const variant = draftVariations[before % draftVariations.length];
+      const remembered = getRememberedModel(proj.id);
       const rect = mainRef.current?.getBoundingClientRect();
       // Offset consecutive creates by up to 6×28 px so repeated "New Video"
       // clicks don't stack on the same pixel.
@@ -1991,7 +2015,7 @@ export function AtelierShellV3() {
         height: 110,
         data: {
           intent: variant.intent,
-          model: variant.model,
+          model: remembered ?? variant.model,
           config_summary: "1280×720 · 5s · 4×",
           reference_image_urls: [],
           candidates: [],
