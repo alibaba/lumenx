@@ -207,12 +207,13 @@ export function Composer({
     <section
       role="dialog"
       aria-label="Generation composer"
-      className="absolute z-40 w-[520px] rounded-xl border border-glass-border bg-elevated/96 shadow-2xl shadow-black/40 backdrop-blur-xl"
+      className="absolute z-40 w-[520px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-24px_rgba(0,0,0,0.85),0_8px_20px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
       style={computedStyle}
     >
-      {/* Tabs */}
-      <div className="flex items-center justify-between gap-1 border-b border-border-subtle px-2 py-1.5">
-        <div role="tablist" aria-label="Generation type" className="flex items-center gap-0.5">
+      {/* Tabs — mono caps with spaced tracking gives the row a "transport
+          control" feel; active tab earns a primary tint pill. */}
+      <div className="flex items-center justify-between gap-1 border-b border-white/6 px-2 py-2">
+        <div role="tablist" aria-label="Generation type" className="flex items-center gap-px">
           {TABS.map(t => (
             <button
               key={t}
@@ -222,33 +223,42 @@ export function Composer({
               tabIndex={t === activeTab ? 0 : -1}
               onClick={() => onTabChange?.(t)}
               onKeyDown={(e) => handleTabKeyDown(e, t)}
-              className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
-                t === activeTab ? "bg-primary/15 text-primary" : "text-text-muted hover:text-foreground hover:bg-hover-bg"
+              className={`rounded-md px-2 py-[5px] font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
+                t === activeTab
+                  ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(100,108,255,0.3)]"
+                  : "text-text-muted hover:bg-white/[0.04] hover:text-foreground/90"
               }`}>
               {t}
             </button>
           ))}
         </div>
         <button type="button" aria-label="Close composer" data-tip="Close" onClick={onClose}
-                className="btn-tip rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground">
+                className="btn-tip inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground">
           <X size={12} aria-hidden="true" />
         </button>
       </div>
 
       {/* Capability mismatch banner */}
       {showCapabilityMismatch && (
-        <div role="alert" className="mx-3 mt-2 rounded-md border border-amber-300/40 bg-amber-400/[0.06] px-2.5 py-1.5 text-[11px] leading-relaxed text-amber-100">
-          <strong className="font-semibold">{modelLabel}</strong> doesn&apos;t accept some of the attached references.
+        <div role="alert" className="mx-3 mt-3 rounded-md border border-amber-300/35 bg-amber-400/[0.05] px-2.5 py-2 text-[11px] leading-relaxed text-amber-100/95">
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-200/80">Mismatch</span>{" "}
+          <strong className="font-medium text-amber-100">{modelLabel}</strong>{" "}
+          doesn&apos;t accept some of the attached references.
         </div>
       )}
 
-      {/* Reference row */}
-      <div className="flex items-center gap-1.5 px-3 pt-2.5">
+      {/* Reference row — tighter 36×52 thumbs, hairline border, 'N REF'
+          mono caps tag at the end matches the chrome metadata voice. */}
+      <div className="flex items-center gap-1.5 px-3 pt-3">
         {refs.map((r, i) => (
-          <div key={i} className="group/ref relative h-10 w-14 overflow-hidden rounded border border-white/10 bg-black/30">
+          <div key={i} className="group/ref relative h-9 w-[52px] overflow-hidden rounded-[5px] border border-white/8 bg-black/30">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={r.src} alt={`Reference ${i + 1}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-            {r.role && <span aria-hidden="true" className="absolute right-0 top-0 rounded-bl bg-black/60 px-1 py-0.5 text-[9px] uppercase text-white/80">{r.role}</span>}
+            {r.role && (
+              <span aria-hidden="true" className="absolute right-0 top-0 rounded-bl-[3px] bg-black/65 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.18em] text-white/85">
+                {r.role}
+              </span>
+            )}
             {onRemoveRef ? (
               <button
                 type="button"
@@ -256,7 +266,7 @@ export function Composer({
                 onClick={() => onRemoveRef(i)}
                 className="absolute inset-0 grid place-items-center bg-black/65 text-red-200 opacity-0 transition-opacity hover:opacity-100 group-hover/ref:opacity-100"
               >
-                <Trash2 size={14} />
+                <Trash2 size={13} aria-hidden="true" />
               </button>
             ) : null}
           </div>
@@ -267,12 +277,14 @@ export function Composer({
           data-tip="Add reference"
           onClick={onAddRef}
           disabled={!onAddRef}
-          className="btn-tip grid h-10 w-10 place-items-center rounded border border-dashed border-glass-border text-text-muted transition hover:border-primary/60 hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-tip grid h-9 w-9 place-items-center rounded-[5px] border border-dashed border-white/12 text-text-muted transition-colors hover:border-primary/55 hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
         >
-          <Plus size={14} aria-hidden="true" />
+          <Plus size={13} aria-hidden="true" />
         </button>
         {refs.length > 0 && (
-          <span className="ml-1 font-mono text-[10px] text-text-muted">{refs.length} ref{refs.length === 1 ? "" : "s"}</span>
+          <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted">
+            {refs.length} ref{refs.length === 1 ? "" : "s"}
+          </span>
         )}
       </div>
 
@@ -338,8 +350,8 @@ export function Composer({
             }
           }}
           autoFocus
-          placeholder="Describe what you want to generate. Use @ to mention a canvas node."
-          className="w-full resize-none rounded-md border border-glass-border bg-input-bg px-2.5 py-2 text-[13px] text-foreground placeholder:text-text-muted outline-none focus:border-primary/60"
+          placeholder="Describe the shot. Use @ to mention a canvas node."
+          className="w-full resize-none rounded-md border border-white/6 bg-black/35 px-3 py-2.5 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
         />
         {mention && filteredMentionables.length > 0 ? (
           <ul
@@ -387,8 +399,11 @@ export function Composer({
         ) : null}
       </div>
 
-      {/* Chip row */}
-      <div className="flex items-center justify-between gap-1.5 px-3 pb-3 pt-2">
+      {/* Chip row — config strip with hairline divider above to separate
+          the prompt zone from the parameter zone. The Generate button on
+          the right gets its own visual weight (primary halo shadow) so the
+          eye lands there at submit time. */}
+      <div className="flex items-center justify-between gap-1.5 border-t border-white/6 px-3 pb-3 pt-2.5">
         <div className="flex items-center gap-1.5">
           <ChipDropdown label="Model"    value={m} primary
             options={modelOptions.map((v) => ({ value: v, label: v }))}
@@ -402,7 +417,7 @@ export function Composer({
           <button type="button" aria-label="More params" data-tip="Seed / guidance / motion"
                   onClick={onAdvanced}
                   disabled={!onAdvanced}
-                  className="btn-tip rounded-md border border-glass-border bg-glass p-1.5 text-text-secondary transition hover:bg-hover-bg hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50">
+                  className="btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/8 bg-black/25 text-text-secondary transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45">
             <Settings size={12} aria-hidden="true" />
           </button>
           <ChipDropdown label="Count" value={c}
@@ -412,15 +427,15 @@ export function Composer({
         <button
           type="button"
           aria-label="Submit"
-          data-tip="Submit (⌘⏎)"
+          data-tip="Generate (⌘⏎)"
           disabled={showCapabilityMismatch}
           onClick={submit}
-          className={`btn-tip grid h-7 w-7 place-items-center rounded-full transition ${
+          className={`btn-tip inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors ${
             showCapabilityMismatch
-              ? "bg-primary/40 text-white/70 cursor-not-allowed"
-              : "bg-primary text-white hover:bg-primary/90"
+              ? "cursor-not-allowed bg-primary/30 text-white/50"
+              : "bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(100,108,255,0.55)] hover:bg-primary/92"
           }`}>
-          <Wand2 size={12} aria-hidden="true" />
+          <Wand2 size={13} aria-hidden="true" />
         </button>
       </div>
     </section>
