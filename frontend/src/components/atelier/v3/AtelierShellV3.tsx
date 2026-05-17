@@ -2379,6 +2379,69 @@ export function AtelierShellV3() {
         );
       })() : null}
 
+      {/* Inspector pill — single-selection, non-draft. Shows kind-specific
+          one-line facts below the node so the user has context without a
+          dedicated side panel. Drafts skip this because the Composer
+          already exposes model + refs. Multi-selection skips so the
+          batch chip can claim that space. */}
+      {selectedNode && !isMultiSelect && !isDraftVideo(selectedNode) && !parseCandidateNodeId(selectedNode.id) ? (() => {
+        const facts: Array<{ label: string; value: string }> = [];
+        const node = selectedNode;
+        if (node.type === "image") {
+          const filename = readString((node.data as { filename?: unknown })?.filename) ?? node.title;
+          if (filename) facts.push({ label: "file", value: filename });
+          const refCount = (project?.nodes ?? []).filter((n) => {
+            const refs = readStringArray((n.data as { reference_image_urls?: unknown })?.reference_image_urls);
+            return n.type === "video" && (node.media_urls ?? []).some((u) => refs.includes(u));
+          }).length;
+          if (refCount > 0) facts.push({ label: "used by", value: `${refCount} draft${refCount === 1 ? "" : "s"}` });
+        } else if (node.type === "video") {
+          const cands = readCandidates(node);
+          const completed = cands.filter((c) => c.status === "completed").length;
+          if (cands.length > 0) facts.push({ label: "takes", value: `${completed}/${cands.length}` });
+          const url = node.media_urls?.[0];
+          if (url) facts.push({ label: "media", value: "ready" });
+        } else if (node.type === "idea") {
+          const body = readString(node.data?.body) ?? node.prompt ?? "";
+          const chars = body.length;
+          facts.push({ label: "length", value: `${chars} char${chars === 1 ? "" : "s"}` });
+        } else if (node.type === "plan") {
+          const bullets = readStringArray(node.data?.bullets);
+          facts.push({ label: "steps", value: `${bullets.length}` });
+        } else if (node.type === "audio") {
+          const dur = readString((node.data as { duration?: unknown })?.duration);
+          if (dur) facts.push({ label: "duration", value: dur });
+        }
+        const updated = node.updated_at ? Math.floor((Date.now() / 1000 - node.updated_at)) : null;
+        if (updated !== null && updated >= 0) {
+          let agoLabel: string;
+          if (updated < 60) agoLabel = `${updated}s`;
+          else if (updated < 3600) agoLabel = `${Math.floor(updated / 60)}m`;
+          else if (updated < 86400) agoLabel = `${Math.floor(updated / 3600)}h`;
+          else agoLabel = `${Math.floor(updated / 86400)}d`;
+          facts.push({ label: "edited", value: `${agoLabel} ago` });
+        }
+        if (facts.length === 0) return null;
+        const screenLeft = panX + node.x * zoomFactor;
+        const screenTop = panY + (node.y + (node.height || 180)) * zoomFactor + 8;
+        return (
+          <div
+            role="status"
+            aria-label="Selected node details"
+            className="absolute z-30 inline-flex items-center gap-2 rounded-full border border-glass-border bg-elevated/85 px-2.5 py-1 font-mono text-[10px] backdrop-blur-md shadow-2xl shadow-black/40 animate-atelier-node-in motion-reduce:animate-none"
+            style={{ left: screenLeft, top: screenTop }}
+          >
+            {facts.map((f, i) => (
+              <span key={f.label} className="inline-flex items-center gap-1">
+                <span className="uppercase tracking-wider text-text-muted">{f.label}</span>
+                <span className="text-foreground">{f.value}</span>
+                {i < facts.length - 1 ? <span aria-hidden="true" className="text-text-muted">·</span> : null}
+              </span>
+            ))}
+          </div>
+        );
+      })() : null}
+
       {/* Connect handle: appears on right-middle of a selected image node
           that has media. Drag onto a draft to attach as reference. Sits in
           screen coords so it stays a fixed 16px button at any zoom. */}
