@@ -201,6 +201,11 @@ function renderNode(
           x={node.x}
           y={node.y}
           onSelect={onSelect}
+          onIntentCommit={(next) => {
+            void useAtelierStore.getState().updateNode(node.id, {
+              data: { ...(node.data ?? {}), intent: next },
+            }).catch(() => {/* save chip surfaces failures */});
+          }}
         />
       );
     }

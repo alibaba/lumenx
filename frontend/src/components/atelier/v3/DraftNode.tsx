@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 
 export type DraftNodeStatus = "draft" | "approved" | "running" | "completed";
@@ -17,6 +18,9 @@ interface Props {
   x: number;
   y: number;
   onSelect?: (id: string) => void;
+  /** Persist a renamed intent. Wired by the shell to updateNode patching
+   *  data.intent. When omitted, the title becomes read-only. */
+  onIntentCommit?: (next: string) => void;
 }
 
 const STATUS_BORDER: Record<DraftNodeStatus, string> = {
@@ -39,6 +43,7 @@ export function DraftNode({
   x,
   y,
   onSelect,
+  onIntentCommit,
 }: Props) {
   const borderClass = selected
     ? "ring-2 ring-primary border-primary/50"
@@ -47,6 +52,31 @@ export function DraftNode({
   const VISIBLE_REFS = 4;
   const visibleRefs = refs ? refs.slice(0, VISIBLE_REFS) : [];
   const overflowCount = refs ? Math.max(0, refs.length - VISIBLE_REFS) : 0;
+
+  // Inline rename: dbl-click the intent label flips it to a text input.
+  // Enter or blur commits, Esc reverts. Intent prop drives the input's
+  // initial value each time editing starts so external updates don't get
+  // overwritten by a stale draft.
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(intent);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+  const startEditing = () => {
+    if (!onIntentCommit) return;
+    setDraft(intent);
+    setEditing(true);
+  };
+  const commit = () => {
+    setEditing(false);
+    if (!onIntentCommit) return;
+    const next = draft.trim();
+    if (next && next !== intent) onIntentCommit(next);
+  };
 
   return (
     <div
@@ -68,7 +98,38 @@ export function DraftNode({
       <div className="px-3 py-2.5">
         <div className="flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
           <Sparkles size={12} className="text-primary shrink-0" />
-          <span className="truncate">{intent}</span>
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onPointerDown={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commit();
+                } else if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditing(false);
+                  setDraft(intent);
+                }
+              }}
+              className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 text-[13px] font-semibold text-foreground outline-none"
+              aria-label="Rename draft"
+            />
+          ) : (
+            <span
+              className={`truncate ${onIntentCommit ? "cursor-text" : ""}`}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                startEditing();
+              }}
+              title={onIntentCommit ? "Double-click to rename" : undefined}
+            >
+              {intent}
+            </span>
+          )}
           {typeof candidatesTotal === "number" && candidatesTotal > 0 ? (
             <span
               className={`ml-auto shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] font-semibold ${
