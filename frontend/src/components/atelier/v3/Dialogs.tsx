@@ -21,6 +21,40 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
+// Minimal focus trap: on Tab, cycle through focusable descendants of `root`
+// instead of letting focus drift to the underlying canvas. Returns nothing
+// because we attach the listener inside an effect — cleanup on unmount.
+function useFocusTrap(rootRef: React.RefObject<HTMLElement | null>, active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const root = rootRef.current;
+    if (!root) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const focusables = root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (activeEl === first || !root.contains(activeEl)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (activeEl === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rootRef, active]);
+}
+
 interface ConfirmProps {
   open: boolean;
   title: string;
@@ -43,6 +77,8 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
   useEffect(() => {
     if (!open) return;
     confirmRef.current?.focus();
@@ -80,6 +116,7 @@ export function ConfirmDialog({
       onClick={onCancel}
     >
       <div
+        ref={dialogRef}
         className="w-[400px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_32px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] animate-atelier-modal-content-in motion-reduce:animate-none"
         onClick={(e) => e.stopPropagation()}
       >
@@ -148,6 +185,8 @@ export function PromptDialog({
 }: PromptProps) {
   const [value, setValue] = useState(initialValue);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, open);
 
   // Reset draft to the latest initial value every time the dialog opens —
   // re-using the same dialog for different rows wouldn't carry stale state.
@@ -185,6 +224,7 @@ export function PromptDialog({
       onClick={onCancel}
     >
       <div
+        ref={dialogRef}
         className="w-[420px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_32px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] animate-atelier-modal-content-in motion-reduce:animate-none"
         onClick={(e) => e.stopPropagation()}
       >
