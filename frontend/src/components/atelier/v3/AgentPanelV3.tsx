@@ -1,6 +1,6 @@
 "use client";
-import { useMemo, useState } from "react";
-import { Bot, Loader2, Paperclip, Send, ShieldCheck, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Bot, Loader2, Paperclip, Send, ShieldCheck, Sparkles, X } from "lucide-react";
 import { useAtelierStore } from "@/store/atelierStore";
 import type {
   AtelierAgentTurn,
@@ -122,6 +122,23 @@ export function AgentPanelV3({ pushToast }: Props) {
   const [planError, setPlanError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [executing, setExecuting] = useState(false);
+  // Per-tool rejection (PRD §14.4). The user can flip individual proposed
+  // calls off before approving — what gets executed is `proposed ∖ rejected`.
+  // Reset whenever the pending turn changes so each new approval card starts
+  // with everything green-lit.
+  const [rejectedCallIds, setRejectedCallIds] = useState<Set<string>>(() => new Set());
+  const pendingTurnId = pendingTurn?.id;
+  useEffect(() => {
+    setRejectedCallIds(new Set());
+  }, [pendingTurnId]);
+  const toggleCallRejection = (callId: string) => {
+    setRejectedCallIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(callId)) next.delete(callId);
+      else next.add(callId);
+      return next;
+    });
+  };
 
   const policy = project?.agent_policy;
   const recentTurns = useMemo<AtelierAgentTurn[]>(
@@ -186,18 +203,35 @@ export function AgentPanelV3({ pushToast }: Props) {
 
   const handleApprove = async () => {
     if (!pendingTurn) return;
+    const proposedCalls = pendingTurn.tool_calls.filter(
+      (c) => c.status === "approval_required" || c.status === "proposed",
+    );
+    const acceptedCalls = proposedCalls.filter((c) => !rejectedCallIds.has(c.call_id));
+    // All rejected → route to global deny so the turn closes cleanly rather
+    // than executing nothing.
+    if (acceptedCalls.length === 0) {
+      await handleReject();
+      return;
+    }
     setExecuting(true);
     try {
-      const tool_calls = pendingTurn.tool_calls
-        .filter((c) => c.status === "approval_required" || c.status === "proposed")
-        .map((c) => ({ tool_name: c.tool_name, arguments: c.arguments }));
+      const tool_calls = acceptedCalls.map((c) => ({
+        tool_name: c.tool_name,
+        arguments: c.arguments,
+      }));
       await runAgentTurn({
         user_message: pendingTurn.user_message,
         approve: true,
         turn_id: pendingTurn.id,
         tool_calls,
       });
-      pushToast?.("success", "Approved & executed.");
+      const skipped = proposedCalls.length - acceptedCalls.length;
+      pushToast?.(
+        "success",
+        skipped > 0
+          ? `Approved ${acceptedCalls.length}, skipped ${skipped}.`
+          : "Approved & executed.",
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Approval execution failed";
       pushToast?.("error", msg);
@@ -302,28 +336,87 @@ export function AgentPanelV3({ pushToast }: Props) {
                 </p>
               ) : null}
               <ul className="mb-3 space-y-1 border-l border-amber-300/15 pl-2.5 text-[13px] leading-[1.5] text-foreground/95">
-                {pendingTurn.tool_calls.filter((c) => c.status === "approval_required" || c.status === "proposed").map((c) => (
-                  <li key={c.call_id} className="flex items-start gap-1.5">
-                    <Sparkles size={10} className="mt-[5px] shrink-0 text-amber-200/85" aria-hidden="true" />
-                    <span>{summarizeToolCall(c)}</span>
-                  </li>
-                ))}
+                {pendingTurn.tool_calls
+                  .filter((c) => c.status === "approval_required" || c.status === "proposed")
+                  .map((c) => {
+                    const rejected = rejectedCallIds.has(c.call_id);
+                    return (
+                      <li key={c.call_id} className="group/call flex items-start gap-1.5">
+                        <Sparkles
+                          size={10}
+                          className={`mt-[5px] shrink-0 transition-colors ${
+                            rejected ? "text-text-muted/55" : "text-amber-200/85"
+                          }`}
+                          aria-hidden="true"
+                        />
+                        <span
+                          className={`flex-1 transition-colors ${
+                            rejected ? "text-text-muted/65 line-through" : "text-foreground/95"
+                          }`}
+                        >
+                          {summarizeToolCall(c)}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={rejected ? "Restore this action" : "Skip this action"}
+                          aria-pressed={rejected}
+                          data-tip={rejected ? "Restore" : "Skip"}
+                          onClick={() => toggleCallRejection(c.call_id)}
+                          disabled={isLocked}
+                          className={`btn-tip mt-[2px] grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                            rejected
+                              ? "border-amber-300/40 bg-amber-300/10 text-amber-200 hover:bg-amber-300/15"
+                              : "border-white/10 bg-black/25 text-text-muted opacity-0 hover:border-red-300/40 hover:bg-red-400/10 hover:text-red-200 group-hover/call:opacity-100 focus:opacity-100"
+                          }`}
+                        >
+                          {rejected ? (
+                            <Sparkles size={9} aria-hidden="true" />
+                          ) : (
+                            <X size={10} aria-hidden="true" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
               </ul>
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  disabled={isLocked}
-                  onClick={handleApprove}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.5)] transition-all duration-200 hover:scale-[1.02] hover:bg-primary/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(100,108,255,0.6)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
-                >
-                  {isLocked ? (
-                    <>
-                      <Loader2 size={11} className="animate-spin" aria-hidden="true" />
-                      Running
-                    </>
-                  ) : (
-                    "Approve & run"
-                  )}
-                </button>
+                {(() => {
+                  const proposedCount = pendingTurn.tool_calls.filter(
+                    (c) => c.status === "approval_required" || c.status === "proposed",
+                  ).length;
+                  const skippedCount = pendingTurn.tool_calls.filter(
+                    (c) =>
+                      (c.status === "approval_required" || c.status === "proposed") &&
+                      rejectedCallIds.has(c.call_id),
+                  ).length;
+                  const allSkipped = skippedCount === proposedCount && proposedCount > 0;
+                  const partial = skippedCount > 0 && !allSkipped;
+                  const label = allSkipped
+                    ? "Skip all"
+                    : partial
+                      ? `Approve ${proposedCount - skippedCount}`
+                      : "Approve & run";
+                  return (
+                    <button
+                      disabled={isLocked}
+                      onClick={handleApprove}
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-all duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 ${
+                        allSkipped
+                          ? "border border-red-300/35 bg-red-400/10 text-red-200 hover:bg-red-400/15"
+                          : "bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.5)] hover:scale-[1.02] hover:bg-primary/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(100,108,255,0.6)]"
+                      }`}
+                    >
+                      {isLocked ? (
+                        <>
+                          <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+                          Running
+                        </>
+                      ) : (
+                        label
+                      )}
+                    </button>
+                  );
+                })()}
                 <button
                   disabled={isLocked}
                   onClick={handleReject}
