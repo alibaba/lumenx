@@ -2537,22 +2537,39 @@ export function AtelierShellV3() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Loading skeleton — three pulse-shimmer rectangles in the rough
-            shape of an image / draft / image trio. Reads as 'something
-            substantial is loading' rather than 'is the page broken'.
-            Auto-fades out as soon as the project resolves. */}
+        {/* Loading skeleton — three node-shaped surfaces with a shimmer
+            sweep crossing left to right. Replaces the bland animate-pulse
+            with a real gradient sweep so it reads as Linear-grade waiting,
+            not a broken page. */}
         {isBootingProject ? (
           <div className="absolute inset-0 grid place-items-center" aria-label="Loading Atelier">
-            <div className="flex items-center gap-6 opacity-90">
-              <div className="h-[180px] w-[180px] animate-pulse rounded-md border border-glass-border bg-elevated/70" />
-              <div className="space-y-2 animate-pulse">
-                <div className="h-[110px] w-[240px] rounded-md border border-glass-border bg-elevated/70" />
-                <div className="h-[68px] w-[200px] rounded-md border border-glass-border bg-elevated/60" />
+            <div className="flex items-center gap-6">
+              <div
+                aria-hidden="true"
+                className="h-[180px] w-[180px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(100,108,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
+                style={{ backgroundColor: "#141416" }}
+              />
+              <div className="space-y-2">
+                <div
+                  aria-hidden="true"
+                  className="h-[110px] w-[240px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(100,108,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
+                  style={{ backgroundColor: "#141416", animationDelay: "0.15s" }}
+                />
+                <div
+                  aria-hidden="true"
+                  className="h-[68px] w-[200px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(100,108,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
+                  style={{ backgroundColor: "#141416", animationDelay: "0.3s" }}
+                />
               </div>
-              <div className="h-[180px] w-[180px] animate-pulse rounded-md border border-glass-border bg-elevated/70" />
+              <div
+                aria-hidden="true"
+                className="h-[180px] w-[180px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(100,108,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
+                style={{ backgroundColor: "#141416", animationDelay: "0.45s" }}
+              />
             </div>
-            <div className="absolute bottom-12 font-mono text-[10px] uppercase tracking-wider text-text-muted">
-              Loading Atelier…
+            <div className="absolute bottom-12 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/85">
+              <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-primary/80 shadow-[0_0_0_3px_rgba(100,108,255,0.18)] motion-safe:animate-pulse" />
+              Loading Atelier
             </div>
           </div>
         ) : null}
@@ -2772,12 +2789,12 @@ export function AtelierShellV3() {
             return (
               <div
                 key={`connect-target-ring-${connectDragTick}`}
-                className="pointer-events-none absolute z-[36] rounded-md ring-2 ring-primary"
+                className="pointer-events-none absolute z-[36] rounded-lg ring-2 ring-primary shadow-[0_0_0_4px_rgba(100,108,255,0.18),0_0_24px_-2px_rgba(100,108,255,0.45)] motion-safe:animate-atelier-pulse-soft"
                 style={{
-                  left: target.x - 4,
-                  top: target.y - 4,
-                  width: (target.width || 240) + 8,
-                  height: (target.height || 110) + 8,
+                  left: target.x - 6,
+                  top: target.y - 6,
+                  width: (target.width || 240) + 12,
+                  height: (target.height || 110) + 12,
                 }}
               />
             );
@@ -3137,7 +3154,7 @@ export function AtelierShellV3() {
                 type="button"
                 aria-label={`Resize ${c.key}`}
                 onPointerDown={startResize(c.key)}
-                className="absolute z-40 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-white/60 bg-primary shadow-[0_0_0_2px_rgba(100,108,255,0.18)] hover:scale-125"
+                className="absolute z-40 h-[10px] w-[10px] -translate-x-1/2 -translate-y-1/2 rounded-[2px] border border-white/40 bg-primary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_0_0_2px_rgba(100,108,255,0.18),0_2px_6px_-2px_rgba(100,108,255,0.55)] transition-all duration-200 hover:scale-[1.4] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),0_0_0_3px_rgba(100,108,255,0.28),0_3px_8px_-2px_rgba(100,108,255,0.7)]"
                 style={{ left: c.sx, top: c.sy, cursor: c.cursor }}
               />
             ))}
@@ -3157,10 +3174,10 @@ export function AtelierShellV3() {
             aria-label="Drag to attach this image as a reference to a draft"
             data-tip="Drag to a draft to attach as reference"
             onPointerDown={(e) => handleConnectHandlePointerDown(e, selectedNode.id, handleScreenX, handleScreenY)}
-            className="btn-tip absolute z-40 grid h-4 w-4 -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/40 bg-primary text-white shadow-[0_0_0_3px_rgba(100,108,255,0.18)] hover:scale-110 active:cursor-grabbing"
+            className="btn-tip absolute z-40 grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/30 bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_0_0_3px_rgba(100,108,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.6)] transition-all duration-200 motion-safe:animate-atelier-pulse-soft hover:scale-[1.18] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(100,108,255,0.28),0_6px_16px_-4px_rgba(100,108,255,0.7)] active:scale-[1.08] active:cursor-grabbing"
             style={{ left: handleScreenX, top: handleScreenY }}
           >
-            <Link2 size={9} aria-hidden="true" />
+            <Link2 size={10} aria-hidden="true" />
           </button>
         );
       })() : null}
@@ -3176,7 +3193,7 @@ export function AtelierShellV3() {
           <div
             key={`marquee-${marqueeTick}`}
             aria-hidden="true"
-            className="pointer-events-none fixed z-[44] rounded-sm border border-primary/70 bg-primary/[0.08]"
+            className="pointer-events-none fixed z-[44] rounded-[3px] border border-primary/55 bg-primary/[0.06] shadow-[0_0_0_1px_rgba(100,108,255,0.18),inset_0_0_24px_-8px_rgba(100,108,255,0.35)]"
             style={{ left: x, top: y, width: w, height: h }}
           />
         );
@@ -3207,8 +3224,15 @@ export function AtelierShellV3() {
               strokeWidth={isOverTarget ? 2.5 : 2}
               strokeDasharray="6 4"
               strokeLinecap="round"
+              className="motion-safe:animate-atelier-dash"
             />
-            <circle cx={x2} cy={y2} r={isOverTarget ? 5 : 3.5} fill="rgba(100,108,255,0.95)" />
+            <circle
+              cx={x2}
+              cy={y2}
+              r={isOverTarget ? 5 : 3.5}
+              fill="rgba(100,108,255,0.95)"
+              style={{ filter: isOverTarget ? "drop-shadow(0 0 6px rgba(100,108,255,0.6))" : "drop-shadow(0 0 3px rgba(100,108,255,0.4))" }}
+            />
           </svg>
         );
       })() : null}

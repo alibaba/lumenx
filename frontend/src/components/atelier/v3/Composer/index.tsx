@@ -357,17 +357,26 @@ export function Composer({
           <ul
             role="listbox"
             aria-label="Mention picker"
-            className="absolute left-3 right-3 top-full z-10 mt-1 max-h-[180px] overflow-y-auto rounded-md border border-glass-border bg-elevated p-1 shadow-2xl shadow-black/50 backdrop-blur-md"
+            className="absolute left-3 right-3 top-full z-10 mt-1 max-h-[200px] origin-top overflow-y-auto rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
           >
+            <div className="px-2 pb-1 pt-1 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-text-muted/80">
+              Mention
+              {mention.query ? (
+                <>
+                  {" "}<span aria-hidden="true" className="text-text-muted/45">·</span>{" "}
+                  <span className="text-foreground/95">@{mention.query}</span>
+                </>
+              ) : null}
+            </div>
             {filteredMentionables.map((m, i) => {
               const active = i === mentionIndex;
               const kindIconColor =
-                m.kind === "video" || m.kind === "draft" ? "text-primary" :
-                m.kind === "image" ? "text-amber-200" :
-                m.kind === "audio" ? "text-emerald-200" :
-                m.kind === "idea" ? "text-amber-300" :
-                m.kind === "plan" ? "text-blue-200" :
-                "text-text-muted";
+                m.kind === "video" || m.kind === "draft" ? "text-primary/85" :
+                m.kind === "image" ? "text-amber-200/85" :
+                m.kind === "audio" ? "text-emerald-200/85" :
+                m.kind === "idea" ? "text-amber-300/85" :
+                m.kind === "plan" ? "text-blue-200/85" :
+                "text-text-muted/85";
               return (
                 <li key={m.id} role="none">
                   <button
@@ -381,13 +390,15 @@ export function Composer({
                       insertMention(m);
                     }}
                     onMouseEnter={() => setMentionIndex(i)}
-                    className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-[12px] ${
-                      active ? "bg-hover-bg text-foreground" : "text-text-secondary hover:bg-hover-bg hover:text-foreground"
+                    className={`flex w-full items-center justify-between gap-2 rounded px-2 py-[6px] text-left text-[12px] transition-colors ${
+                      active
+                        ? "bg-white/[0.06] text-foreground"
+                        : "text-text-secondary/95 hover:bg-white/[0.04] hover:text-foreground"
                     }`}
                   >
                     <span className="truncate">{m.label}</span>
                     {m.kind ? (
-                      <span className={`shrink-0 font-mono text-[10px] uppercase tracking-wider ${kindIconColor}`}>
+                      <span className={`shrink-0 font-mono text-[9px] uppercase tracking-[0.2em] ${kindIconColor}`}>
                         {m.kind}
                       </span>
                     ) : null}
