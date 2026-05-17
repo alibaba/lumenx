@@ -1927,6 +1927,44 @@ export function AtelierShellV3() {
     { intent: "Wildcard direction", model: "Vidu Q3" },
   ];
 
+  // Double-click empty canvas → create a video draft at the clicked world
+  // coords. RHTV-style "think it, create it" gesture. Skipped when the
+  // user double-clicked a node, dialog, toolbar, or right rail.
+  const handleMainDoubleClick = (event: React.MouseEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget && (event.target as HTMLElement).closest('[data-atelier-node],[role="dialog"],[role="toolbar"],[role="region"],[role="menu"],[role="status"]')) return;
+    const rect = mainRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const wx = (event.clientX - rect.left - panX) / zoomFactor;
+    const wy = (event.clientY - rect.top - panY) / zoomFactor;
+    void (async () => {
+      try {
+        const proj = await ensureProject();
+        const variant = draftVariations[(proj.nodes.length) % draftVariations.length];
+        const node = await api.createAtelierNode(proj.id, {
+          type: "video",
+          title: `Video Node ${proj.nodes.length + 1}`,
+          prompt: "",
+          status: "draft",
+          x: Math.round(wx - 120),
+          y: Math.round(wy - 55),
+          width: 240,
+          height: 110,
+          data: {
+            intent: variant.intent,
+            model: variant.model,
+            config_summary: "1280×720 · 5s · 4×",
+            reference_image_urls: [],
+            candidates: [],
+          },
+        });
+        await refreshCurrentProject();
+        selectNode(node.id);
+      } catch (err: unknown) {
+        pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
+  };
+
   const handleCreateVideo = async () => {
     try {
       const proj = await ensureProject();
@@ -2191,6 +2229,7 @@ export function AtelierShellV3() {
         onPointerDown={handleMainPointerDown}
         onPointerMove={handleMainPointerMove}
         onPointerUp={handleMainPointerUp}
+        onDoubleClick={handleMainDoubleClick}
         onContextMenu={(e) => {
           // Empty canvas right-click → canvas-level menu (Paste / Select all).
           // The node-wrapper handler stops propagation so this only fires when
@@ -3299,6 +3338,7 @@ export function AtelierShellV3() {
                 ["← / → in Preview", "Prev / next take"],
                 ["Drag image handle → draft", "Attach as reference"],
                 ["Right-click node", "Context menu"],
+                ["Double-click empty canvas", "Quick-add video draft"],
               ].map(([keys, label]) => (
                 <div key={keys} className="flex items-center justify-between gap-3 py-0.5">
                   <span className="text-text-secondary">{label}</span>
