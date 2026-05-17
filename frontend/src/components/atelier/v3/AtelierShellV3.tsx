@@ -1885,25 +1885,35 @@ export function AtelierShellV3() {
   const lastFocusedBeforeOverlayRef = useRef<HTMLElement | null>(null);
   // Effect lives further below — declared after all overlay states.
 
-  // First-run onboarding hint pointing to '?'. Persists "seen" across
-  // refreshes via localStorage so we don't nag returning users.
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  // First-run onboarding tour — 3 sequential coachmark cards. Persists
+  // "seen" across refreshes via localStorage so we don't nag returning
+  // users. tourStep === null means inactive (returning user or finished).
+  const [tourStep, setTourStep] = useState<number | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       const seen = window.localStorage.getItem("atelier-v3-onboarding-seen");
       if (!seen) {
-        // Wait for project to load + auto-fit settle, then surface.
-        const t = window.setTimeout(() => setShowOnboarding(true), 1200);
+        const t = window.setTimeout(() => setTourStep(0), 1200);
         return () => window.clearTimeout(t);
       }
     } catch {
-      /* localStorage may be unavailable; fall back to no hint */
+      /* localStorage may be unavailable; fall back to no tour */
     }
   }, []);
   const dismissOnboarding = () => {
-    setShowOnboarding(false);
+    setTourStep(null);
     try { window.localStorage.setItem("atelier-v3-onboarding-seen", "1"); } catch { /* ignore */ }
+  };
+  const advanceOnboarding = () => {
+    setTourStep((s) => {
+      if (s === null) return null;
+      if (s >= 2) {
+        try { window.localStorage.setItem("atelier-v3-onboarding-seen", "1"); } catch { /* ignore */ }
+        return null;
+      }
+      return s + 1;
+    });
   };
 
   // Right-click context menu. Holds the cursor position (screen coords)
@@ -3418,43 +3428,110 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* First-run onboarding hint — slides in once, points to '?' help. */}
-      {showOnboarding && !showHelp ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className="absolute bottom-[120px] left-4 z-30 max-w-[280px] animate-atelier-node-in motion-reduce:animate-none rounded-xl border border-primary/40 bg-elevated px-3 py-2.5 shadow-2xl shadow-black/40 backdrop-blur-md"
-        >
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <span className="font-mono text-[10px] uppercase tracking-wider text-primary/85">Welcome</span>
-            <button
-              type="button"
-              onClick={dismissOnboarding}
-              aria-label="Dismiss tip"
-              className="rounded p-0.5 text-text-muted hover:bg-hover-bg hover:text-foreground"
-            >
-              <X size={11} />
-            </button>
-          </div>
-          <p className="text-[12px] leading-relaxed text-text-secondary">
-            Drop a seed with{" "}
-            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">V</kbd>,{" "}
-            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">I</kbd>,{" "}
-            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">T</kbd>, or{" "}
-            <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">C</kbd>.
-            Press{" "}
-            <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">?</kbd>{" "}
-            anytime to see every shortcut.
-          </p>
-          <button
-            type="button"
-            onClick={() => { setShowHelp(true); dismissOnboarding(); }}
-            className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/25"
+      {/* Multi-step onboarding tour — 3 sequential cards walking the user
+          through the seed → compose → approve flow. Bottom-left, doesn't
+          block canvas interaction. Each step has Skip + Next buttons. */}
+      {tourStep !== null && !showHelp ? (() => {
+        const steps = [
+          {
+            tag: "Step 1 of 3",
+            title: "Welcome to Atelier",
+            body: "This is your AI video studio canvas. Drop seeds, link them with references, generate takes, judge, and stitch a sequence — all in one space.",
+          },
+          {
+            tag: "Step 2 of 3",
+            title: "Drop a seed",
+            body: (
+              <>
+                Press{" "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">V</kbd>{" "}
+                for video,{" "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">I</kbd>{" "}
+                for image,{" "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">T</kbd>{" "}
+                for idea, or{" "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">C</kbd>{" "}
+                for comment. Or double-click anywhere on empty canvas to drop a video.
+              </>
+            ),
+          },
+          {
+            tag: "Step 3 of 3",
+            title: "Generate & approve",
+            body: (
+              <>
+                Select a draft → Composer pops up below. Press{" "}
+                <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">⌘ Enter</kbd>{" "}
+                to generate. Type{" "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">@</kbd>{" "}
+                to mention nodes. Press{" "}
+                <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">?</kbd>{" "}
+                anytime for the full shortcut list.
+              </>
+            ),
+          },
+        ];
+        const step = steps[tourStep];
+        const isLast = tourStep >= steps.length - 1;
+        return (
+          <div
+            role="status"
+            aria-live="polite"
+            className="absolute bottom-[120px] left-4 z-30 max-w-[300px] animate-atelier-node-in motion-reduce:animate-none rounded-xl border border-primary/40 bg-elevated px-3.5 py-3 shadow-2xl shadow-black/40 backdrop-blur-md"
           >
-            View shortcuts
-          </button>
-        </div>
-      ) : null}
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-primary/85">{step.tag}</span>
+              <button
+                type="button"
+                onClick={dismissOnboarding}
+                aria-label="Dismiss tour"
+                className="rounded p-0.5 text-text-muted hover:bg-hover-bg hover:text-foreground"
+              >
+                <X size={11} />
+              </button>
+            </div>
+            <div className="mb-1 text-[13px] font-semibold text-foreground">{step.title}</div>
+            <div className="text-[12px] leading-relaxed text-text-secondary">{step.body}</div>
+            {/* Progress dots */}
+            <div className="mt-3 flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                {steps.map((_, i) => (
+                  <span
+                    key={i}
+                    aria-hidden="true"
+                    className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                      i === tourStep ? "bg-primary" : i < tourStep ? "bg-primary/40" : "bg-white/15"
+                    }`}
+                  />
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={dismissOnboarding}
+                  className="rounded-full px-2 py-0.5 text-[11px] text-text-muted hover:bg-hover-bg hover:text-foreground"
+                >
+                  Skip
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isLast) {
+                      setShowHelp(true);
+                      dismissOnboarding();
+                    } else {
+                      advanceOnboarding();
+                    }
+                  }}
+                  className="rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-primary/90"
+                >
+                  {isLast ? "View shortcuts" : "Next"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
 
       {/* Keyboard shortcut help overlay (press '?'). Outside-click + Esc
           to close. Production-grade learning surface — a glance is enough. */}
