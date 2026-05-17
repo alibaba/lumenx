@@ -48,6 +48,9 @@ interface Props {
   onAddRef?: () => void;
   onRemoveRef?: (index: number) => void;
   onAdvanced?: () => void;
+  /** Called on textarea blur if the prompt changed since mount/last save —
+   *  lets the parent persist the draft so typed content survives close. */
+  onPromptCommit?: (next: string) => void;
 
   // Position: either anchor + viewport, OR explicit style.
   anchor?: ComposerAnchor | null;
@@ -74,6 +77,7 @@ export function Composer({
   onAddRef,
   onRemoveRef,
   onAdvanced,
+  onPromptCommit,
   anchor,
   viewport,
   style,
@@ -201,6 +205,16 @@ export function Composer({
           rows={3}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            // Persist typed content even if the user doesn't click submit —
+            // closing the composer or selecting elsewhere would otherwise
+            // throw the draft away. Only fire when the value actually
+            // changed from what came in via props (avoids spurious writes
+            // on every focus shift).
+            if (onPromptCommit && draft !== (prompt ?? "")) {
+              onPromptCommit(draft);
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();

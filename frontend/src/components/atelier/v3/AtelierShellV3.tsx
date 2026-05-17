@@ -2490,6 +2490,14 @@ export function AtelierShellV3() {
                   .catch((err: unknown) => pushToast("error", `Remove failed: ${err instanceof Error ? err.message : String(err)}`));
               }}
               onAdvanced={() => pushToast("info", "Advanced params (seed / guidance / motion) coming next.")}
+              onPromptCommit={(next) => {
+                if (!isDraftVideo(selectedNode)) return;
+                void useAtelierStore.getState()
+                  .updateNode(selectedNode.id, {
+                    data: { ...(selectedNode.data ?? {}), prompt: next },
+                  })
+                  .catch(() => {/* save chip surfaces failures */});
+              }}
             />
           </div>
         </div>
