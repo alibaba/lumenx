@@ -374,20 +374,42 @@ interface EdgeLabel {
   tone: "neutral" | "primary" | "success" | "warning" | "error";
 }
 
+/** A reference edge is identified by `${fromId}::${toId}::${url}`. */
+function refEdgeId(fromId: string, toId: string, url: string): string {
+  return `${fromId}::${toId}::${url}`;
+}
+function parseRefEdgeId(id: string): { fromId: string; toId: string; url: string } | null {
+  const parts = id.split("::");
+  if (parts.length < 3) return null;
+  return { fromId: parts[0], toId: parts[1], url: parts.slice(2).join("::") };
+}
+
+interface RefEdgeMidpoint {
+  id: string;
+  midX: number;
+  midY: number;
+}
+
 function renderEdges(
   project: AtelierProject | null,
   hoveredNodeId: string | null,
+  selectedRefEdgeId: string | null,
+  onClickRefEdge: (id: string) => void,
   labelsOut?: EdgeLabel[],
+  refEdgeMidpointsOut?: RefEdgeMidpoint[],
 ): React.ReactNode {
   if (!project) return null;
   const edges: React.ReactNode[] = [];
-  // When the user hovers a node, edges *connected* to that node stay full
-  // strength; everything else dims. Reads "relationship spotlight".
   const dimUnrelated = !!hoveredNodeId;
   const isRelated = (fromId: string, toId: string) =>
     !hoveredNodeId || fromId === hoveredNodeId || toId === hoveredNodeId;
 
-  // Reference-image → video edges (muted, dotted).
+  // Reference-image → video edges. Each rendered as a <g> with two paths:
+  //   - invisible thick hit-area (12px stroke, pointer-events: stroke) so
+  //     the edge is clickable without making it visually thick
+  //   - visible thin styled path on top
+  // Selected edge upgrades to primary tint; hovered/related thicken from
+  // 1.5 → 2px. Dim factor on unrelated edges is 0.12.
   const refLinks = buildReferenceLinks(project.nodes);
   for (const link of refLinks) {
     const x1 = link.from.x + (link.from.width || 180);
@@ -397,20 +419,43 @@ function renderEdges(
     const dx = Math.max(40, Math.abs(x2 - x1) * 0.3);
     const related = isRelated(link.from.id, link.to.id);
     const opacity = dimUnrelated && !related ? 0.12 : 1;
+    const eid = refEdgeId(link.from.id, link.to.id, link.url);
+    const isSelected = selectedRefEdgeId === eid;
+    const stroke = isSelected ? "rgba(100,108,255,0.85)" : "rgba(156,163,175,0.35)";
+    const strokeWidth = isSelected ? 2.25 : (related && hoveredNodeId ? 2 : 1.5);
+    const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
     edges.push(
-      <path
-        key={`ref-${link.from.id}-${link.to.id}-${link.url.slice(-12)}`}
-        d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
-        fill="none"
-        stroke="rgba(156,163,175,0.35)"
-        strokeWidth={related && hoveredNodeId ? 2 : 1.5}
-        strokeDasharray="2 4"
-        style={{ opacity, transition: "opacity 180ms ease-out, stroke-width 180ms" }}
-      />,
+      <g
+        key={`ref-${eid}`}
+        style={{ pointerEvents: "stroke", cursor: "pointer", opacity, transition: "opacity 180ms ease-out" }}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onClickRefEdge(eid);
+        }}
+      >
+        {/* Invisible fat hit-area — stroke 12px so the click target is
+            generous even at zoom=25%. */}
+        <path d={d} fill="none" stroke="rgba(0,0,0,0)" strokeWidth={12} />
+        <path
+          d={d}
+          fill="none"
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeDasharray={isSelected ? undefined : "2 4"}
+          style={{ transition: "stroke 180ms ease-out, stroke-width 180ms" }}
+        />
+      </g>,
     );
-    if (labelsOut && hoveredNodeId && related) {
+    if (refEdgeMidpointsOut && (isSelected || (related && hoveredNodeId))) {
+      refEdgeMidpointsOut.push({
+        id: eid,
+        midX: (x1 + x2) / 2,
+        midY: (y1 + y2) / 2,
+      });
+    }
+    if (labelsOut && hoveredNodeId && related && !isSelected) {
       labelsOut.push({
-        key: `ref-label-${link.from.id}-${link.to.id}-${link.url.slice(-12)}`,
+        key: `ref-label-${eid}`,
         midX: (x1 + x2) / 2,
         midY: (y1 + y2) / 2,
         text: "ref",
@@ -678,6 +723,12 @@ export function AtelierShellV3() {
   // Hovered node id for the edge-spotlight effect — when set, only edges
   // touching this node stay full-strength; the rest fade.
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+
+  // Selected reference edge id (`${fromId}::${toId}::${url}`). Set when the
+  // user clicks a ref edge on the canvas. Selecting an edge clears node
+  // selection, surfaces an inline × delete button at the edge's midpoint,
+  // and arms Delete/Backspace to detach the reference.
+  const [selectedRefEdgeId, setSelectedRefEdgeId] = useState<string | null>(null);
 
   // Sequence drag-to-reorder: which clip index is currently being dragged
   // (source) and which index the drop indicator is shown at (target). Both
@@ -1129,6 +1180,11 @@ export function AtelierShellV3() {
             setContextMenu(null);
             break;
           }
+          if (selectedRefEdgeId) {
+            e.preventDefault();
+            setSelectedRefEdgeId(null);
+            break;
+          }
           if (selectedNodeId || extraSelectedIds.size > 0) {
             e.preventDefault();
             selectNode(null);
@@ -1137,6 +1193,22 @@ export function AtelierShellV3() {
           break;
         case "delete":
         case "backspace":
+          // Edge selected → detach the reference and clear edge selection.
+          // Otherwise fall through to node delete.
+          if (selectedRefEdgeId) {
+            if ((e.target as HTMLElement)?.tagName !== "BODY") return;
+            e.preventDefault();
+            const parsed = parseRefEdgeId(selectedRefEdgeId);
+            if (parsed) {
+              const { fromId, toId, url } = parsed;
+              setSelectedRefEdgeId(null);
+              void useAtelierStore.getState()
+                .detachReferenceNode(toId, url, fromId)
+                .then(() => pushToast("info", "Reference detached"))
+                .catch((err: unknown) => pushToast("error", `Detach failed: ${err instanceof Error ? err.message : String(err)}`));
+            }
+            break;
+          }
           if (allSelectedIds.size === 0) break;
           if ((e.target as HTMLElement)?.tagName !== "BODY") return;
           e.preventDefault();
@@ -1420,9 +1492,10 @@ export function AtelierShellV3() {
       return;
     }
 
-    // Plain empty-canvas click clears any selection.
+    // Plain empty-canvas click clears any selection (nodes + edge).
     selectNode(null);
     if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
+    if (selectedRefEdgeId) setSelectedRefEdgeId(null);
     panDragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -1705,6 +1778,7 @@ export function AtelierShellV3() {
 
     // Plain click on something else: drop extras for a fresh single-selection.
     if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
+    if (selectedRefEdgeId) setSelectedRefEdgeId(null);
 
     // Don't drag virtual candidates (they're derived); selection still fires.
     if (parseCandidateNodeId(node.id)) return;
@@ -2687,7 +2761,21 @@ export function AtelierShellV3() {
               which Cmd+Arrow nudges or long drags could trigger trivially. */}
           {(() => {
             const labels: EdgeLabel[] = [];
-            const paths = renderEdges(project ?? null, hoveredNodeId, labels);
+            const refEdgeMidpoints: RefEdgeMidpoint[] = [];
+            const paths = renderEdges(
+              project ?? null,
+              hoveredNodeId,
+              selectedRefEdgeId,
+              (id) => {
+                // Selecting an edge clears node selection so the SelectionActionBar
+                // doesn't fight the inline edge × delete button for screen real estate.
+                setSelectedRefEdgeId(id);
+                selectNode(null);
+                if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
+              },
+              labels,
+              refEdgeMidpoints,
+            );
             // Compute bbox: every node's outer corners + a 4000px pad so
             // edges curving outside the node bbox (cubic control points)
             // never get clipped. Falls back to a 4000² box centered at 0,0
@@ -2709,8 +2797,20 @@ export function AtelierShellV3() {
             return (
               <>
                 <svg
-                  className="pointer-events-none absolute"
-                  style={{ left: svgX, top: svgY, width: svgW, height: svgH, zIndex: 5 }}
+                  className="absolute"
+                  style={{
+                    left: svgX,
+                    top: svgY,
+                    width: svgW,
+                    height: svgH,
+                    zIndex: 5,
+                    // Container itself is pass-through; individual edge <g>
+                    // elements set pointer-events: stroke locally so only
+                    // the visible/hit-area path lines capture clicks. This
+                    // keeps the giant SVG bbox from swallowing pan / drag
+                    // gestures over empty space.
+                    pointerEvents: "none",
+                  }}
                   viewBox={`${svgX} ${svgY} ${svgW} ${svgH}`}
                 >
                   {paths}
@@ -2733,6 +2833,34 @@ export function AtelierShellV3() {
                     </div>
                   );
                 })}
+                {/* Selected ref-edge × button at the edge midpoint. Click
+                    detaches the reference. Delete key does the same. */}
+                {refEdgeMidpoints
+                  .filter((m) => m.id === selectedRefEdgeId)
+                  .map((m) => (
+                    <button
+                      key={`refedge-del-${m.id}`}
+                      type="button"
+                      aria-label="Detach reference"
+                      data-tip="Detach reference (Del)"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const parsed = parseRefEdgeId(m.id);
+                        if (!parsed) return;
+                        const { fromId, toId, url } = parsed;
+                        setSelectedRefEdgeId(null);
+                        void useAtelierStore.getState()
+                          .detachReferenceNode(toId, url, fromId)
+                          .then(() => pushToast("info", "Reference detached"))
+                          .catch((err: unknown) => pushToast("error", `Detach failed: ${err instanceof Error ? err.message : String(err)}`));
+                      }}
+                      className="btn-tip absolute z-[7] grid h-5 w-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-[#141416] text-text-secondary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_2px_8px_-2px_rgba(0,0,0,0.6)] transition-all duration-150 hover:scale-[1.15] hover:border-red-400/55 hover:bg-red-400/12 hover:text-red-200 active:scale-[0.94] motion-safe:animate-atelier-popover-in"
+                      style={{ left: m.midX, top: m.midY }}
+                    >
+                      <X size={11} aria-hidden="true" />
+                    </button>
+                  ))}
               </>
             );
           })()}
