@@ -424,17 +424,24 @@ export function AtelierShellV3() {
   const policy = project?.agent_policy;
 
   // Live save status — counts in-flight /atelier/* requests via axios
-  // interceptors and tracks the timestamp of the last successful response.
-  // Surfaces in a small chip so the user knows their work is persisted.
-  const [saveState, setSaveState] = useState<{ inflight: number; savedAt: number | null }>({ inflight: 0, savedAt: null });
+  // interceptors and tracks the timestamp of the last successful response
+  // and the last failure. Surfaces in a small chip so the user knows
+  // their work is persisted, and flips to a red error state when the
+  // most recent round-trip didn't succeed.
+  const [saveState, setSaveState] = useState<{
+    inflight: number;
+    savedAt: number | null;
+    failedAt: number | null;
+  }>({ inflight: 0, savedAt: null, failedAt: null });
   useEffect(() => {
     let inflight = 0;
     let savedAt: number | null = null;
+    let failedAt: number | null = null;
     const isAtelier = (url: string | undefined) => !!url && url.includes("/atelier/");
     const reqId = axios.interceptors.request.use((cfg) => {
       if (isAtelier(cfg.url)) {
         inflight += 1;
-        setSaveState({ inflight, savedAt });
+        setSaveState({ inflight, savedAt, failedAt });
       }
       return cfg;
     });
@@ -445,7 +452,10 @@ export function AtelierShellV3() {
           // Treat reads (GET) and writes (POST/PUT/DELETE) the same — any
           // round-trip success is evidence the canvas state is in sync.
           savedAt = Date.now();
-          setSaveState({ inflight, savedAt });
+          // A success after a failure clears the error state — recovery is
+          // implicit and we shouldn't keep nagging.
+          failedAt = null;
+          setSaveState({ inflight, savedAt, failedAt });
         }
         return res;
       },
@@ -453,7 +463,8 @@ export function AtelierShellV3() {
         const cfg = (err as { config?: { url?: string } } | null)?.config;
         if (isAtelier(cfg?.url)) {
           inflight = Math.max(0, inflight - 1);
-          setSaveState({ inflight, savedAt });
+          failedAt = Date.now();
+          setSaveState({ inflight, savedAt, failedAt });
         }
         return Promise.reject(err);
       },
@@ -2850,14 +2861,19 @@ export function AtelierShellV3() {
       ) : null}
 
       {/* Save-state indicator — sits top-right, just inside the right rail.
-          Stays out of the way until something is happening. */}
+          Three faces: blue saving / emerald saved-Ns-ago / red failed +
+          retry. The chip stays hidden until the first round-trip so an
+          empty session doesn't show a noisy default. */}
       {(() => {
-        const { inflight, savedAt } = saveState;
-        if (inflight === 0 && savedAt === null) return null;
+        const { inflight, savedAt, failedAt } = saveState;
+        if (inflight === 0 && savedAt === null && failedAt === null) return null;
         const isSaving = inflight > 0;
+        const hasUnrecoveredFailure = failedAt !== null && (savedAt === null || failedAt > savedAt);
         let label: string;
         if (isSaving) {
           label = "Saving…";
+        } else if (hasUnrecoveredFailure) {
+          label = "Save failed";
         } else if (savedAt) {
           const ago = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
           if (ago < 5) label = "Saved";
@@ -2867,23 +2883,42 @@ export function AtelierShellV3() {
         } else {
           label = "Saved";
         }
+        const tone = isSaving
+          ? "border-blue-400/40 text-blue-200"
+          : hasUnrecoveredFailure
+          ? "border-red-400/50 text-red-200"
+          : "border-emerald-400/30 text-emerald-200";
         return (
           <div
             role="status"
             aria-live="polite"
-            className={`absolute top-4 z-30 inline-flex items-center gap-1.5 rounded-full border bg-elevated/85 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider backdrop-blur-md shadow-2xl shadow-black/40 transition-opacity duration-300 ${
-              isSaving
-                ? "border-blue-400/40 text-blue-200"
-                : "border-emerald-400/30 text-emerald-200"
-            }`}
+            className={`absolute top-4 z-30 inline-flex items-center gap-1.5 rounded-full border bg-elevated/85 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider backdrop-blur-md shadow-2xl shadow-black/40 transition-opacity duration-300 ${tone}`}
             style={{ right: agentCollapsed ? 88 : 412 }}
           >
             {isSaving ? (
               <CloudUpload size={10} className="animate-pulse" aria-hidden="true" />
+            ) : hasUnrecoveredFailure ? (
+              <CloudUpload size={10} aria-hidden="true" />
             ) : (
               <Check size={10} aria-hidden="true" />
             )}
             <span>{label}</span>
+            {hasUnrecoveredFailure && !isSaving ? (
+              <button
+                type="button"
+                onClick={() => {
+                  // Re-fetch the project — gives the user a way to force-sync
+                  // and verify whether the canvas matches the server.
+                  void refreshCurrentProject().catch(() => {
+                    // failedAt will refresh from the next response error.
+                  });
+                }}
+                className="ml-1 rounded-full bg-red-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-100 hover:bg-red-400/30"
+                aria-label="Retry sync"
+              >
+                Retry
+              </button>
+            ) : null}
           </div>
         );
       })()}
