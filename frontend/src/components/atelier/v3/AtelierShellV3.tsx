@@ -2341,10 +2341,21 @@ export function AtelierShellV3() {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* loading skeleton (in screen coords) */}
+        {/* Loading skeleton — three pulse-shimmer rectangles in the rough
+            shape of an image / draft / image trio. Reads as 'something
+            substantial is loading' rather than 'is the page broken'.
+            Auto-fades out as soon as the project resolves. */}
         {isBootingProject ? (
-          <div className="absolute inset-0 grid place-items-center">
-            <div className="rounded-md border border-glass-border bg-glass px-4 py-2 text-[12px] text-text-secondary backdrop-blur-md">
+          <div className="absolute inset-0 grid place-items-center" aria-label="Loading Atelier">
+            <div className="flex items-center gap-6 opacity-90">
+              <div className="h-[180px] w-[180px] animate-pulse rounded-md border border-glass-border bg-elevated/70" />
+              <div className="space-y-2 animate-pulse">
+                <div className="h-[110px] w-[240px] rounded-md border border-glass-border bg-elevated/70" />
+                <div className="h-[68px] w-[200px] rounded-md border border-glass-border bg-elevated/60" />
+              </div>
+              <div className="h-[180px] w-[180px] animate-pulse rounded-md border border-glass-border bg-elevated/70" />
+            </div>
+            <div className="absolute bottom-12 font-mono text-[10px] uppercase tracking-wider text-text-muted">
               Loading Atelier…
             </div>
           </div>
