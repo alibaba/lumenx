@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, FolderOpen, Link2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, FolderOpen, GitBranch, Link2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -241,6 +241,9 @@ function renderNode(
             void useAtelierStore.getState().updateNode(node.id, {
               data: { ...(node.data ?? {}), intent: next },
             }).catch(() => {/* save chip surfaces failures */});
+          }}
+          onDetachRef={(url) => {
+            void useAtelierStore.getState().detachReferenceNode(node.id, url).catch(() => {});
           }}
         />
       );
@@ -1466,6 +1469,21 @@ export function AtelierShellV3() {
   const [connectDragTick, setConnectDragTick] = useState(0);
   const [hoveredConnectTargetId, setHoveredConnectTargetId] = useState<string | null>(null);
 
+  // Branch drag — from a completed take's right-edge handle, drag a bezier
+  // out to anywhere on the canvas; on release the take's prompt + model
+  // seed a new draft positioned at the drop point. Mirrors the connect
+  // drag's window-level pointermove pattern. PRD §6.4-bis: 'branch from a
+  // result' becomes a one-gesture flow (vs. right-click → Branch).
+  const branchDragRef = useRef<{
+    parentId: string;
+    candidateId: string;
+    startScreenX: number;
+    startScreenY: number;
+    currentScreenX: number;
+    currentScreenY: number;
+  } | null>(null);
+  const [branchDragTick, setBranchDragTick] = useState(0);
+
   const zoomFactor = zoom / 100;
 
   // Helper: translate a screen-space delta to world-space (just divide by zoom).
@@ -1696,6 +1714,77 @@ export function AtelierShellV3() {
         .attachReferenceNode(target.id, drag.sourceNodeId)
         .then(() => pushToast("success", "Reference attached"))
         .catch((err: unknown) => pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`));
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  // Branch from a completed take's right-edge handle. Drag a bezier out
+  // anywhere; on release we call branchFromCandidate (which seeds a new
+  // draft from the take's prompt + model) and immediately move the new
+  // draft to the drop world coords so the user lands on visual confirmation.
+  const handleBranchHandlePointerDown = (
+    event: React.PointerEvent,
+    parentId: string,
+    candidateId: string,
+    handleScreenX: number,
+    handleScreenY: number,
+  ) => {
+    if (event.button !== 0) return;
+    event.stopPropagation();
+    event.preventDefault();
+    branchDragRef.current = {
+      parentId,
+      candidateId,
+      startScreenX: handleScreenX,
+      startScreenY: handleScreenY,
+      currentScreenX: event.clientX,
+      currentScreenY: event.clientY,
+    };
+    setBranchDragTick((v) => v + 1);
+
+    const onMove = (ev: PointerEvent) => {
+      if (!branchDragRef.current) return;
+      branchDragRef.current.currentScreenX = ev.clientX;
+      branchDragRef.current.currentScreenY = ev.clientY;
+      setBranchDragTick((v) => v + 1);
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      const drag = branchDragRef.current;
+      branchDragRef.current = null;
+      setBranchDragTick((v) => v + 1);
+      if (!drag) return;
+      // Compute drop world coords (center of the new draft on the cursor).
+      const rect = mainRef.current?.getBoundingClientRect();
+      const offX = rect?.left ?? 0;
+      const offY = rect?.top ?? 0;
+      const dropWorldX = (ev.clientX - offX - panX) / zoomFactor;
+      const dropWorldY = (ev.clientY - offY - panY) / zoomFactor;
+      // Tiny drag = no-op (treat as a click without intent to drop).
+      if (
+        Math.abs(ev.clientX - drag.startScreenX) + Math.abs(ev.clientY - drag.startScreenY) < 8
+      ) {
+        return;
+      }
+      void useAtelierStore.getState()
+        .branchFromCandidate(drag.parentId, drag.candidateId)
+        .then((newDraft) => {
+          // Center the newly-created draft on the drop point.
+          const w = newDraft.width || 240;
+          const h = newDraft.height || 110;
+          const tx = Math.round(dropWorldX - w / 2);
+          const ty = Math.round(dropWorldY - h / 2);
+          useAtelierStore.getState().moveNodeLocal(newDraft.id, tx, ty);
+          void useAtelierStore.getState().commitNodePosition(newDraft.id, tx, ty).catch(() => {});
+          pushToast("success", "Branched · new draft created");
+        })
+        .catch((err: unknown) => {
+          pushToast("error", `Branch failed: ${err instanceof Error ? err.message : String(err)}`);
+        });
     };
 
     window.addEventListener("pointermove", onMove);
@@ -3357,6 +3446,72 @@ export function AtelierShellV3() {
           >
             <Link2 size={10} aria-hidden="true" />
           </button>
+        );
+      })() : null}
+
+      {/* Branch handle: appears on right-middle of a selected COMPLETED
+          take (virtual candidate). Drag anywhere on the canvas; on release
+          a new draft is seeded from the take's prompt + model and placed
+          at the drop point. Emerald-tinted to distinguish from the primary
+          connect handle. PRD §6.4-bis. */}
+      {selectedNode && (() => {
+        const parsed = parseCandidateNodeId(selectedNode.id);
+        if (!parsed || !project) return null;
+        const parent = project.nodes.find((n) => n.id === parsed.parentId);
+        const cand = parent ? readCandidates(parent).find((c) => c.id === parsed.candidateId) : undefined;
+        if (!cand || cand.status !== "completed") return null;
+        const handleScreenX = panX + (selectedNode.x + (selectedNode.width || 200)) * zoomFactor;
+        const handleScreenY = panY + (selectedNode.y + (selectedNode.height || 113) / 2) * zoomFactor;
+        return (
+          <button
+            type="button"
+            aria-label="Drag to branch from this take"
+            data-tip="Drag to branch — creates a new draft from this take"
+            onPointerDown={(e) =>
+              handleBranchHandlePointerDown(e, parsed.parentId, parsed.candidateId, handleScreenX, handleScreenY)
+            }
+            className="btn-tip absolute z-40 grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/30 bg-emerald-500 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_0_0_3px_rgba(110,231,183,0.18),0_4px_12px_-4px_rgba(16,185,129,0.6)] transition-all duration-200 motion-safe:animate-atelier-pulse-soft hover:scale-[1.18] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(110,231,183,0.28),0_6px_16px_-4px_rgba(16,185,129,0.7)] active:scale-[1.08] active:cursor-grabbing"
+            style={{ left: handleScreenX, top: handleScreenY }}
+          >
+            <GitBranch size={10} aria-hidden="true" />
+          </button>
+        );
+      })()}
+
+      {/* Branch-drag bezier overlay (screen coords). Emerald dashed line
+          from the take handle to the cursor. */}
+      {branchDragRef.current ? (() => {
+        const drag = branchDragRef.current!;
+        const x1 = drag.startScreenX;
+        const y1 = drag.startScreenY;
+        const x2 = drag.currentScreenX;
+        const y2 = drag.currentScreenY;
+        const dx = Math.max(40, Math.abs(x2 - x1) * 0.4);
+        return (
+          <svg
+            key={`branch-svg-${branchDragTick}`}
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 z-[45]"
+            width="100%"
+            height="100%"
+          >
+            <path
+              d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
+              fill="none"
+              stroke="rgba(16,185,129,0.85)"
+              strokeWidth={2.25}
+              strokeDasharray="6 4"
+              strokeLinecap="round"
+              className="motion-safe:animate-atelier-dash"
+            />
+            <circle
+              cx={x2}
+              cy={y2}
+              r={4}
+              fill="rgba(16,185,129,0.95)"
+              style={{ filter: "drop-shadow(0 0 6px rgba(16,185,129,0.6))" }}
+            />
+          </svg>
         );
       })() : null}
 

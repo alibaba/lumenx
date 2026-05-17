@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, X } from "lucide-react";
 
 export type DraftNodeStatus = "draft" | "approved" | "running" | "completed";
 
@@ -21,6 +21,10 @@ interface Props {
   /** Persist a renamed intent. Wired by the shell to updateNode patching
    *  data.intent. When omitted, the title becomes read-only. */
   onIntentCommit?: (next: string) => void;
+  /** Detach a single reference URL (called when the user clicks the ×
+   *  badge that hovers over a ref thumbnail). Wired by the shell to
+   *  store.detachReferenceNode. When omitted, refs stay read-only. */
+  onDetachRef?: (url: string) => void;
 }
 
 const STATUS_BORDER: Record<DraftNodeStatus, string> = {
@@ -54,6 +58,7 @@ export function DraftNode({
   y,
   onSelect,
   onIntentCommit,
+  onDetachRef,
 }: Props) {
   const borderClass = selected
     ? "ring-2 ring-primary border-primary/50"
@@ -189,14 +194,33 @@ export function DraftNode({
         {refs && refs.length > 0 ? (
           <div className="mt-2 flex items-center gap-1">
             {visibleRefs.map((r, i) => (
-              <img
+              <div
                 key={i}
-                src={r}
-                alt={`Reference ${i + 1}`}
-                loading="lazy"
-                decoding="async"
-                className="h-[22px] w-[22px] rounded-[3px] border border-white/8 object-cover"
-              />
+                className="group/ref relative h-[22px] w-[22px] overflow-hidden rounded-[3px] border border-white/8"
+              >
+                <img
+                  src={r}
+                  alt={`Reference ${i + 1}`}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover"
+                />
+                {onDetachRef ? (
+                  <button
+                    type="button"
+                    aria-label={`Detach reference ${i + 1}`}
+                    data-tip="Detach"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDetachRef(r);
+                    }}
+                    className="btn-tip absolute inset-0 grid place-items-center bg-black/65 text-red-200 opacity-0 transition-opacity hover:opacity-100 group-hover/ref:opacity-100"
+                  >
+                    <X size={11} aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
             ))}
             {overflowCount > 0 ? (
               <span className="grid h-[22px] min-w-[22px] place-items-center rounded-[3px] border border-white/8 bg-white/[0.03] px-1 font-mono text-[9px] tracking-tight text-text-muted">
