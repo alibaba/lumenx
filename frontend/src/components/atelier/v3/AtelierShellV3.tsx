@@ -22,6 +22,7 @@ import {
   toMediaNodeView,
   type ComposerSubmitPayload,
 } from "@/components/atelier/v3";
+import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
 import {
   api,
   type AtelierNode,
@@ -817,6 +818,35 @@ export function AtelierShellV3() {
   const [editingIdeaId, setEditingIdeaId] = useState<string | null>(null);
   const [editingIdeaBody, setEditingIdeaBody] = useState("");
 
+  // ── Confirm / prompt dialogs ──────────────────────────────────────────
+  // Replaces window.confirm / window.prompt so destructive actions and
+  // renames stay inside the cinematic frame. Each dialog state slot holds
+  // both the visual props and the resolved-user-input callback. Helpers
+  // `askConfirm` / `askPrompt` are pseudo-imperative — open the dialog,
+  // resolve via the user's choice. Unlike browser dialogs they do not
+  // block the event loop, so callers must continue work inside `onConfirm`
+  // / `onSubmit` rather than reading a return value.
+  const [confirmDialogState, setConfirmDialogState] = useState<{
+    title: string;
+    body?: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    tone?: "danger" | "primary";
+    onConfirm: () => void;
+  } | null>(null);
+  const [promptDialogState, setPromptDialogState] = useState<{
+    title: string;
+    description?: string;
+    initialValue?: string;
+    placeholder?: string;
+    submitLabel?: string;
+    onSubmit: (value: string) => void;
+  } | null>(null);
+  const askConfirm = (opts: NonNullable<typeof confirmDialogState>) =>
+    setConfirmDialogState(opts);
+  const askPrompt = (opts: NonNullable<typeof promptDialogState>) =>
+    setPromptDialogState(opts);
+
   // First-load auto-fit: once a project loads with at least one node, fit
   // them in viewport. One-shot per browser session — user is in control of
   // pan/zoom after the first paint.
@@ -921,10 +951,18 @@ export function AtelierShellV3() {
   const deleteSelection = async () => {
     const ids = Array.from(allSelectedIds);
     if (ids.length === 0) return;
-    const ok = window.confirm(
-      ids.length === 1 ? "Delete this node?" : `Delete ${ids.length} nodes?`,
-    );
-    if (!ok) return;
+    askConfirm({
+      title: ids.length === 1 ? "Delete this node?" : `Delete ${ids.length} nodes?`,
+      body: "This cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "danger",
+      onConfirm: () => {
+        void runDeleteSelection(ids);
+      },
+    });
+  };
+
+  const runDeleteSelection = async (ids: string[]) => {
     const store = useAtelierStore.getState();
     let ok_count = 0;
     let fail_count = 0;
@@ -2080,11 +2118,17 @@ export function AtelierShellV3() {
         return;
       }
       // Top-level node delete with confirmation
-      const ok = window.confirm(`Delete this ${node.type} node?`);
-      if (!ok) return;
-      void deleteAtelierNode(node.id)
-        .then(() => pushToast("info", "Node deleted"))
-        .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
+      askConfirm({
+        title: `Delete this ${node.type} node?`,
+        body: "This cannot be undone.",
+        confirmLabel: "Delete",
+        tone: "danger",
+        onConfirm: () => {
+          void deleteAtelierNode(node.id)
+            .then(() => pushToast("info", "Node deleted"))
+            .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
+        },
+      });
       return;
     }
 
@@ -2625,15 +2669,23 @@ export function AtelierShellV3() {
                             aria-label={`Rename ${p.title || "Untitled"}`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              const next = window.prompt("Rename project:", p.title || "");
-                              if (!next || next === p.title) return;
-                              void api
-                                .updateAtelierProject(p.id, { title: next })
-                                .then(async () => {
-                                  await useAtelierStore.getState().loadProjects();
-                                  pushToast("success", `Renamed to "${next}"`);
-                                })
-                                .catch((err: unknown) => pushToast("error", `Rename failed: ${err instanceof Error ? err.message : String(err)}`));
+                              askPrompt({
+                                title: "Rename project",
+                                description: `Currently "${p.title || "Untitled"}".`,
+                                initialValue: p.title || "",
+                                placeholder: "Project name",
+                                submitLabel: "Rename",
+                                onSubmit: (next) => {
+                                  if (next === p.title) return;
+                                  void api
+                                    .updateAtelierProject(p.id, { title: next })
+                                    .then(async () => {
+                                      await useAtelierStore.getState().loadProjects();
+                                      pushToast("success", `Renamed to "${next}"`);
+                                    })
+                                    .catch((err: unknown) => pushToast("error", `Rename failed: ${err instanceof Error ? err.message : String(err)}`));
+                                },
+                              });
                             }}
                             className="pointer-events-auto rounded p-1 text-text-muted hover:bg-hover-bg hover:text-foreground"
                           >
@@ -2645,16 +2697,22 @@ export function AtelierShellV3() {
                               aria-label={`Delete ${p.title || "Untitled"}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const ok = window.confirm(`Delete "${p.title || "Untitled"}" and all its nodes?\nThis cannot be undone.`);
-                                if (!ok) return;
-                                setShowProjectPicker(false);
-                                void api
-                                  .deleteAtelierProject(p.id)
-                                  .then(async () => {
-                                    await useAtelierStore.getState().loadProjects();
-                                    pushToast("info", `Deleted "${p.title || "Untitled"}"`);
-                                  })
-                                  .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
+                                askConfirm({
+                                  title: `Delete "${p.title || "Untitled"}"?`,
+                                  body: "All of its nodes will be removed. This cannot be undone.",
+                                  confirmLabel: "Delete project",
+                                  tone: "danger",
+                                  onConfirm: () => {
+                                    setShowProjectPicker(false);
+                                    void api
+                                      .deleteAtelierProject(p.id)
+                                      .then(async () => {
+                                        await useAtelierStore.getState().loadProjects();
+                                        pushToast("info", `Deleted "${p.title || "Untitled"}"`);
+                                      })
+                                      .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
+                                  },
+                                });
                               }}
                               className="pointer-events-auto rounded p-1 text-text-muted hover:bg-red-400/20 hover:text-red-200"
                             >
@@ -2671,12 +2729,18 @@ export function AtelierShellV3() {
                     type="button"
                     role="menuitem"
                     onClick={() => {
-                      const title = window.prompt("Project name?");
-                      if (!title) return;
-                      setShowProjectPicker(false);
-                      void createProject(title)
-                        .then(() => pushToast("success", `Created "${title}"`))
-                        .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+                      askPrompt({
+                        title: "New project",
+                        description: "Give it a name. You can rename later.",
+                        placeholder: "Project name",
+                        submitLabel: "Create",
+                        onSubmit: (title) => {
+                          setShowProjectPicker(false);
+                          void createProject(title)
+                            .then(() => pushToast("success", `Created "${title}"`))
+                            .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
+                        },
+                      });
                     }}
                     className="flex w-full items-center gap-1.5 rounded px-2.5 py-2 text-left font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/10"
                   >
@@ -4489,6 +4553,38 @@ export function AtelierShellV3() {
           <Play size={14} />
         </button>
       ) : null}
+
+      {/* In-shell confirm + prompt dialogs (replaces window.confirm /
+          window.prompt). Each dispatch closes the dialog after running the
+          user's chosen handler — cancel just clears state. */}
+      <ConfirmDialog
+        open={!!confirmDialogState}
+        title={confirmDialogState?.title ?? ""}
+        body={confirmDialogState?.body}
+        confirmLabel={confirmDialogState?.confirmLabel}
+        cancelLabel={confirmDialogState?.cancelLabel}
+        tone={confirmDialogState?.tone}
+        onConfirm={() => {
+          const fn = confirmDialogState?.onConfirm;
+          setConfirmDialogState(null);
+          fn?.();
+        }}
+        onCancel={() => setConfirmDialogState(null)}
+      />
+      <PromptDialog
+        open={!!promptDialogState}
+        title={promptDialogState?.title ?? ""}
+        description={promptDialogState?.description}
+        initialValue={promptDialogState?.initialValue}
+        placeholder={promptDialogState?.placeholder}
+        submitLabel={promptDialogState?.submitLabel}
+        onSubmit={(value) => {
+          const fn = promptDialogState?.onSubmit;
+          setPromptDialogState(null);
+          fn?.(value);
+        }}
+        onCancel={() => setPromptDialogState(null)}
+      />
     </div>
   );
 }
