@@ -861,6 +861,8 @@ export function AtelierShellV3() {
     initialValue?: string;
     placeholder?: string;
     submitLabel?: string;
+    multiline?: boolean;
+    allowEmpty?: boolean;
     onSubmit: (value: string) => void;
   } | null>(null);
   const askConfirm = (opts: NonNullable<typeof confirmDialogState>) =>
@@ -2720,6 +2722,52 @@ export function AtelierShellV3() {
                     {String(projects.length).padStart(2, "0")}
                   </span>
                 </div>
+                {/* Current-project description card. Editable inline via the
+                    pencil — opens the multiline PromptDialog. Reads italic
+                    when present, mono caps placeholder when blank. */}
+                <div className="group/desc relative border-b border-white/6 px-2.5 py-2">
+                  {project.description ? (
+                    <p className="pr-6 font-display text-[12px] italic leading-[1.5] tracking-tight text-text-secondary/95">
+                      {project.description}
+                    </p>
+                  ) : (
+                    <p className="pr-6 font-mono text-[9.5px] uppercase tracking-[0.24em] text-text-muted/75">
+                      No description · click pencil to add
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Edit project description"
+                    data-tip="Edit description"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      askPrompt({
+                        title: "Project description",
+                        description: `For "${project.title || "Untitled"}". Markdown not rendered yet — keep it short.`,
+                        initialValue: project.description || "",
+                        placeholder: "What is this project about?",
+                        submitLabel: "Save",
+                        multiline: true,
+                        allowEmpty: true,
+                        onSubmit: (next) => {
+                          if (next === (project.description || "")) return;
+                          void api
+                            .updateAtelierProject(project.id, { description: next })
+                            .then(async () => {
+                              await useAtelierStore.getState().loadProjects();
+                              pushToast("success", "Description saved");
+                            })
+                            .catch((err: unknown) =>
+                              pushToast("error", `Save failed: ${err instanceof Error ? err.message : String(err)}`),
+                            );
+                        },
+                      });
+                    }}
+                    className="btn-tip absolute right-1 top-1.5 rounded p-1 text-text-muted opacity-0 transition-opacity hover:bg-hover-bg hover:text-foreground group-hover/desc:opacity-100"
+                  >
+                    <Pencil size={10} aria-hidden="true" />
+                  </button>
+                </div>
                 <ul className="max-h-[280px] overflow-y-auto">
                   {projects.map((p) => {
                     const isCurrent = p.id === project.id;
@@ -4492,13 +4540,33 @@ export function AtelierShellV3() {
             ],
           },
           {
+            heading: "Connect",
+            items: [
+              ["Hover image / take", "Reveals L+R ports"],
+              ["Drag right port → draft", "Attach as reference"],
+              ["Drag right port → take", "Branch a new draft"],
+              ["Drag right port → empty canvas", "Spawn a draft connected to source"],
+              ["Click ref edge midpoint", "Select the connection"],
+              ["Del on selected ref edge", "Detach reference"],
+            ],
+          },
+          {
             heading: "Generate",
             items: [
-              ["⌘ + Enter (Composer)", "Generate"],
+              ["Click draft node", "Open Composer"],
+              ["⌘ + Enter (in Composer)", "Generate"],
               ["@ in prompt", "Mention canvas node"],
-              ["Drag image handle → draft", "Attach as reference"],
               ["← / → in Preview", "Prev / next take"],
               ["/", "Focus Agent composer"],
+            ],
+          },
+          {
+            heading: "Sequence",
+            items: [
+              ["Take action bar → Add", "Append to sequence"],
+              ["Drag a clip in strip", "Reorder"],
+              ["Hover clip + ×", "Remove from sequence"],
+              ["Click strip clip", "Open in preview"],
             ],
           },
         ];
@@ -4687,6 +4755,8 @@ export function AtelierShellV3() {
         initialValue={promptDialogState?.initialValue}
         placeholder={promptDialogState?.placeholder}
         submitLabel={promptDialogState?.submitLabel}
+        multiline={promptDialogState?.multiline}
+        allowEmpty={promptDialogState?.allowEmpty}
         onSubmit={(value) => {
           const fn = promptDialogState?.onSubmit;
           setPromptDialogState(null);

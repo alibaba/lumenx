@@ -168,6 +168,13 @@ interface PromptProps {
   placeholder?: string;
   submitLabel?: string;
   cancelLabel?: string;
+  /** When true, render a multi-line textarea instead of a single-line
+   *  input. Trimmed-empty strings still block submit. */
+  multiline?: boolean;
+  /** Allow saving an empty value. Default false (single-line names like
+   *  project title need a value); multi-line descriptions can be
+   *  cleared. */
+  allowEmpty?: boolean;
   onSubmit: (value: string) => void;
   onCancel: () => void;
 }
@@ -180,11 +187,15 @@ export function PromptDialog({
   placeholder,
   submitLabel = "Save",
   cancelLabel = "Cancel",
+  multiline = false,
+  allowEmpty = false,
   onSubmit,
   onCancel,
 }: PromptProps) {
   const [value, setValue] = useState(initialValue);
-  const inputRef = useRef<HTMLInputElement>(null);
+  // The ref's element type depends on `multiline`; we keep one ref of the
+  // union type and cast at the assignment site to keep React happy.
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(dialogRef, open);
 
@@ -232,7 +243,7 @@ export function PromptDialog({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            if (!trimmed) return;
+            if (!allowEmpty && !trimmed) return;
             onSubmit(trimmed);
           }}
           className="px-4 pb-3.5 pt-3.5"
@@ -253,17 +264,28 @@ export function PromptDialog({
           {description ? (
             <p className="mb-2.5 text-[12.5px] leading-[1.55] text-text-secondary/95">{description}</p>
           ) : null}
-          <input
-            ref={inputRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={placeholder}
-            className="mb-3.5 w-full rounded-md border border-white/8 bg-black/35 px-3 py-2 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
-          />
+          {multiline ? (
+            <textarea
+              ref={(el) => { inputRef.current = el; }}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={placeholder}
+              rows={4}
+              className="mb-3.5 w-full resize-none rounded-md border border-white/8 bg-black/35 px-3 py-2 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
+            />
+          ) : (
+            <input
+              ref={(el) => { inputRef.current = el; }}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder={placeholder}
+              className="mb-3.5 w-full rounded-md border border-white/8 bg-black/35 px-3 py-2 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
+            />
+          )}
           <div className="grid grid-cols-2 gap-2">
             <button
               type="submit"
-              disabled={!trimmed}
+              disabled={!allowEmpty && !trimmed}
               className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(100,108,255,0.55)] transition-all duration-200 hover:scale-[1.02] hover:bg-primary/92 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:scale-100"
             >
               {submitLabel}
