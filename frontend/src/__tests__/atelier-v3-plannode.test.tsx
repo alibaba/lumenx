@@ -12,12 +12,11 @@ describe("PlanNode", () => {
     expect(screen.getByText("c")).toBeInTheDocument();
   });
 
-  it("shows the 'Plan · by Agent' footer", () => {
-    // Footer is split into two mono-caps tokens with a separator dot, so we
-    // assert the two distinct labels rather than a single concatenated string.
+  it("shows the 'Plan · by Agent' tear-stamp footer", () => {
+    // Footer is now a single dashed-perforation TearLine with a centered
+    // mono-caps label. We assert the combined string lives in the DOM.
     render(<PlanNode id="p2" title="x" bullets={[]} x={0} y={0} />);
-    expect(screen.getByText(/^Plan$/i)).toBeInTheDocument();
-    expect(screen.getByText(/^by Agent$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Plan · by Agent/i)).toBeInTheDocument();
   });
 
   it("uses a quiet glass border by default and primary ring when selected", () => {

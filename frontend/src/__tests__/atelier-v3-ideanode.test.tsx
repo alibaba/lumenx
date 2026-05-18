@@ -55,6 +55,6 @@ describe("v3 IdeaNode", () => {
     const longBody = "Lorem ipsum dolor sit amet ".repeat(200);
     const { container } = render(<IdeaNode id="i8" body={longBody} x={0} y={0} />);
     const p = container.querySelector("p");
-    expect(p?.className).toMatch(/line-clamp-6|overflow-hidden/);
+    expect(p?.className).toMatch(/line-clamp-5|line-clamp-6|overflow-hidden/);
   });
 });

@@ -50,9 +50,11 @@ function ringClass(
 
 function TypeChip({ kind }: { kind: MediaKind }) {
   const Icon = kind === "video" ? Video : kind === "audio" ? Volume2 : ImageIcon;
+  // Stamped feel: dashed inset border on a darkened pill, matches the
+  // atelier "stamped from a rubber" badge vocabulary used elsewhere.
   const label = kind === "image" ? "img" : kind === "video" ? "vid" : "aud";
   return (
-    <span className="pointer-events-none absolute left-1.5 top-1.5 hidden items-center gap-1 rounded-[3px] bg-black/70 px-1.5 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-white/85 backdrop-blur-sm group-hover:inline-flex">
+    <span className="pointer-events-none absolute left-1.5 top-1.5 hidden items-center gap-1 rounded-[3px] border border-dashed border-white/22 bg-black/70 px-1.5 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white/90 backdrop-blur-sm group-hover:inline-flex">
       <Icon size={9} aria-hidden="true" className="text-primary/85" />
       {label}
     </span>
@@ -335,7 +337,9 @@ export function MediaNode({
       ) : null}
 
       {selectedAsTake ? (
-        <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.16em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
+        // Selected take = "stamped approved". Dashed inset reinforces the
+        // rubber-stamp identity vs. a flat label pill.
+        <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-white/35 bg-primary px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
           <Check size={9} aria-hidden="true" /> selected
         </span>
       ) : duration ? (

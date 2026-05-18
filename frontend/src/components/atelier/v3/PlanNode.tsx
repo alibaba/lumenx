@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Bot } from "lucide-react";
+import { TearLine, StampBadge } from "./ornaments";
 
 const VISIBLE_BULLETS = 5;
 
@@ -45,6 +46,8 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
 
   const visibleBullets = bullets.slice(0, VISIBLE_BULLETS);
   const overflowBullets = Math.max(0, bullets.length - VISIBLE_BULLETS);
+  // Stamp index from id tail. Stable across re-renders without a real index.
+  const stampNum = id.slice(-3).toUpperCase();
 
   return (
     <div
@@ -69,8 +72,9 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
     >
       <div className="px-4 pb-3 pt-3.5">
         {/* Header — Bot avatar in primary tint, display-font title with
-            tighter tracking, no trailing chrome */}
-        <div className="mb-2 flex items-center gap-2 text-foreground">
+            tighter tracking, plus a stamped index badge in the trailing
+            corner for that "agency receipt" weight. */}
+        <div className="mb-2.5 flex items-center gap-2 text-foreground">
           <span className="grid h-[20px] w-[20px] shrink-0 place-items-center rounded-[5px] bg-primary/15 text-primary ring-1 ring-inset ring-primary/25">
             <Bot size={11} aria-hidden="true" />
           </span>
@@ -96,7 +100,7 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
             />
           ) : (
             <span
-              className={`truncate font-display text-[13px] font-medium tracking-[-0.005em] ${onTitleCommit ? "cursor-text" : ""}`}
+              className={`flex-1 truncate font-display text-[13px] font-medium tracking-[-0.005em] ${onTitleCommit ? "cursor-text" : ""}`}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 startEditing();
@@ -106,6 +110,7 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
               {title}
             </span>
           )}
+          <StampBadge label="Plan No" number={stampNum} tone="primary" />
         </div>
 
         {/* Bullets — vertical hairline indent in lieu of dots. Reads as a
@@ -121,11 +126,10 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
           ) : null}
         </ul>
 
-        {/* Footer caption — mono caps, separator dot, agent attribution */}
-        <div className="mt-2.5 flex items-center gap-1.5 border-t border-border-subtle pt-2 font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted">
-          <span>Plan</span>
-          <span aria-hidden="true" className="text-text-muted/50">·</span>
-          <span>by Agent</span>
+        {/* Tear-stamp footer: dashed perforation flanking the agent
+            attribution. Reads as the bottom of an agency receipt. */}
+        <div className="mt-3">
+          <TearLine label="Plan · by Agent" />
         </div>
       </div>
     </div>

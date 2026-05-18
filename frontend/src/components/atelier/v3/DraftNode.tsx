@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, X } from "lucide-react";
+import { TearLine } from "./ornaments";
 
 export type DraftNodeStatus = "draft" | "approved" | "running" | "completed";
 
@@ -163,15 +164,20 @@ export function DraftNode({
             </span>
           )}
           {typeof candidatesTotal === "number" && candidatesTotal > 0 ? (
+            // Take counter — stamped feel via dashed inset border, e.g.
+            // "TAKE · 02/04". Tone shifts to emerald when fully ready.
             <span
-              className={`ml-auto shrink-0 rounded-full px-1.5 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.12em] ${
+              className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${
                 (candidatesReady ?? 0) >= candidatesTotal
-                  ? "bg-emerald-400/12 text-emerald-200/95"
-                  : "bg-blue-400/12 text-blue-200/95"
+                  ? "border-emerald-300/35 text-emerald-200/95"
+                  : "border-blue-300/35 text-blue-200/95"
               }`}
               aria-label={`${candidatesReady ?? 0} of ${candidatesTotal} candidates ready`}
             >
-              {candidatesReady ?? 0}/{candidatesTotal}
+              <span>Take</span>
+              <span className="font-display text-[10px] tracking-tight">
+                {candidatesReady ?? 0}/{candidatesTotal}
+              </span>
             </span>
           ) : null}
         </div>
@@ -235,9 +241,25 @@ export function DraftNode({
         ) : null}
       </div>
 
-      {/* Awaiting-approval indicator: stronger 5×5 dot with primary halo so
-          it actually reads at zoom-out. Replaces the previous near-invisible
-          1.5×1.5 amber speck. */}
+      {/* Receipt footer — dashed perforation flanking a status caption,
+          tone-mapped to the node's lifecycle. Reads as the bottom of an
+          atelier-issued ticket. The amber halo dot is preserved on the
+          top-right so the eye finds awaiting-approval cards at zoom-out. */}
+      {(() => {
+        const map: Record<DraftNodeStatus, { label: string; tone: "amber" | "blue" | "primary" | "emerald" }> = {
+          draft:     { label: "Awaiting approval", tone: "amber" },
+          running:   { label: "Generating takes",  tone: "blue" },
+          approved:  { label: "Approved",          tone: "primary" },
+          completed: { label: "Take selected",     tone: "emerald" },
+        };
+        const m = map[status];
+        return (
+          <div className="px-3.5 pb-2.5">
+            <TearLine tone={m.tone} label={m.label} />
+          </div>
+        );
+      })()}
+
       {status === "draft" ? (
         <span
           role="status"
