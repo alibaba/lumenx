@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, FolderOpen, GitBranch, Link2, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, FolderOpen, GitBranch, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -3216,19 +3216,19 @@ export function AtelierShellV3() {
       {/* SelectionActionBar — rendered OUTSIDE the world transform so it
           stays a fixed screen size while still anchored above the selected
           node. Coordinates converted: screen = pan + world * zoom.
-          Hidden in multi-select mode; the multi-select chip takes over. */}
+          Hidden in multi-select mode; the multi-select chip takes over.
+          The bar is positioned directly under the shell root (relative)
+          using its own absolute — no nested 0×0 wrapper, since the nested
+          wrapper introduced an extra containing-block that desync'd the
+          bar from the node when the user pinch-zoomed or pan-resized. */}
       {selectedNode && !isMultiSelect ? (
-        <div className="pointer-events-none absolute inset-0 z-30">
-          <div className="pointer-events-auto absolute" style={{ left: 0, top: 0 }}>
-            <SelectionActionBar
-              kind={selectionKindOf(selectedNode)}
-              x={panX + selectedNode.x * zoomFactor}
-              y={panY + selectedNode.y * zoomFactor}
-              width={(selectedNode.width || 240) * zoomFactor}
-              onAct={(action) => handleActionBar(action, selectedNode)}
-            />
-          </div>
-        </div>
+        <SelectionActionBar
+          kind={selectionKindOf(selectedNode)}
+          x={panX + selectedNode.x * zoomFactor}
+          y={panY + selectedNode.y * zoomFactor}
+          width={(selectedNode.width || 240) * zoomFactor}
+          onAct={(action) => handleActionBar(action, selectedNode)}
+        />
       ) : null}
 
       {/* Multi-select chip: shows count + group Delete + Clear. Centered
@@ -3532,25 +3532,63 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Connect handle: appears on right-middle of a selected image node
-          that has media. Drag onto a draft to attach as reference. Sits in
-          screen coords so it stays a fixed 16px button at any zoom. */}
-      {selectedNode && selectedNode.type === "image" && (selectedNode.media_urls?.length ?? 0) > 0 ? (() => {
-        const handleScreenX = panX + (selectedNode.x + (selectedNode.width || 180)) * zoomFactor;
-        const handleScreenY = panY + (selectedNode.y + (selectedNode.height || 180) / 2) * zoomFactor;
+      {/* Connect ports: small `+` handles at the L+R midpoints of any
+          selected-or-hovered media node that owns refsable media (image /
+          completed video). Drag from either port toward a draft to attach
+          as reference. Both ports start the same drag — the visual pair
+          reads as "input + output", though attachment direction is the
+          same (source → draft). The drop target highlight is wired through
+          handleConnectHandlePointerDown's onMove. */}
+      {(() => {
+        // Pick the node that should expose ports: selected wins; otherwise
+        // a hovered media node. Drafts (intent cards) don't get ports —
+        // they're targets, not sources.
+        const candidate = selectedNode
+          ? selectedNode
+          : hoveredNodeId
+            ? (project?.nodes.find((n) => n.id === hoveredNodeId) ?? null)
+            : null;
+        if (!candidate) return null;
+        const refsable =
+          (candidate.type === "image" || candidate.type === "video" || candidate.type === "audio") &&
+          (candidate.media_urls?.length ?? 0) > 0;
+        if (!refsable) return null;
+        const w = candidate.width || (candidate.type === "image" ? 180 : 200);
+        const h = candidate.height || (candidate.type === "image" ? 180 : 113);
+        const cy = panY + (candidate.y + h / 2) * zoomFactor;
+        const leftX = panX + candidate.x * zoomFactor;
+        const rightX = panX + (candidate.x + w) * zoomFactor;
+        const portClass =
+          "btn-tip absolute z-40 grid h-[20px] w-[20px] -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/35 bg-[#141416]/96 text-primary/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_0_0_3px_rgba(100,108,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.4)] backdrop-blur-md transition-all duration-150 hover:scale-[1.18] hover:border-primary/55 hover:bg-primary hover:text-white hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(100,108,255,0.32),0_6px_16px_-4px_rgba(100,108,255,0.7)] active:scale-[1.08] active:cursor-grabbing";
         return (
-          <button
-            type="button"
-            aria-label="Drag to attach this image as a reference to a draft"
-            data-tip="Drag to a draft to attach as reference"
-            onPointerDown={(e) => handleConnectHandlePointerDown(e, selectedNode.id, handleScreenX, handleScreenY)}
-            className="btn-tip absolute z-40 grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/30 bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_0_0_3px_rgba(100,108,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.6)] transition-all duration-200 motion-safe:animate-atelier-pulse-soft hover:scale-[1.18] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(100,108,255,0.28),0_6px_16px_-4px_rgba(100,108,255,0.7)] active:scale-[1.08] active:cursor-grabbing"
-            style={{ left: handleScreenX, top: handleScreenY }}
-          >
-            <Link2 size={10} aria-hidden="true" />
-          </button>
+          <>
+            <button
+              type="button"
+              aria-label="Connect from this node"
+              data-tip="Drag to a draft to attach as reference"
+              onPointerDown={(e) =>
+                handleConnectHandlePointerDown(e, candidate.id, leftX, cy)
+              }
+              className={portClass}
+              style={{ left: leftX, top: cy }}
+            >
+              <Plus size={11} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="Connect from this node"
+              data-tip="Drag to a draft to attach as reference"
+              onPointerDown={(e) =>
+                handleConnectHandlePointerDown(e, candidate.id, rightX, cy)
+              }
+              className={portClass}
+              style={{ left: rightX, top: cy }}
+            >
+              <Plus size={11} aria-hidden="true" />
+            </button>
+          </>
         );
-      })() : null}
+      })()}
 
       {/* Branch handle: appears on right-middle of a selected COMPLETED
           take (virtual candidate). Drag anywhere on the canvas; on release

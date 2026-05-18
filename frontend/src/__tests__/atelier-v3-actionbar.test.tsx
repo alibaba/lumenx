@@ -53,9 +53,11 @@ describe("SelectionActionBar", () => {
   it("positions itself centered above the node bounding box", () => {
     const { container } = render(<SelectionActionBar kind="video" x={100} y={200} width={200} onAct={() => {}} />);
     const root = container.firstElementChild as HTMLElement;
-    // expected: left = x + width/2 = 200, top = y - 40 = 160
+    // expected: left = x + width/2 = 200, top = y - 36 = 164
+    // (Tighter pairing than the legacy 40px gap — bar sits 4px above
+    // the node top so the eye reads them as one selection unit.)
     expect(root.style.left).toBe("200px");
-    expect(root.style.top).toBe("160px");
+    expect(root.style.top).toBe("164px");
   });
 
   it("draft kind shows ONLY Delete (Composer is the editor for drafts)", () => {

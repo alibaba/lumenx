@@ -1,8 +1,9 @@
 "use client";
-import { Play, Settings, Link2, GitBranch, Check, Scissors, Trash2 } from "lucide-react";
+import { Play, Settings, Link2, GitBranch, Check, Scissors, Trash2, Pencil } from "lucide-react";
 
 export type ActionKey =
   | "play"
+  | "edit"
   | "regenerate"
   | "useAsRef"
   | "branch"
@@ -29,6 +30,7 @@ interface ActionDef {
 
 const ACTIONS: Record<ActionKey, ActionDef> = {
   play: { key: "play", label: "Play", Icon: Play },
+  edit: { key: "edit", label: "Edit", Icon: Pencil },
   regenerate: { key: "regenerate", label: "Re-generate", Icon: Settings },
   useAsRef: { key: "useAsRef", label: "Use as reference", Icon: Link2 },
   branch: { key: "branch", label: "Branch", Icon: GitBranch },
@@ -78,10 +80,20 @@ function buttonClass(variant: ActionDef["variant"]): string {
 export function SelectionActionBar({ kind, x, y, width, onAct }: Props) {
   const items = LAYOUTS[kind];
 
+  // Bar height: h-7 + py-1 + 1px border × 2 = ~32px. We want the bar to sit
+  // 8px above the node's top edge so the eye reads it as part of the same
+  // selection unit, not "another control floating away". Math:
+  //   bar-bottom = top + 32 (height)
+  //   want: bar-bottom = y - 8
+  //   ∴ top = y - 40 → was the previous value but read as too far
+  // New: bar-bottom = y - 4 → top = y - 36. Tighter pairing while still
+  // leaving a hairline of breathing room. Clamps to viewport top.
   return (
     <div
+      role="toolbar"
+      aria-label="Selection actions"
       className="absolute z-40 inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/8 bg-[#141416]/96 px-1 py-1 shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
-      style={{ left: x + width / 2, top: Math.max(8, y - 40) }}
+      style={{ left: x + width / 2, top: Math.max(8, y - 36) }}
     >
       {items.map((item, idx) => {
         if (item === "divider") {
