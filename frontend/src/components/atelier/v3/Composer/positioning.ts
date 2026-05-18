@@ -60,12 +60,19 @@ export function composerPlacement(
     };
   }
 
-  // Horizontal — pin to the anchor's left edge. Nudge inward only if
-  // the right edge of the composer would leave the viewport entirely.
+  // Horizontal — pin to the anchor's left edge by default. If the
+  // composer would extend past the viewport right edge, try right-
+  // aligning it with the anchor's right edge instead. That keeps the
+  // composer visually attached to the same node rather than sliding
+  // far left to fit. Clamp as a last resort.
   let left = Math.round(anchor.x);
-  const rightEdge = left + composer.width;
-  if (rightEdge > viewport.width - 12) {
-    left = Math.max(12, viewport.width - composer.width - 12);
+  if (left + composer.width > viewport.width - 12) {
+    const rightAligned = Math.round(anchor.x + anchor.width - composer.width);
+    if (rightAligned >= 12 && rightAligned + composer.width <= viewport.width - 12) {
+      left = rightAligned;
+    } else {
+      left = Math.max(12, viewport.width - composer.width - 12);
+    }
   }
   if (left < 12) left = 12;
 
