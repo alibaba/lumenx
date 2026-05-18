@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, FolderOpen, GitBranch, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, FolderOpen, Pencil, Play, Plus, Trash2, X } from "lucide-react";
 import {
   MediaNode,
   DraftNode,
@@ -1529,19 +1529,8 @@ export function AtelierShellV3() {
   const [hoveredConnectTargetId, setHoveredConnectTargetId] = useState<string | null>(null);
 
   // Branch drag — from a completed take's right-edge handle, drag a bezier
-  // out to anywhere on the canvas; on release the take's prompt + model
-  // seed a new draft positioned at the drop point. Mirrors the connect
-  // drag's window-level pointermove pattern. PRD §6.4-bis: 'branch from a
-  // result' becomes a one-gesture flow (vs. right-click → Branch).
-  const branchDragRef = useRef<{
-    parentId: string;
-    candidateId: string;
-    startScreenX: number;
-    startScreenY: number;
-    currentScreenX: number;
-    currentScreenY: number;
-  } | null>(null);
-  const [branchDragTick, setBranchDragTick] = useState(0);
+  // (Branch drag has been folded into the unified handlePortDragOut path —
+  //  no separate ref/state needed.)
 
   const zoomFactor = zoom / 100;
 
@@ -1712,22 +1701,36 @@ export function AtelierShellV3() {
     }
   };
 
-  // Drag-to-connect: from a selected image's right-edge handle, draw a
-  // dashed bezier following the cursor. Drop on a draft (orange) video node
-  // to attach the image as a reference. Cancel drops elsewhere.
-  // Uses window-level pointermove/up so the gesture survives leaving the
-  // canvas bounds and doesn't fight main's pan handlers.
-  const handleConnectHandlePointerDown = (
+  // Unified hover-port outgoing drag. Replaces the two specialized
+  // selection-state handles (image connect, take branch). Works on every
+  // node type — the dispatch decides what the drop does:
+  //   - Source = image w/ media → drop on draft attaches as ref;
+  //                                drop on canvas creates a new draft pre-
+  //                                attached to the image at the drop point.
+  //   - Source = completed take → branches into a new draft, dropped at
+  //                                the cursor (existing branch flow).
+  //   - Source = anything else → toast "coming soon" (idea/comment/draft
+  //     don't have well-defined outgoing semantics yet).
+  const handlePortDragOut = (
     event: React.PointerEvent,
-    sourceNodeId: string,
+    source: AtelierNode,
     handleScreenX: number,
     handleScreenY: number,
   ) => {
     if (event.button !== 0) return;
     event.stopPropagation();
     event.preventDefault();
+    const parsedCand = parseCandidateNodeId(source.id);
+    const isTakeSource = !!parsedCand;
+    const isImageSource = source.type === "image" && (source.media_urls?.length ?? 0) > 0;
+
+    if (!isTakeSource && !isImageSource) {
+      pushToast("info", "Connections from this node type are coming soon. Try an image or completed take.");
+      return;
+    }
+
     connectDragRef.current = {
-      sourceNodeId,
+      sourceNodeId: source.id,
       startScreenX: handleScreenX,
       startScreenY: handleScreenY,
       currentScreenX: event.clientX,
@@ -1739,16 +1742,20 @@ export function AtelierShellV3() {
       if (!connectDragRef.current) return;
       connectDragRef.current.currentScreenX = ev.clientX;
       connectDragRef.current.currentScreenY = ev.clientY;
-      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
-      const nodeEl = el?.closest("[data-atelier-node]") as HTMLElement | null;
-      const targetId = nodeEl?.dataset.atelierNode ?? null;
-      const valid = (() => {
-        if (!targetId || targetId === sourceNodeId) return null;
-        const target = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === targetId);
-        if (!target || !isDraftVideo(target)) return null;
-        return target.id;
-      })();
-      setHoveredConnectTargetId(valid);
+      // Highlight only meaningful drop targets — for image sources, that's
+      // a draft video; takes don't snap onto a target (they create a new
+      // draft at the cursor regardless).
+      if (isImageSource) {
+        const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
+        const nodeEl = el?.closest("[data-atelier-node]") as HTMLElement | null;
+        const targetId = nodeEl?.dataset.atelierNode ?? null;
+        const valid = (() => {
+          if (!targetId || targetId === source.id) return null;
+          const target = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === targetId);
+          return target && isDraftVideo(target) ? target.id : null;
+        })();
+        setHoveredConnectTargetId(valid);
+      }
       setConnectDragTick((v) => v + 1);
     };
 
@@ -1760,90 +1767,84 @@ export function AtelierShellV3() {
       setHoveredConnectTargetId(null);
       setConnectDragTick((v) => v + 1);
       if (!drag) return;
+
+      const dragged =
+        Math.abs(ev.clientX - drag.startScreenX) + Math.abs(ev.clientY - drag.startScreenY);
+      // Tiny movement = treat as a click. Don't fire any side-effect.
+      if (dragged < 8) return;
+
       const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
       const nodeEl = el?.closest("[data-atelier-node]") as HTMLElement | null;
       const targetId = nodeEl?.dataset.atelierNode ?? null;
-      if (!targetId || targetId === drag.sourceNodeId) return;
-      const target = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === targetId);
-      if (!target || !isDraftVideo(target)) {
-        pushToast("info", "Drop on a draft video node to attach as reference.");
-        return;
-      }
-      void useAtelierStore.getState()
-        .attachReferenceNode(target.id, drag.sourceNodeId)
-        .then(() => pushToast("success", "Reference attached"))
-        .catch((err: unknown) => pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`));
-    };
-
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  };
-
-  // Branch from a completed take's right-edge handle. Drag a bezier out
-  // anywhere; on release we call branchFromCandidate (which seeds a new
-  // draft from the take's prompt + model) and immediately move the new
-  // draft to the drop world coords so the user lands on visual confirmation.
-  const handleBranchHandlePointerDown = (
-    event: React.PointerEvent,
-    parentId: string,
-    candidateId: string,
-    handleScreenX: number,
-    handleScreenY: number,
-  ) => {
-    if (event.button !== 0) return;
-    event.stopPropagation();
-    event.preventDefault();
-    branchDragRef.current = {
-      parentId,
-      candidateId,
-      startScreenX: handleScreenX,
-      startScreenY: handleScreenY,
-      currentScreenX: event.clientX,
-      currentScreenY: event.clientY,
-    };
-    setBranchDragTick((v) => v + 1);
-
-    const onMove = (ev: PointerEvent) => {
-      if (!branchDragRef.current) return;
-      branchDragRef.current.currentScreenX = ev.clientX;
-      branchDragRef.current.currentScreenY = ev.clientY;
-      setBranchDragTick((v) => v + 1);
-    };
-
-    const onUp = (ev: PointerEvent) => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      const drag = branchDragRef.current;
-      branchDragRef.current = null;
-      setBranchDragTick((v) => v + 1);
-      if (!drag) return;
-      // Compute drop world coords (center of the new draft on the cursor).
+      const target = targetId
+        ? useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === targetId)
+        : null;
       const rect = mainRef.current?.getBoundingClientRect();
       const offX = rect?.left ?? 0;
       const offY = rect?.top ?? 0;
       const dropWorldX = (ev.clientX - offX - panX) / zoomFactor;
       const dropWorldY = (ev.clientY - offY - panY) / zoomFactor;
-      // Tiny drag = no-op (treat as a click without intent to drop).
-      if (
-        Math.abs(ev.clientX - drag.startScreenX) + Math.abs(ev.clientY - drag.startScreenY) < 8
-      ) {
+
+      // Source = take → always branch (existing behavior). Drop on canvas
+      // anchors the new draft at the cursor; drop on a node still branches
+      // but lets the auto-layout placement stand.
+      if (isTakeSource && parsedCand) {
+        void useAtelierStore.getState()
+          .branchFromCandidate(parsedCand.parentId, parsedCand.candidateId)
+          .then(async (newDraft) => {
+            if (!target) {
+              const w = newDraft.width || 240;
+              const h = newDraft.height || 110;
+              const tx = Math.round(dropWorldX - w / 2);
+              const ty = Math.round(dropWorldY - h / 2);
+              useAtelierStore.getState().moveNodeLocal(newDraft.id, tx, ty);
+              await useAtelierStore.getState().commitNodePosition(newDraft.id, tx, ty).catch(() => {});
+            }
+            pushToast("success", "Branched · new draft created");
+          })
+          .catch((err: unknown) =>
+            pushToast("error", `Branch failed: ${err instanceof Error ? err.message : String(err)}`),
+          );
         return;
       }
-      void useAtelierStore.getState()
-        .branchFromCandidate(drag.parentId, drag.candidateId)
-        .then((newDraft) => {
-          // Center the newly-created draft on the drop point.
-          const w = newDraft.width || 240;
-          const h = newDraft.height || 110;
-          const tx = Math.round(dropWorldX - w / 2);
-          const ty = Math.round(dropWorldY - h / 2);
-          useAtelierStore.getState().moveNodeLocal(newDraft.id, tx, ty);
-          void useAtelierStore.getState().commitNodePosition(newDraft.id, tx, ty).catch(() => {});
-          pushToast("success", "Branched · new draft created");
-        })
-        .catch((err: unknown) => {
-          pushToast("error", `Branch failed: ${err instanceof Error ? err.message : String(err)}`);
-        });
+
+      // Source = image
+      if (isImageSource) {
+        if (target && isDraftVideo(target)) {
+          // Attach to an existing draft target (the typical "use as ref"
+          // flow but performed via drag).
+          void useAtelierStore.getState()
+            .attachReferenceNode(target.id, source.id)
+            .then(() => pushToast("success", "Reference attached"))
+            .catch((err: unknown) =>
+              pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`),
+            );
+          return;
+        }
+        if (!target) {
+          // Drop on empty canvas → create a new draft pre-attached to this
+          // image. The new draft lands centered on the cursor so the user
+          // sees confirmation at the drop point.
+          void useAtelierStore.getState()
+            .createVideoNode()
+            .then(async (newDraft) => {
+              const w = newDraft.width || 240;
+              const h = newDraft.height || 110;
+              const tx = Math.round(dropWorldX - w / 2);
+              const ty = Math.round(dropWorldY - h / 2);
+              useAtelierStore.getState().moveNodeLocal(newDraft.id, tx, ty);
+              await useAtelierStore.getState().commitNodePosition(newDraft.id, tx, ty).catch(() => {});
+              await useAtelierStore.getState().attachReferenceNode(newDraft.id, source.id);
+              pushToast("success", "New draft created and image attached");
+            })
+            .catch((err: unknown) =>
+              pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`),
+            );
+          return;
+        }
+        pushToast("info", "Drop on a draft video, or on empty canvas to create one.");
+        return;
+      }
     };
 
     window.addEventListener("pointermove", onMove);
@@ -3571,56 +3572,62 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Connect ports: small `+` handles at the L+R midpoints of any
-          selected-or-hovered media node that owns refsable media (image /
-          completed video). Drag from either port toward a draft to attach
-          as reference. Both ports start the same drag — the visual pair
-          reads as "input + output", though attachment direction is the
-          same (source → draft). The drop target highlight is wired through
-          handleConnectHandlePointerDown's onMove. */}
+      {/* Connection ports — left = input (passive drop target indicator),
+          right = output (drag-from). Appear on selected-or-hovered nodes;
+          render in screen coords so they stay a stable 18px size at any
+          zoom. Right port dispatches through handlePortDragOut, which
+          decides whether the drag attaches an image, branches a take, or
+          spawns a fresh draft pre-attached to the source on a canvas
+          drop. Drafts and ideas show the ports too but currently surface
+          a "coming soon" toast on release — the visual symmetry is the
+          point. */}
       {(() => {
-        // Pick the node that should expose ports: selected wins; otherwise
-        // a hovered media node. Drafts (intent cards) don't get ports —
-        // they're targets, not sources.
         const candidate = selectedNode
           ? selectedNode
           : hoveredNodeId
             ? (project?.nodes.find((n) => n.id === hoveredNodeId) ?? null)
             : null;
         if (!candidate) return null;
-        const refsable =
-          (candidate.type === "image" || candidate.type === "video" || candidate.type === "audio") &&
-          (candidate.media_urls?.length ?? 0) > 0;
-        if (!refsable) return null;
-        const w = candidate.width || (candidate.type === "image" ? 180 : 200);
+        // Skip ports for the connect-drag SOURCE node itself — the handle
+        // is already grabbed; doubling it visually is noise.
+        if (connectDragRef.current?.sourceNodeId === candidate.id) return null;
+        const w = candidate.width || (candidate.type === "image" ? 180 : 240);
         const h = candidate.height || (candidate.type === "image" ? 180 : 113);
         const cy = panY + (candidate.y + h / 2) * zoomFactor;
         const leftX = panX + candidate.x * zoomFactor;
         const rightX = panX + (candidate.x + w) * zoomFactor;
-        const portClass =
-          "btn-tip absolute z-40 grid h-[20px] w-[20px] -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/35 bg-[#141416]/96 text-primary/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_0_0_3px_rgba(100,108,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.4)] backdrop-blur-md transition-all duration-150 hover:scale-[1.18] hover:border-primary/55 hover:bg-primary hover:text-white hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(100,108,255,0.32),0_6px_16px_-4px_rgba(100,108,255,0.7)] active:scale-[1.08] active:cursor-grabbing";
+        const isDropTarget =
+          !!connectDragRef.current && hoveredConnectTargetId === candidate.id;
+        // Left port: passive input. When a connection drag is in flight
+        // and this node is the hovered drop target, the left port lights
+        // up to read as "land here". Otherwise it's a quiet affordance
+        // showing the node accepts incoming links.
+        const leftClass = `pointer-events-none absolute z-40 grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border backdrop-blur-md transition-all duration-150 ${
+          isDropTarget
+            ? "border-primary/65 bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(100,108,255,0.32),0_6px_16px_-4px_rgba(100,108,255,0.7)] motion-safe:animate-atelier-pulse-soft"
+            : "border-white/20 bg-[#141416]/92 text-text-muted/85 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_2px_8px_-2px_rgba(0,0,0,0.45)]"
+        }`;
+        // Right port: active output. Drag-from starts handlePortDragOut.
+        const rightClass =
+          "btn-tip absolute z-40 grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/30 bg-[#141416]/92 text-primary/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_0_0_3px_rgba(100,108,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.4)] backdrop-blur-md transition-all duration-150 hover:scale-[1.18] hover:border-primary/60 hover:bg-primary hover:text-white hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(100,108,255,0.32),0_6px_16px_-4px_rgba(100,108,255,0.7)] active:scale-[1.08] active:cursor-grabbing";
         return (
           <>
-            <button
-              type="button"
-              aria-label="Connect from this node"
-              data-tip="Drag to a draft to attach as reference"
-              onPointerDown={(e) =>
-                handleConnectHandlePointerDown(e, candidate.id, leftX, cy)
-              }
-              className={portClass}
+            <span
+              aria-hidden="true"
+              data-tip={isDropTarget ? "Drop to connect" : "Input"}
+              className={`${leftClass} btn-tip`}
               style={{ left: leftX, top: cy }}
             >
-              <Plus size={11} aria-hidden="true" />
-            </button>
+              <Plus size={10} aria-hidden="true" />
+            </span>
             <button
               type="button"
-              aria-label="Connect from this node"
-              data-tip="Drag to a draft to attach as reference"
+              aria-label="Connection output — drag onto a node or to empty canvas"
+              data-tip="Drag onto a draft, or to empty canvas to spawn a connected draft"
               onPointerDown={(e) =>
-                handleConnectHandlePointerDown(e, candidate.id, rightX, cy)
+                handlePortDragOut(e, candidate, rightX, cy)
               }
-              className={portClass}
+              className={rightClass}
               style={{ left: rightX, top: cy }}
             >
               <Plus size={11} aria-hidden="true" />
@@ -3628,72 +3635,6 @@ export function AtelierShellV3() {
           </>
         );
       })()}
-
-      {/* Branch handle: appears on right-middle of a selected COMPLETED
-          take (virtual candidate). Drag anywhere on the canvas; on release
-          a new draft is seeded from the take's prompt + model and placed
-          at the drop point. Emerald-tinted to distinguish from the primary
-          connect handle. PRD §6.4-bis. */}
-      {selectedNode && (() => {
-        const parsed = parseCandidateNodeId(selectedNode.id);
-        if (!parsed || !project) return null;
-        const parent = project.nodes.find((n) => n.id === parsed.parentId);
-        const cand = parent ? readCandidates(parent).find((c) => c.id === parsed.candidateId) : undefined;
-        if (!cand || cand.status !== "completed") return null;
-        const handleScreenX = panX + (selectedNode.x + (selectedNode.width || 200)) * zoomFactor;
-        const handleScreenY = panY + (selectedNode.y + (selectedNode.height || 113) / 2) * zoomFactor;
-        return (
-          <button
-            type="button"
-            aria-label="Drag to branch from this take"
-            data-tip="Drag to branch — creates a new draft from this take"
-            onPointerDown={(e) =>
-              handleBranchHandlePointerDown(e, parsed.parentId, parsed.candidateId, handleScreenX, handleScreenY)
-            }
-            className="btn-tip absolute z-40 grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/30 bg-emerald-500 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_0_0_3px_rgba(110,231,183,0.18),0_4px_12px_-4px_rgba(16,185,129,0.6)] transition-all duration-200 motion-safe:animate-atelier-pulse-soft hover:scale-[1.18] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(110,231,183,0.28),0_6px_16px_-4px_rgba(16,185,129,0.7)] active:scale-[1.08] active:cursor-grabbing"
-            style={{ left: handleScreenX, top: handleScreenY }}
-          >
-            <GitBranch size={10} aria-hidden="true" />
-          </button>
-        );
-      })()}
-
-      {/* Branch-drag bezier overlay (screen coords). Emerald dashed line
-          from the take handle to the cursor. */}
-      {branchDragRef.current ? (() => {
-        const drag = branchDragRef.current!;
-        const x1 = drag.startScreenX;
-        const y1 = drag.startScreenY;
-        const x2 = drag.currentScreenX;
-        const y2 = drag.currentScreenY;
-        const dx = Math.max(40, Math.abs(x2 - x1) * 0.4);
-        return (
-          <svg
-            key={`branch-svg-${branchDragTick}`}
-            aria-hidden="true"
-            className="pointer-events-none fixed inset-0 z-[45]"
-            width="100%"
-            height="100%"
-          >
-            <path
-              d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
-              fill="none"
-              stroke="rgba(16,185,129,0.85)"
-              strokeWidth={2.25}
-              strokeDasharray="6 4"
-              strokeLinecap="round"
-              className="motion-safe:animate-atelier-dash"
-            />
-            <circle
-              cx={x2}
-              cy={y2}
-              r={4}
-              fill="rgba(16,185,129,0.95)"
-              style={{ filter: "drop-shadow(0 0 6px rgba(16,185,129,0.6))" }}
-            />
-          </svg>
-        );
-      })() : null}
 
       {/* Marquee box-select overlay (screen coords). */}
       {marqueeDragRef.current ? (() => {
