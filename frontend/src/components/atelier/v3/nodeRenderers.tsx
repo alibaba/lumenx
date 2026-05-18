@@ -1,0 +1,400 @@
+"use client";
+//
+// Node-rendering helpers extracted out of AtelierShellV3.tsx so the shell
+// stops being a 4900-line file. Pure rendering — these functions take a
+// node and the minimal props they need to dispatch to the right v3 leaf
+// component, plus a couple of shared geometry / data helpers used both
+// here and in the shell.
+//
+// Behavior is identical to the previous inline definitions; this is a
+// move-only refactor (no logic changes).
+import * as React from "react";
+import { Play } from "lucide-react";
+import {
+  MediaNode,
+  DraftNode,
+  IdeaNode,
+  CommentNode,
+  PlanNode,
+  toMediaNodeView,
+} from "@/components/atelier/v3";
+import { useAtelierStore } from "@/store/atelierStore";
+import type { AtelierNode, AtelierVideoCandidate } from "@/lib/api";
+
+// ── Geometry constants ────────────────────────────────────────────────
+//
+// Candidate takes (the small video thumbs spawned next to each draft)
+// are laid out in a 2-column grid to the right of the parent draft.
+// Same numbers the shell used to inline.
+export const PARENT_TO_CAND_GAP = 32;
+export const CAND_WIDTH = 200;
+export const CAND_HEIGHT = 113;
+export const CAND_GAP = 16;
+
+// ── Pure data helpers ─────────────────────────────────────────────────
+
+export function selectionKindOf(
+  node: AtelierNode,
+): "image" | "video" | "audio" | "draft" | "idea" | "comment" {
+  if (node.type === "image") return "image";
+  if (node.type === "audio") return "audio";
+  if (node.type === "idea") return "idea";
+  if (node.type === "comment") return "comment";
+  if (node.type === "video" && node.status === "draft") return "draft";
+  return "video";
+}
+
+export function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+export function readStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+export function readCandidates(node: AtelierNode): AtelierVideoCandidate[] {
+  const raw = (node.data as { candidates?: unknown })?.candidates;
+  if (!Array.isArray(raw)) return [];
+  return raw as AtelierVideoCandidate[];
+}
+
+export function isDraftVideo(node: AtelierNode): boolean {
+  // Any draft-status video is a DraftNode candidate. The intent string is
+  // pulled from data.intent → title → "Untitled" further down so a node
+  // missing data.intent still renders as a draft (instead of falling to
+  // the wall-of-text empty-video card).
+  return node.type === "video" && node.status === "draft";
+}
+
+export function candidateNodeId(parentId: string, candidateId: string): string {
+  return `${parentId}::cand::${candidateId}`;
+}
+
+export function parseCandidateNodeId(
+  id: string,
+): { parentId: string; candidateId: string } | null {
+  const m = id.match(/^(.+)::cand::(.+)$/);
+  if (!m) return null;
+  return { parentId: m[1], candidateId: m[2] };
+}
+
+export function candidatePosition(
+  parent: AtelierNode,
+  index: number,
+): { x: number; y: number } {
+  const parentRight = parent.x + (parent.width || 240) + PARENT_TO_CAND_GAP;
+  const x = parentRight + (index % 2) * (CAND_WIDTH + CAND_GAP);
+  const y = parent.y + Math.floor(index / 2) * (CAND_HEIGHT + 15);
+  return { x, y };
+}
+
+// ── Node renderers ────────────────────────────────────────────────────
+
+export function renderNode(
+  node: AtelierNode,
+  selectedIds: Set<string>,
+  select: (id: string | null) => void,
+  imageActions?: {
+    onUpload: (id: string) => void;
+    onGenerate: (id: string) => void;
+  },
+  /** Id of the idea/comment node currently being edited inline by the
+   *  shell. The matching node renders in editing-mode (chrome only) so the
+   *  overlaid textarea isn't doubled with the underlying body. */
+  editingTextNodeId?: string | null,
+): React.ReactNode {
+  const isSelected = selectedIds.has(node.id);
+  const onSelect = () => select(node.id);
+  const isEditingThis = editingTextNodeId === node.id;
+
+  if (node.type === "image") {
+    const view = toMediaNodeView(node, { selectedNodeId: null });
+    if (!view) return null;
+    // Wire upload / generate actions only for empty image drafts — that's
+    // the only state where the actionable card replaces the placeholder.
+    const isEmptyDraft = !view.src;
+    return (
+      <MediaNode
+        key={node.id}
+        id={view.id}
+        kind="image"
+        src={view.src}
+        filename={view.filename ?? node.title}
+        status={view.status}
+        selected={isSelected}
+        x={view.x}
+        y={view.y}
+        width={view.width}
+        height={view.height}
+        onSelect={onSelect}
+        onUpload={isEmptyDraft && imageActions ? imageActions.onUpload : undefined}
+        onGenerate={isEmptyDraft && imageActions ? imageActions.onGenerate : undefined}
+      />
+    );
+  }
+
+  if (node.type === "audio") {
+    const view = toMediaNodeView(node, { selectedNodeId: null });
+    if (!view) return null;
+    return (
+      <MediaNode
+        key={node.id}
+        id={view.id}
+        kind="audio"
+        filename={view.filename ?? node.title}
+        duration={view.duration}
+        status={view.status}
+        selected={isSelected}
+        x={view.x}
+        y={view.y}
+        width={view.width}
+        height={view.height}
+        onSelect={onSelect}
+      />
+    );
+  }
+
+  if (node.type === "idea") {
+    const body = readString(node.data?.body) ?? node.prompt ?? "";
+    return (
+      <IdeaNode
+        key={node.id}
+        id={node.id}
+        body={body}
+        selected={isSelected}
+        x={node.x}
+        y={node.y}
+        onSelect={onSelect}
+        editing={isEditingThis}
+      />
+    );
+  }
+
+  if (node.type === "comment") {
+    const body = readString(node.data?.body) ?? node.prompt ?? "";
+    const author = readString((node.data as { author?: unknown })?.author);
+    return (
+      <CommentNode
+        key={node.id}
+        id={node.id}
+        body={body}
+        author={author}
+        selected={isSelected}
+        x={node.x}
+        y={node.y}
+        onSelect={onSelect}
+        editing={isEditingThis}
+      />
+    );
+  }
+
+  if (node.type === "plan") {
+    const title = node.title || "Plan";
+    const bullets = readStringArray((node.data as { bullets?: unknown })?.bullets);
+    return (
+      <PlanNode
+        key={node.id}
+        id={node.id}
+        title={title}
+        bullets={bullets}
+        selected={isSelected}
+        x={node.x}
+        y={node.y}
+        onSelect={onSelect}
+        onTitleCommit={(next) => {
+          void useAtelierStore
+            .getState()
+            .updateNode(node.id, { title: next })
+            .catch(() => {/* save chip surfaces failures */});
+        }}
+      />
+    );
+  }
+
+  if (node.type === "video") {
+    if (isDraftVideo(node)) {
+      const intent =
+        readString(node.data?.intent) ?? node.title ?? "Untitled draft";
+      const modelLabel = readString(node.data?.model) ?? "Wan 2.7";
+      const configSummary =
+        readString(node.data?.config_summary) ?? "1280×720 · 5s · 4×";
+      const refs = readStringArray(node.data?.reference_image_urls);
+      const cands = readCandidates(node);
+      const candidatesReady = cands.filter((c) => c.status === "completed").length;
+      const candidatesTotal = cands.length;
+      return (
+        <DraftNode
+          key={node.id}
+          id={node.id}
+          status="draft"
+          intent={intent}
+          modelLabel={modelLabel}
+          configSummary={configSummary}
+          refs={refs}
+          candidatesReady={candidatesTotal > 0 ? candidatesReady : undefined}
+          candidatesTotal={candidatesTotal > 0 ? candidatesTotal : undefined}
+          selected={isSelected}
+          x={node.x}
+          y={node.y}
+          onSelect={onSelect}
+          onIntentCommit={(next) => {
+            void useAtelierStore.getState().updateNode(node.id, {
+              data: { ...(node.data ?? {}), intent: next },
+            }).catch(() => {/* save chip surfaces failures */});
+          }}
+          onDetachRef={(url) => {
+            void useAtelierStore.getState().detachReferenceNode(node.id, url).catch(() => {});
+          }}
+        />
+      );
+    }
+    const view = toMediaNodeView(node, { selectedNodeId: null });
+    const candidateCount = readCandidates(node).length;
+    // Empty-video fallback: a non-draft video node with no media + no
+    // candidates. With the broadened isDraftVideo this is rare — only
+    // triggered by orphaned legacy nodes whose status was bumped past
+    // 'draft' before any media was attached.
+    if (!view?.src && candidateCount === 0) {
+      return (
+        <div
+          key={node.id}
+          className={`absolute w-[200px] rounded-md border bg-elevated transition-shadow shadow-2xl shadow-black/40 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)] ${
+            isSelected ? "ring-2 ring-primary border-primary/50" : "border-glass-border"
+          }`}
+          style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
+          role="button"
+          tabIndex={0}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+        >
+          <div className="flex flex-col items-center gap-1 px-3 py-3 text-center">
+            <Play size={14} className="text-text-muted" aria-hidden="true" />
+            <div className="font-mono text-[10px] uppercase tracking-wider text-text-muted">
+              {node.title || "Empty video"}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (view) {
+      return (
+        <MediaNode
+          key={node.id}
+          id={view.id}
+          kind="video"
+          src={view.src}
+          filename={view.filename ?? node.title}
+          duration={view.duration}
+          status={view.status}
+          progress={view.progress}
+          selected={view.selected}
+          selectedAsTake={view.selectedAsTake}
+          x={view.x}
+          y={view.y}
+          // Clamp legacy nodes' bloated default 420x560 to v0.3 sizes.
+          width={view.width ? Math.min(view.width, 240) : undefined}
+          height={view.height ? Math.min(view.height, 136) : undefined}
+          onSelect={onSelect}
+        />
+      );
+    }
+  }
+
+  return null;
+}
+
+export function renderCandidatesAsMediaNodes(
+  node: AtelierNode,
+  selectedIds: Set<string>,
+  select: (id: string | null) => void,
+  onRetry: (parentId: string, candidateId: string) => void,
+): React.ReactNode[] {
+  if (node.type !== "video") return [];
+  const candidates = readCandidates(node);
+  if (candidates.length === 0) return [];
+  const selectedTakeId = readString(
+    (node.data as { selected_candidate_id?: unknown })?.selected_candidate_id,
+  );
+
+  return candidates.map((c, i) => {
+    const { x, y } = candidatePosition(node, i);
+    const candKey = candidateNodeId(node.id, c.id);
+    const params = (c.params ?? {}) as Record<string, unknown>;
+    const progress =
+      typeof params.progress === "number" ? params.progress : undefined;
+    // Prefer backend-supplied ETA; fall back to a heuristic from
+    // attempt_started_at + progress so the user gets *some* signal.
+    const etaSeconds = (() => {
+      const explicit = [
+        params.eta_seconds,
+        params.estimated_seconds_remaining,
+        params.eta,
+      ].find((v): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0);
+      if (explicit !== undefined) return Math.round(explicit);
+      if (
+        typeof progress === "number" &&
+        progress > 5 &&
+        typeof c.attempt_started_at === "number" &&
+        c.attempt_started_at > 0
+      ) {
+        const elapsedMs = Date.now() - c.attempt_started_at * 1000;
+        if (elapsedMs > 0) {
+          const eta = (elapsedMs / 1000) * (100 - progress) / progress;
+          if (eta > 0 && eta < 600) return Math.round(eta);
+        }
+      }
+      return undefined;
+    })();
+    // Completed takes are draggable to the Sequence Strip via HTML5
+    // drag-and-drop. We carry a custom mime type so the strip's drop
+    // handler can distinguish take drags from regular pointer drags
+    // (canvas pan, marquee, etc.).
+    const dragPayload = JSON.stringify({ parentId: node.id, candidateId: c.id });
+    return (
+      // Wrap each candidate MediaNode with a positional shell that carries
+      // data-atelier-node, so the Composer's DOM-rect anchor lookup can
+      // find candidate takes the same way it finds top-level nodes.
+      <div
+        key={candKey}
+        data-atelier-node={candKey}
+        draggable={c.status === "completed" && !!c.video_url}
+        onDragStart={(e) => {
+          if (c.status !== "completed" || !c.video_url) return;
+          e.dataTransfer.effectAllowed = "copyLink";
+          e.dataTransfer.setData("application/x-atelier-take", dragPayload);
+          // Plain text fallback so dropping into other surfaces (e.g.,
+          // the agent prompt) still gets a meaningful payload.
+          e.dataTransfer.setData("text/plain", `@${c.label || c.id.slice(0, 8)}`);
+        }}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 0,
+          height: 0,
+        }}
+      >
+        <MediaNode
+          id={candKey}
+          kind="video"
+          src={c.video_url ?? undefined}
+          filename={c.label || c.id.slice(0, 8)}
+          status={c.status}
+          progress={progress}
+          etaSeconds={etaSeconds}
+          errorMessage={c.error ?? undefined}
+          selectedAsTake={selectedTakeId === c.id}
+          selected={selectedIds.has(candKey)}
+          x={x}
+          y={y}
+          onSelect={() => select(candKey)}
+          onRetry={c.status === "failed" ? () => onRetry(node.id, c.id) : undefined}
+        />
+      </div>
+    );
+  });
+}
