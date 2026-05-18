@@ -2,6 +2,7 @@
 import { useRef } from "react";
 import { AlertTriangle, Check, ImageIcon, Loader2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
+import { TearLine } from "./ornaments";
 
 interface Props {
   id: string;
@@ -142,6 +143,114 @@ export function MediaNode({
       try { v.currentTime = 0; } catch { /* ignore */ }
     }
   };
+
+  // ── Image card mode ────────────────────────────────────────────────
+  // When an image node has uploaded media, render the same card chrome
+  // as DraftNode (244 wide, header row + thumb + tear footer) so the
+  // canvas reads as a uniform set of cards rather than a mix of bare
+  // thumbnails and bordered cards. Empty image drafts keep their
+  // upload+generate inline UX; videos and audio stay thumbnail-only.
+  if (kind === "image" && src && !isEmptyImageActionable) {
+    const stampNum = id.slice(-3).toUpperCase();
+    const cardBorder = selected || selectedAsTake
+      ? "ring-2 ring-primary border-primary/50"
+      : status === "failed"
+        ? "border-red-400/45"
+        : "border-glass-border";
+    const cardName = filename || "Image";
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onSelect?.(id);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect?.(id);
+          }
+        }}
+        style={{
+          transform: `translate(${x}px, ${y}px)`,
+          backgroundImage:
+            "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 32%)",
+        }}
+        className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-shadow duration-200 ${cardBorder}`}
+      >
+        {/* Header row — same vocabulary as DraftNode (sparkles + display
+            font title). 'IMG' caption sits at the trailing edge so the
+            card is identifiable at a glance even when the thumbnail is
+            similar across siblings. */}
+        <div className="flex items-center gap-1.5 px-3.5 pb-1.5 pt-3 text-foreground">
+          <ImageIcon size={11} className="shrink-0 text-primary" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate font-display text-[13px] font-medium tracking-[-0.005em]">
+            {cardName}
+          </span>
+          <span className="shrink-0 rounded-[3px] border border-dashed border-white/22 px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-text-muted/85">
+            Img
+          </span>
+        </div>
+        {/* Thumbnail body — fixed aspect 4:3 keeps every image card the
+            same height regardless of source ratio. */}
+        <div className="px-3 pb-1.5">
+          <div className="relative overflow-hidden rounded-md border border-white/8 bg-black/40" style={{ aspectRatio: "4 / 3" }}>
+            <img
+              src={src}
+              alt={filename ?? ""}
+              loading="lazy"
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            {showProcessing ? (
+              <div className="absolute inset-0 grid place-items-center bg-blue-400/[0.18] backdrop-blur-[1px]">
+                <div className="flex flex-col items-center gap-1">
+                  <Loader2 className="animate-spin text-blue-100" size={18} />
+                  {typeof progress === "number" ? (
+                    <span className="font-mono text-[10px] font-semibold text-blue-50">{Math.round(progress)}%</span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+            {showFailed ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-red-400/[0.18] backdrop-blur-[1px]">
+                <AlertTriangle size={16} className="text-red-200" aria-hidden="true" />
+                <span className="font-mono text-[9px] uppercase tracking-wider text-red-100">
+                  {errorMessage ? "Failed" : "Generation failed"}
+                </span>
+                {onRetry ? (
+                  <button
+                    type="button"
+                    aria-label="Retry generation"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRetry(id);
+                    }}
+                    className="btn-tip mt-0.5 inline-flex items-center gap-1 rounded-full bg-red-400/25 px-2 py-0.5 text-[10px] font-semibold text-red-50 hover:bg-red-400/40"
+                    data-tip={errorMessage || "Retry generation"}
+                  >
+                    <RotateCw size={10} aria-hidden="true" /> Retry
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            {selectedAsTake ? (
+              <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-white/35 bg-primary px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
+                <Check size={9} aria-hidden="true" /> selected
+              </span>
+            ) : null}
+          </div>
+        </div>
+        {/* Tear-stamp footer — receipt-style index, matches IdeaNode and
+            DraftNode footers. */}
+        <div className="px-3 pb-2.5">
+          <TearLine label={`Image · No ${stampNum}`} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

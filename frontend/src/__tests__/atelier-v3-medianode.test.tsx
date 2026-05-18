@@ -42,12 +42,15 @@ describe("v3 MediaNode", () => {
     expect(screen.getByText(/selected/i)).toBeInTheDocument();
   });
 
-  it("clamps width to <= 240 even if larger requested", () => {
+  it("clamps width to <= 240 for video takes even if larger requested", () => {
+    // Image+src now renders the unified 244-wide card chrome (no
+    // user-supplied dimensions); the clamp test is therefore moved to
+    // a video take, which keeps the legacy width-prop behavior.
     const { container } = render(
       <MediaNode
         id="n4"
-        kind="image"
-        src="https://example.com/a.png"
+        kind="video"
+        src="https://example.com/v.mp4"
         status="completed"
         width={400}
         height={400}
@@ -128,12 +131,14 @@ describe("v3 MediaNode", () => {
     expect(parent).not.toHaveBeenCalled();
   });
 
-  it("clamps negative width and height to a positive minimum", () => {
+  it("clamps negative width and height to a positive minimum (video kind)", () => {
+    // Same reason as above: image+src is now a fixed-width card without
+    // a height attribute, so we test the clamp on a video take.
     const { container } = render(
       <MediaNode
         id="n9"
-        kind="image"
-        src="https://example.com/a.png"
+        kind="video"
+        src="https://example.com/v.mp4"
         status="completed"
         x={0}
         y={0}
@@ -144,5 +149,23 @@ describe("v3 MediaNode", () => {
     const root = container.firstElementChild as HTMLElement;
     expect(parseInt(root.style.width)).toBeGreaterThanOrEqual(40);
     expect(parseInt(root.style.height)).toBeGreaterThanOrEqual(24);
+  });
+
+  it("renders an image as a 244-wide card with stamped Img caption", () => {
+    const { container } = render(
+      <MediaNode
+        id="n10abc123"
+        kind="image"
+        src="https://example.com/a.png"
+        filename="hero.png"
+        status="completed"
+        x={0}
+        y={0}
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toMatch(/w-\[244px\]/);
+    expect(screen.getByText(/^Img$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Image · No 123/i)).toBeInTheDocument();
   });
 });
