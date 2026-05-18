@@ -2131,7 +2131,19 @@ export function AtelierShellV3() {
     payload: ComposerSubmitPayload,
     node: AtelierNode,
   ) => {
-    if (node.type === "video" && node.status === "draft") {
+    // All video-output tabs share one backend path — what changes is the
+    // ref configuration the user has set up on the draft. T2V is just
+    // I2V with refs cleared; R2V is I2V with multi-ref; V2V is I2V with
+    // a video ref. The composer's tab is therefore *advisory* (drives
+    // copy + model filter) rather than dispatching different endpoints.
+    const isVideoTab =
+      payload.tab === "I2V" ||
+      payload.tab === "T2V" ||
+      payload.tab === "R2V" ||
+      payload.tab === "V2V";
+    const isImageTab = payload.tab === "T2I" || payload.tab === "I2I";
+
+    if (isVideoTab && node.type === "video" && node.status === "draft") {
       const refs = readStringArray(
         (node.data as { reference_image_urls?: unknown })?.reference_image_urls,
       );
@@ -2152,7 +2164,20 @@ export function AtelierShellV3() {
         .catch((err: unknown) => pushToast("error", `Generate failed: ${err instanceof Error ? err.message : String(err)}`));
       return;
     }
-    pushToast("info", `Tab "${payload.tab}" submission isn't wired yet — use I2V/R2V drafts for now.`);
+    if (isImageTab) {
+      pushToast(
+        "info",
+        "Image generation (T2I / I2I) needs an image draft node — drop a new image node from the toolbar, then run.",
+      );
+      return;
+    }
+    if (payload.tab === "Audio") {
+      pushToast(
+        "info",
+        "Audio generation isn't wired yet — coming with the music / voice integration.",
+      );
+      return;
+    }
   };
 
   const handleActionBar = (action: string, node: AtelierNode) => {
