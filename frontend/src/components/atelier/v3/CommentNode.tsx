@@ -9,12 +9,15 @@ interface Props {
   x: number;
   y: number;
   onSelect?: (id: string) => void;
+  /** When true, skip body + footer so the shell's overlaid textarea sits
+   *  cleanly. Same fix as IdeaNode. */
+  editing?: boolean;
 }
 
 // CommentNode — annotation pinned to the canvas. Reads as a tipped-in
 // review slip: italic display body sits above a dashed perforation that
 // optionally carries the author's mono-caps signature.
-export function CommentNode({ id, body, author, selected, x, y, onSelect }: Props) {
+export function CommentNode({ id, body, author, selected, x, y, onSelect, editing }: Props) {
   const borderClass = selected
     ? "ring-2 ring-primary border-primary/45"
     : "border-violet-200/12";
@@ -42,27 +45,33 @@ export function CommentNode({ id, body, author, selected, x, y, onSelect }: Prop
       }}
       className={`group absolute w-[224px] overflow-hidden rounded-[10px] border bg-[#15141a] shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(167,139,250,0.07)] transition-shadow duration-200 ${borderClass}`}
     >
-      <div className="px-3.5 pb-2 pt-3">
-        <p className="line-clamp-5 whitespace-pre-wrap font-display text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95">
-          {body || (
-            <span className="not-italic font-mono text-[10.5px] uppercase tracking-[0.22em] text-violet-200/60">
-              empty · double-click
+      {editing ? (
+        <div aria-hidden="true" className="min-h-[140px]" />
+      ) : (
+        <>
+          <div className="px-3.5 pb-2 pt-3">
+            <p className="line-clamp-5 whitespace-pre-wrap font-display text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95">
+              {body || (
+                <span className="not-italic font-mono text-[10.5px] uppercase tracking-[0.22em] text-violet-200/60">
+                  empty · double-click
+                </span>
+              )}
+            </p>
+          </div>
+          {/* Tear-stamp footer: dashed perforation flanking the author + index.
+              When no author, just shows "NOTE · NO XXX". */}
+          <div
+            className="flex items-center gap-2 px-3 pb-2.5"
+            aria-hidden="true"
+          >
+            <div className="flex-1 border-t border-dashed border-violet-200/35" />
+            <span className="shrink-0 font-mono text-[8.5px] font-medium uppercase tracking-[0.26em] text-violet-200/85">
+              {author ? `${author} · No ${stampNum}` : `Note · No ${stampNum}`}
             </span>
-          )}
-        </p>
-      </div>
-      {/* Tear-stamp footer: dashed perforation flanking the author + index.
-          When no author, just shows "NOTE · NO XXX". */}
-      <div
-        className="flex items-center gap-2 px-3 pb-2.5"
-        aria-hidden="true"
-      >
-        <div className="flex-1 border-t border-dashed border-violet-200/35" />
-        <span className="shrink-0 font-mono text-[8.5px] font-medium uppercase tracking-[0.26em] text-violet-200/85">
-          {author ? `${author} · No ${stampNum}` : `Note · No ${stampNum}`}
-        </span>
-        <div className="flex-1 border-t border-dashed border-violet-200/35" />
-      </div>
+            <div className="flex-1 border-t border-dashed border-violet-200/35" />
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -51,7 +51,9 @@ const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
     "delete",
   ],
   audio: ["play", "useAsRef", "addToSequence", "divider", "delete"],
-  image: ["useAsRef", "branch", "divider", "delete"],
+  // Branch is meaningless on a static image (you branch FROM a take, not
+  // from a reference). Image action bar keeps just attach + delete.
+  image: ["useAsRef", "divider", "delete"],
   // Drafts use the floating Composer as their editor — no "regenerate"
   // (would silently 400 without payload). Branch is meaningless on an
   // intent (you branch FROM a take). Just Delete.

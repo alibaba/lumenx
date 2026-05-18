@@ -106,9 +106,14 @@ function renderNode(
     onUpload: (id: string) => void;
     onGenerate: (id: string) => void;
   },
+  /** Id of the idea/comment node currently being edited inline by the
+   *  shell. The matching node renders in editing-mode (chrome only) so the
+   *  overlaid textarea isn't doubled with the underlying body. */
+  editingTextNodeId?: string | null,
 ): React.ReactNode {
   const isSelected = selectedIds.has(node.id);
   const onSelect = () => select(node.id);
+  const isEditingThis = editingTextNodeId === node.id;
 
   if (node.type === "image") {
     const view = toMediaNodeView(node, { selectedNodeId: null });
@@ -168,6 +173,7 @@ function renderNode(
         x={node.x}
         y={node.y}
         onSelect={onSelect}
+        editing={isEditingThis}
       />
     );
   }
@@ -185,6 +191,7 @@ function renderNode(
         x={node.x}
         y={node.y}
         onSelect={onSelect}
+        editing={isEditingThis}
       />
     );
   }
@@ -2213,15 +2220,26 @@ export function AtelierShellV3() {
     }
 
     if (action === "useAsRef") {
-      // Open the per-action picker that lets the user choose which draft
-      // to attach this image as a reference to. (Drag-to-attach is a v1.1
-      // affordance; this dropdown is the v1 baseline.)
+      // Two ways to attach:
+      //   1. This action bar item → opens a picker modal listing every
+      //      draft video node so the user clicks the target.
+      //   2. The right-edge connect handle → drag onto a draft directly.
+      // Both go through store.attachReferenceNode, so the result is the
+      // same — the picker is the keyboard / mouse-only baseline.
       if (node.type !== "image") {
-        pushToast("info", "Use-as-reference is for image nodes.");
+        pushToast("info", "Use-as-reference is for image nodes — pick an image first.");
         return;
       }
       if (!node.media_urls || node.media_urls.length === 0) {
-        pushToast("info", "Upload the image first, then attach it as reference.");
+        pushToast("info", "Upload an image into this node first, then attach it.");
+        return;
+      }
+      const draftCount = (project?.nodes ?? []).filter(isDraftVideo).length;
+      if (draftCount === 0) {
+        pushToast(
+          "info",
+          "No draft video nodes yet — press V (or the toolbar Video button) to create one, then attach.",
+        );
         return;
       }
       setUseAsRefSourceId(node.id);
@@ -2892,11 +2910,23 @@ export function AtelierShellV3() {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/75">
-                <kbd className="rounded-[3px] border border-primary/30 bg-primary/10 px-1.5 py-[1px] text-[10px] tracking-tight text-primary">?</kbd>
-                <span>shortcuts</span>
-                <span aria-hidden="true" className="h-3 w-px bg-white/8" />
-                <span>drop image files anywhere</span>
+              {/* Two short discoverability hints — a flat keyboard cue
+                  and a one-liner explaining how nodes get linked, since
+                  the right-edge drag handle isn't visible until something
+                  is selected. */}
+              <div className="flex flex-col items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/75">
+                <div className="flex items-center gap-2">
+                  <kbd className="rounded-[3px] border border-primary/30 bg-primary/10 px-1.5 py-[1px] text-[10px] tracking-tight text-primary">?</kbd>
+                  <span>shortcuts</span>
+                  <span aria-hidden="true" className="h-3 w-px bg-white/8" />
+                  <span>drop image files anywhere</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-primary/65 shadow-[0_0_0_2px_rgba(100,108,255,0.16)]" />
+                  <span className="text-text-muted/85">
+                    Link · select an image, drag the right-edge handle onto a draft
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -3098,7 +3128,7 @@ export function AtelierShellV3() {
                   onGenerate: () => {
                     pushToast("info", "Generate from prompt (T2I) is coming next.");
                   },
-                })}
+                }, editingIdeaId)}
               </div>
             );
           })}
@@ -3141,9 +3171,15 @@ export function AtelierShellV3() {
           {editingIdeaId && project ? (() => {
             const node = project.nodes.find((n) => n.id === editingIdeaId);
             if (!node || (node.type !== "idea" && node.type !== "comment")) return null;
-            const tint = node.type === "comment"
-              ? "bg-violet-400/[0.06] border-violet-300/60 ring-violet-300/30"
-              : "bg-amber-400/[0.06] border-primary/60 ring-primary/30";
+            // Match the underlying node card: same width (224), same solid
+            // bg, same rounded corners, same outer shadow. The card itself
+            // renders editing-mode (chrome only) so this textarea owns the
+            // entire visual frame while the user types.
+            const isComment = node.type === "comment";
+            const surfaceBg = isComment ? "bg-[#15141a]" : "bg-[#1a1611]";
+            const ringTone = isComment
+              ? "border-violet-300/55 ring-violet-300/40"
+              : "border-primary/55 ring-primary/40";
             return (
               <textarea
                 autoFocus
@@ -3164,8 +3200,9 @@ export function AtelierShellV3() {
                     (e.target as HTMLTextAreaElement).blur();
                   }
                 }}
-                className={`absolute z-30 w-[220px] resize-none rounded-md border px-3 py-2.5 text-[13px] leading-relaxed text-foreground outline-none ring-2 ${tint}`}
-                style={{ left: node.x, top: node.y, height: Math.max(80, (node.height || 120)) }}
+                placeholder="Write the idea — Esc to cancel, ⌘⏎ to save"
+                className={`absolute z-30 w-[224px] resize-none rounded-[10px] border px-3.5 py-3 font-display text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95 placeholder:not-italic placeholder:font-mono placeholder:text-[10.5px] placeholder:uppercase placeholder:tracking-[0.22em] placeholder:text-text-muted/60 shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] outline-none ring-2 ${surfaceBg} ${ringTone}`}
+                style={{ left: node.x, top: node.y, minHeight: 140, height: Math.max(140, (node.height || 140)) }}
               />
             );
           })() : null}
