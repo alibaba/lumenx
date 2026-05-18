@@ -355,6 +355,11 @@ function renderCandidatesAsMediaNodes(
       }
       return undefined;
     })();
+    // Completed takes are draggable to the Sequence Strip via HTML5
+    // drag-and-drop. We carry a custom mime type so the strip's drop
+    // handler can distinguish take drags from regular pointer drags
+    // (canvas pan, marquee, etc.).
+    const dragPayload = JSON.stringify({ parentId: node.id, candidateId: c.id });
     return (
       // Wrap each candidate MediaNode with a positional shell that carries
       // data-atelier-node, so the Composer's DOM-rect anchor lookup can
@@ -362,6 +367,15 @@ function renderCandidatesAsMediaNodes(
       <div
         key={candKey}
         data-atelier-node={candKey}
+        draggable={c.status === "completed" && !!c.video_url}
+        onDragStart={(e) => {
+          if (c.status !== "completed" || !c.video_url) return;
+          e.dataTransfer.effectAllowed = "copyLink";
+          e.dataTransfer.setData("application/x-atelier-take", dragPayload);
+          // Plain text fallback so dropping into other surfaces (e.g.,
+          // the agent prompt) still gets a meaningful payload.
+          e.dataTransfer.setData("text/plain", `@${c.label || c.id.slice(0, 8)}`);
+        }}
         style={{
           position: "absolute",
           left: 0,
@@ -760,6 +774,9 @@ export function AtelierShellV3() {
   // stored in shell because they only matter while a drag is in progress.
   const [seqDragFromIndex, setSeqDragFromIndex] = useState<number | null>(null);
   const [seqDragOverIndex, setSeqDragOverIndex] = useState<number | null>(null);
+  // True while a take drag from the canvas is over the strip — drives the
+  // primary-tinted drop-zone ring on the strip's outer surface.
+  const [seqDropActive, setSeqDropActive] = useState(false);
 
   // Multi-selection layer. Store keeps a single primary `selectedNodeId`
   // (which anchors the action bar / composer / inspector); the shell
@@ -2146,10 +2163,46 @@ export function AtelierShellV3() {
     const isImageTab = payload.tab === "T2I" || payload.tab === "I2I";
 
     if (isVideoTab && node.type === "video" && node.status === "draft") {
-      const refs = readStringArray(
+      const existingRefs = readStringArray(
         (node.data as { reference_image_urls?: unknown })?.reference_image_urls,
       );
       const batch = parseInt(payload.count, 10);
+
+      // ── Parse @mentions from the prompt and auto-attach matching image
+      // nodes. Mentions act as a typing-speed shortcut for the visual
+      // attach flow — typing "@hero" implicitly adds the image node
+      // labeled "hero" as a reference, no need to hunt the connect
+      // handle. We only auto-attach IMAGE nodes; @-mentioning a draft
+      // or an idea is informational (the prompt mentions it, but we
+      // don't try to attach a draft as a ref to itself).
+      const allNodes = project?.nodes ?? [];
+      const mentionMatches = Array.from(payload.prompt.matchAll(/@([^\s@]+)/g));
+      const newRefUrls: string[] = [];
+      for (const m of mentionMatches) {
+        const label = m[1];
+        // Match by title, then by data.intent / data.body — same lookup
+        // priority as the Composer's mentionables list.
+        const target = allNodes.find((n) => {
+          if (n.type !== "image") return false;
+          if (!n.media_urls || n.media_urls.length === 0) return false;
+          const title = n.title || "";
+          const intent = readString((n.data as { intent?: unknown })?.intent) || "";
+          const body = readString((n.data as { body?: unknown })?.body) || "";
+          return (
+            title === label ||
+            intent === label ||
+            body.slice(0, 40) === label
+          );
+        });
+        if (!target || !target.media_urls) continue;
+        for (const url of target.media_urls) {
+          if (!existingRefs.includes(url) && !newRefUrls.includes(url)) {
+            newRefUrls.push(url);
+          }
+        }
+      }
+      const finalRefs = [...existingRefs, ...newRefUrls];
+
       // Persist the chosen model before kicking off generation — even if
       // the request fails, the user clearly intended this model and we
       // shouldn't re-default to Wan 2.7 on the next draft.
@@ -2158,11 +2211,20 @@ export function AtelierShellV3() {
         .createVideoCandidates(node.id, {
           prompt: payload.prompt,
           model: payload.modelLabel,
-          reference_image_urls: refs,
+          reference_image_urls: finalRefs,
           batch_size: Number.isFinite(batch) && batch > 0 ? batch : 4,
           params: {},
         })
-        .then(() => pushToast("success", `Generating ${batch || 4} candidates…`))
+        .then(() => {
+          if (newRefUrls.length > 0) {
+            pushToast(
+              "success",
+              `Generating ${batch || 4} candidates · auto-attached ${newRefUrls.length} mention${newRefUrls.length === 1 ? "" : "s"}`,
+            );
+          } else {
+            pushToast("success", `Generating ${batch || 4} candidates…`);
+          }
+        })
         .catch((err: unknown) => pushToast("error", `Generate failed: ${err instanceof Error ? err.message : String(err)}`));
       return;
     }
@@ -3959,10 +4021,54 @@ export function AtelierShellV3() {
 
       {/* Sequence Strip — bottom rail. Outer surface uses the cinematic
           chrome vocabulary (1px white/8 hairline + inset top edge highlight
-          + layered shadow) so it reads as a real surface, not a glass card. */}
+          + layered shadow) so it reads as a real surface, not a glass card.
+          Drop target: HTML5-draggable completed takes from the canvas can
+          be dropped here to append to the sequence (handler reads the
+          custom application/x-atelier-take mime). */}
       <div
-        className="absolute bottom-4 left-[280px] z-20 rounded-2xl border border-white/8 bg-[#0c0c10]/92 p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+        className={`absolute bottom-4 left-[280px] z-20 rounded-2xl border bg-[#0c0c10]/92 p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl transition-colors ${
+          seqDropActive ? "border-primary/60 ring-2 ring-primary/35" : "border-white/8"
+        }`}
         style={{ right: agentCollapsed ? 88 : 412 }}
+        onDragEnter={(e) => {
+          if (!Array.from(e.dataTransfer.types).includes("application/x-atelier-take")) return;
+          e.preventDefault();
+          setSeqDropActive(true);
+        }}
+        onDragOver={(e) => {
+          if (!Array.from(e.dataTransfer.types).includes("application/x-atelier-take")) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
+        }}
+        onDragLeave={(e) => {
+          // Only clear when leaving for somewhere outside the strip.
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          setSeqDropActive(false);
+        }}
+        onDrop={(e) => {
+          const data = e.dataTransfer.getData("application/x-atelier-take");
+          setSeqDropActive(false);
+          if (!data) return;
+          e.preventDefault();
+          try {
+            const { parentId, candidateId } = JSON.parse(data) as {
+              parentId: string;
+              candidateId: string;
+            };
+            setSequence((prev) => {
+              if (prev.some((s) => s.parentId === parentId && s.candidateId === candidateId)) {
+                pushToast("info", "Already in sequence");
+                return prev;
+              }
+              return [...prev, { parentId, candidateId }];
+            });
+            pushToast("success", "Added to sequence");
+          } catch {
+            // Malformed payload — silently ignore. Should never happen
+            // since we serialize ourselves, but defensive parsing means
+            // a foreign drop won't crash the strip.
+          }
+        }}
       >
         {/* Editorial header: stamped 'CUT · SEQUENCE · NO 001' identity +
             running clip count rendered as a typewriter readout. The bullet
@@ -3989,7 +4095,7 @@ export function AtelierShellV3() {
         </div>
         {sequenceEntries.length === 0 ? (
           <div className="px-2 py-2 text-[11px] text-text-muted/85">
-            Select a completed take, then{" "}
+            Drag a completed take here, or use{" "}
             <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/70">Add to Sequence</span>{" "}
             from its action bar.
           </div>
