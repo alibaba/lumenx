@@ -1056,16 +1056,26 @@ export function AtelierShellV3() {
           return;
         }
         if (key === "c") {
+          // If the user has text selected in the page (e.g., copying a
+          // toast message, error, or any visible label), let the browser's
+          // native copy run instead of intercepting with our node-clipboard
+          // logic. Otherwise the user gets the wrong text plus a confusing
+          // "Nothing to copy" toast.
+          const sel = window.getSelection?.();
+          if (sel && sel.toString().trim().length > 0) {
+            return; // browser handles copy
+          }
           // Copy to private clipboard (not OS clipboard — node payloads
           // aren't useful there). Quiet on success: the next paste is the
           // signal users want.
           e.preventDefault();
           const count = copySelection();
           if (count === 0) {
-            pushToast("info", "Nothing to copy.");
-          } else {
-            pushToast("info", count === 1 ? "1 node copied" : `${count} nodes copied`);
+            // No text selection AND nothing on canvas to copy. Stay quiet
+            // — the toast was just noise for a no-op shortcut press.
+            return;
           }
+          pushToast("info", count === 1 ? "1 node copied" : `${count} nodes copied`);
           return;
         }
         if (key === "v") {
@@ -1725,7 +1735,9 @@ export function AtelierShellV3() {
     const isImageSource = source.type === "image" && (source.media_urls?.length ?? 0) > 0;
 
     if (!isTakeSource && !isImageSource) {
-      pushToast("info", "Connections from this node type are coming soon. Try an image or completed take.");
+      // Should never fire — ports are only rendered on supported source
+      // types. Belt-and-braces silent return rather than a toast: the
+      // user clicked an affordance we shouldn't have shown.
       return;
     }
 
@@ -3572,15 +3584,15 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Connection ports — left = input (passive drop target indicator),
-          right = output (drag-from). Appear on selected-or-hovered nodes;
-          render in screen coords so they stay a stable 18px size at any
-          zoom. Right port dispatches through handlePortDragOut, which
-          decides whether the drag attaches an image, branches a take, or
-          spawns a fresh draft pre-attached to the source on a canvas
-          drop. Drafts and ideas show the ports too but currently surface
-          a "coming soon" toast on release — the visual symmetry is the
-          point. */}
+      {/* Connection ports — only show on nodes that *can* drag out (image
+          with media, completed take). Showing them on idea/draft/comment
+          nodes was a "coming soon" trap: the affordance promised an
+          interaction the implementation didn't have. Visual: identical
+          16×16 ports on left and right edges. The right port is the
+          active drag-from. The left port is a passive drop indicator —
+          when a connection drag is in flight and this node is the
+          hovered target, both ports light primary to confirm the
+          landing zone. */}
       {(() => {
         const candidate = selectedNode
           ? selectedNode
@@ -3588,49 +3600,63 @@ export function AtelierShellV3() {
             ? (project?.nodes.find((n) => n.id === hoveredNodeId) ?? null)
             : null;
         if (!candidate) return null;
-        // Skip ports for the connect-drag SOURCE node itself — the handle
-        // is already grabbed; doubling it visually is noise.
         if (connectDragRef.current?.sourceNodeId === candidate.id) return null;
-        const w = candidate.width || (candidate.type === "image" ? 180 : 240);
-        const h = candidate.height || (candidate.type === "image" ? 180 : 113);
+        // Only nodes with outgoing semantics earn ports. Image needs
+        // uploaded media; takes must be a completed candidate.
+        const parsedCand = parseCandidateNodeId(candidate.id);
+        const candData = (() => {
+          if (!parsedCand || !project) return null;
+          const parent = project.nodes.find((n) => n.id === parsedCand.parentId);
+          return parent ? readCandidates(parent).find((c) => c.id === parsedCand.candidateId) ?? null : null;
+        })();
+        const isImageWithMedia =
+          candidate.type === "image" && (candidate.media_urls?.length ?? 0) > 0;
+        const isCompletedTake = !!candData && candData.status === "completed";
+        if (!isImageWithMedia && !isCompletedTake) return null;
+
+        const w = candidate.width || (candidate.type === "image" ? 244 : 200);
+        const h = candidate.height || (candidate.type === "image" ? 224 : 113);
         const cy = panY + (candidate.y + h / 2) * zoomFactor;
         const leftX = panX + candidate.x * zoomFactor;
         const rightX = panX + (candidate.x + w) * zoomFactor;
         const isDropTarget =
           !!connectDragRef.current && hoveredConnectTargetId === candidate.id;
-        // Left port: passive input. When a connection drag is in flight
-        // and this node is the hovered drop target, the left port lights
-        // up to read as "land here". Otherwise it's a quiet affordance
-        // showing the node accepts incoming links.
-        const leftClass = `pointer-events-none absolute z-40 grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border backdrop-blur-md transition-all duration-150 ${
-          isDropTarget
-            ? "border-primary/65 bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(100,108,255,0.32),0_6px_16px_-4px_rgba(100,108,255,0.7)] motion-safe:animate-atelier-pulse-soft"
-            : "border-white/20 bg-[#141416]/92 text-text-muted/85 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_2px_8px_-2px_rgba(0,0,0,0.45)]"
-        }`;
-        // Right port: active output. Drag-from starts handlePortDragOut.
-        const rightClass =
-          "btn-tip absolute z-40 grid h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 cursor-grab place-items-center rounded-full border border-white/30 bg-[#141416]/92 text-primary/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_0_0_3px_rgba(100,108,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.4)] backdrop-blur-md transition-all duration-150 hover:scale-[1.18] hover:border-primary/60 hover:bg-primary hover:text-white hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.28),0_0_0_4px_rgba(100,108,255,0.32),0_6px_16px_-4px_rgba(100,108,255,0.7)] active:scale-[1.08] active:cursor-grabbing";
+        const isDragSourceCompatible = !!connectDragRef.current; // any drag in flight
+
+        // Both ports share the same base shape (16×16 round, dashed inset
+        // border, neutral fill) so they read as a coherent input/output
+        // pair. Active states only adjust tone, not geometry.
+        const baseShape =
+          "absolute z-40 grid h-4 w-4 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border backdrop-blur-md transition-all duration-150";
+        const idleTone =
+          "border-white/22 bg-[#141416]/95 text-text-muted/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_2px_6px_-2px_rgba(0,0,0,0.45)]";
+        const activeTone =
+          "border-primary/60 bg-primary/15 text-primary shadow-[0_0_0_3px_rgba(100,108,255,0.18),0_3px_10px_-2px_rgba(100,108,255,0.4)]";
+        const dropTargetTone =
+          "border-primary bg-primary text-white shadow-[0_0_0_4px_rgba(100,108,255,0.32),0_4px_12px_-2px_rgba(100,108,255,0.5)] motion-safe:animate-atelier-pulse-soft";
         return (
           <>
             <span
               aria-hidden="true"
               data-tip={isDropTarget ? "Drop to connect" : "Input"}
-              className={`${leftClass} btn-tip`}
+              className={`btn-tip ${baseShape} ${
+                isDropTarget ? dropTargetTone : isDragSourceCompatible ? activeTone : idleTone
+              }`}
               style={{ left: leftX, top: cy }}
             >
-              <Plus size={10} aria-hidden="true" />
+              <Plus size={9} aria-hidden="true" />
             </span>
             <button
               type="button"
-              aria-label="Connection output — drag onto a node or to empty canvas"
+              aria-label="Connection output — drag onto a node or empty canvas"
               data-tip="Drag onto a draft, or to empty canvas to spawn a connected draft"
-              onPointerDown={(e) =>
-                handlePortDragOut(e, candidate, rightX, cy)
-              }
-              className={rightClass}
+              onPointerDown={(e) => handlePortDragOut(e, candidate, rightX, cy)}
+              className={`btn-tip cursor-grab active:cursor-grabbing hover:scale-[1.18] hover:border-primary/60 hover:bg-primary/30 hover:text-white ${baseShape} ${
+                isDropTarget ? dropTargetTone : activeTone
+              }`}
               style={{ left: rightX, top: cy }}
             >
-              <Plus size={11} aria-hidden="true" />
+              <Plus size={9} aria-hidden="true" />
             </button>
           </>
         );

@@ -1,3 +1,22 @@
+// Composer placement.
+//
+// Goal: the Composer must always read as "attached to the selected node".
+// Earlier rev tried to be clever (clamp behind right rail, flip above
+// when overflowing) — and produced placements that drifted far from the
+// anchor when the node was near the right edge or the rail. That broke
+// the visual association the whole UX depends on.
+//
+// New rule: stay glued to the anchor. Two simple decisions:
+//   1. Try to place below the anchor; flip above only if there's clearly
+//      no room below AND there's room above.
+//   2. Align horizontally with the anchor's left edge; only nudge inward
+//      if the composer would otherwise extend past the viewport edge by
+//      more than its own gap. The right rail is allowed to overlap — it
+//      sits at z-30, the composer at z-40, so the user still reads them
+//      as discrete surfaces and can click through to either.
+//
+// Keep this code obvious. Clever placement is what got us here.
+
 export interface ComposerAnchor {
   x: number;
   y: number;
@@ -8,16 +27,15 @@ export interface ComposerAnchor {
 export interface ComposerViewport {
   width: number;
   height: number;
-  rightRailWidth: number;   // px taken by Right Rail at the right edge (e.g. 396 = 380 + 16 padding)
+  /** Width reserved at the right edge by the Agent rail (informational —
+   *  not used as a hard clamp anymore; see file comment). */
+  rightRailWidth: number;
 }
 
 export interface ComposerSize {
   width: number;
-  /** Approximate height used to decide whether the composer fits below the
-   *  anchor before flipping above. Default 320 covers the common 7-tab +
-   *  3-line textarea layout. */
   height?: number;
-  gap?: number;     // px between anchor and composer; default 16
+  gap?: number;
 }
 
 export interface ComposerPlacement {
@@ -28,29 +46,48 @@ export interface ComposerPlacement {
 export function composerPlacement(
   anchor: ComposerAnchor | null,
   viewport: ComposerViewport,
-  composer: ComposerSize = { width: 520 }
+  composer: ComposerSize = { width: 520 },
 ): ComposerPlacement {
-  const gap = composer.gap ?? 16;
+  const gap = composer.gap ?? 14;
   const height = composer.height ?? 320;
+  // No anchor — center on viewport. (Only happens for the no-selection
+  // fallback path; in normal use `anchor` is the selected node's DOM
+  // rect.)
   if (!anchor) {
     return {
       left: Math.max(16, Math.round((viewport.width - composer.width) / 2)),
-      top:  Math.max(16, Math.round(viewport.height / 3)),
+      top: Math.max(16, Math.round(viewport.height / 3)),
     };
   }
-  // Horizontal: prefer aligning with anchor.x but avoid the right rail and
-  // the right edge of the viewport.
-  const desiredLeft = anchor.x;
-  const maxLeft     = viewport.width - viewport.rightRailWidth - composer.width - gap;
-  const left = Math.max(16, Math.min(desiredLeft, maxLeft));
-  // Vertical: try below the anchor first; if it would overflow the viewport
-  // bottom, flip to above. Fall back to clamping inside the viewport when
-  // neither side fits cleanly (very tall anchor / very short viewport).
-  const belowTop = anchor.y + anchor.height + gap;
-  const aboveTop = anchor.y - height - gap;
+
+  // Horizontal — pin to the anchor's left edge. Nudge inward only if
+  // the right edge of the composer would leave the viewport entirely.
+  let left = Math.round(anchor.x);
+  const rightEdge = left + composer.width;
+  if (rightEdge > viewport.width - 12) {
+    left = Math.max(12, viewport.width - composer.width - 12);
+  }
+  if (left < 12) left = 12;
+
+  // Vertical — prefer below; flip above when there is clearly no room
+  // below AND there is room above. Otherwise stay below and let the
+  // composer overflow (the canvas main is the user's working area, not
+  // a fixed-size dialog).
+  const belowTop = Math.round(anchor.y + anchor.height + gap);
+  const aboveTop = Math.round(anchor.y - height - gap);
+  const fitsBelow = belowTop + height <= viewport.height - 12;
+  const fitsAbove = aboveTop >= 12;
   let top: number;
-  if (belowTop + height <= viewport.height - 16) top = belowTop;
-  else if (aboveTop >= 16) top = aboveTop;
-  else top = Math.max(16, Math.min(belowTop, viewport.height - height - 16));
+  if (fitsBelow) {
+    top = belowTop;
+  } else if (fitsAbove) {
+    top = aboveTop;
+  } else {
+    // Neither side fits cleanly. Stay below, clamped, and let the user
+    // scroll the inner content if the composer is taller than the
+    // remaining space.
+    top = Math.max(12, Math.min(belowTop, viewport.height - 80));
+  }
+
   return { left, top };
 }
