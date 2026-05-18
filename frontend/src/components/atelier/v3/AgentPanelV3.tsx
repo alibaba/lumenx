@@ -267,18 +267,31 @@ export function AgentPanelV3({ pushToast }: Props) {
       {/* Conversation scroll region */}
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {recentTurns.length === 0 && !pendingTurn ? (
+          // Editorial 'try asking' card. Reads as a thumbed-down menu of
+          // possible openings — italic display body for each line, mono
+          // caps tear-stamp footer caption.
           <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
             <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-primary/45 via-primary/15 to-transparent" />
-            <div className="px-3 py-2.5">
-              <div className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-primary/85">
+            <div className="px-3.5 py-3">
+              <div className="mb-2 flex items-center gap-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-primary/85">
                 <Sparkles size={10} aria-hidden="true" />
                 Try asking
               </div>
-              <ul className="space-y-1 border-l border-white/6 pl-3 text-[12px] leading-[1.5] text-text-secondary/95">
+              <ul className="space-y-1.5 border-l border-white/6 pl-3 font-display text-[13px] italic leading-[1.5] tracking-tight text-foreground/92">
                 <li>Create three drafts for a rainy rooftop chase.</li>
                 <li>Generate 4 candidates for the selected draft.</li>
                 <li>Add the neon alley reference to the cinematic draft.</li>
               </ul>
+              <div
+                aria-hidden="true"
+                className="mt-3 flex items-center gap-2"
+              >
+                <div className="flex-1 border-t border-dashed border-white/10" />
+                <span className="font-mono text-[8.5px] font-medium uppercase tracking-[0.28em] text-text-muted/75">
+                  Prompt · Library
+                </span>
+                <div className="flex-1 border-t border-dashed border-white/10" />
+              </div>
             </div>
           </div>
         ) : null}

@@ -2619,9 +2619,11 @@ export function AtelierShellV3() {
                 aria-label="Atelier projects"
                 className="absolute left-0 top-10 z-[35] w-[300px] origin-top rounded-md border border-white/8 bg-[#141416]/96 p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
               >
-                <div className="flex items-center justify-between px-2 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/80">
-                  <span>Projects</span>
-                  <span className="text-text-muted/55">{projects.length}</span>
+                <div className="flex items-center justify-between border-b border-dashed border-white/8 px-2.5 py-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
+                  <span>Atelier · Projects</span>
+                  <span className="font-display text-[11px] tracking-tight text-text-muted/65">
+                    {String(projects.length).padStart(2, "0")}
+                  </span>
                 </div>
                 <ul className="max-h-[280px] overflow-y-auto">
                   {projects.map((p) => {
@@ -2836,13 +2838,13 @@ export function AtelierShellV3() {
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
             <div className="pointer-events-auto flex flex-col items-center gap-7 text-center animate-atelier-node-in motion-reduce:animate-none">
               <div className="space-y-2.5">
-                <span className="font-mono text-[10px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
-                  Atelier · v0.3
+                <span className="font-mono text-[10px] font-medium uppercase tracking-[0.36em] text-text-muted/85">
+                  Atelier · No 001 · v0.3
                 </span>
-                <div className="font-display text-[28px] font-medium leading-[1.05] tracking-[-0.012em] text-foreground">
-                  Drop a seed.
+                <div className="font-display text-[30px] font-medium leading-[1.02] tracking-[-0.012em] text-foreground">
+                  Drop a <span className="italic">seed</span>.
                 </div>
-                <div className="max-w-[400px] text-[13px] leading-[1.55] text-text-secondary/95">
+                <div className="max-w-[420px] text-[13px] leading-[1.55] text-text-secondary/95">
                   Pick a starting point. Everything you make connects from here.
                 </div>
               </div>
@@ -3812,23 +3814,28 @@ export function AtelierShellV3() {
         className="absolute bottom-4 left-[280px] z-20 rounded-2xl border border-white/8 bg-[#0c0c10]/92 p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
         style={{ right: agentCollapsed ? 88 : 412 }}
       >
-        <div className="mb-2 flex items-center justify-between px-1 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/85">
+        {/* Editorial header: stamped 'CUT · SEQUENCE · NO 001' identity +
+            running clip count rendered as a typewriter readout. The bullet
+            dot becomes part of the rhythm, not a status indicator. */}
+        <div className="mb-2 flex items-center justify-between gap-2 border-b border-dashed border-white/8 px-1 pb-1.5 font-mono text-[9px] uppercase tracking-[0.28em] text-text-muted/85">
           <div className="flex items-center gap-1.5">
             <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-primary/70 shadow-[0_0_0_2px_rgba(100,108,255,0.16)]" />
-            <span>Sequence</span>
-            <span aria-hidden="true" className="text-text-muted/40">·</span>
-            <span className="text-foreground/85">
-              {sequenceEntries.length} clip{sequenceEntries.length === 1 ? "" : "s"}
-            </span>
+            <span className="font-medium">Cut · Sequence · No 001</span>
           </div>
-          {sequenceEntries.length > 0 ? (
-            <button
-              onClick={() => setSequence([])}
-              className="rounded px-1.5 py-0.5 tracking-[0.2em] text-text-muted/70 transition-colors hover:bg-white/[0.06] hover:text-foreground"
-            >
-              Clear
-            </button>
-          ) : null}
+          <div className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="text-text-muted/55">{sequenceEntries.length === 1 ? "Clip" : "Clips"}</span>
+            <span className="font-display text-[11px] tracking-tight text-foreground/95">
+              {String(sequenceEntries.length).padStart(2, "0")}
+            </span>
+            {sequenceEntries.length > 0 ? (
+              <button
+                onClick={() => setSequence([])}
+                className="ml-1 rounded px-1.5 py-0.5 tracking-[0.24em] text-text-muted/70 transition-colors hover:bg-white/[0.06] hover:text-foreground"
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
         </div>
         {sequenceEntries.length === 0 ? (
           <div className="px-2 py-2 text-[11px] text-text-muted/85">
