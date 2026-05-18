@@ -1,7 +1,7 @@
 "use client";
 import axios from "axios";
 import * as React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
@@ -356,23 +356,37 @@ function renderCandidatesAsMediaNodes(
       return undefined;
     })();
     return (
-      <MediaNode
+      // Wrap each candidate MediaNode with a positional shell that carries
+      // data-atelier-node, so the Composer's DOM-rect anchor lookup can
+      // find candidate takes the same way it finds top-level nodes.
+      <div
         key={candKey}
-        id={candKey}
-        kind="video"
-        src={c.video_url ?? undefined}
-        filename={c.label || c.id.slice(0, 8)}
-        status={c.status}
-        progress={progress}
-        etaSeconds={etaSeconds}
-        errorMessage={c.error ?? undefined}
-        selectedAsTake={selectedTakeId === c.id}
-        selected={selectedIds.has(candKey)}
-        x={x}
-        y={y}
-        onSelect={() => select(candKey)}
-        onRetry={c.status === "failed" ? () => onRetry(node.id, c.id) : undefined}
-      />
+        data-atelier-node={candKey}
+        style={{
+          position: "absolute",
+          left: 0,
+          top: 0,
+          width: 0,
+          height: 0,
+        }}
+      >
+        <MediaNode
+          id={candKey}
+          kind="video"
+          src={c.video_url ?? undefined}
+          filename={c.label || c.id.slice(0, 8)}
+          status={c.status}
+          progress={progress}
+          etaSeconds={etaSeconds}
+          errorMessage={c.error ?? undefined}
+          selectedAsTake={selectedTakeId === c.id}
+          selected={selectedIds.has(candKey)}
+          x={x}
+          y={y}
+          onSelect={() => select(candKey)}
+          onRetry={c.status === "failed" ? () => onRetry(node.id, c.id) : undefined}
+        />
+      </div>
     );
   });
 }
@@ -2029,15 +2043,40 @@ export function AtelierShellV3() {
 
   // Composer anchor: only show below a selected draft. Re-generation from
   // a completed take or candidate is invoked via SelectionActionBar.
-  const composerAnchor =
-    selectedNode && isDraftVideo(selectedNode)
-      ? {
-          x: selectedNode.x,
-          y: selectedNode.y,
-          width: selectedNode.width || 240,
-          height: selectedNode.height || 110,
-        }
-      : null;
+  //
+  // The anchor is derived from the *DOM rect* of the selected node, not
+  // recomputed from world coordinates. Pan / zoom / right-rail collapse
+  // can leave the math out of sync with what's actually painted; reading
+  // the rendered rect is the only ground truth that survives all those
+  // state transitions. We re-measure on every selection / pan / zoom /
+  // rail-collapse change and on window resize.
+  const composerShouldShow = selectedNode != null && isDraftVideo(selectedNode);
+  const [composerAnchor, setComposerAnchor] = useState<
+    { x: number; y: number; width: number; height: number } | null
+  >(null);
+  useLayoutEffect(() => {
+    if (!composerShouldShow || !selectedNode) {
+      setComposerAnchor(null);
+      return;
+    }
+    const measure = () => {
+      const el = document.querySelector(`[data-atelier-node="${selectedNode.id}"]`);
+      if (!el) {
+        setComposerAnchor(null);
+        return;
+      }
+      const r = (el as HTMLElement).getBoundingClientRect();
+      setComposerAnchor({ x: r.left, y: r.top, width: r.width, height: r.height });
+    };
+    measure();
+    // Re-measure on the next frame in case the node was just mounted.
+    const raf = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+    };
+  }, [composerShouldShow, selectedNode, panX, panY, zoom, agentCollapsed]);
 
   // Real viewport size, derived from the canvas main element. Falls back
   // to 1440x900 in environments where the rect isn't available yet (first
@@ -3711,18 +3750,14 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Composer — also OUTSIDE world, anchored to selected draft via
-          screen-coord anchor + viewport. Hidden in multi-select. */}
+      {/* Composer — also OUTSIDE world, anchored to the selected draft's
+          rendered DOM rect (already in screen coords). Hidden in multi-
+          select. */}
       {composerAnchor && selectedNode && !isMultiSelect ? (
         <div className="pointer-events-none absolute inset-0 z-30">
           <div className="pointer-events-auto">
             <Composer
-              anchor={{
-                x: panX + composerAnchor.x * zoomFactor,
-                y: panY + composerAnchor.y * zoomFactor,
-                width: composerAnchor.width * zoomFactor,
-                height: composerAnchor.height * zoomFactor,
-              }}
+              anchor={composerAnchor}
               viewport={viewport}
               prompt={
                 isDraftVideo(selectedNode)
