@@ -78,15 +78,19 @@ export function BottomNavRail({
       >
         <ZoomIn size={13} aria-hidden="true" />
       </button>
+      {/* Zoom readout — typewriter-style "ZOOM · 100" reads as a meter
+          marking, not a percent sign you've seen on every SaaS app. */}
       <button
         type="button"
         aria-label="Reset zoom to 100%"
         data-tip="Reset to 100%"
         onClick={() => onZoomChange(100)}
-        className="btn-tip ml-0.5 inline-flex h-6 items-center justify-end rounded px-1.5 font-mono text-[10px] tracking-[0.08em] text-text-muted/85 transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-text-muted/85"
+        className="btn-tip ml-0.5 inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.22em] text-text-muted/85 transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-text-muted/85"
         disabled={zoom === 100}
       >
-        {zoom}%
+        <span aria-hidden="true">Zoom</span>
+        <span aria-hidden="true" className="text-text-muted/55">·</span>
+        <span className="font-display text-[11px] tracking-tight">{zoom}</span>
       </button>
     </div>
   );

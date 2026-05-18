@@ -6,8 +6,12 @@ import { RightRailV3 } from "@/components/atelier/v3/RightRailV3";
 describe("RightRailV3", () => {
   it("renders Creative Agent header with Active status", () => {
     render(<RightRailV3 mode="on_request" agentStatus="active"><div>body</div></RightRailV3>);
-    expect(screen.getByText("Creative Agent")).toBeInTheDocument();
-    expect(screen.getByText(/active/i)).toBeInTheDocument();
+    // The brand row reads "Creative Agent" with the second word italicized,
+    // so the text spans two DOM nodes — match against trimmed textContent.
+    expect(
+      screen.getByText((_, el) => !!el && el.textContent?.trim() === "Creative Agent"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/active/i).length).toBeGreaterThan(0);
   });
 
   it("does NOT render a Node tab", () => {
@@ -63,7 +67,9 @@ describe("RightRailV3", () => {
     const aside = container.firstElementChild as HTMLElement;
     expect(aside.className).toMatch(/w-\[56px\]/);
     // body content not rendered in collapsed state
-    expect(screen.queryByText("Creative Agent")).toBeNull();
+    expect(
+      screen.queryByText((_, el) => !!el && el.textContent?.trim() === "Creative Agent"),
+    ).toBeNull();
     fireEvent.click(screen.getByLabelText("Expand panel"));
     expect(onCollapse).toHaveBeenCalled();
   });

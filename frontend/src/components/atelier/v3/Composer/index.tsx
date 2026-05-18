@@ -5,6 +5,7 @@ import { CapabilityIcon } from "./CapabilityIcon";
 import { ChipDropdown } from "./ChipDropdown";
 import { composerPlacement, type ComposerAnchor, type ComposerViewport } from "./positioning";
 import { validateAtelierRefs, type AtelierRefKind } from "@/lib/modelCatalog";
+import { TearLine } from "../ornaments";
 
 const TABS = ["T2I", "I2I", "T2V", "I2V", "R2V", "V2V", "Audio"] as const;
 export type ComposerTab = typeof TABS[number];
@@ -238,6 +239,19 @@ export function Composer({
       className="absolute z-40 w-[520px] origin-top overflow-hidden rounded-[14px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-24px_rgba(0,0,0,0.85),0_8px_20px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-composer-in motion-reduce:animate-none"
       style={computedStyle}
     >
+      {/* Editorial slip header — a faint top strip with mono-caps "OFFICIAL ·
+          COMPOSER · NO. 001" that anchors the panel as an issued ticket. The
+          number is fixed-style 001 just for that "rubber-stamped serial"
+          reading; it isn't a real id. */}
+      <div className="flex items-center justify-between gap-2 border-b border-dashed border-white/8 px-3 py-1.5">
+        <span aria-hidden="true" className="font-mono text-[8.5px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
+          Atelier · Composer · No 001
+        </span>
+        <span aria-hidden="true" className="font-mono text-[8.5px] uppercase tracking-[0.28em] text-text-muted/55">
+          {activeTab}
+        </span>
+      </div>
+
       {/* Tabs — mono caps with spaced tracking gives the row a "transport
           control" feel; active tab earns a primary tint pill. */}
       <div className="flex items-center justify-between gap-1 border-b border-white/6 px-2 py-2">
@@ -251,7 +265,7 @@ export function Composer({
               tabIndex={t === activeTab ? 0 : -1}
               onClick={() => onTabChange?.(t)}
               onKeyDown={(e) => handleTabKeyDown(e, t)}
-              className={`rounded-md px-2 py-[5px] font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
+              className={`rounded-md px-2 py-[5px] font-mono text-[10px] font-medium uppercase tracking-[0.22em] transition-colors ${
                 t === activeTab
                   ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(100,108,255,0.3)]"
                   : "text-text-muted hover:bg-white/[0.04] hover:text-foreground/90"
@@ -267,12 +281,15 @@ export function Composer({
       </div>
 
       {/* Capability mismatch banner — shows the real catalog-derived reason
-          (e.g., "doesn't accept video references"), not a generic blurb. */}
+          (e.g., "doesn't accept video references"), not a generic blurb.
+          Dashed border + tracked mono caps continues the receipt voice. */}
       {mismatchActive && (
-        <div role="alert" className="mx-3 mt-3 rounded-md border border-amber-300/35 bg-amber-400/[0.05] px-2.5 py-2 text-[11px] leading-relaxed text-amber-100/95">
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-200/80">Mismatch</span>{" "}
-          <strong className="font-medium text-amber-100">{m}</strong>{" "}
-          {mismatchReason ?? "doesn’t accept some of the attached references"}.
+        <div role="alert" className="mx-3 mt-3 rounded-md border border-dashed border-amber-300/35 bg-amber-400/[0.05] px-2.5 py-2 text-[11.5px] leading-relaxed text-amber-100/95">
+          <span className="font-mono text-[9.5px] font-medium uppercase tracking-[0.28em] text-amber-200/85">Mismatch · Notice</span>
+          <div className="mt-0.5">
+            <strong className="font-medium text-amber-100">{m}</strong>{" "}
+            {mismatchReason ?? "doesn’t accept some of the attached references"}.
+          </div>
         </div>
       )}
 
@@ -284,7 +301,7 @@ export function Composer({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={r.src} alt={`Reference ${i + 1}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
             {r.role && (
-              <span aria-hidden="true" className="absolute right-0 top-0 rounded-bl-[3px] bg-black/65 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.18em] text-white/85">
+              <span aria-hidden="true" className="absolute right-0 top-0 rounded-bl-[3px] border border-dashed border-white/35 bg-black/70 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.24em] text-white/90">
                 {r.role}
               </span>
             )}
@@ -439,11 +456,14 @@ export function Composer({
         ) : null}
       </div>
 
-      {/* Chip row — config strip with hairline divider above to separate
-          the prompt zone from the parameter zone. The Generate button on
-          the right gets its own visual weight (primary halo shadow) so the
-          eye lands there at submit time. */}
-      <div className="flex items-center justify-between gap-1.5 border-t border-white/6 px-3 pb-3 pt-2.5">
+      {/* Chip row — config strip prefaced by a dashed perforation reading
+          "TEAR HERE TO GENERATE", carrying the receipt metaphor through.
+          The Generate button on the right gets its own visual weight
+          (primary halo shadow) so the eye lands there at submit time. */}
+      <div className="px-3 pt-2.5">
+        <TearLine label="Tear here to generate" />
+      </div>
+      <div className="flex items-center justify-between gap-1.5 px-3 pb-3 pt-2.5">
         <div className="flex items-center gap-1.5">
           <ChipDropdown label="Model"    value={m} primary
             options={modelOptions.map((v) => ({ value: v, label: v }))}

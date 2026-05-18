@@ -5,9 +5,12 @@ import { BottomNavRail } from "@/components/atelier/v3/BottomNavRail";
 import { Minimap } from "@/components/atelier/v3/Minimap";
 
 describe("BottomNavRail", () => {
-  it("renders zoom value", () => {
+  it("renders zoom value as a 'ZOOM · 85' typewriter readout", () => {
     render(<BottomNavRail zoom={85} onZoomChange={() => {}} onFit={() => {}} onToggleMinimap={() => {}} />);
-    expect(screen.getByText("85%")).toBeInTheDocument();
+    // "ZOOM" tag + "85" number live in adjacent spans inside the reset
+    // button — assert the button name.
+    expect(screen.getByLabelText(/Reset zoom/i).textContent).toMatch(/Zoom/i);
+    expect(screen.getByLabelText(/Reset zoom/i).textContent).toContain("85");
   });
 
   it("calls onFit when Fit view clicked", () => {
