@@ -19,6 +19,7 @@ import {
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
+import { VIDEO_I2V_MODELS } from "@/lib/modelCatalog";
 import {
   // Pure helpers + node renderers extracted to keep this file under
   // control. Behavior is identical; this is a move-only refactor.
@@ -1899,13 +1900,30 @@ export function AtelierShellV3() {
       // the request fails, the user clearly intended this model and we
       // shouldn't re-default to Wan 2.7 on the next draft.
       rememberModel(project?.id, payload.modelLabel);
+
+      // Translate the Composer's `advanced` payload into the backend's
+      // `params` shape. We use snake_case for the wire format (matches
+      // existing model.runtime keys) and skip undefined/empty values so
+      // the backend's defaults still apply when the user hasn't touched
+      // a knob.
+      const adv = payload.advanced ?? {};
+      const advParams: Record<string, unknown> = {};
+      if (adv.negativePrompt && adv.negativePrompt.trim().length > 0) {
+        advParams.negative_prompt = adv.negativePrompt.trim();
+      }
+      if (typeof adv.seed === "number") advParams.seed = adv.seed;
+      if (typeof adv.cfgScale === "number") advParams.cfg_scale = adv.cfgScale;
+      if (adv.mode) advParams.mode = adv.mode;
+      if (adv.movementAmplitude) advParams.movement_amplitude = adv.movementAmplitude;
+      if (typeof adv.sound === "boolean") advParams.sound = adv.sound;
+
       void useAtelierStore.getState()
         .createVideoCandidates(node.id, {
           prompt: payload.prompt,
           model: payload.modelLabel,
           reference_image_urls: finalRefs,
           batch_size: Number.isFinite(batch) && batch > 0 ? batch : 4,
-          params: {},
+          params: advParams,
         })
         .then(() => {
           if (newRefUrls.length > 0) {
@@ -3080,12 +3098,55 @@ export function AtelierShellV3() {
 
           {/* virtual candidate media nodes (no drag — derived) */}
           {project?.nodes.flatMap((node) =>
-            renderCandidatesAsMediaNodes(node, allSelectedIds, selectNode, (parentId, candidateId) => {
-              void useAtelierStore.getState()
-                .retryCandidate(parentId, candidateId)
-                .then(() => pushToast("info", "Retrying take…"))
-                .catch((err: unknown) => pushToast("error", `Retry failed: ${err instanceof Error ? err.message : String(err)}`));
-            }),
+            renderCandidatesAsMediaNodes(
+              node,
+              allSelectedIds,
+              selectNode,
+              (parentId, candidateId) => {
+                void useAtelierStore.getState()
+                  .retryCandidate(parentId, candidateId)
+                  .then(() => pushToast("info", "Retrying take…"))
+                  .catch((err: unknown) => pushToast("error", `Retry failed: ${err instanceof Error ? err.message : String(err)}`));
+              },
+              // Retry-with-different-model options: every visible video
+              // model from the catalog. The user picked the original
+              // model when they created the draft; we deliberately
+              // include it here so "retry same model with a different
+              // seed" stays accessible from the same menu.
+              VIDEO_I2V_MODELS.map((m) => m.name),
+              (parentId, candidateId, modelLabel) => {
+                // Retry-with-model: delete the failed candidate then
+                // generate one new candidate with the chosen model.
+                // The endpoint supports per-call model + batch_size,
+                // so this composes from existing primitives — no
+                // backend change needed.
+                const store = useAtelierStore.getState();
+                const parent = store.currentProject?.nodes.find((n) => n.id === parentId);
+                if (!parent) return;
+                const existingRefs = readStringArray(
+                  (parent.data as { reference_image_urls?: unknown })?.reference_image_urls,
+                );
+                const prompt =
+                  readString((parent.data as { prompt?: unknown })?.prompt) ??
+                  parent.prompt ??
+                  "";
+                void store
+                  .deleteCandidate(parentId, candidateId)
+                  .then(() =>
+                    store.createVideoCandidates(parentId, {
+                      prompt,
+                      model: modelLabel,
+                      reference_image_urls: existingRefs,
+                      batch_size: 1,
+                      params: {},
+                    }),
+                  )
+                  .then(() => pushToast("info", `Retrying with ${modelLabel}…`))
+                  .catch((err: unknown) =>
+                    pushToast("error", `Retry failed: ${err instanceof Error ? err.message : String(err)}`),
+                  );
+              },
+            ),
           )}
 
           {/* Connect-drag target highlight: while dragging from an image's

@@ -6,6 +6,7 @@ import { ChipDropdown } from "./ChipDropdown";
 import { composerPlacement, type ComposerAnchor, type ComposerViewport } from "./positioning";
 import { validateAtelierRefs, type AtelierRefKind } from "@/lib/modelCatalog";
 import { TearLine } from "../ornaments";
+import { AdvancedPopover, type AdvancedParamsValue } from "./AdvancedPopover";
 
 const TABS = ["T2I", "I2I", "T2V", "I2V", "R2V", "V2V", "Audio"] as const;
 export type ComposerTab = typeof TABS[number];
@@ -24,6 +25,11 @@ export interface ComposerSubmitPayload {
   duration: string;
   count: string;
   refs: ComposerRef[];
+  /** Advanced model-specific params (negative prompt, seed lock,
+   *  cfgScale, mode, motion, sound). Only fields the active model
+   *  actually supports populate; the rest stay undefined. Forwarded
+   *  by the shell into createVideoCandidates' `params` payload. */
+  advanced?: AdvancedParamsValue;
 }
 
 export interface ComposerRef {
@@ -127,6 +133,21 @@ export function Composer({
   useEffect(() => setD(duration),   [duration]);
   useEffect(() => setC(count),      [count]);
 
+  // Advanced popover state — Composer-local; values flow into the
+  // submit payload as `advanced`. The popover reads model capabilities
+  // via the catalog and only renders supported fields (negative prompt,
+  // seed lock, cfgScale, mode, movementAmplitude, sound).
+  const [advanced, setAdvanced] = useState<AdvancedParamsValue>({});
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const advancedAnchorRef = useRef<HTMLButtonElement>(null);
+  const [advancedAnchorRect, setAdvancedAnchorRect] = useState<{ left: number; top: number; width: number; height: number } | undefined>();
+  // Switching to a different model resets advanced fields the new
+  // model doesn't support — otherwise a stale negative_prompt could
+  // ride along to a model that has no negative-prompt capability.
+  useEffect(() => {
+    setAdvanced({});
+  }, [m]);
+
   // ── Capability mismatch (real validation) ───────────────────────────
   // Derived from the model catalog: each catalog entry declares its
   // `inputs.reference_images.{max, reference_type}` contract. We honor the
@@ -215,7 +236,7 @@ export function Composer({
 
   const submit = () => {
     if (mismatchActive) return;
-    onSubmit?.({ tab: activeTab, prompt: draft, modelLabel: m, aspect: a, duration: d, count: c, refs });
+    onSubmit?.({ tab: activeTab, prompt: draft, modelLabel: m, aspect: a, duration: d, count: c, refs, advanced });
   };
 
   const tabIndexOf = (t: ComposerTab) => TABS.indexOf(t);
@@ -474,10 +495,27 @@ export function Composer({
           <ChipDropdown label="Duration" value={d}
             options={durationOptions.map((v) => ({ value: v, label: v }))}
             onChange={(v) => setD(v)} />
-          <button type="button" aria-label="More params" data-tip="Seed / guidance / motion"
-                  onClick={onAdvanced}
-                  disabled={!onAdvanced}
-                  className="btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md border border-white/8 bg-black/25 text-text-secondary transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45">
+          <button
+            type="button"
+            ref={advancedAnchorRef}
+            aria-label="Advanced params"
+            data-tip="Negative prompt · Seed · Guidance"
+            onClick={() => {
+              const r = advancedAnchorRef.current?.getBoundingClientRect();
+              if (r) {
+                setAdvancedAnchorRect({ left: r.left, top: r.top, width: r.width, height: r.height });
+              }
+              setAdvancedOpen((v) => !v);
+              onAdvanced?.();
+            }}
+            className={`btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md border bg-black/25 text-text-secondary transition-colors hover:bg-white/[0.05] hover:text-foreground ${
+              // Lit ring when any advanced field has a non-default value,
+              // so the user can see at a glance that the run will pick
+              // up custom params.
+              advanced.negativePrompt || typeof advanced.seed === "number" || typeof advanced.cfgScale === "number" || advanced.mode || advanced.movementAmplitude || advanced.sound
+                ? "border-primary/55 text-primary"
+                : "border-white/8"
+            }`}>
             <Settings size={12} aria-hidden="true" />
           </button>
           <ChipDropdown label="Count" value={c}
@@ -500,6 +538,15 @@ export function Composer({
           <Wand2 size={13} aria-hidden="true" className="transition-transform duration-200 group-hover:rotate-12" />
         </button>
       </div>
+
+      <AdvancedPopover
+        open={advancedOpen}
+        modelLabel={m}
+        value={advanced}
+        onChange={setAdvanced}
+        onClose={() => setAdvancedOpen(false)}
+        anchorRect={advancedAnchorRect}
+      />
     </section>
   );
 }

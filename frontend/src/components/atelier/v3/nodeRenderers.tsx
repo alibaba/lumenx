@@ -312,6 +312,8 @@ export function renderCandidatesAsMediaNodes(
   selectedIds: Set<string>,
   select: (id: string | null) => void,
   onRetry: (parentId: string, candidateId: string) => void,
+  retryModelOptions?: string[],
+  onRetryWithModel?: (parentId: string, candidateId: string, modelLabel: string) => void,
 ): React.ReactNode[] {
   if (node.type !== "video") return [];
   const candidates = readCandidates(node);
@@ -418,6 +420,12 @@ export function renderCandidatesAsMediaNodes(
           y={y}
           onSelect={() => select(candKey)}
           onRetry={c.status === "failed" ? () => onRetry(node.id, c.id) : undefined}
+          retryModelOptions={c.status === "failed" ? retryModelOptions : undefined}
+          onRetryWithModel={
+            c.status === "failed" && onRetryWithModel
+              ? (_, modelLabel) => onRetryWithModel(node.id, c.id, modelLabel)
+              : undefined
+          }
         />
       </div>
     );

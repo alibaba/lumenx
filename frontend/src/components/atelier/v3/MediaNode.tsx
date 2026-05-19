@@ -1,6 +1,6 @@
 "use client";
-import { useRef, useState } from "react";
-import { AlertTriangle, Check, ImageIcon, Loader2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, Check, ChevronDown, ImageIcon, Loader2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
 import { TearLine } from "./ornaments";
 
@@ -23,6 +23,13 @@ interface Props {
   onSelect?: (id: string) => void;
   /** When provided on a failed node, an inline Retry button is shown. */
   onRetry?: (id: string) => void;
+  /** Optional list of model display names the failed take can be re-run
+   *  with. When non-empty, the Retry button gets a chevron that opens a
+   *  small popup; picking a model fires `onRetryWithModel(id, model)`.
+   *  The list is the user's choice — caller decides whether to include
+   *  the original model, all i2v candidates, or anything else. */
+  retryModelOptions?: string[];
+  onRetryWithModel?: (id: string, modelLabel: string) => void;
   /** When provided on an empty image node, the placeholder becomes a
    *  unified actionable card with Upload + Generate buttons baked into the
    *  same bordered box (no separate floating overlay). */
@@ -59,6 +66,107 @@ function TypeChip({ kind }: { kind: MediaKind }) {
       <Icon size={9} aria-hidden="true" className="text-primary/85" />
       {label}
     </span>
+  );
+}
+
+// Compound retry control — small "Retry" button with an optional
+// chevron that opens a popup of alternate models. The popup lists every
+// option the caller passed; we don't filter or dedupe on the original
+// model because the user explicitly asked for that to be a choice
+// ("retry with same model" is a valid pick).
+function RetryButton({
+  id,
+  errorMessage,
+  onRetry,
+  retryModelOptions,
+  onRetryWithModel,
+}: {
+  id: string;
+  errorMessage?: string;
+  onRetry?: (id: string) => void;
+  retryModelOptions?: string[];
+  onRetryWithModel?: (id: string, modelLabel: string) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapperRef.current) return;
+      if (!wrapperRef.current.contains(e.target as Node)) setPickerOpen(false);
+    };
+    const id2 = requestAnimationFrame(() => window.addEventListener("mousedown", onDown));
+    return () => {
+      cancelAnimationFrame(id2);
+      window.removeEventListener("mousedown", onDown);
+    };
+  }, [pickerOpen]);
+
+  const hasOptions = !!retryModelOptions && retryModelOptions.length > 0 && !!onRetryWithModel;
+  if (!onRetry && !hasOptions) return null;
+
+  return (
+    <div ref={wrapperRef} className="relative inline-flex items-center gap-px">
+      {onRetry ? (
+        <button
+          type="button"
+          aria-label="Retry generation"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry(id);
+          }}
+          className="btn-tip mt-0.5 inline-flex items-center gap-1 rounded-full bg-red-400/25 px-2 py-0.5 text-[10px] font-semibold text-red-50 hover:bg-red-400/40"
+          data-tip={errorMessage || "Retry with same model"}
+        >
+          <RotateCw size={10} aria-hidden="true" /> Retry
+        </button>
+      ) : null}
+      {hasOptions ? (
+        <button
+          type="button"
+          aria-label="Retry with a different model"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            setPickerOpen((v) => !v);
+          }}
+          className="btn-tip mt-0.5 inline-flex items-center justify-center rounded-full bg-red-400/25 px-1.5 py-[3px] text-red-50 hover:bg-red-400/40"
+          data-tip="Pick a different model"
+        >
+          <ChevronDown size={10} aria-hidden="true" />
+        </button>
+      ) : null}
+      {pickerOpen && hasOptions ? (
+        <div
+          role="menu"
+          aria-label="Retry with model"
+          className="absolute right-0 top-full z-30 mt-1 w-[180px] origin-top overflow-hidden rounded-md border border-white/8 bg-[#141416]/96 p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
+        >
+          <div className="border-b border-dashed border-white/8 px-2 py-1 font-mono text-[8.5px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
+            Retry with
+          </div>
+          <div className="max-h-[180px] overflow-y-auto p-1">
+            {retryModelOptions!.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                role="menuitem"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPickerOpen(false);
+                  onRetryWithModel!(id, opt);
+                }}
+                className="block w-full rounded px-2 py-1 text-left text-[11.5px] text-text-secondary transition-colors hover:bg-white/[0.05] hover:text-foreground"
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -102,6 +210,8 @@ export function MediaNode({
   onRetry,
   onUpload,
   onGenerate,
+  retryModelOptions,
+  onRetryWithModel,
 }: Props) {
   const def = DEFAULT_SIZE[kind];
   const w = Math.max(40, Math.min(width ?? def.w, MAX_WIDTH));
@@ -243,21 +353,13 @@ export function MediaNode({
                 <span className="font-mono text-[9px] uppercase tracking-wider text-red-100">
                   {errorMessage ? "Failed" : "Generation failed"}
                 </span>
-                {onRetry ? (
-                  <button
-                    type="button"
-                    aria-label="Retry generation"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRetry(id);
-                    }}
-                    className="btn-tip mt-0.5 inline-flex items-center gap-1 rounded-full bg-red-400/25 px-2 py-0.5 text-[10px] font-semibold text-red-50 hover:bg-red-400/40"
-                    data-tip={errorMessage || "Retry generation"}
-                  >
-                    <RotateCw size={10} aria-hidden="true" /> Retry
-                  </button>
-                ) : null}
+                <RetryButton
+                  id={id}
+                  errorMessage={errorMessage}
+                  onRetry={onRetry}
+                  retryModelOptions={retryModelOptions}
+                  onRetryWithModel={onRetryWithModel}
+                />
               </div>
             ) : null}
             {selectedAsTake ? (
@@ -440,21 +542,13 @@ export function MediaNode({
           <span className="font-mono text-[9px] uppercase tracking-wider text-red-100">
             {errorMessage ? "Failed" : "Generation failed"}
           </span>
-          {onRetry ? (
-            <button
-              type="button"
-              aria-label="Retry generation"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRetry(id);
-              }}
-              className="btn-tip mt-0.5 inline-flex items-center gap-1 rounded-full bg-red-400/25 px-2 py-0.5 text-[10px] font-semibold text-red-50 hover:bg-red-400/40"
-              data-tip={errorMessage || "Retry generation"}
-            >
-              <RotateCw size={10} aria-hidden="true" /> Retry
-            </button>
-          ) : null}
+          <RetryButton
+            id={id}
+            errorMessage={errorMessage}
+            onRetry={onRetry}
+            retryModelOptions={retryModelOptions}
+            onRetryWithModel={onRetryWithModel}
+          />
         </div>
       ) : null}
 
