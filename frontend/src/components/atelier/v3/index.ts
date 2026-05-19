@@ -41,3 +41,15 @@ export {
 
 // Wave D — asset library
 export { AssetLibrary, type AssetKind, type AssetCategory } from "./AssetLibrary";
+
+// Wave E — workflow library
+export { WorkflowsPanel } from "./WorkflowsPanel";
+export {
+  WORKFLOW_TEMPLATES,
+  TEMPLATE_CATEGORY_LABELS,
+  TEMPLATE_GEOMETRY,
+  type WorkflowTemplate,
+  type TemplateCategory,
+  type TemplateNode,
+  type TemplateEdge,
+} from "./workflowTemplates";

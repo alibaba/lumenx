@@ -15,6 +15,7 @@ import {
   DraftWorkbench,
   LeftRailV3,
   RailPanel,
+  WorkflowsPanel,
   type LeftRailMode,
   type ComposerSubmitPayload,
 } from "@/components/atelier/v3";
@@ -469,6 +470,34 @@ export function AtelierShellV3() {
   const [activeRailMode, setActiveRailMode] = useState<LeftRailMode | null>(null);
   const toggleRailMode = (mode: LeftRailMode) => {
     setActiveRailMode((cur) => (cur === mode ? null : mode));
+  };
+
+  // Sequence Strip visibility (Sprint D). Persisted, defaults to
+  // visible so existing users don't lose the bottom strip on first
+  // load after the upgrade.
+  const [sequenceVisible, setSequenceVisibleRaw] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    try {
+      return window.localStorage.getItem("atelier-v3-sequence-visible") !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const setSequenceVisible: typeof setSequenceVisibleRaw = (next) => {
+    setSequenceVisibleRaw((prev) => {
+      const resolved = typeof next === "function"
+        ? (next as (p: boolean) => boolean)(prev)
+        : next;
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(
+            "atelier-v3-sequence-visible",
+            resolved ? "1" : "0",
+          );
+        }
+      } catch { /* ignore */ }
+      return resolved;
+    });
   };
 
   // (Sprint B: Asset Library open state moved into activeRailMode.
@@ -2455,12 +2484,17 @@ export function AtelierShellV3() {
         onModeToggle={(mode) => {
           // Agent mode is special: it doesn't have its own slide-out
           // panel here — it just toggles the always-present right rail.
-          // Same for Sequence (toggles the bottom strip). The rail's
-          // active highlight still tracks the user's last pick so they
-          // can see "I'm in Agent mode" at a glance.
+          // Same for Sequence (toggles the bottom strip's visibility).
+          // The rail's active highlight still tracks the user's last
+          // pick so they can see "I'm in Agent mode" at a glance.
           if (mode === "agent") {
             setAgentCollapsed((c) => !c);
             setActiveRailMode((cur) => (cur === "agent" ? null : "agent"));
+            return;
+          }
+          if (mode === "sequence") {
+            setSequenceVisible((v) => !v);
+            setActiveRailMode((cur) => (cur === "sequence" ? null : "sequence"));
             return;
           }
           toggleRailMode(mode);
@@ -2576,48 +2610,156 @@ export function AtelierShellV3() {
         </ul>
       </RailPanel>
 
-      {/* Workflows panel — placeholder for Sprint C. The slot exists so
-          the rail's affordance isn't a dead button. Real workflow
-          browser (curated local presets) lands next sprint per Codex
-          doc §4.7 / §7.7. */}
+      {/* Workflows panel — local template registry. Click Insert →
+          shell creates the template's nodes at viewport center then
+          wires reference edges per the template spec. (Codex doc
+          §4.7 / §7.7.) */}
       <RailPanel
         open={activeRailMode === "workflows"}
         title="Workflows"
         tag="Atelier · Workflows · No 001"
         onClose={() => setActiveRailMode(null)}
       >
-        <div className="px-4 py-6 text-center">
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-text-muted/85">
-            Coming next sprint
-          </div>
-          <p className="text-[12px] leading-[1.55] text-text-secondary/95">
-            A curated browser of generation recipes — story video, character
-            reference, product reveal, motion presets. Each template will
-            instantiate a small group of nodes + reference wiring + model
-            defaults so you can start with a working setup instead of a
-            blank canvas.
-          </p>
-        </div>
+        <WorkflowsPanel
+          onInsert={(template) => {
+            // Compute drop offset: viewport center → world coords. The
+            // template's local (0,0) lands here; everything else is
+            // offset relative to that anchor.
+            const rect = mainRef.current?.getBoundingClientRect();
+            const screenCenterX = (rect?.width ?? 1440) / 2;
+            const screenCenterY = (rect?.height ?? 900) / 2;
+            const dropWorldX = (screenCenterX - panX) / zoomFactor;
+            const dropWorldY = (screenCenterY - panY) / zoomFactor;
+
+            // Recipe: create every template node, then attach references
+            // by mapping localId → real node id. We sequence the create
+            // calls so the api gets stable order, but the .then chain
+            // collects ids before firing attach.
+            const localToReal = new Map<string, string>();
+            const projectId = project?.id;
+            if (!projectId) {
+              pushToast("error", "No project loaded.");
+              return;
+            }
+
+            (async () => {
+              try {
+                for (const tn of template.nodes) {
+                  const created = await api.createAtelierNode(projectId, {
+                    type: tn.type,
+                    title: tn.title ?? template.name,
+                    prompt:
+                      typeof tn.data?.prompt === "string"
+                        ? (tn.data.prompt as string)
+                        : "",
+                    x: Math.round(dropWorldX + tn.x),
+                    y: Math.round(dropWorldY + tn.y),
+                    width: tn.type === "image" ? 244 : tn.type === "video" ? 240 : 224,
+                    height: tn.type === "image" ? 224 : tn.type === "video" ? 110 : 120,
+                    data: tn.data ?? {},
+                  } as AtelierNodePayload);
+                  localToReal.set(tn.localId, created.id);
+                }
+                for (const edge of template.edges) {
+                  if (edge.kind !== "reference") continue;
+                  const fromId = localToReal.get(edge.from);
+                  const toId = localToReal.get(edge.to);
+                  if (!fromId || !toId) continue;
+                  await useAtelierStore.getState().attachReferenceNode(toId, fromId);
+                }
+                // Refresh the project so all nodes+edges land in the UI.
+                await refreshCurrentProject();
+                pushToast(
+                  "success",
+                  `Inserted ${template.name} · ${template.nodes.length} node${template.nodes.length === 1 ? "" : "s"}`,
+                );
+                setActiveRailMode(null);
+              } catch (err: unknown) {
+                pushToast(
+                  "error",
+                  `Insert failed: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            })();
+          }}
+        />
       </RailPanel>
 
-      {/* History panel — placeholder for Sprint D. Real timeline browser
-          (project event log, saved versions, agent turns) lands later. */}
+      {/* History panel — agent-turn timeline. v1 just lists turns from
+          project.agent_turns (already in store, polled with the rest of
+          the project). Future iterations: filter by status, expand turn
+          to see tool calls, jump to the affected node. */}
       <RailPanel
         open={activeRailMode === "history"}
         title="History"
         tag="Atelier · History · No 001"
         onClose={() => setActiveRailMode(null)}
       >
-        <div className="px-4 py-6 text-center">
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-text-muted/85">
-            Coming later
-          </div>
-          <p className="text-[12px] leading-[1.55] text-text-secondary/95">
-            Project event log + saved versions — see every generation,
-            every approval, every branch your project has gone through.
-            Roll back to any point.
-          </p>
-        </div>
+        {(() => {
+          const turns = project?.agent_turns ?? [];
+          if (turns.length === 0) {
+            return (
+              <div className="px-4 py-6 text-center">
+                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-text-muted/85">
+                  No agent turns yet
+                </div>
+                <p className="text-[12px] leading-[1.55] text-text-secondary/95">
+                  Ask the Agent to do something — the timeline will fill in
+                  as it plans, asks for approval, and executes.
+                </p>
+              </div>
+            );
+          }
+          // Most recent first reads as "what just happened?", which is
+          // what the user opens this panel to find. Backend stores
+          // chronologically.
+          const ordered = [...turns].sort((a, b) => b.created_at - a.created_at);
+          const statusTone = (s: typeof turns[number]["status"]): string => {
+            if (s === "completed") return "border-emerald-300/35 text-emerald-200/95";
+            if (s === "failed") return "border-red-300/35 text-red-200/95";
+            if (s === "waiting_approval") return "border-amber-300/35 text-amber-200/95";
+            return "border-blue-300/35 text-blue-200/95";
+          };
+          return (
+            <ul className="space-y-1.5 p-2.5">
+              {ordered.map((turn) => (
+                <li
+                  key={turn.id}
+                  className="rounded-md border border-white/8 bg-black/20 px-3 py-2"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${statusTone(turn.status)}`}
+                    >
+                      {turn.status.replace("_", " ")}
+                    </span>
+                    <span className="font-mono text-[9px] tracking-tight text-text-muted/85">
+                      {new Date(turn.created_at * 1000).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                  {turn.user_message ? (
+                    <p className="line-clamp-3 font-display text-[12px] italic leading-[1.45] tracking-tight text-foreground/92">
+                      {turn.user_message}
+                    </p>
+                  ) : (
+                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/70">
+                      System turn
+                    </p>
+                  )}
+                  {turn.tool_calls.length > 0 ? (
+                    <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/85">
+                      {turn.tool_calls.length} tool call
+                      {turn.tool_calls.length === 1 ? "" : "s"}
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          );
+        })()}
       </RailPanel>
 
       {/* Project picker — sits below Toolbar (top-16 left-4). Pill shows
@@ -3990,7 +4132,9 @@ export function AtelierShellV3() {
           + layered shadow) so it reads as a real surface, not a glass card.
           Drop target: HTML5-draggable completed takes from the canvas can
           be dropped here to append to the sequence (handler reads the
-          custom application/x-atelier-take mime). */}
+          custom application/x-atelier-take mime). Visibility toggled via
+          the LeftRailV3 Sequence mode button (Sprint D). */}
+      {sequenceVisible ? (
       <div
         className={`absolute bottom-4 left-[280px] z-20 rounded-2xl border bg-[#0c0c10]/92 p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl transition-colors ${
           seqDropActive ? "border-primary/60 ring-2 ring-primary/35" : "border-white/8"
@@ -4194,6 +4338,7 @@ export function AtelierShellV3() {
           </div>
         )}
       </div>
+      ) : null}
 
       {/* Right-click context menu — closes on outside click + Esc. */}
       {contextMenu ? (() => {
