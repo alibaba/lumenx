@@ -352,8 +352,33 @@ export function renderCandidatesAsMediaNodes(
     // Completed takes are draggable to the Sequence Strip via HTML5
     // drag-and-drop. We carry a custom mime type so the strip's drop
     // handler can distinguish take drags from regular pointer drags
-    // (canvas pan, marquee, etc.).
-    const dragPayload = JSON.stringify({ parentId: node.id, candidateId: c.id });
+    // (canvas pan, marquee, etc.). Payload is always an array — single
+    // take is just an array of one. The strip iterates and appends in
+    // order, so multi-selecting takes (Shift / Cmd click) and dragging
+    // any one of them drops the whole batch in selection order.
+    const isMultiSelected = selectedIds.has(candKey) && selectedIds.size > 1;
+    const buildBatchPayload = () => {
+      if (!isMultiSelected) {
+        return JSON.stringify([{ parentId: node.id, candidateId: c.id }]);
+      }
+      // Walk the parent's candidate list (same lookup we already do)
+      // and emit every selected one. This keeps order stable so the
+      // strip mirrors the candidate-grid order, not selection order.
+      const batch: Array<{ parentId: string; candidateId: string }> = [];
+      for (const cc of candidates) {
+        const k = candidateNodeId(node.id, cc.id);
+        if (selectedIds.has(k) && cc.status === "completed" && !!cc.video_url) {
+          batch.push({ parentId: node.id, candidateId: cc.id });
+        }
+      }
+      // If somehow our own candKey wasn't included (shouldn't happen
+      // since isMultiSelected required selectedIds.has(candKey)), drop
+      // back to single-take payload.
+      if (batch.length === 0) {
+        return JSON.stringify([{ parentId: node.id, candidateId: c.id }]);
+      }
+      return JSON.stringify(batch);
+    };
     return (
       // Wrap each candidate MediaNode with a positional shell that carries
       // data-atelier-node, so the Composer's DOM-rect anchor lookup can
@@ -365,7 +390,7 @@ export function renderCandidatesAsMediaNodes(
         onDragStart={(e) => {
           if (c.status !== "completed" || !c.video_url) return;
           e.dataTransfer.effectAllowed = "copyLink";
-          e.dataTransfer.setData("application/x-atelier-take", dragPayload);
+          e.dataTransfer.setData("application/x-atelier-take", buildBatchPayload());
           // Plain text fallback so dropping into other surfaces (e.g.,
           // the agent prompt) still gets a meaningful payload.
           e.dataTransfer.setData("text/plain", `@${c.label || c.id.slice(0, 8)}`);

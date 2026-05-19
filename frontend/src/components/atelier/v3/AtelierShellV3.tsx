@@ -3708,18 +3708,43 @@ export function AtelierShellV3() {
           if (!data) return;
           e.preventDefault();
           try {
-            const { parentId, candidateId } = JSON.parse(data) as {
-              parentId: string;
-              candidateId: string;
-            };
+            // Payload is always an array — single take is a 1-element
+            // array. Multi-selected takes share order from the parent's
+            // candidate list (see buildBatchPayload in nodeRenderers).
+            const parsed = JSON.parse(data);
+            const batch: Array<{ parentId: string; candidateId: string }> =
+              Array.isArray(parsed)
+                ? parsed
+                : parsed && typeof parsed === "object"
+                  ? [parsed]
+                  : [];
+            if (batch.length === 0) return;
+            let added = 0;
+            let skipped = 0;
             setSequence((prev) => {
-              if (prev.some((s) => s.parentId === parentId && s.candidateId === candidateId)) {
-                pushToast("info", "Already in sequence");
-                return prev;
+              const next = [...prev];
+              for (const item of batch) {
+                if (!item || typeof item.parentId !== "string" || typeof item.candidateId !== "string") {
+                  continue;
+                }
+                if (next.some((s) => s.parentId === item.parentId && s.candidateId === item.candidateId)) {
+                  skipped += 1;
+                  continue;
+                }
+                next.push({ parentId: item.parentId, candidateId: item.candidateId });
+                added += 1;
               }
-              return [...prev, { parentId, candidateId }];
+              return next;
             });
-            pushToast("success", "Added to sequence");
+            if (added === 0 && skipped > 0) {
+              pushToast("info", "Already in sequence");
+            } else if (added > 0 && skipped > 0) {
+              pushToast("success", `Added ${added} · skipped ${skipped} duplicate${skipped === 1 ? "" : "s"}`);
+            } else if (added === 1) {
+              pushToast("success", "Added to sequence");
+            } else if (added > 1) {
+              pushToast("success", `Added ${added} clips`);
+            }
           } catch {
             // Malformed payload — silently ignore. Should never happen
             // since we serialize ourselves, but defensive parsing means
@@ -3799,6 +3824,23 @@ export function AtelierShellV3() {
                   setSeqDragOverIndex(null);
                 }}
                 onClick={() => cand.video_url && setPreviewVideoUrl(cand.video_url)}
+                onMouseEnter={(e) => {
+                  // Hover-to-preview, same vibe as the canvas take cards:
+                  // the inner <video> autoplays muted+loop on a 250 ms
+                  // dwell so a quick scrub through the strip doesn't
+                  // trigger flicker.
+                  const v = e.currentTarget.querySelector("video");
+                  if (!v) return;
+                  window.setTimeout(() => {
+                    v.play().catch(() => {/* autoplay may be blocked */});
+                  }, 250);
+                }}
+                onMouseLeave={(e) => {
+                  const v = e.currentTarget.querySelector("video");
+                  if (!v) return;
+                  v.pause();
+                  try { v.currentTime = 0; } catch { /* ignore */ }
+                }}
                 className={`group relative h-[68px] w-[124px] shrink-0 cursor-grab overflow-hidden rounded-[5px] border transition-shadow hover:border-primary/45 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.22)] active:cursor-grabbing ${
                   seqDragFromIndex === i
                     ? "opacity-45 border-primary/55"
@@ -3812,6 +3854,7 @@ export function AtelierShellV3() {
                   <video
                     src={getAssetUrl(cand.video_url)}
                     muted
+                    loop
                     playsInline
                     preload="metadata"
                     aria-label={`${parent.title} thumbnail`}
