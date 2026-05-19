@@ -1,5 +1,5 @@
 "use client";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { AlertTriangle, Check, ImageIcon, Loader2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
 import { TearLine } from "./ornaments";
@@ -116,6 +116,11 @@ export function MediaNode({
     kind === "image" && !src && !!(onUpload || onGenerate) &&
     status !== "processing" && status !== "pending" && status !== "failed";
 
+  // Image card aspect — read off the <img>'s naturalWidth/naturalHeight
+  // once it loads. Until then we render with a 4:3 fallback so the card
+  // height doesn't pop on load.
+  const [imageAspect, setImageAspect] = useState<number | null>(null);
+
   // Hover-to-preview for completed video takes — pause-on-leave + 250ms
   // dwell delay so a quick hover-pass doesn't trigger flicker. Mute + loop
   // + playsinline keep it sotto voce.
@@ -158,6 +163,14 @@ export function MediaNode({
         ? "border-red-400/45"
         : "border-glass-border";
     const cardName = filename || "Image";
+    // Image's natural aspect ratio is read off the loaded <img> via
+    // onLoad below. Until it's known, fall back to 4:3 so the card
+    // height is stable. Clamp aspect into a reasonable range so a tall
+    // portrait doesn't make the card a sliver and a wide pano doesn't
+    // shrink the thumb to a hairline.
+    const naturalAspect = imageAspect && imageAspect > 0
+      ? Math.max(0.6, Math.min(2.4, imageAspect))
+      : 4 / 3;
     return (
       <div
         role="button"
@@ -192,15 +205,26 @@ export function MediaNode({
             Img
           </span>
         </div>
-        {/* Thumbnail body — fixed aspect 4:3 keeps every image card the
-            same height regardless of source ratio. */}
+        {/* Thumbnail body — adapts to the source's natural aspect (read
+            once on load), clamped to [0.6, 2.4] so portraits and panos
+            stay readable on a 244-wide card. Fallback 4:3 while loading
+            keeps the card height stable. */}
         <div className="px-3 pb-1.5">
-          <div className="relative overflow-hidden rounded-md border border-white/8 bg-black/40" style={{ aspectRatio: "4 / 3" }}>
+          <div
+            className="relative overflow-hidden rounded-md border border-white/8 bg-black/40"
+            style={{ aspectRatio: `${naturalAspect}` }}
+          >
             <img
               src={src}
               alt={filename ?? ""}
               loading="lazy"
               decoding="async"
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                  setImageAspect(img.naturalWidth / img.naturalHeight);
+                }
+              }}
               className="absolute inset-0 h-full w-full object-cover"
             />
             {showProcessing ? (

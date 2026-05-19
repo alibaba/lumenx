@@ -1811,25 +1811,46 @@ export function AtelierShellV3() {
       // handle. We only auto-attach IMAGE nodes; @-mentioning a draft
       // or an idea is informational (the prompt mentions it, but we
       // don't try to attach a draft as a ref to itself).
+      // Mention resolution — try in priority: exact → case-insensitive
+      // exact → prefix (case-insensitive) → contains. The first
+      // priority that yields a unique image-with-media wins. This is
+      // forgiving enough that the user typing `@hero` finds a node
+      // titled `Hero shot` without case-matching, while still being
+      // strict enough that `@a` doesn't accidentally pick the first
+      // node alphabetically.
       const allNodes = project?.nodes ?? [];
+      const candidatePool = allNodes.filter(
+        (n) => n.type === "image" && (n.media_urls?.length ?? 0) > 0,
+      );
+      const labelsOf = (n: AtelierNode): string[] => {
+        const title = n.title || "";
+        const intent = readString((n.data as { intent?: unknown })?.intent) || "";
+        const body = readString((n.data as { body?: unknown })?.body) || "";
+        return [title, intent, body.slice(0, 40)].filter((s) => s.length > 0);
+      };
+      const resolveMention = (query: string): AtelierNode | null => {
+        const q = query.trim();
+        const ql = q.toLowerCase();
+        const tries: Array<(labels: string[]) => boolean> = [
+          (labels) => labels.some((l) => l === q),
+          (labels) => labels.some((l) => l.toLowerCase() === ql),
+          (labels) => labels.some((l) => l.toLowerCase().startsWith(ql)),
+          (labels) => labels.some((l) => l.toLowerCase().includes(ql)),
+        ];
+        for (const test of tries) {
+          const matches = candidatePool.filter((n) => test(labelsOf(n)));
+          if (matches.length === 1) return matches[0];
+          // Multiple hits at this priority → ambiguous, escalate to next
+          // priority. If even contains-search gives multiple matches,
+          // bail (better silence than auto-attaching the wrong one).
+        }
+        return null;
+      };
+
       const mentionMatches = Array.from(payload.prompt.matchAll(/@([^\s@]+)/g));
       const newRefUrls: string[] = [];
       for (const m of mentionMatches) {
-        const label = m[1];
-        // Match by title, then by data.intent / data.body — same lookup
-        // priority as the Composer's mentionables list.
-        const target = allNodes.find((n) => {
-          if (n.type !== "image") return false;
-          if (!n.media_urls || n.media_urls.length === 0) return false;
-          const title = n.title || "";
-          const intent = readString((n.data as { intent?: unknown })?.intent) || "";
-          const body = readString((n.data as { body?: unknown })?.body) || "";
-          return (
-            title === label ||
-            intent === label ||
-            body.slice(0, 40) === label
-          );
-        });
+        const target = resolveMention(m[1]);
         if (!target || !target.media_urls) continue;
         for (const url of target.media_urls) {
           if (!existingRefs.includes(url) && !newRefUrls.includes(url)) {
@@ -4124,12 +4145,12 @@ export function AtelierShellV3() {
       {tourStep !== null && !showHelp ? (() => {
         const steps = [
           {
-            tag: "Step 1 of 3",
+            tag: "Step 1 of 4",
             title: "Welcome to Atelier",
-            body: "This is your AI video studio canvas. Drop seeds, link them with references, generate takes, judge, and stitch a sequence — all in one space.",
+            body: "Your AI video studio canvas. Drop seeds, link them with references, generate takes, judge, and stitch a sequence — all in one space.",
           },
           {
-            tag: "Step 2 of 3",
+            tag: "Step 2 of 4",
             title: "Drop a seed",
             body: (
               <>
@@ -4146,17 +4167,28 @@ export function AtelierShellV3() {
             ),
           },
           {
-            tag: "Step 3 of 3",
-            title: "Generate & approve",
+            tag: "Step 3 of 4",
+            title: "Wire it up",
             body: (
               <>
-                Select a draft → Composer pops up below. Press{" "}
+                Hover an image or completed take — left + right{" "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">+</kbd>{" "}
+                ports appear on its edges. Drag the right port onto a draft to attach as reference, onto another node to branch, or to empty canvas to spawn a new draft pre-connected.
+              </>
+            ),
+          },
+          {
+            tag: "Step 4 of 4",
+            title: "Generate & sequence",
+            body: (
+              <>
+                Click a draft → Composer pops up below. Press{" "}
                 <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">⌘ Enter</kbd>{" "}
                 to generate. Type{" "}
                 <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">@</kbd>{" "}
-                to mention nodes. Press{" "}
+                to mention nodes (auto-attaches matching images). Drag completed takes into the bottom Sequence Strip to stitch your cut. Press{" "}
                 <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">?</kbd>{" "}
-                anytime for the full shortcut list.
+                for the full shortcut list.
               </>
             ),
           },
@@ -4305,7 +4337,8 @@ export function AtelierShellV3() {
           {
             heading: "Sequence",
             items: [
-              ["Take action bar → Add", "Append to sequence"],
+              ["Drag take → Sequence Strip", "Append to sequence"],
+              ["Take action bar → Add", "Same, via menu"],
               ["Drag a clip in strip", "Reorder"],
               ["Hover clip + ×", "Remove from sequence"],
               ["Click strip clip", "Open in preview"],
