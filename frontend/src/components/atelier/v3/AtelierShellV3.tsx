@@ -17,6 +17,7 @@ import {
   type ComposerSubmitPayload,
 } from "@/components/atelier/v3";
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
+import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import {
   // Pure helpers + node renderers extracted to keep this file under
   // control. Behavior is identical; this is a move-only refactor.
@@ -2446,9 +2447,10 @@ export function AtelierShellV3() {
                     when present, mono caps placeholder when blank. */}
                 <div className="group/desc relative border-b border-white/6 px-2.5 py-2">
                   {project.description ? (
-                    <p className="pr-6 font-display text-[12px] italic leading-[1.5] tracking-tight text-text-secondary/95">
-                      {project.description}
-                    </p>
+                    <MiniMarkdown
+                      source={project.description}
+                      className="pr-6 font-display text-[12px] italic leading-[1.5] tracking-tight text-text-secondary/95"
+                    />
                   ) : (
                     <p className="pr-6 font-mono text-[9.5px] uppercase tracking-[0.24em] text-text-muted/75">
                       No description · click pencil to add
@@ -2462,7 +2464,7 @@ export function AtelierShellV3() {
                       e.stopPropagation();
                       askPrompt({
                         title: "Project description",
-                        description: `For "${project.title || "Untitled"}". Markdown not rendered yet — keep it short.`,
+                        description: `For "${project.title || "Untitled"}". Markdown subset: **bold** *italic* \`code\` [link](url).`,
                         initialValue: project.description || "",
                         placeholder: "What is this project about?",
                         submitLabel: "Save",
