@@ -23,7 +23,7 @@
 //   - The shell renders this when (selectedNode is a draft); otherwise
 //     the compact DraftNode renders.
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
 import {
   Composer,
   type ComposerMentionable,
@@ -66,6 +66,11 @@ interface Props {
   onRemoveRef?: (idx: number) => void;
   onPromptCommit?: (next: string) => void;
   mentionables?: ComposerMentionable[];
+  /** Set when the shell detects an upstream image reference whose
+   *  updated_at is newer than this draft's last successful run. v1
+   *  surfaces this as a small amber chip so the user knows their
+   *  current take may not reflect the latest reference state. */
+  staleRefCount?: number;
 }
 
 export function DraftWorkbench({
@@ -97,6 +102,7 @@ export function DraftWorkbench({
   onRemoveRef,
   onPromptCommit,
   mentionables,
+  staleRefCount = 0,
 }: Props) {
   // Title row (rename) — same affordance as DraftNode so the muscle
   // memory carries over. Double-click to rename, Enter commits, Esc
@@ -195,6 +201,17 @@ export function DraftWorkbench({
             {intent}
           </span>
         )}
+        {staleRefCount > 0 ? (
+          <span
+            role="status"
+            aria-label={`${staleRefCount} reference${staleRefCount === 1 ? "" : "s"} updated since last run`}
+            data-tip="Reference updated since last run"
+            className="btn-tip ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed border-amber-300/45 bg-amber-400/10 px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-amber-100"
+          >
+            <AlertTriangle size={9} aria-hidden="true" />
+            Stale ref · {staleRefCount}
+          </span>
+        ) : null}
         {typeof candidatesTotal === "number" && candidatesTotal > 0 ? (
           <span
             className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${

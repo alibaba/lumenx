@@ -43,7 +43,7 @@ export {
 export { AssetLibrary, type AssetKind, type AssetCategory } from "./AssetLibrary";
 
 // Wave E — workflow library
-export { WorkflowsPanel } from "./WorkflowsPanel";
+export { WorkflowsPanel, appendUserWorkflow } from "./WorkflowsPanel";
 export {
   WORKFLOW_TEMPLATES,
   TEMPLATE_CATEGORY_LABELS,

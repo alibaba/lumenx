@@ -340,6 +340,17 @@ export function Composer({
           <div key={i} className="group/ref relative h-9 w-[52px] overflow-hidden rounded-[5px] border border-white/8 bg-black/30">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={r.src} alt={`Reference ${i + 1}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+            {/* Slot index badge — bottom-left so it doesn't fight with the
+                kind/role chip in the top-right. RHTV §4.5 surfaces these
+                as "@图N" tokens in the prompt; we mirror that vocabulary
+                visually so the user reads "图1 = first thumb" without
+                being told. */}
+            <span
+              aria-hidden="true"
+              className="absolute bottom-0 left-0 rounded-tr-[3px] border-r border-t border-dashed border-white/35 bg-black/75 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.18em] text-white/95"
+            >
+              图{i + 1}
+            </span>
             {r.role && (
               <span aria-hidden="true" className="absolute right-0 top-0 rounded-bl-[3px] border border-dashed border-white/35 bg-black/70 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.24em] text-white/90">
                 {r.role}

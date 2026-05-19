@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, FolderOpen, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, CreditCard, FolderOpen, Pencil, Play, Plus, Scissors, Share2, Trash2, User, X } from "lucide-react";
 import {
   SelectionActionBar,
   BottomNavRail,
@@ -16,8 +16,13 @@ import {
   LeftRailV3,
   RailPanel,
   WorkflowsPanel,
+  appendUserWorkflow,
   type LeftRailMode,
   type ComposerSubmitPayload,
+  type WorkflowTemplate,
+  type TemplateNode,
+  type TemplateEdge,
+  type TemplateCategory,
 } from "@/components/atelier/v3";
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
@@ -2073,6 +2078,90 @@ export function AtelierShellV3() {
       setUseAsRefSourceId(node.id);
       return;
     }
+
+    // Post-judgment actions on a completed take (or any node carrying a
+    // media url). RHTV §4.6 framing: "I judged this; now do something
+    // with it" — download, fullscreen, send to agent. Each resolves the
+    // active media url first; for video candidates we look at the parent
+    // node's candidate list instead of a top-level url.
+    const resolveMediaUrl = (n: AtelierNode): string | null => {
+      const parsed = parseCandidateNodeId(n.id);
+      if (parsed) {
+        const proj = store.currentProject;
+        const parent = proj?.nodes.find((p) => p.id === parsed.parentId);
+        const cand = parent ? readCandidates(parent).find((c) => c.id === parsed.candidateId) : undefined;
+        return cand?.video_url ?? null;
+      }
+      return n.media_urls?.[0] ?? null;
+    };
+
+    if (action === "download") {
+      const url = resolveMediaUrl(node);
+      if (!url) {
+        pushToast("info", "Nothing to download yet — generate or upload first.");
+        return;
+      }
+      // The simplest cross-browser path: a synthetic <a download>. Same
+      // origin assets actually trigger the download attribute; cross
+      // origin (signed OSS) opens in a new tab — acceptable v1 behavior.
+      try {
+        const a = document.createElement("a");
+        a.href = url;
+        const guess = url.split("?")[0].split("/").pop() || "download";
+        a.download = guess;
+        a.target = "_blank";
+        a.rel = "noopener";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        pushToast("success", "Download started");
+      } catch (err) {
+        pushToast("error", `Download failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    if (action === "fullscreen") {
+      const url = resolveMediaUrl(node);
+      if (!url) {
+        pushToast("info", "Nothing to preview yet.");
+        return;
+      }
+      const parsed = parseCandidateNodeId(node.id);
+      if (parsed) {
+        setPreview({ url, parentId: parsed.parentId, candidateId: parsed.candidateId });
+      } else {
+        setPreviewVideoUrl(url);
+      }
+      return;
+    }
+
+    if (action === "addToAgent") {
+      // v1: stub. We mark the node with `agent_pinned: true` so the
+      // future Agent planner_package builder can pick it up as
+      // selective context. UI surfaces the pin state on the node card
+      // (a small bot dot in the corner). No backend tool wiring yet —
+      // matches Codex doc §7.5 plan: ship the affordance now, wire the
+      // selective-context payload when the planner endpoint accepts it.
+      const parsed = parseCandidateNodeId(node.id);
+      const targetId = parsed?.parentId ?? node.id;
+      const target = (store.currentProject?.nodes ?? []).find((n) => n.id === targetId);
+      if (!target) {
+        pushToast("error", "Could not resolve the node.");
+        return;
+      }
+      const data = { ...(target.data ?? {}) } as Record<string, unknown>;
+      const wasPinned = data.agent_pinned === true;
+      if (wasPinned) {
+        delete data.agent_pinned;
+      } else {
+        data.agent_pinned = true;
+      }
+      void store.updateNode(targetId, { data })
+        .then(() => pushToast("success", wasPinned ? "Removed from Agent context" : "Added to Agent context"))
+        .catch((err: unknown) => pushToast("error", `Failed: ${err instanceof Error ? err.message : String(err)}`));
+      return;
+    }
   };
 
   // Track which image node is choosing a target for "Use as reference".
@@ -2160,7 +2249,19 @@ export function AtelierShellV3() {
   // gives prod-grade durability without a schema change. Multi-device
   // sync ships with the migration.
   const sequenceStorageKey = (projectId: string) => `atelier-v3-seq:${projectId}`;
-  const [sequence, setSequence] = useState<Array<{ parentId: string; candidateId: string }>>([]);
+  // NLE-lite trim. trimStart/trimEnd are in seconds, both inclusive
+  // bounds. v1 only stores them; the preview honors them at playback
+  // start/end via timeupdate events. v1 doesn't yet repaint the
+  // thumbnail to show only the kept range — that's a v1.1 polish item.
+  type SequenceEntry = {
+    parentId: string;
+    candidateId: string;
+    trimStart?: number;
+    trimEnd?: number;
+  };
+  const [sequence, setSequence] = useState<SequenceEntry[]>([]);
+  // Which clip in the strip is showing the trim popover. null = closed.
+  const [trimEditingIndex, setTrimEditingIndex] = useState<number | null>(null);
   // Hydrate from localStorage when project id changes.
   useEffect(() => {
     if (!project?.id || typeof window === "undefined") return;
@@ -2173,10 +2274,22 @@ export function AtelierShellV3() {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
         // Defensively validate shape so a corrupted payload can't crash render.
-        const valid = parsed.filter(
-          (e): e is { parentId: string; candidateId: string } =>
-            !!e && typeof e === "object" && typeof (e as { parentId?: unknown }).parentId === "string" && typeof (e as { candidateId?: unknown }).candidateId === "string",
-        );
+        // trimStart/trimEnd are optional — we accept them only if numeric.
+        const valid: SequenceEntry[] = parsed
+          .filter(
+            (e): e is { parentId: string; candidateId: string } =>
+              !!e &&
+              typeof e === "object" &&
+              typeof (e as { parentId?: unknown }).parentId === "string" &&
+              typeof (e as { candidateId?: unknown }).candidateId === "string",
+          )
+          .map((raw) => {
+            const r = raw as { parentId: string; candidateId: string; trimStart?: unknown; trimEnd?: unknown };
+            const out: SequenceEntry = { parentId: r.parentId, candidateId: r.candidateId };
+            if (typeof r.trimStart === "number" && Number.isFinite(r.trimStart)) out.trimStart = r.trimStart;
+            if (typeof r.trimEnd === "number" && Number.isFinite(r.trimEnd)) out.trimEnd = r.trimEnd;
+            return out;
+          });
         setSequence(valid);
       } else {
         setSequence([]);
@@ -2586,6 +2699,41 @@ export function AtelierShellV3() {
                 setActiveRailMode(null);
               },
             },
+            {
+              key: "library",
+              title: "From Library",
+              shortcut: "A",
+              desc: "Reuse an existing project asset.",
+              onPick: () => {
+                // Library entry just hops the user into Assets mode —
+                // they pick a card, drag it onto the canvas (or use
+                // whatever in-Library actions ship next).
+                setActiveRailMode("assets");
+              },
+            },
+            {
+              key: "script",
+              title: "Script",
+              shortcut: "T",
+              desc: "Idea node prefilled with a 3-beat scaffold.",
+              onPick: () => {
+                // Script = an Idea node with a starter scaffold so the
+                // user gets going on structure first, generation later.
+                // Pure local — no LLM call. Mirrors RHTV's "Script" entry
+                // which is also a structured note, not a model call.
+                void createIdeaNode(
+                  "Setup — what world is this?\n\nTurn — what changes?\n\nPayoff — how does it land?",
+                )
+                  .then((node) => {
+                    setEditingIdeaId(node.id);
+                    setEditingIdeaBody((node.data as { body?: string })?.body ?? "");
+                  })
+                  .catch((err: unknown) =>
+                    pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`),
+                  );
+                setActiveRailMode(null);
+              },
+            },
           ].map((opt) => (
             <li key={opt.key}>
               <button
@@ -2762,21 +2910,39 @@ export function AtelierShellV3() {
         })()}
       </RailPanel>
 
-      {/* Project picker — sits below Toolbar (top-16 left-4). Pill shows
-          current project; click opens a popover with the project list +
-          a "New" CTA. Hidden when there are no projects loaded yet. */}
+      {/* Top brand bar — Atelier wordmark + project picker on the left,
+          share / credits / profile placeholders on the right. Replaces
+          the previous bare top-[60px] picker. Spans from the rail's
+          right edge to just inside the agent right rail. The picker
+          dropdown still anchors below the picker pill (top-10 left-0
+          relative to the picker's wrapper div). */}
       {project ? (
-        <div className="absolute left-4 top-[60px] z-30">
+        <header
+          role="banner"
+          aria-label="Atelier header"
+          className="absolute left-[72px] top-3 z-30 flex h-10 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/88 pl-3 pr-1.5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.45),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+          style={{ right: agentCollapsed ? 96 : 420 }}
+        >
+          {/* LumenX wordmark — quiet, mono caps tracked. The bracket is a
+              tiny rhetorical wink at "this is the Atelier surface, not
+              Studio". */}
+          <span aria-hidden="true" className="select-none font-mono text-[10px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
+            <span className="text-primary/90">LumenX</span>
+            <span className="px-1.5 text-text-muted/55">·</span>
+            <span className="text-foreground/85">Atelier</span>
+          </span>
+          <span aria-hidden="true" className="h-4 w-px bg-white/8" />
+          <div className="relative">
           <button
             type="button"
             aria-label="Switch project"
             aria-expanded={showProjectPicker}
             onClick={() => setShowProjectPicker((v) => !v)}
-            className="btn-tip inline-flex items-center gap-2 rounded-full border border-white/8 bg-[#141416]/92 px-2.5 py-[5px] text-foreground shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors hover:bg-[#1a1a1d]"
+            className="btn-tip inline-flex items-center gap-2 rounded-full border border-white/8 bg-[#0c0c10]/92 px-2.5 py-[5px] text-foreground transition-colors hover:bg-[#1a1a1d]"
             data-tip="Switch project"
           >
             <FolderOpen size={11} className="text-text-muted/85" aria-hidden="true" />
-            <span className="max-w-[160px] truncate font-display text-[12px] font-medium tracking-[-0.005em]">
+            <span className="max-w-[200px] truncate font-display text-[12px] font-medium tracking-[-0.005em]">
               {project.title || "Untitled"}
             </span>
             <ChevronDown size={11} className="text-text-muted/70" aria-hidden="true" />
@@ -2974,7 +3140,42 @@ export function AtelierShellV3() {
               </div>
             </>
           ) : null}
-        </div>
+          </div>
+
+          {/* Right cluster — share / credits / profile placeholders. v1
+              stubs only; pop a toast when clicked so we can wire real
+              flows later without changing markup. */}
+          <div className="ml-auto flex items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="Share project"
+              data-tip="Share · coming soon"
+              onClick={() => pushToast("info", "Share is coming with the public-link feature.")}
+              className="btn-tip grid h-8 w-8 place-items-center rounded-full text-text-muted transition-colors hover:bg-white/[0.06] hover:text-foreground"
+            >
+              <Share2 size={13} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-label="Credits"
+              data-tip="Credits · placeholder"
+              onClick={() => pushToast("info", "Credits accounting will land with the billing layer.")}
+              className="btn-tip inline-flex h-8 items-center gap-1 rounded-full px-2 text-text-muted transition-colors hover:bg-white/[0.06] hover:text-foreground"
+            >
+              <CreditCard size={12} aria-hidden="true" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em]">∞</span>
+            </button>
+            <button
+              type="button"
+              aria-label="Profile"
+              data-tip="Profile · coming soon"
+              onClick={() => pushToast("info", "Profile / sign-in is the next chrome wave.")}
+              className="btn-tip grid h-8 w-8 place-items-center rounded-full bg-primary/12 text-primary transition-colors hover:bg-primary/22"
+            >
+              <User size={13} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
       ) : null}
 
       {/* Hidden file input shared by Toolbar (legacy direct upload) and the
@@ -3515,6 +3716,31 @@ export function AtelierShellV3() {
                         ? ("draft" as const)
                         : (n.type as "image" | "video" | "audio" | "idea" | "plan"),
                   }))}
+                staleRefCount={(() => {
+                  // Stale = a referenced upstream image's updated_at is
+                  // newer than this draft's most recent successful
+                  // candidate (or, if none, the draft's own updated_at
+                  // when refs were attached). Pure client compute — no
+                  // backend bookkeeping needed.
+                  const refIds = readStringArray(
+                    (selectedNode.data as { reference_node_ids?: unknown })?.reference_node_ids,
+                  );
+                  if (refIds.length === 0) return 0;
+                  const cands = readCandidates(selectedNode);
+                  const lastRunAt = cands.reduce<number>((m, c) => {
+                    const t = c.completed_at ?? c.created_at ?? 0;
+                    return t > m ? t : m;
+                  }, 0) || (selectedNode.updated_at ?? 0);
+                  if (!lastRunAt) return 0;
+                  let stale = 0;
+                  for (const rid of refIds) {
+                    const upstream = project.nodes.find((n) => n.id === rid);
+                    if (upstream && (upstream.updated_at ?? 0) > lastRunAt + 2) {
+                      stale += 1;
+                    }
+                  }
+                  return stale;
+                })()}
               />
             </div>
           ) : null}
@@ -3703,6 +3929,101 @@ export function AtelierShellV3() {
                 </>
               ) : null}
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                // Save current selection as a user workflow. Pure local
+                // serialization → localStorage; no backend trip. We
+                // ignore candidate-virtual selections (only real nodes
+                // can be templated) and normalize coordinates so the
+                // template's local (0,0) is the bounding box's top-left.
+                const selectedReal: AtelierNode[] = [];
+                for (const id of Array.from(allSelectedIds)) {
+                  if (parseCandidateNodeId(id)) continue;
+                  const n = project?.nodes.find((nn) => nn.id === id);
+                  if (n) selectedReal.push(n);
+                }
+                if (selectedReal.length === 0) {
+                  pushToast("info", "Select at least one real node to save.");
+                  return;
+                }
+                const minX = Math.min(...selectedReal.map((n) => n.x));
+                const minY = Math.min(...selectedReal.map((n) => n.y));
+                const realIds = new Set(selectedReal.map((n) => n.id));
+                const localId = (id: string) => id;
+                const allowedKinds: ReadonlyArray<TemplateNode["type"]> = [
+                  "image",
+                  "video",
+                  "idea",
+                  "comment",
+                ];
+                const tnodes: TemplateNode[] = selectedReal
+                  .filter((n): n is AtelierNode & { type: TemplateNode["type"] } =>
+                    allowedKinds.includes(n.type as TemplateNode["type"]),
+                  )
+                  .map((n) => ({
+                    localId: localId(n.id),
+                    type: n.type as TemplateNode["type"],
+                    x: Math.round(n.x - minX),
+                    y: Math.round(n.y - minY),
+                    title: n.title || undefined,
+                    data: (() => {
+                      const out: Record<string, unknown> = {};
+                      const d = (n.data ?? {}) as Record<string, unknown>;
+                      // Subset of fields that survive the template
+                      // round-trip — avoid leaking media_urls or
+                      // reference_node_ids (they re-derive from edges).
+                      for (const k of [
+                        "intent",
+                        "model",
+                        "config_summary",
+                        "prompt",
+                        "body",
+                      ]) {
+                        if (k in d) out[k] = d[k];
+                      }
+                      return out;
+                    })(),
+                  }));
+                const tedges: TemplateEdge[] = [];
+                for (const n of selectedReal) {
+                  const refIds = readStringArray(
+                    (n.data as { reference_node_ids?: unknown })?.reference_node_ids,
+                  );
+                  for (const rid of refIds) {
+                    if (realIds.has(rid)) {
+                      tedges.push({ from: rid, to: n.id, kind: "reference" });
+                    }
+                  }
+                }
+                askPrompt({
+                  title: "Save selection as workflow",
+                  description: `${tnodes.length} node${tnodes.length === 1 ? "" : "s"} · ${tedges.length} reference${tedges.length === 1 ? "" : "s"}. Saved to your browser only.`,
+                  placeholder: "Workflow name",
+                  initialValue: "My workflow",
+                  submitLabel: "Save",
+                  onSubmit: (name) => {
+                    const trimmed = name.trim() || "Untitled workflow";
+                    const tpl: WorkflowTemplate = {
+                      id: `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+                      name: trimmed,
+                      category: "utility" as TemplateCategory,
+                      description: `Saved from canvas · ${new Date().toLocaleString()}`,
+                      tags: [`${tnodes.length} nodes`, ...(tedges.length > 0 ? [`${tedges.length} refs`] : [])],
+                      nodes: tnodes,
+                      edges: tedges,
+                    };
+                    appendUserWorkflow(tpl);
+                    pushToast("success", `Saved "${trimmed}" — find it in Workflows · Mine`);
+                  },
+                });
+              }}
+              className="rounded-full bg-primary/15 px-2 py-[3px] font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-primary/95 transition-colors hover:bg-primary/25"
+              aria-label="Save selection as workflow"
+            >
+              Save as workflow
+            </button>
+            <span aria-hidden="true" className="h-3.5 w-px bg-white/8" />
             <button
               type="button"
               onClick={() => void deleteSelection()}
@@ -4319,8 +4640,62 @@ export function AtelierShellV3() {
                 </span>
                 <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-1.5 pb-1 pt-2.5">
                   <span className="truncate text-[10px] text-foreground/95">{parent.title}</span>
-                  <span className="font-mono text-[9px] tracking-tight text-text-muted">{String(i + 1).padStart(2, "0")}</span>
+                  {(typeof entry.trimStart === "number" || typeof entry.trimEnd === "number") ? (
+                    <span
+                      aria-label="Trim applied"
+                      className="font-mono text-[8.5px] tracking-tight text-amber-200/95"
+                      data-tip={`Trim ${entry.trimStart ?? 0}s–${entry.trimEnd ?? "end"}s`}
+                    >
+                      ✁ {Number.isFinite(entry.trimStart ?? NaN) ? (entry.trimStart as number).toFixed(1) : "0.0"}-
+                      {Number.isFinite(entry.trimEnd ?? NaN) ? (entry.trimEnd as number).toFixed(1) : "end"}
+                    </span>
+                  ) : (
+                    <span className="font-mono text-[9px] tracking-tight text-text-muted">{String(i + 1).padStart(2, "0")}</span>
+                  )}
                 </div>
+                {/* Trim handles indicator — thin amber bar bottom of the
+                    thumb when trim is set. We don't know the clip's true
+                    duration without metadata, so we approximate: assume
+                    5s default, scale handle positions accordingly. The
+                    bar reads the same regardless: it shows where the
+                    kept slice sits inside the clip. */}
+                {(typeof entry.trimStart === "number" || typeof entry.trimEnd === "number") ? (() => {
+                  const dur = 5;
+                  const a = Math.max(0, Math.min(dur, entry.trimStart ?? 0));
+                  const b = Math.max(a, Math.min(dur, entry.trimEnd ?? dur));
+                  const leftPct = (a / dur) * 100;
+                  const widthPct = ((b - a) / dur) * 100;
+                  return (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute bottom-0 left-0 right-0 h-[3px] bg-black/35"
+                    >
+                      <span
+                        className="block h-full bg-amber-300/85"
+                        style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}
+                      />
+                    </span>
+                  );
+                })() : null}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTrimEditingIndex((cur) => (cur === i ? null : i));
+                  }}
+                  className={`btn-tip absolute left-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-black/65 transition-colors ${
+                    trimEditingIndex === i
+                      ? "text-amber-200 opacity-100"
+                      : (typeof entry.trimStart === "number" || typeof entry.trimEnd === "number")
+                      ? "text-amber-200/95 opacity-100"
+                      : "text-white/85 opacity-0 hover:bg-amber-400/45 group-hover:opacity-100"
+                  }`}
+                  aria-label={`Trim clip ${i + 1}`}
+                  data-tip="Trim · in / out"
+                >
+                  <Scissors size={9} aria-hidden="true" />
+                </span>
                 <span
                   role="button"
                   tabIndex={0}
@@ -4333,6 +4708,74 @@ export function AtelierShellV3() {
                 >
                   <X size={9} aria-hidden="true" />
                 </span>
+                {trimEditingIndex === i ? (
+                  <div
+                    role="dialog"
+                    aria-label="Trim clip"
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute -top-[120px] left-1/2 z-30 w-[200px] -translate-x-1/2 rounded-md border border-white/8 bg-[#141416]/96 p-2 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
+                  >
+                    <div className="mb-1.5 flex items-center justify-between font-mono text-[8.5px] uppercase tracking-[0.22em] text-text-muted/85">
+                      <span>Trim · clip {i + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setTrimEditingIndex(null)}
+                        className="rounded px-1 hover:bg-hover-bg hover:text-foreground"
+                        aria-label="Close trim editor"
+                      >
+                        <X size={10} aria-hidden="true" />
+                      </button>
+                    </div>
+                    <label className="mb-1 block text-[10px] text-text-secondary">
+                      In <span className="font-mono text-text-muted/85">(sec)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        defaultValue={entry.trimStart ?? 0}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          setSequence((prev) => prev.map((s, idx) => idx === i ? { ...s, trimStart: Number.isFinite(v) ? v : undefined } : s));
+                        }}
+                        className="mt-0.5 w-full rounded border border-white/10 bg-black/40 px-1.5 py-1 font-mono text-[11px] text-foreground outline-none focus:border-primary/60"
+                      />
+                    </label>
+                    <label className="mb-1 block text-[10px] text-text-secondary">
+                      Out <span className="font-mono text-text-muted/85">(sec)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        defaultValue={entry.trimEnd ?? ""}
+                        placeholder="end"
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const v = parseFloat(raw);
+                          setSequence((prev) => prev.map((s, idx) => idx === i ? { ...s, trimEnd: raw === "" || !Number.isFinite(v) ? undefined : v } : s));
+                        }}
+                        className="mt-0.5 w-full rounded border border-white/10 bg-black/40 px-1.5 py-1 font-mono text-[11px] text-foreground outline-none focus:border-primary/60"
+                      />
+                    </label>
+                    <div className="mt-1.5 flex items-center justify-between gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSequence((prev) => prev.map((s, idx) => idx === i ? { parentId: s.parentId, candidateId: s.candidateId } : s));
+                        }}
+                        className="rounded-full px-2 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-text-muted/85 transition-colors hover:bg-hover-bg hover:text-foreground"
+                      >
+                        Reset
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTrimEditingIndex(null)}
+                        className="rounded-full bg-primary/15 px-2 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/25"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </button>
             ))}
           </div>

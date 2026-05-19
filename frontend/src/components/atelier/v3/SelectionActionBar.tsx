@@ -1,6 +1,21 @@
 "use client";
-import { Play, Settings, Link2, GitBranch, Check, Scissors, Trash2, Pencil } from "lucide-react";
+import {
+  Play,
+  Settings,
+  Link2,
+  GitBranch,
+  Check,
+  Scissors,
+  Trash2,
+  Pencil,
+  Download,
+  Maximize2,
+  Bot,
+} from "lucide-react";
 
+// Per Codex doc §4.6 / §7.6 — completed-take nodes need a richer action
+// vocabulary than draft/idea nodes. New entries are framed as "judgment
+// after generation" affordances: save out / view full / hand to agent.
 export type ActionKey =
   | "play"
   | "edit"
@@ -9,6 +24,9 @@ export type ActionKey =
   | "branch"
   | "selectTake"
   | "addToSequence"
+  | "download"
+  | "fullscreen"
+  | "addToAgent"
   | "delete";
 
 interface Props {
@@ -36,12 +54,19 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   branch: { key: "branch", label: "Branch", Icon: GitBranch },
   selectTake: { key: "selectTake", label: "Select as take", Icon: Check, variant: "select" },
   addToSequence: { key: "addToSequence", label: "Add to Sequence", Icon: Scissors },
+  download: { key: "download", label: "Download", Icon: Download },
+  fullscreen: { key: "fullscreen", label: "Fullscreen preview", Icon: Maximize2 },
+  addToAgent: { key: "addToAgent", label: "Send to Agent", Icon: Bot },
   delete: { key: "delete", label: "Delete", Icon: Trash2, variant: "danger" },
 };
 
 type LayoutItem = ActionKey | "divider";
 
 const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
+  // Layout for completed takes (RHTV §4.6 reference): play / iterate /
+  // attach / branch / select / sequence go first because they're flow
+  // actions; download / fullscreen / agent are post-judgment actions
+  // grouped after a divider; delete sits at the far right.
   video: [
     "play",
     "regenerate",
@@ -50,12 +75,17 @@ const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
     "selectTake",
     "addToSequence",
     "divider",
+    "fullscreen",
+    "download",
+    "addToAgent",
+    "divider",
     "delete",
   ],
-  audio: ["play", "useAsRef", "addToSequence", "divider", "delete"],
+  audio: ["play", "useAsRef", "addToSequence", "divider", "download", "addToAgent", "divider", "delete"],
   // Branch is meaningless on a static image (you branch FROM a take, not
-  // from a reference). Image action bar keeps just attach + delete.
-  image: ["useAsRef", "divider", "delete"],
+  // from a reference). Image action bar: attach + post-judgment (full /
+  // download / agent) + delete.
+  image: ["useAsRef", "divider", "fullscreen", "download", "addToAgent", "divider", "delete"],
   // Drafts use the floating Composer as their editor — no "regenerate"
   // (would silently 400 without payload). Branch is meaningless on an
   // intent (you branch FROM a take). Just Delete.
