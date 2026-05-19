@@ -916,3 +916,174 @@ def test_atelier_agent_r2v_generation_uses_model_specific_reference_validation(p
     assert turn.status == "failed"
     assert turn.tool_calls[0].status == "failed"
     assert "reference_video_urls" in turn.tool_calls[0].error
+
+
+# ---------------------------------------------------------------------------
+# StructurePlanner — "Director's Console" multi-step plans.
+# ---------------------------------------------------------------------------
+
+
+def test_atelier_structure_planner_three_shot_story_emits_three_video_drafts(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "3-shot story about a rain-soaked rooftop chase",
+        planner="structure",
+        planner_input={"drop_world_x": 200, "drop_world_y": 300},
+    )
+
+    assert plan.status == "ready"
+    assert plan.planner == "structure"
+    assert plan.skill_name == "director-story-beats"
+    assert plan.reason.startswith("Structured plan: 3-beat story")
+    assert len(plan.tool_calls) == 3
+    titles = [call["arguments"]["title"] for call in plan.tool_calls]
+    assert any("Setup" in t for t in titles)
+    assert any("Turn" in t for t in titles)
+    assert any("Payoff" in t for t in titles)
+    assert all(call["tool_name"] == "canvas.createVideoNode" for call in plan.tool_calls)
+    # Beat coords march downward at the drop anchor.
+    xs = [call["arguments"]["x"] for call in plan.tool_calls]
+    ys = [call["arguments"]["y"] for call in plan.tool_calls]
+    assert xs == [200, 200, 200]
+    assert ys[0] < ys[1] < ys[2]
+
+
+def test_atelier_structure_planner_numeric_n_shot_caps_at_eight(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pipeline.update_atelier_agent_policy(project.id, {"max_nodes_per_action": 12})
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "10 shots from a rooftop heist",
+        planner="structure",
+    )
+
+    assert plan.status == "ready"
+    # Classifier caps at 8 even though the policy allows more.
+    assert len(plan.tool_calls) == 8
+
+
+def test_atelier_structure_planner_blocks_when_request_exceeds_policy(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pipeline.update_atelier_agent_policy(project.id, {"max_nodes_per_action": 2})
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "5-shot story",
+        planner="structure",
+    )
+
+    assert plan.status == "blocked"
+    assert "max_nodes_per_action" in plan.reason
+    assert plan.tool_calls == []
+
+
+def test_atelier_structure_planner_variants_default_to_four(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "give me parallel candidates of a moonlit chase",
+        planner="structure",
+    )
+
+    assert plan.status == "ready"
+    assert plan.skill_name == "director-variants"
+    assert len(plan.tool_calls) == 4
+    titles = [call["arguments"]["title"] for call in plan.tool_calls]
+    assert all("v" in title for title in titles)
+
+
+def test_atelier_structure_planner_motion_study_requires_image_ref(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    # No selected node — blocked.
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "motion study",
+        planner="structure",
+    )
+    assert plan.status == "blocked"
+    assert "image reference" in plan.reason.lower()
+
+    # Selected image node without media — still blocked (need bytes to ref).
+    image = pipeline.create_atelier_node(
+        project.id,
+        {"type": "image", "title": "Hero ref", "x": 80.0, "y": 80.0},
+    )
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "motion study",
+        planner="structure",
+        selected_node_id=image.id,
+    )
+    assert plan.status == "blocked"
+    assert "no media" in plan.reason.lower()
+
+    # Patch in a media url and try again — now it should succeed.
+    pipeline.update_atelier_node(project.id, image.id, {"media_urls": ["uploads/hero.png"]})
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "motion study",
+        planner="structure",
+        selected_node_id=image.id,
+    )
+    assert plan.status == "ready"
+    assert plan.skill_name == "director-motion-study"
+    # 4 variants by default; anchored to the image's right.
+    assert len(plan.tool_calls) == 4
+    for call in plan.tool_calls:
+        assert call["tool_name"] == "canvas.createVideoNode"
+        assert call["arguments"]["x"] > image.x  # to the right of the ref
+        assert call["arguments"]["title"] in {"Slow push", "Whip pan", "Pull back", "Hold still", "Orbit", "Push and tilt"}
+
+
+def test_atelier_structure_planner_character_ref_creates_one_draft(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    image = pipeline.create_atelier_node(
+        project.id,
+        {"type": "image", "title": "Hero", "media_urls": ["uploads/hero.png"], "x": 100.0, "y": 100.0},
+    )
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "character ref → video",
+        planner="structure",
+        selected_node_id=image.id,
+    )
+
+    assert plan.status == "ready"
+    assert plan.skill_name == "director-character-ref"
+    assert len(plan.tool_calls) == 1
+    assert plan.tool_calls[0]["tool_name"] == "canvas.createVideoNode"
+    assert plan.tool_calls[0]["arguments"]["title"] == "Character shot"
+
+
+def test_atelier_structure_planner_blocks_unrecognized_intent(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "do the thing with the stuff",
+        planner="structure",
+    )
+
+    assert plan.status == "blocked"
+    assert "structure pattern" in plan.reason.lower()
+    assert plan.tool_calls == []
+
+
+def test_atelier_structure_planner_explicit_intent_kind_overrides_message(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "anything goes",
+        planner="structure",
+        planner_input={"intent_kind": "story_beats", "count": 5},
+    )
+
+    assert plan.status == "ready"
+    assert len(plan.tool_calls) == 5

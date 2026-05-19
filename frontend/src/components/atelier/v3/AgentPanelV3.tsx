@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Loader2, Paperclip, Send, ShieldCheck, Sparkles, X } from "lucide-react";
+import { Bot, Loader2, Paperclip, Send, ShieldCheck, Sparkles, Wand2, X } from "lucide-react";
 import { useAtelierStore } from "@/store/atelierStore";
 import type {
   AtelierAgentTurn,
@@ -122,6 +122,27 @@ export function AgentPanelV3({ pushToast }: Props) {
   const [planError, setPlanError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [executing, setExecuting] = useState(false);
+  // Mode: "free" routes to deterministic_core (single-action plans);
+  // "director" routes to the new structure planner that emits multi-step
+  // plans for "3-shot story" / "N variants" / "motion study" etc.
+  // Persisted across renders so a power user can stay in director mode.
+  const [plannerMode, setPlannerMode] = useState<"free" | "director">(() => {
+    if (typeof window === "undefined") return "free";
+    const v = window.localStorage.getItem("atelier-v3-planner-mode");
+    return v === "director" ? "director" : "free";
+  });
+  const setPlannerModePersist = (next: "free" | "director") => {
+    setPlannerMode(next);
+    try {
+      window.localStorage.setItem("atelier-v3-planner-mode", next);
+    } catch {
+      /* ignore quota / private mode */
+    }
+    // Stale plan from a previous mode would mismatch the new vocabulary,
+    // so flush it whenever the mode flips.
+    if (plannedCalls.length > 0) setPlannedCalls([]);
+    setPlanError(null);
+  };
   // Per-tool rejection (PRD §14.4). The user can flip individual proposed
   // calls off before approving — what gets executed is `proposed ∖ rejected`.
   // Reset whenever the pending turn changes so each new approval card starts
@@ -157,6 +178,7 @@ export function AgentPanelV3({ pushToast }: Props) {
       const plan = await planAgentTurn({
         user_message: draft,
         selected_node_id: selectedNodeId ?? null,
+        planner: plannerMode === "director" ? "structure" : null,
       });
       if (plan.status === "blocked") {
         setPlanError(plan.reason || "Agent planner refused this request.");
@@ -278,9 +300,20 @@ export function AgentPanelV3({ pushToast }: Props) {
                 Try asking
               </div>
               <ul className="space-y-1.5 border-l border-white/6 pl-3 font-display text-[13px] italic leading-[1.5] tracking-tight text-foreground/92">
-                <li>Create three drafts for a rainy rooftop chase.</li>
-                <li>Generate 4 candidates for the selected draft.</li>
-                <li>Add the neon alley reference to the cinematic draft.</li>
+                {plannerMode === "director" ? (
+                  <>
+                    <li>3-shot story about a rooftop chase.</li>
+                    <li>4 variants from this reference.</li>
+                    <li>Motion study (select an image first).</li>
+                    <li>Character ref → video.</li>
+                  </>
+                ) : (
+                  <>
+                    <li>Create three drafts for a rainy rooftop chase.</li>
+                    <li>Generate 4 candidates for the selected draft.</li>
+                    <li>Add the neon alley reference to the cinematic draft.</li>
+                  </>
+                )}
               </ul>
               <div
                 aria-hidden="true"
@@ -510,9 +543,46 @@ export function AgentPanelV3({ pushToast }: Props) {
               >
                 <Paperclip size={11} aria-hidden="true" />
               </button>
+              {/* Planner mode segmented control. Free = deterministic
+                  single-action plans (the existing behavior). Director =
+                  structure planner: maps "3-shot story" / "N variants" /
+                  "motion study" intents into multi-step canvas plans. */}
+              <div role="tablist" aria-label="Planner mode" className="inline-flex items-center rounded-full border border-white/8 bg-black/30 p-[2px]">
+                <button
+                  role="tab"
+                  type="button"
+                  aria-selected={plannerMode === "free"}
+                  data-tip="Free intent → single action"
+                  onClick={() => setPlannerModePersist("free")}
+                  disabled={isLocked}
+                  className={`btn-tip inline-flex items-center gap-1 rounded-full px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.18em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    plannerMode === "free"
+                      ? "bg-primary/20 text-primary"
+                      : "text-text-muted hover:text-foreground"
+                  }`}
+                >
+                  Free
+                </button>
+                <button
+                  role="tab"
+                  type="button"
+                  aria-selected={plannerMode === "director"}
+                  data-tip="Director · structured multi-step plans"
+                  onClick={() => setPlannerModePersist("director")}
+                  disabled={isLocked}
+                  className={`btn-tip inline-flex items-center gap-1 rounded-full px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.18em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    plannerMode === "director"
+                      ? "bg-primary/20 text-primary"
+                      : "text-text-muted hover:text-foreground"
+                  }`}
+                >
+                  <Wand2 size={9} aria-hidden="true" />
+                  Director
+                </button>
+              </div>
               {policy?.approval_mode ? (
                 <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-text-muted/80">
-                  Mode <span aria-hidden="true" className="text-text-muted/50">·</span>{" "}
+                  <span aria-hidden="true" className="text-text-muted/50">·</span>{" "}
                   <span className="text-text-secondary/95">{policy.approval_mode.replace("_", " ")}</span>
                 </span>
               ) : null}

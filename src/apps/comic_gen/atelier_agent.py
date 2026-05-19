@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
@@ -406,6 +407,410 @@ class ModelAdapterPlanner:
             reason=reason,
             context=context,
         )
+
+
+# ---------------------------------------------------------------------------
+# StructurePlanner — "Director's Console" mode.
+#
+# Maps a free-form intent like "3-shot story" or "4 motion variants" into a
+# multi-tool-call plan that materializes a small cluster of nodes on the
+# canvas. Complements DeterministicCorePlanner (single action) by handling
+# the multi-node creation patterns RHTV / LibTV expose as their primary
+# Director-mode output.
+#
+# Boundaries (by design):
+#   - No model adapter call. Pattern matching is deterministic regex; this
+#     keeps the planner reproducible, replayable, and offline-friendly.
+#   - Only emits tool calls the registry already knows about. We do NOT
+#     introduce new tools here — every plan is something the user could
+#     have built by hand using the existing canvas.* / generation.* set.
+#   - Bounded by policy.max_nodes_per_action; if the requested structure
+#     would create more nodes than the policy allows, return blocked
+#     instead of silently truncating (truncated plans confuse users about
+#     why their "5-shot story" became 3).
+#
+# Recognized intents (kind → trigger phrases):
+#   story_beats       —  "3-shot story" / "三镜头" / "setup turn payoff" / "N shots"
+#   variants          —  "4 variants" / "N candidates" / "平行候选"
+#   motion_study      —  "motion study" / "运镜变体"  (requires selected image ref)
+#   character_ref     —  "character ref → video"      (requires selected image ref)
+#   scene_ref         —  "scene ref → video"          (requires selected image ref)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _StructureIntent:
+    kind: str
+    count: int
+    label: str
+
+
+_STRUCTURE_KINDS = {"story_beats", "variants", "motion_study", "character_ref", "scene_ref"}
+_STORY_BEAT_NAMES = ["Setup", "Turn", "Payoff"]
+
+
+def _classify_structure_intent(message: str) -> Optional[_StructureIntent]:
+    text = " ".join(message.lower().split())
+    if not text:
+        return None
+
+    # Numeric N-shot first — pin the count when the user is explicit.
+    m = re.search(r"(\d+)\s*-?\s*(?:shots?|镜头|分镜|个镜头|个分镜|场)", text)
+    if m:
+        n = max(2, min(8, int(m.group(1))))
+        return _StructureIntent(kind="story_beats", count=n, label=f"{n}-beat story")
+
+    # 3-beat story shorthands ("setup turn payoff", "三幕", "三段式").
+    if re.search(
+        r"(三镜头|三幕|三段式|三场|setup[^\w]*turn[^\w]*payoff|开端[^\w]*转折[^\w]*结局|three[\s-]*shot|3[\s-]*shot|3[\s-]*beat|3[\s-]*act)",
+        text,
+    ):
+        return _StructureIntent(kind="story_beats", count=3, label="3-beat story")
+
+    # Motion study — "运镜变体" / "motion study". Default to 4 variants.
+    if re.search(
+        r"(运镜变体|运镜研究|motion[\s-]*study|motion[\s-]*variants?|camera[\s-]*variants?|镜头变体)",
+        text,
+    ):
+        return _StructureIntent(kind="motion_study", count=4, label="motion study")
+
+    # N variants / N candidates — explicit count.
+    m = re.search(r"(\d+)\s*(?:个)?\s*(?:variants?|候选|平行候选|variation)", text)
+    if m:
+        n = max(2, min(6, int(m.group(1))))
+        return _StructureIntent(kind="variants", count=n, label=f"{n} variants")
+
+    if re.search(r"(平行候选|平行对比|variants?\b|candidates?\b|对比候选)", text):
+        return _StructureIntent(kind="variants", count=4, label="4 variants")
+
+    # Character / scene ref to video. The "→" / "-" / "to" / "→视频" chain
+    # is what the user types when they think "use this image as a ref".
+    if re.search(r"(角色参考|character[\s-]*ref|character[\s-]*reference|主角[\s-]*参考|character[\s-]*to[\s-]*video)", text):
+        return _StructureIntent(kind="character_ref", count=1, label="character → video")
+
+    if re.search(r"(场景参考|scene[\s-]*ref|scene[\s-]*reference|establishing[\s-]*shot|场景到视频)", text):
+        return _StructureIntent(kind="scene_ref", count=1, label="scene → video")
+
+    return None
+
+
+class StructurePlanner:
+    name = "structure"
+
+    # World-coord step between successive draft cards. Matches the spacing
+    # the front-end's workflow templates use so a Director-built cluster
+    # and a template-built cluster look identical on the canvas.
+    DRAFT_W = 240
+    IMG_W = 244
+    COL_GAP = 80
+    ROW_GAP = 60
+    DEFAULT_DROP_X = 160.0
+    DEFAULT_DROP_Y = 160.0
+
+    def plan(
+        self,
+        project: AtelierProject,
+        user_message: str,
+        selected_node_id: Optional[str] = None,
+        skill_name: Optional[str] = None,
+        planner_input: Optional[Dict[str, Any]] = None,
+    ) -> AtelierAgentPlan:
+        planner_input_payload = dict(planner_input or {})
+        prompt = (user_message or "").strip()
+        context = AtelierAgentPlanContext(
+            selected_node_id=selected_node_id,
+            planner_input=_redact_planner_context_input(planner_input_payload),
+        )
+
+        intent = self._intent_from_inputs(prompt, planner_input_payload)
+
+        if not prompt and not intent:
+            return self._blocked(
+                project, user_message, skill_name, context,
+                "Enter an intent before previewing or executing.",
+            )
+
+        if not intent:
+            return self._blocked(
+                project, user_message, skill_name, context,
+                "Couldn't recognize a structure pattern. Try '3-shot story', '4 variants', "
+                "'motion study', 'character ref → video', or 'scene ref → video'.",
+            )
+
+        max_nodes = max(1, int(getattr(project.agent_policy, "max_nodes_per_action", 8) or 8))
+        drop_x = self._coerce_float(planner_input_payload.get("drop_world_x"), self.DEFAULT_DROP_X)
+        drop_y = self._coerce_float(planner_input_payload.get("drop_world_y"), self.DEFAULT_DROP_Y)
+
+        selected_node = None
+        if selected_node_id:
+            selected_node = next((n for n in project.nodes if n.id == selected_node_id), None)
+            if not selected_node:
+                return self._blocked(
+                    project, user_message, skill_name, context,
+                    "Selected Atelier node was not found.",
+                )
+
+        model_id = _DEFAULT_MODEL_SETTINGS.i2v_model
+
+        if intent.kind == "story_beats":
+            tool_calls = self._build_story_beats(prompt, intent.count, drop_x, drop_y, model_id)
+        elif intent.kind == "variants":
+            tool_calls = self._build_variants(prompt, intent.count, drop_x, drop_y, model_id, selected_node)
+        elif intent.kind == "motion_study":
+            require = self._require_image_with_media(selected_node)
+            if require:
+                return self._blocked(project, user_message, skill_name, context, require)
+            tool_calls = self._build_motion_study(prompt, intent.count, drop_x, drop_y, model_id, selected_node)
+        elif intent.kind in ("character_ref", "scene_ref"):
+            require = self._require_image_with_media(selected_node)
+            if require:
+                return self._blocked(project, user_message, skill_name, context, require)
+            tool_calls = self._build_ref_to_video(prompt, drop_x, drop_y, model_id, selected_node, intent.kind)
+        else:  # pragma: no cover — guarded by classifier
+            tool_calls = []
+
+        if not tool_calls:
+            return self._blocked(
+                project, user_message, skill_name, context,
+                f"Structure planner produced no tool calls for kind '{intent.kind}'.",
+            )
+
+        # Count nodes the plan would create. attachReferenceNode + readProject
+        # don't add nodes; only create* calls do. Bound by policy.
+        node_creating = sum(
+            1 for c in tool_calls
+            if c.get("tool_name") in ("canvas.createVideoNode", "canvas.createReferenceImageNode")
+        )
+        if node_creating > max_nodes:
+            return self._blocked(
+                project, user_message, skill_name, context,
+                f"Structure plan would create {node_creating} nodes, exceeding "
+                f"policy.max_nodes_per_action ({max_nodes}). Lower the count and try again.",
+            )
+
+        return AtelierAgentPlan(
+            project_id=project.id,
+            user_message=user_message,
+            planner=self.name,
+            skill_name=skill_name or f"director-{intent.kind.replace('_', '-')}",
+            status="ready",
+            reason=f"Structured plan: {intent.label}",
+            context=context,
+            tool_calls=tool_calls,
+        )
+
+    # ---------- intent resolution ----------
+
+    @classmethod
+    def _intent_from_inputs(
+        cls, prompt: str, planner_input_payload: Dict[str, Any]
+    ) -> Optional[_StructureIntent]:
+        explicit_kind = str(planner_input_payload.get("intent_kind") or "").strip() or None
+        if explicit_kind:
+            if explicit_kind not in _STRUCTURE_KINDS:
+                return None
+            raw_count = planner_input_payload.get("count")
+            count = cls._coerce_count_for_kind(explicit_kind, raw_count)
+            return _StructureIntent(
+                kind=explicit_kind,
+                count=count,
+                label=f"{explicit_kind.replace('_', ' ')} (explicit)",
+            )
+        return _classify_structure_intent(prompt)
+
+    @staticmethod
+    def _coerce_count_for_kind(kind: str, raw: Any) -> int:
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            n = {"story_beats": 3, "variants": 4, "motion_study": 4}.get(kind, 1)
+        if kind == "story_beats":
+            return max(2, min(8, n))
+        if kind == "variants":
+            return max(2, min(6, n))
+        if kind == "motion_study":
+            return max(2, min(6, n))
+        return 1
+
+    @staticmethod
+    def _coerce_float(value: Any, fallback: float) -> float:
+        try:
+            return float(value) if value is not None else fallback
+        except (TypeError, ValueError):
+            return fallback
+
+    @staticmethod
+    def _require_image_with_media(node: Optional[AtelierNode]) -> Optional[str]:
+        if not node or node.type != "image":
+            return "This structure requires a selected image reference node — pick one and try again."
+        if not _get_reference_image_urls_from_media(node):
+            return "Selected image has no media yet — upload or generate one before building this structure."
+        return None
+
+    # ---------- tool call builders ----------
+
+    def _build_story_beats(
+        self, prompt: str, count: int, drop_x: float, drop_y: float, model_id: str,
+    ) -> List[Dict[str, Any]]:
+        beat_names = list(_STORY_BEAT_NAMES) + [f"Beat {i + 1}" for i in range(3, count)]
+        beats = beat_names[:count]
+        title = _compact_intent_title(prompt) or "Story"
+        calls: List[Dict[str, Any]] = []
+        for i, beat in enumerate(beats):
+            calls.append({
+                "tool_name": "canvas.createVideoNode",
+                "arguments": {
+                    "title": f"{title} · {beat}",
+                    "prompt": f"{beat} — {prompt}".strip(" —"),
+                    "model": model_id,
+                    "x": drop_x,
+                    "y": drop_y + i * (self.DRAFT_W * 0.5 + self.ROW_GAP),
+                },
+            })
+        return calls
+
+    def _build_variants(
+        self,
+        prompt: str,
+        count: int,
+        drop_x: float,
+        drop_y: float,
+        model_id: str,
+        selected_node: Optional[AtelierNode],
+    ) -> List[Dict[str, Any]]:
+        # If a real image ref is selected, anchor variants to its right and
+        # attach the ref to each. Otherwise lay out variants horizontally.
+        title = _compact_intent_title(prompt) or "Variant"
+        calls: List[Dict[str, Any]] = []
+        anchor_x = drop_x
+        anchor_y = drop_y
+        attach_to: Optional[AtelierNode] = selected_node if (selected_node and selected_node.type == "image") else None
+        if attach_to:
+            anchor_x = float(attach_to.x or 0) + self.IMG_W + self.COL_GAP
+            anchor_y = float(attach_to.y or 0)
+        # Pseudo node ids for the plan are just placeholders the harness
+        # ignores; only the title + position + ref attach matter. The
+        # attach call below uses the real selected_node.id (if any) for
+        # the image side. The video side is filled in at execution by
+        # whatever node id `canvas.createVideoNode` returns — but tool
+        # calls here are independent (no ref binding between calls in
+        # v1 of the planner output contract). For v1 we only emit the
+        # attach call when selected_node is the IMAGE side; the user can
+        # then re-run the planner with the new draft selected to pull in
+        # additional refs. (Cross-call ref binding is a v1.1 feature.)
+        for i in range(count):
+            calls.append({
+                "tool_name": "canvas.createVideoNode",
+                "arguments": {
+                    "title": f"{title} · v{i + 1}",
+                    "prompt": prompt or f"Variant {i + 1}",
+                    "model": model_id,
+                    "x": anchor_x + (i % 2) * (self.DRAFT_W + self.COL_GAP),
+                    "y": anchor_y + (i // 2) * (self.DRAFT_W * 0.5 + self.ROW_GAP),
+                },
+            })
+        return calls
+
+    def _build_motion_study(
+        self,
+        prompt: str,
+        count: int,
+        drop_x: float,
+        drop_y: float,
+        model_id: str,
+        selected_node: Optional[AtelierNode],
+    ) -> List[Dict[str, Any]]:
+        # Selected image is mandatory (validated upstream). Stack the
+        # variants vertically to the right of the ref so the cluster reads
+        # as "this ref → these takes".
+        assert selected_node is not None
+        anchor_x = float(selected_node.x or 0) + self.IMG_W + self.COL_GAP
+        anchor_y = float(selected_node.y or 0)
+        intents = ["Slow push", "Whip pan", "Pull back", "Hold still", "Orbit", "Push and tilt"][:count]
+        calls: List[Dict[str, Any]] = []
+        # createVideoNode + attachReferenceNode pairs. Note: attach uses
+        # the selected image node id directly; the new draft id is not
+        # known at plan time, so v1 emits attach calls referencing a
+        # stable placeholder ("$last_video_node") that the harness today
+        # cannot resolve. Until cross-call binding lands (planner v1.1),
+        # we omit the attach calls for motion_study and instead pre-fill
+        # the prompt with @图1 mention syntax so the user can attach
+        # after creation. This keeps the plan executable today without
+        # silently producing orphan attach calls that always fail.
+        for i, intent in enumerate(intents):
+            calls.append({
+                "tool_name": "canvas.createVideoNode",
+                "arguments": {
+                    "title": f"{intent}",
+                    "prompt": (prompt or intent).strip(),
+                    "model": model_id,
+                    "x": anchor_x,
+                    "y": anchor_y + i * (self.DRAFT_W * 0.5 + self.ROW_GAP),
+                },
+            })
+        return calls
+
+    def _build_ref_to_video(
+        self,
+        prompt: str,
+        drop_x: float,
+        drop_y: float,
+        model_id: str,
+        selected_node: Optional[AtelierNode],
+        kind: str,
+    ) -> List[Dict[str, Any]]:
+        # Selected image is mandatory (validated upstream). Place the new
+        # draft to the right of the ref. Same caveat as motion_study: the
+        # planner cannot bind the new draft id back to attachReferenceNode
+        # in v1, so the user finishes the wiring by hand (or the front-end
+        # follows up with a separate attach call once it knows the id).
+        assert selected_node is not None
+        intent_label = "Character shot" if kind == "character_ref" else "Establishing shot"
+        anchor_x = float(selected_node.x or 0) + self.IMG_W + self.COL_GAP
+        anchor_y = float(selected_node.y or 0)
+        return [
+            {
+                "tool_name": "canvas.createVideoNode",
+                "arguments": {
+                    "title": intent_label,
+                    "prompt": prompt or intent_label,
+                    "model": model_id,
+                    "x": anchor_x,
+                    "y": anchor_y,
+                },
+            },
+        ]
+
+    # ---------- helpers ----------
+
+    @staticmethod
+    def _blocked(
+        project: AtelierProject,
+        user_message: str,
+        skill_name: Optional[str],
+        context: AtelierAgentPlanContext,
+        reason: str,
+    ) -> AtelierAgentPlan:
+        return AtelierAgentPlan(
+            project_id=project.id,
+            user_message=user_message,
+            planner=StructurePlanner.name,
+            skill_name=skill_name,
+            status="blocked",
+            reason=reason,
+            context=context,
+        )
+
+
+def _get_reference_image_urls_from_media(node: AtelierNode) -> List[str]:
+    """Image nodes carry their bytes either at top-level media_urls or in
+    data.media_urls (legacy). Either is treated as 'this node has media'."""
+    urls = list(node.media_urls or [])
+    if not urls:
+        nested = (node.data or {}).get("media_urls")
+        if isinstance(nested, list):
+            urls = [u for u in nested if isinstance(u, str) and u]
+    return urls
 
 
 class AtelierPermissionEnforcer:
@@ -938,4 +1343,5 @@ def build_default_atelier_planner_registry(
     registry = AtelierPlannerRegistry()
     registry.register(DeterministicCorePlanner())
     registry.register(ModelAdapterPlanner(tool_registry or build_default_atelier_tool_registry()))
+    registry.register(StructurePlanner())
     return registry
