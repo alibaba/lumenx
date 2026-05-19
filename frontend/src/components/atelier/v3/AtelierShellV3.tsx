@@ -18,6 +18,7 @@ import {
 } from "@/components/atelier/v3";
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
+import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
 import {
   // Pure helpers + node renderers extracted to keep this file under
   // control. Behavior is identical; this is a move-only refactor.
@@ -455,6 +456,31 @@ export function AtelierShellV3() {
       return resolved;
     });
   };
+
+  // Asset Library drawer — open / closed state, persisted same way as
+  // the right rail. Default closed so first-time users land on the
+  // canvas, not on chrome.
+  const [libraryOpen, setLibraryOpenRaw] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("atelier-v3-library-open") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setLibraryOpen: typeof setLibraryOpenRaw = (next) => {
+    setLibraryOpenRaw((prev) => {
+      const resolved = typeof next === "function"
+        ? (next as (p: boolean) => boolean)(prev)
+        : next;
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("atelier-v3-library-open", resolved ? "1" : "0");
+        }
+      } catch { /* ignore */ }
+      return resolved;
+    });
+  };
   // Preview modal state. Beyond the url, we carry the parent/candidate ids
   // when the source was a take so the modal can offer take-level actions
   // (select / branch / delete) inline. URL-only previews (Sequence Strip
@@ -887,6 +913,14 @@ export function AtelierShellV3() {
         case "f":
           e.preventDefault();
           handleFitView();
+          break;
+        case "a":
+          // Toggle the asset library drawer. Pure UX shortcut, no
+          // canvas state mutated. Cmd/Ctrl+A is select-all and is
+          // handled in the modifier branch above; this bare-A only
+          // fires when no modifier is held.
+          e.preventDefault();
+          setLibraryOpen((v) => !v);
           break;
         case "/":
           e.preventDefault();
@@ -2343,15 +2377,58 @@ export function AtelierShellV3() {
   // For v1: every drop creates a new image node at drop position.
   const [isDraggingFileOver, setIsDraggingFileOver] = useState(false);
   const handleDragOver = (event: React.DragEvent) => {
-    if (!event.dataTransfer.types.includes("Files")) return;
+    // Accept either OS file drops OR atelier-asset drags from the library.
+    const types = Array.from(event.dataTransfer.types);
+    if (!types.includes("Files") && !types.includes("application/x-atelier-asset")) return;
     event.preventDefault();
-    if (!isDraggingFileOver) setIsDraggingFileOver(true);
+    if (types.includes("Files") && !isDraggingFileOver) setIsDraggingFileOver(true);
   };
   const handleDragLeave = (event: React.DragEvent) => {
     if (event.target === event.currentTarget) setIsDraggingFileOver(false);
   };
   const handleDrop = async (event: React.DragEvent) => {
-    if (!event.dataTransfer.types.includes("Files")) return;
+    const types = Array.from(event.dataTransfer.types);
+
+    // ── Library asset drop ──────────────────────────────────────────
+    // When the user drags an image asset from the AssetLibrary onto a
+    // draft, attach the asset's image as a reference. Drops on empty
+    // canvas no-op for v1 (the library asset already exists; cloning
+    // it would just duplicate a node).
+    if (types.includes("application/x-atelier-asset")) {
+      event.preventDefault();
+      const data = event.dataTransfer.getData("application/x-atelier-asset");
+      if (!data) return;
+      let parsed: { nodeId: string; kind: string };
+      try {
+        parsed = JSON.parse(data) as { nodeId: string; kind: string };
+      } catch {
+        return;
+      }
+      // Walk up from the drop target to find a draft node.
+      const el = event.target as HTMLElement | null;
+      const targetEl = el?.closest("[data-atelier-node]") as HTMLElement | null;
+      const targetId = targetEl?.dataset.atelierNode ?? null;
+      if (!targetId) return; // no-op on empty canvas
+      const target = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === targetId);
+      if (!target || !isDraftVideo(target)) {
+        pushToast("info", "Drop on a draft video node to attach.");
+        return;
+      }
+      if (parsed.kind !== "image") {
+        pushToast("info", "Only image assets can be attached as references.");
+        return;
+      }
+      try {
+        await useAtelierStore.getState().attachReferenceNode(target.id, parsed.nodeId);
+        pushToast("success", "Reference attached");
+      } catch (err: unknown) {
+        pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    // ── OS file drop ───────────────────────────────────────────────
+    if (!types.includes("Files")) return;
     event.preventDefault();
     setIsDraggingFileOver(false);
     const files = Array.from(event.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
@@ -2374,6 +2451,28 @@ export function AtelierShellV3() {
       className="relative h-screen w-screen overflow-hidden bg-background text-foreground"
       onWheel={handleWheel as unknown as React.WheelEventHandler<HTMLDivElement>}
     >
+      {/* Asset Library — left-edge collapsible drawer. Toggle via the
+          edge button or the `A` shortcut. Categorisation pill writes to
+          node.data.category (character / scene / prop). */}
+      <AssetLibrary
+        nodes={project?.nodes ?? []}
+        open={libraryOpen}
+        onToggle={() => setLibraryOpen((v) => !v)}
+        onCycleCategory={(nodeId, next) => {
+          const node = project?.nodes.find((n) => n.id === nodeId);
+          if (!node) return;
+          const data = { ...(node.data ?? {}), category: next };
+          if (next === null) {
+            delete (data as Record<string, unknown>).category;
+          }
+          void useAtelierStore.getState()
+            .updateNode(nodeId, { data })
+            .catch((err: unknown) =>
+              pushToast("error", `Set category failed: ${err instanceof Error ? err.message : String(err)}`),
+            );
+        }}
+      />
+
       <ToolbarV3
         onCreate={(kind) => {
           if (kind === "video") {
@@ -4356,6 +4455,14 @@ export function AtelierShellV3() {
               ["Drag empty", "Pan canvas"],
               ["⌘ / Ctrl + Wheel", "Zoom"],
               ["⌘ / Ctrl + \\", "Toggle right rail"],
+            ],
+          },
+          {
+            heading: "Library",
+            items: [
+              ["A", "Toggle asset library"],
+              ["Drag from library → draft", "Attach as reference"],
+              ["Click category pill on image card", "Cycle: Character / Scene / Prop"],
             ],
           },
           {

@@ -35,3 +35,6 @@ export {
   type ComposerSize,
   type ComposerPlacement,
 } from "./Composer";
+
+// Wave D — asset library
+export { AssetLibrary, type AssetKind, type AssetCategory } from "./AssetLibrary";
