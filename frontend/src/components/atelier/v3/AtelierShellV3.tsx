@@ -1,7 +1,7 @@
 "use client";
 import axios from "axios";
 import * as React from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
@@ -13,7 +13,7 @@ import {
   ToolbarV3,
   RightRailV3,
   AgentPanelV3,
-  Composer,
+  DraftWorkbench,
   type ComposerSubmitPayload,
 } from "@/components/atelier/v3";
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
@@ -1751,53 +1751,10 @@ export function AtelierShellV3() {
   // The anchor is derived from the *DOM rect* of the selected node, not
   // recomputed from world coordinates. Pan / zoom / right-rail collapse
   // can leave the math out of sync with what's actually painted; reading
-  // the rendered rect is the only ground truth that survives all those
-  // state transitions. We re-measure on every selection / pan / zoom /
-  // rail-collapse change and on window resize.
-  const composerShouldShow = selectedNode != null && isDraftVideo(selectedNode);
-  const [composerAnchor, setComposerAnchor] = useState<
-    { x: number; y: number; width: number; height: number } | null
-  >(null);
-  useLayoutEffect(() => {
-    if (!composerShouldShow || !selectedNode) {
-      setComposerAnchor(null);
-      return;
-    }
-    const measure = () => {
-      const el = document.querySelector(`[data-atelier-node="${selectedNode.id}"]`);
-      if (!el) {
-        setComposerAnchor(null);
-        return;
-      }
-      const r = (el as HTMLElement).getBoundingClientRect();
-      setComposerAnchor({ x: r.left, y: r.top, width: r.width, height: r.height });
-    };
-    measure();
-    // Re-measure on the next frame in case the node was just mounted.
-    const raf = requestAnimationFrame(measure);
-    window.addEventListener("resize", measure);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("resize", measure);
-    };
-  }, [composerShouldShow, selectedNode, panX, panY, zoom, agentCollapsed]);
-
-  // Real viewport size, derived from the canvas main element. Falls back
-  // to 1440x900 in environments where the rect isn't available yet (first
-  // render, jsdom). Right-rail width is the only inset we need to subtract
-  // since toolbar/save chip sit at top edges and don't crowd the composer.
-  const viewport = useMemo(() => {
-    const rect = mainRef.current?.getBoundingClientRect();
-    return {
-      width: rect?.width ?? 1440,
-      height: rect?.height ?? 900,
-      rightRailWidth: agentCollapsed ? 56 + 16 : 380 + 16,
-    };
-    // Re-derive when the right rail collapses or when zoom/pan changes,
-    // which is a proxy for "user moved something" — the rect itself is
-    // stable but the dependencies cover the cases where we want a fresh
-    // measurement after layout settles.
-  }, [agentCollapsed, zoom, panX, panY]);
+  // (Sprint A: floating Composer retired in favor of inline DraftWorkbench.
+  //  The composerAnchor measurement + viewport calc that powered popup
+  //  positioning are no longer needed — the workbench renders inside the
+  //  world transform at the node's own coords.)
 
   // Remember last-used model per project so the next new draft picks it up
   // instead of always defaulting to "Wan 2.7". Stored in localStorage with
@@ -3149,6 +3106,136 @@ export function AtelierShellV3() {
             ),
           )}
 
+          {/* Selected-draft workbench (RHTV/LibTV pattern). Render in
+              world coords so it scales with zoom + lives at the same
+              spot the compact card would occupy. The compact DraftNode
+              for this id is suppressed in renderNode when isSelected,
+              so the two never double up. */}
+          {selectedNode && isDraftVideo(selectedNode) && !isMultiSelect && project ? (
+            <div
+              key={`workbench-${selectedNode.id}`}
+              data-atelier-node={selectedNode.id}
+              onPointerDownCapture={(e) => handleNodePointerDown(e, selectedNode)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!allSelectedIds.has(selectedNode.id)) {
+                  selectNode(selectedNode.id);
+                  if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
+                }
+                setContextMenu({ screenX: e.clientX, screenY: e.clientY, node: selectedNode });
+              }}
+              onMouseEnter={() => setHoveredNodeId(selectedNode.id)}
+              onMouseLeave={() => setHoveredNodeId((prev) => (prev === selectedNode.id ? null : prev))}
+              className="group/node animate-atelier-node-in motion-reduce:animate-none"
+              style={{ touchAction: "none", zIndex: 22 }}
+            >
+              <DraftWorkbench
+                id={selectedNode.id}
+                status="draft"
+                intent={
+                  readString(selectedNode.data?.intent) ?? selectedNode.title ?? "Untitled draft"
+                }
+                modelLabel={readString(selectedNode.data?.model) ?? "Wan 2.7"}
+                configSummary={
+                  readString(selectedNode.data?.config_summary) ?? "1280×720 · 5s · 4×"
+                }
+                candidatesReady={(() => {
+                  const cands = readCandidates(selectedNode);
+                  return cands.length > 0
+                    ? cands.filter((c) => c.status === "completed").length
+                    : undefined;
+                })()}
+                candidatesTotal={(() => {
+                  const cands = readCandidates(selectedNode);
+                  return cands.length > 0 ? cands.length : undefined;
+                })()}
+                selected
+                x={selectedNode.x}
+                y={selectedNode.y}
+                prompt={readString(selectedNode.data?.prompt) ?? selectedNode.prompt ?? ""}
+                refs={(() => {
+                  const urls = readStringArray(
+                    (selectedNode.data as { reference_image_urls?: unknown })?.reference_image_urls,
+                  );
+                  const idList = readStringArray(
+                    (selectedNode.data as { reference_node_ids?: unknown })?.reference_node_ids,
+                  );
+                  const allNodes = project.nodes;
+                  const findKind = (url: string, idx: number): "image" | "video" | "audio" | undefined => {
+                    const idCandidate = idList[idx];
+                    if (idCandidate) {
+                      const byId = allNodes.find((n) => n.id === idCandidate);
+                      if (byId && (byId.type === "image" || byId.type === "video" || byId.type === "audio")) {
+                        return byId.type;
+                      }
+                    }
+                    const byUrl = allNodes.find(
+                      (n) => Array.isArray(n.media_urls) && n.media_urls.includes(url),
+                    );
+                    if (byUrl && (byUrl.type === "image" || byUrl.type === "video" || byUrl.type === "audio")) {
+                      return byUrl.type;
+                    }
+                    return undefined;
+                  };
+                  return urls.map((src, idx) => ({
+                    src: getAssetUrl(src),
+                    role: "ref",
+                    kind: findKind(src, idx),
+                  }));
+                })()}
+                onSelect={(id) => selectNode(id)}
+                onIntentCommit={(next) => {
+                  void useAtelierStore.getState()
+                    .updateNode(selectedNode.id, {
+                      data: { ...(selectedNode.data ?? {}), intent: next },
+                    })
+                    .catch(() => {/* save chip surfaces failures */});
+                }}
+                onSubmit={(payload) => handleComposerSubmit(payload, selectedNode)}
+                onAddRef={() => {
+                  imageNodeIdForUploadRef.current = null;
+                  composerRefDraftIdRef.current = selectedNode.id;
+                  fileInputRef.current?.click();
+                }}
+                onRemoveRef={(idx) => {
+                  const refs = readStringArray(
+                    (selectedNode.data as { reference_image_urls?: unknown })?.reference_image_urls,
+                  );
+                  const removed = refs[idx];
+                  if (!removed) return;
+                  void useAtelierStore.getState()
+                    .detachReferenceNode(selectedNode.id, removed)
+                    .then(() => pushToast("info", "Reference removed"))
+                    .catch((err: unknown) =>
+                      pushToast("error", `Remove failed: ${err instanceof Error ? err.message : String(err)}`),
+                    );
+                }}
+                onPromptCommit={(next) => {
+                  void useAtelierStore.getState()
+                    .updateNode(selectedNode.id, {
+                      data: { ...(selectedNode.data ?? {}), prompt: next },
+                    })
+                    .catch(() => {/* save chip surfaces failures */});
+                }}
+                mentionables={(project.nodes ?? [])
+                  .filter((n) => n.id !== selectedNode.id)
+                  .map((n) => ({
+                    id: n.id,
+                    label:
+                      n.title ||
+                      readString((n.data as { intent?: unknown })?.intent) ||
+                      readString((n.data as { body?: unknown })?.body)?.slice(0, 40) ||
+                      n.type,
+                    kind:
+                      n.type === "video" && n.status === "draft"
+                        ? ("draft" as const)
+                        : (n.type as "image" | "video" | "audio" | "idea" | "plan"),
+                  }))}
+              />
+            </div>
+          ) : null}
+
           {/* Connect-drag target highlight: while dragging from an image's
               connect handle, glow the draft under the cursor (in world coords
               so the ring scales with zoom). */}
@@ -3671,91 +3758,10 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Composer — also OUTSIDE world, anchored to the selected draft's
-          rendered DOM rect (already in screen coords). Hidden in multi-
-          select. */}
-      {composerAnchor && selectedNode && !isMultiSelect ? (
-        <div className="pointer-events-none absolute inset-0 z-30">
-          <div className="pointer-events-auto">
-            <Composer
-              anchor={composerAnchor}
-              viewport={viewport}
-              prompt={
-                isDraftVideo(selectedNode)
-                  ? readString(selectedNode.data?.prompt) ?? selectedNode.prompt ?? ""
-                  : selectedNode.prompt ?? ""
-              }
-              modelLabel={readString(selectedNode.data?.model) ?? "Wan 2.7"}
-              refs={(() => {
-                // Build refs with source-node kind so the Composer can
-                // validate against the model catalog (e.g., I2V models
-                // refuse video references). Match each URL back to its
-                // origin node first by id list, then by URL membership.
-                const urls = readStringArray(
-                  (selectedNode.data as { reference_image_urls?: unknown })?.reference_image_urls,
-                );
-                const idList = readStringArray(
-                  (selectedNode.data as { reference_node_ids?: unknown })?.reference_node_ids,
-                );
-                const allNodes = project?.nodes ?? [];
-                const findKind = (url: string, idx: number): "image" | "video" | "audio" | undefined => {
-                  const idCandidate = idList[idx];
-                  if (idCandidate) {
-                    const byId = allNodes.find((n) => n.id === idCandidate);
-                    if (byId && (byId.type === "image" || byId.type === "video" || byId.type === "audio")) {
-                      return byId.type;
-                    }
-                  }
-                  const byUrl = allNodes.find((n) => Array.isArray(n.media_urls) && n.media_urls.includes(url));
-                  if (byUrl && (byUrl.type === "image" || byUrl.type === "video" || byUrl.type === "audio")) {
-                    return byUrl.type;
-                  }
-                  return undefined;
-                };
-                return urls.map((src, idx) => ({
-                  src: getAssetUrl(src),
-                  role: "ref",
-                  kind: findKind(src, idx),
-                }));
-              })()}
-              onClose={() => selectNode(null)}
-              onSubmit={(payload) => handleComposerSubmit(payload, selectedNode)}
-              onAddRef={() => {
-                imageNodeIdForUploadRef.current = null;
-                composerRefDraftIdRef.current = selectedNode.id;
-                fileInputRef.current?.click();
-              }}
-              onRemoveRef={(idx) => {
-                const refs = readStringArray(
-                  (selectedNode.data as { reference_image_urls?: unknown })?.reference_image_urls,
-                );
-                const removed = refs[idx];
-                if (!removed) return;
-                void useAtelierStore.getState()
-                  .detachReferenceNode(selectedNode.id, removed)
-                  .then(() => pushToast("info", "Reference removed"))
-                  .catch((err: unknown) => pushToast("error", `Remove failed: ${err instanceof Error ? err.message : String(err)}`));
-              }}
-              onAdvanced={() => pushToast("info", "Advanced params (seed / guidance / motion) coming next.")}
-              onPromptCommit={(next) => {
-                if (!isDraftVideo(selectedNode)) return;
-                void useAtelierStore.getState()
-                  .updateNode(selectedNode.id, {
-                    data: { ...(selectedNode.data ?? {}), prompt: next },
-                  })
-                  .catch(() => {/* save chip surfaces failures */});
-              }}
-              mentionables={(project?.nodes ?? [])
-                .filter((n) => n.id !== selectedNode.id)
-                .map((n) => ({
-                  id: n.id,
-                  label: n.title || readString((n.data as { intent?: unknown })?.intent) || readString((n.data as { body?: unknown })?.body)?.slice(0, 40) || n.type,
-                  kind: n.type === "video" && n.status === "draft" ? ("draft" as const) : (n.type as "image" | "video" | "audio" | "idea" | "plan"),
-                }))}
-            />
-          </div>
-        </div>
-      ) : null}
+      {/* Floating Composer retired in Sprint A — drafts now use the
+          inline DraftWorkbench (rendered above inside the world wrapper).
+          Per Codex competitive research §4.4 / §6.1 / §7.4: selected
+          node IS the workbench, no popups to chase. */}
 
       {/* right rail (Agent-only) */}
       <RightRailV3

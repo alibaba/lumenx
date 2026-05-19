@@ -215,6 +215,10 @@ export function renderNode(
 
   if (node.type === "video") {
     if (isDraftVideo(node)) {
+      // Selected drafts render as a DraftWorkbench overlay in the
+      // shell (RHTV/LibTV pattern: selected node IS the workbench).
+      // Skip the compact card here so the two don't double up.
+      if (isSelected) return null;
       const intent =
         readString(node.data?.intent) ?? node.title ?? "Untitled draft";
       const modelLabel = readString(node.data?.model) ?? "Wan 2.7";

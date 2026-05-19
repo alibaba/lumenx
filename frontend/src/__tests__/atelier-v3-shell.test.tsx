@@ -237,7 +237,10 @@ describe("AtelierShellV3", () => {
     expect(screen.queryByLabelText("Re-generate")).toBeNull();
   });
 
-  it("renders Composer below a selected draft", async () => {
+  it("renders inline DraftWorkbench when a draft is selected (no floating Composer)", async () => {
+    // Sprint A: the floating Composer was retired. A selected draft now
+    // expands in place into a DraftWorkbench (RHTV / LibTV pattern). The
+    // workbench is identified by its aria-label "Draft workbench: ...".
     const store = await getStoreState();
     store.selectedNodeId = "n2";
     const { AtelierShellV3 } = await import(
@@ -245,8 +248,12 @@ describe("AtelierShellV3", () => {
     );
     render(<AtelierShellV3 />);
     expect(
-      screen.getByRole("dialog", { name: /generation composer/i }),
+      screen.getByRole("button", { name: /draft workbench/i }),
     ).toBeInTheDocument();
+    // Floating popup dialog should NOT exist anymore.
+    expect(
+      screen.queryByRole("dialog", { name: /generation composer/i }),
+    ).toBeNull();
   });
 
   it("does NOT render Composer when a completed video is selected (only drafts get Composer)", async () => {

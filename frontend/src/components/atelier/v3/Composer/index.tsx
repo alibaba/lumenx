@@ -82,6 +82,16 @@ interface Props {
   anchor?: ComposerAnchor | null;
   viewport?: ComposerViewport;
   style?: React.CSSProperties;
+
+  /** When true, the Composer renders as a regular block element with no
+   *  absolute positioning, no fixed width, no entry animation, no
+   *  shadow/border (the parent provides the chrome). Designed to be
+   *  embedded *inside* a draft node so the node itself becomes the
+   *  generation workbench — RHTV / LibTV pattern (see Atelier
+   *  competitive research, §4.4 / §6.1 / §7.4). When false (default),
+   *  the Composer floats above the canvas via anchor + viewport
+   *  positioning. */
+  inline?: boolean;
 }
 
 export function Composer({
@@ -108,6 +118,7 @@ export function Composer({
   anchor,
   viewport,
   style,
+  inline = false,
 }: Props) {
   const computedStyle = useMemo<React.CSSProperties>(() => {
     if (style) return style;
@@ -253,12 +264,20 @@ export function Composer({
     }
   };
 
+  // Two layout modes:
+  //   - floating (default): absolute-positioned popup that hovers above
+  //     the canvas, sized 520, with full chrome (shadow + border + blur).
+  //   - inline: renders as a normal block, parent provides the chrome.
+  //     This is the RHTV/LibTV in-node workbench pattern.
+  const sectionClass = inline
+    ? "relative w-full overflow-hidden bg-transparent"
+    : "absolute z-40 w-[520px] origin-top overflow-hidden rounded-[14px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-24px_rgba(0,0,0,0.85),0_8px_20px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-composer-in motion-reduce:animate-none";
   return (
     <section
-      role="dialog"
+      role={inline ? "group" : "dialog"}
       aria-label="Generation composer"
-      className="absolute z-40 w-[520px] origin-top overflow-hidden rounded-[14px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-24px_rgba(0,0,0,0.85),0_8px_20px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-composer-in motion-reduce:animate-none"
-      style={computedStyle}
+      className={sectionClass}
+      style={inline ? undefined : computedStyle}
     >
       {/* Editorial slip header — a faint top strip with mono-caps "OFFICIAL ·
           COMPOSER · NO. 001" that anchors the panel as an issued ticket. The

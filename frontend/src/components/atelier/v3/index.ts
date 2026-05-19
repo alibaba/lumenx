@@ -9,6 +9,7 @@ export { type MediaKind, type MediaNodeView, toMediaNodeView } from "./types";
 // Wave A — leaf nodes
 export { MediaNode } from "./MediaNode";
 export { DraftNode } from "./DraftNode";
+export { DraftWorkbench } from "./DraftWorkbench";
 export { IdeaNode } from "./IdeaNode";
 export { CommentNode } from "./CommentNode";
 
