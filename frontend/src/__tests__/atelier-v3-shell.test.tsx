@@ -186,13 +186,16 @@ describe("AtelierShellV3", () => {
     store.deleteCandidate.mockClear();
   });
 
-  it("renders the toolbar, right rail, and bottom nav rail", async () => {
+  it("renders the left rail, right rail, and bottom nav rail", async () => {
+    // Sprint B: top horizontal Toolbar replaced with vertical
+    // LeftRailV3 (Activity-Bar pattern). Look for the new mode rail
+    // by aria-label.
     const { AtelierShellV3 } = await import(
       "@/components/atelier/v3/AtelierShellV3"
     );
     render(<AtelierShellV3 />);
     expect(
-      screen.getByRole("toolbar", { name: /atelier toolbar/i }),
+      screen.getByRole("toolbar", { name: /atelier mode rail/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: /^Atelier Agent$/i }),
@@ -269,7 +272,7 @@ describe("AtelierShellV3", () => {
     ).toBeNull();
   });
 
-  it("Toolbar create-video posts a draft node via api.createAtelierNode", async () => {
+  it("Add panel create-video posts a draft node via api.createAtelierNode", async () => {
     // We bypass store.createVideoNode and call api directly to land a draft
     // in one network round-trip (status='draft' + data.intent set so the
     // DraftNode renderer wins immediately, no MediaNode flicker).
@@ -295,7 +298,11 @@ describe("AtelierShellV3", () => {
       "@/components/atelier/v3/AtelierShellV3"
     );
     render(<AtelierShellV3 />);
-    fireEvent.click(screen.getByLabelText("New Video Node"));
+    // Sprint B: the old top "New Video Node" pill is gone. Now: click
+    // the left rail's Add mode → its panel slides open → click the
+    // "Video draft" entry in the panel.
+    fireEvent.click(screen.getByRole("tab", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: /Video draft/i }));
     // Allow the async promise chain in handleCreateVideo to schedule.
     await new Promise((r) => setTimeout(r, 0));
     expect(spy).toHaveBeenCalledTimes(1);

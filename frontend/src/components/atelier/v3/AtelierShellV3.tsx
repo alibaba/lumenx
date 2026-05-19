@@ -10,10 +10,12 @@ import {
   SelectionActionBar,
   BottomNavRail,
   Minimap,
-  ToolbarV3,
   RightRailV3,
   AgentPanelV3,
   DraftWorkbench,
+  LeftRailV3,
+  RailPanel,
+  type LeftRailMode,
   type ComposerSubmitPayload,
 } from "@/components/atelier/v3";
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
@@ -458,30 +460,20 @@ export function AtelierShellV3() {
     });
   };
 
-  // Asset Library drawer — open / closed state, persisted same way as
-  // the right rail. Default closed so first-time users land on the
-  // canvas, not on chrome.
-  const [libraryOpen, setLibraryOpenRaw] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem("atelier-v3-library-open") === "1";
-    } catch {
-      return false;
-    }
-  });
-  const setLibraryOpen: typeof setLibraryOpenRaw = (next) => {
-    setLibraryOpenRaw((prev) => {
-      const resolved = typeof next === "function"
-        ? (next as (p: boolean) => boolean)(prev)
-        : next;
-      try {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("atelier-v3-library-open", resolved ? "1" : "0");
-        }
-      } catch { /* ignore */ }
-      return resolved;
-    });
+  // Active left-rail mode — drives which slide-out panel is visible
+  // beside the rail. Sprint B: 6 modes (Add / Assets / Workflows /
+  // History / Agent / Sequence). null = no panel open. Toggling the
+  // active mode again closes its panel. We don't persist this to
+  // localStorage on purpose: opening a panel is a transient action,
+  // a creator's "next thing to do", not their preferred default.
+  const [activeRailMode, setActiveRailMode] = useState<LeftRailMode | null>(null);
+  const toggleRailMode = (mode: LeftRailMode) => {
+    setActiveRailMode((cur) => (cur === mode ? null : mode));
   };
+
+  // (Sprint B: Asset Library open state moved into activeRailMode.
+  //  The localStorage 'atelier-v3-library-open' key is no longer
+  //  written; old values are harmlessly ignored.)
   // Preview modal state. Beyond the url, we carry the parent/candidate ids
   // when the source was a take so the modal can offer take-level actions
   // (select / branch / delete) inline. URL-only previews (Sequence Strip
@@ -916,12 +908,11 @@ export function AtelierShellV3() {
           handleFitView();
           break;
         case "a":
-          // Toggle the asset library drawer. Pure UX shortcut, no
-          // canvas state mutated. Cmd/Ctrl+A is select-all and is
-          // handled in the modifier branch above; this bare-A only
-          // fires when no modifier is held.
+          // Toggle the Assets rail mode. Pure UX shortcut, no canvas
+          // state mutated. Cmd/Ctrl+A is select-all and is handled in
+          // the modifier branch above; bare A only fires unmodified.
           e.preventDefault();
-          setLibraryOpen((v) => !v);
+          setActiveRailMode((cur) => (cur === "assets" ? null : "assets"));
           break;
         case "/":
           e.preventDefault();
@@ -2429,10 +2420,18 @@ export function AtelierShellV3() {
       {/* Asset Library — left-edge collapsible drawer. Toggle via the
           edge button or the `A` shortcut. Categorisation pill writes to
           node.data.category (character / scene / prop). */}
+      {/* AssetLibrary — controlled by the left rail's Assets mode.
+          hideCollapsedHandle drops the standalone edge handle (the rail
+          is the canonical entry point now); leftOffsetPx=72 docks the
+          panel against the rail (rail width 56 + 16 gap). The legacy
+          libraryOpen / `A` shortcut still works because A opens it
+          directly via setActiveRailMode below. */}
       <AssetLibrary
         nodes={project?.nodes ?? []}
-        open={libraryOpen}
-        onToggle={() => setLibraryOpen((v) => !v)}
+        open={activeRailMode === "assets"}
+        onToggle={() => setActiveRailMode((cur) => (cur === "assets" ? null : "assets"))}
+        hideCollapsedHandle
+        leftOffsetPx={72}
         onCycleCategory={(nodeId, next) => {
           const node = project?.nodes.find((n) => n.id === nodeId);
           if (!node) return;
@@ -2448,36 +2447,178 @@ export function AtelierShellV3() {
         }}
       />
 
-      <ToolbarV3
-        onCreate={(kind) => {
-          if (kind === "video") {
-            void handleCreateVideo();
+      {/* LeftRailV3 — vertical mode rail at the left edge (replaces the
+          old top horizontal Toolbar). Six modes drive the slide-out
+          panel; undo/redo/help live at the rail's bottom. */}
+      <LeftRailV3
+        activeMode={activeRailMode}
+        onModeToggle={(mode) => {
+          // Agent mode is special: it doesn't have its own slide-out
+          // panel here — it just toggles the always-present right rail.
+          // Same for Sequence (toggles the bottom strip). The rail's
+          // active highlight still tracks the user's last pick so they
+          // can see "I'm in Agent mode" at a glance.
+          if (mode === "agent") {
+            setAgentCollapsed((c) => !c);
+            setActiveRailMode((cur) => (cur === "agent" ? null : "agent"));
             return;
           }
-          if (kind === "image") {
-            // v0.3.2+: create an empty image-draft node; user uploads or
-            // generates from its action bar. (PRD §6 / user request.)
-            void createEmptyImageDraft()
-              .then(() => pushToast("info", "Image node added — select Upload from its action bar."))
-              .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
-            return;
-          }
-          if (kind === "idea") {
-            void createIdeaNode()
-              .then((node) => {
-                setEditingIdeaId(node.id);
-                setEditingIdeaBody((node.data as { body?: string })?.body ?? "");
-              })
-              .catch((err: unknown) => pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`));
-            return;
-          }
+          toggleRailMode(mode);
         }}
-        onAskAgent={() => setAgentCollapsed(false)}
         onUndo={undo}
         onRedo={redo}
         canUndo={undoStackRef.current.length > 0}
         canRedo={redoStackRef.current.length > 0}
+        onHelp={() => setShowHelp(true)}
       />
+
+      {/* Add panel — slide-out beside the rail with creator-facing
+          shortcuts. Mirrors LibTV's add-node taxonomy (Codex doc §3.4):
+          Image / Video / Idea / Comment / Upload / From Library. */}
+      <RailPanel
+        open={activeRailMode === "add"}
+        title="Add to canvas"
+        tag="Atelier · Add · No 001"
+        onClose={() => setActiveRailMode(null)}
+      >
+        <ul className="space-y-1 p-2">
+          {[
+            {
+              key: "video",
+              title: "Video draft",
+              shortcut: "V",
+              desc: "Compose with a model + refs.",
+              onPick: () => {
+                void handleCreateVideo();
+                setActiveRailMode(null);
+              },
+            },
+            {
+              key: "image",
+              title: "Image",
+              shortcut: "I",
+              desc: "Upload or generate a reference.",
+              onPick: () => {
+                void createEmptyImageDraft()
+                  .then(() => pushToast("info", "Image node added — select Upload from its action bar."))
+                  .catch((err: unknown) =>
+                    pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`),
+                  );
+                setActiveRailMode(null);
+              },
+            },
+            {
+              key: "idea",
+              title: "Idea",
+              shortcut: "T",
+              desc: "Capture a beat or a vibe.",
+              onPick: () => {
+                void createIdeaNode()
+                  .then((node) => {
+                    setEditingIdeaId(node.id);
+                    setEditingIdeaBody((node.data as { body?: string })?.body ?? "");
+                  })
+                  .catch((err: unknown) =>
+                    pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`),
+                  );
+                setActiveRailMode(null);
+              },
+            },
+            {
+              key: "comment",
+              title: "Comment",
+              shortcut: "C",
+              desc: "Pin a note on the canvas.",
+              onPick: () => {
+                void createCommentNode()
+                  .then((node) => {
+                    setEditingIdeaId(node.id);
+                    setEditingIdeaBody((node.data as { body?: string })?.body ?? "");
+                  })
+                  .catch((err: unknown) =>
+                    pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`),
+                  );
+                setActiveRailMode(null);
+              },
+            },
+            {
+              key: "upload",
+              title: "Upload file",
+              shortcut: "Drop",
+              desc: "Drop image / video files anywhere.",
+              onPick: () => {
+                imageNodeIdForUploadRef.current = null;
+                fileInputRef.current?.click();
+                setActiveRailMode(null);
+              },
+            },
+          ].map((opt) => (
+            <li key={opt.key}>
+              <button
+                type="button"
+                onClick={opt.onPick}
+                className="group flex w-full items-center gap-3 rounded-md border border-white/6 bg-black/20 px-3 py-2 text-left transition-all hover:-translate-y-[1px] hover:border-primary/35 hover:bg-primary/[0.06]"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">
+                    {opt.title}
+                  </div>
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/85">
+                    {opt.desc}
+                  </div>
+                </div>
+                <kbd className="rounded border border-white/8 bg-black/35 px-1.5 py-[1px] font-mono text-[10px] tracking-tight text-text-muted/85 group-hover:border-primary/35 group-hover:text-primary/85">
+                  {opt.shortcut}
+                </kbd>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </RailPanel>
+
+      {/* Workflows panel — placeholder for Sprint C. The slot exists so
+          the rail's affordance isn't a dead button. Real workflow
+          browser (curated local presets) lands next sprint per Codex
+          doc §4.7 / §7.7. */}
+      <RailPanel
+        open={activeRailMode === "workflows"}
+        title="Workflows"
+        tag="Atelier · Workflows · No 001"
+        onClose={() => setActiveRailMode(null)}
+      >
+        <div className="px-4 py-6 text-center">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-text-muted/85">
+            Coming next sprint
+          </div>
+          <p className="text-[12px] leading-[1.55] text-text-secondary/95">
+            A curated browser of generation recipes — story video, character
+            reference, product reveal, motion presets. Each template will
+            instantiate a small group of nodes + reference wiring + model
+            defaults so you can start with a working setup instead of a
+            blank canvas.
+          </p>
+        </div>
+      </RailPanel>
+
+      {/* History panel — placeholder for Sprint D. Real timeline browser
+          (project event log, saved versions, agent turns) lands later. */}
+      <RailPanel
+        open={activeRailMode === "history"}
+        title="History"
+        tag="Atelier · History · No 001"
+        onClose={() => setActiveRailMode(null)}
+      >
+        <div className="px-4 py-6 text-center">
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-text-muted/85">
+            Coming later
+          </div>
+          <p className="text-[12px] leading-[1.55] text-text-secondary/95">
+            Project event log + saved versions — see every generation,
+            every approval, every branch your project has gone through.
+            Roll back to any point.
+          </p>
+        </div>
+      </RailPanel>
 
       {/* Project picker — sits below Toolbar (top-16 left-4). Pill shows
           current project; click opens a popover with the project list +

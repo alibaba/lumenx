@@ -84,9 +84,25 @@ interface Props {
   onToggle: () => void;
   /** Cycle the category of an image asset. Wired to updateNode in shell. */
   onCycleCategory?: (nodeId: string, next: AssetCategory) => void;
+  /** When true, the closed-state collapsed-handle is suppressed. Used
+   *  when a parent (e.g. LeftRailV3) is the canonical entry point and
+   *  rendering our own handle would create two affordances for the same
+   *  action. */
+  hideCollapsedHandle?: boolean;
+  /** Pixels to offset the panel from the left edge. Defaults to 16
+   *  (matches the original solo-drawer position). LeftRailV3 passes 80
+   *  (rail width 56 + 24 gap) so the panel docks against the rail. */
+  leftOffsetPx?: number;
 }
 
-export function AssetLibrary({ nodes, open, onToggle, onCycleCategory }: Props) {
+export function AssetLibrary({
+  nodes,
+  open,
+  onToggle,
+  onCycleCategory,
+  hideCollapsedHandle = false,
+  leftOffsetPx = 16,
+}: Props) {
   const [kindFilter, setKindFilter] = useState<AssetKind>("all");
   const [imageCategoryFilter, setImageCategoryFilter] = useState<"all" | Exclude<AssetCategory, null>>("all");
   const [search, setSearch] = useState("");
@@ -125,15 +141,18 @@ export function AssetLibrary({ nodes, open, onToggle, onCycleCategory }: Props) 
   };
 
   // Collapsed state — small handle button on the left edge that hover-
-  // tooltips. Press `A` or click to expand.
+  // tooltips. Press `A` or click to expand. Suppressed when a parent
+  // (LeftRailV3) is the canonical entry point.
   if (!open) {
+    if (hideCollapsedHandle) return null;
     return (
       <button
         type="button"
         aria-label="Open asset library"
         data-tip="Asset library (A)"
         onClick={onToggle}
-        className="btn-tip absolute left-4 top-1/2 z-30 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-white/8 bg-[#141416]/96 text-text-muted shadow-[0_14px_30px_-18px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-colors hover:bg-[#1a1a1d] hover:text-foreground"
+        style={{ left: leftOffsetPx }}
+        className="btn-tip absolute top-1/2 z-30 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full border border-white/8 bg-[#141416]/96 text-text-muted shadow-[0_14px_30px_-18px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl transition-colors hover:bg-[#1a1a1d] hover:text-foreground"
       >
         <ChevronRight size={14} aria-hidden="true" />
       </button>
@@ -144,7 +163,8 @@ export function AssetLibrary({ nodes, open, onToggle, onCycleCategory }: Props) 
     <aside
       role="region"
       aria-label="Asset library"
-      className="absolute left-4 top-4 bottom-4 z-30 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-white/8 bg-[#0c0c10]/92 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+      style={{ left: leftOffsetPx }}
+      className="absolute top-4 bottom-4 z-30 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-white/8 bg-[#0c0c10]/92 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
     >
       <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-primary/85 via-primary/35 to-transparent" />
 

@@ -21,6 +21,8 @@ export { Minimap } from "./Minimap";
 
 // Wave C — top-level chrome + composer
 export { ToolbarV3 } from "./ToolbarV3";
+export { LeftRailV3, type LeftRailMode } from "./LeftRailV3";
+export { RailPanel } from "./RailPanel";
 export { RightRailV3, type AgentRailStatus, type PermissionMode } from "./RightRailV3";
 export { AgentPanelV3 } from "./AgentPanelV3";
 export {
