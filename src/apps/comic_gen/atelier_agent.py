@@ -859,6 +859,49 @@ class StructurePlanner:
         )
 
 
+def _select_planner_snapshot_nodes(
+    nodes: List[AtelierNode],
+    selected_node: Optional[AtelierNode],
+) -> Tuple[List[AtelierNode], str]:
+    """Build the planner snapshot's node list.
+
+    If any node carries data.agent_pinned == True, return ONLY:
+      - the pinned nodes
+      - the selected node (if any)
+      - any image nodes referenced by the above (so refs don't dangle)
+    Returned scope tag is "pinned" in that case, "full" otherwise.
+
+    The pinned-set is the user's curated context — everything else is
+    canvas noise from the planner's perspective. Per Codex doc §7.5
+    selective-context guidance.
+    """
+    pinned_ids = {
+        n.id for n in nodes
+        if isinstance((n.data or {}).get("agent_pinned"), bool) and (n.data or {}).get("agent_pinned") is True
+    }
+    if not pinned_ids:
+        return list(nodes), "full"
+
+    keep_ids = set(pinned_ids)
+    if selected_node and selected_node.id in {n.id for n in nodes}:
+        keep_ids.add(selected_node.id)
+
+    # Pull in image refs the kept nodes depend on so the planner sees
+    # the supporting refs (e.g. a pinned video draft's image ref must
+    # also be visible).
+    by_id = {n.id: n for n in nodes}
+    for nid in list(keep_ids):
+        node = by_id.get(nid)
+        if not node:
+            continue
+        for ref in (node.data or {}).get("reference_node_ids") or []:
+            if isinstance(ref, str) and ref in by_id:
+                keep_ids.add(ref)
+
+    ordered = [n for n in nodes if n.id in keep_ids]
+    return ordered, "pinned"
+
+
 def _get_reference_image_urls_from_media(node: AtelierNode) -> List[str]:
     """Image nodes carry their bytes either at top-level media_urls or in
     data.media_urls (legacy). Either is treated as 'this node has media'."""
@@ -936,6 +979,15 @@ class AtelierAgentHarness:
             selected_node = next((node for node in project.nodes if node.id == selected_node_id), None)
             if not selected_node:
                 raise ValueError("Selected Atelier node was not found")
+        # Selective context (Codex doc §7.5): if any node in the project
+        # carries data.agent_pinned == True, narrow the snapshot to those
+        # pinned nodes plus any references they directly depend on plus
+        # the selected node. The full canvas can grow large fast — sending
+        # everything every turn pollutes the planner with noise and
+        # bloats token cost. Pinned nodes are the user's curated context.
+        nodes_for_snapshot, scope = _select_planner_snapshot_nodes(
+            project.nodes, selected_node
+        )
         return AtelierAgentPlannerPackage(
             project_id=project.id,
             user_message=user_message,
@@ -950,7 +1002,8 @@ class AtelierAgentHarness:
                 "title": project.title,
                 "description": project.description,
                 "node_count": len(project.nodes),
-                "nodes": [_compact_node(node) for node in project.nodes],
+                "scope": scope,
+                "nodes": [_compact_node(node) for node in nodes_for_snapshot],
             },
             selected_node_snapshot=_compact_node(selected_node) if selected_node else None,
             policy_snapshot=project.agent_policy.model_dump(mode="json"),

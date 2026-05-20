@@ -1120,6 +1120,53 @@ def test_atelier_structure_planner_motion_study_executes_with_real_attachments(p
         assert image.id in ref_ids, f"draft {draft.id} missing ref {image.id}"
 
 
+def test_atelier_planner_package_full_scope_when_no_pinned_nodes(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pipeline.create_atelier_node(project.id, {"type": "video", "title": "A"})
+    pipeline.create_atelier_node(project.id, {"type": "video", "title": "B"})
+
+    package = pipeline.build_atelier_agent_planner_package(project.id, user_message="hi")
+    assert package.project_snapshot["scope"] == "full"
+    assert len(package.project_snapshot["nodes"]) == 2
+
+
+def test_atelier_planner_package_narrows_to_pinned_nodes(pipeline):
+    """Selective context: when any node is agent_pinned, the snapshot
+    drops down to just the pinned set + the selected node + any refs
+    the kept nodes depend on. Everything else is canvas noise."""
+    project = pipeline.create_atelier_project("Board")
+    a = pipeline.create_atelier_node(project.id, {"type": "video", "title": "A"})
+    b = pipeline.create_atelier_node(
+        project.id,
+        {"type": "video", "title": "B (pinned)", "data": {"agent_pinned": True}},
+    )
+    image = pipeline.create_atelier_node(
+        project.id,
+        {"type": "image", "title": "Ref", "media_urls": ["uploads/ref.png"]},
+    )
+    # B references the image — that ref should be kept too.
+    pipeline.update_atelier_node(
+        project.id,
+        b.id,
+        {"data": {**(b.data or {}), "reference_node_ids": [image.id]}},
+    )
+    # A noise node not pinned, not selected, not referenced — should drop.
+    pipeline.create_atelier_node(project.id, {"type": "video", "title": "C"})
+
+    package = pipeline.build_atelier_agent_planner_package(
+        project.id,
+        user_message="advance B",
+        selected_node_id=a.id,  # selected stays in scope too
+    )
+    assert package.project_snapshot["scope"] == "pinned"
+    kept_ids = {n["id"] for n in package.project_snapshot["nodes"]}
+    # B (pinned), A (selected), image (ref of B) — but NOT the noise C.
+    assert b.id in kept_ids
+    assert a.id in kept_ids
+    assert image.id in kept_ids
+    assert len(kept_ids) == 3
+
+
 def test_atelier_structure_planner_unresolved_alias_fails_cleanly(pipeline):
     """If a consumer alias references something that wasn't bound (because
     its producer call failed or was skipped), the harness must fail the
