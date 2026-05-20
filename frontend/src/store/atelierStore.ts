@@ -560,18 +560,10 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
         if (!imageNode) throw new Error("Atelier reference node not found");
         const referenceUrl = imageNode.media_urls[0];
         if (!referenceUrl) throw new Error("Reference node has no media URL");
-        const existingParentNodeId = imageNode.data?.parent_node_id;
-        const existingVideoReference = project.nodes.find((node) =>
-            node.type === "video" &&
-            node.id !== videoNode.id &&
-            (
-                getReferenceNodeIds(node).includes(imageNode.id) ||
-                getReferenceImageUrls(node).includes(referenceUrl)
-            )
-        );
-        if ((existingParentNodeId && existingParentNodeId !== videoNode.id) || existingVideoReference) {
-            throw new Error("Reference node is already attached to another video node");
-        }
+        // N:M attachments. The earlier 1:1 lock blocked shared-ref
+        // workflows (motion_study / character_ref → multiple shots),
+        // which is the central RHTV / LibTV pattern. Edge uniqueness is
+        // still enforced per video via Set dedupe below.
 
         const nextRefs = Array.from(new Set([...getReferenceImageUrls(videoNode), referenceUrl]));
         const nextReferenceNodeIds = Array.from(new Set([...getReferenceNodeIds(videoNode), imageNode.id]));
@@ -582,10 +574,14 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                 reference_node_ids: nextReferenceNodeIds,
             },
         });
+        // Keep parent_node_id at the FIRST attacher for back-pointer
+        // semantics in buildReferenceLinks; subsequent edges are
+        // derivable from each video's reference_node_ids.
+        const existingParent = imageNode.data?.parent_node_id;
         const updatedImageNode = await api.updateAtelierNode(project.id, imageNode.id, {
             data: {
                 ...(imageNode.data ?? {}),
-                parent_node_id: videoNode.id,
+                parent_node_id: existingParent || videoNode.id,
                 reference_role: "video_reference_image",
             },
         });

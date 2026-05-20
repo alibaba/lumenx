@@ -865,7 +865,12 @@ def test_atelier_agent_attach_reference_node_updates_both_nodes(pipeline):
     assert image.data["parent_node_id"] == video.id
 
 
-def test_atelier_agent_rejects_cross_video_reference_attachment(pipeline):
+def test_atelier_agent_allows_shared_reference_across_video_nodes(pipeline):
+    """One image ref → many video drafts (N:M). The original 1:1 lock has
+    been intentionally loosened to support shared character / scene refs
+    (motion_study, character_ref structure plans). The image keeps its
+    parent_node_id pointing at the first attacher for back-pointer
+    purposes; subsequent edges live on each video's reference_node_ids."""
     project = pipeline.create_atelier_project("Board")
     pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
     first_video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "First"})
@@ -888,9 +893,13 @@ def test_atelier_agent_rejects_cross_video_reference_attachment(pipeline):
         }],
     )
 
-    assert turn.status == "failed"
-    assert turn.tool_calls[0].status == "failed"
-    assert "already attached" in turn.tool_calls[0].error
+    assert turn.status == "completed"
+    state = pipeline.get_atelier_project(project.id)
+    second = next(n for n in state.nodes if n.id == second_video.id)
+    img = next(n for n in state.nodes if n.id == image.id)
+    assert image.id in (second.data or {}).get("reference_node_ids", [])
+    # parent_node_id stays at the first attacher for back-pointer continuity.
+    assert (img.data or {}).get("parent_node_id") == first_video.id
 
 
 def test_atelier_agent_r2v_generation_uses_model_specific_reference_validation(pipeline):
@@ -1032,12 +1041,19 @@ def test_atelier_structure_planner_motion_study_requires_image_ref(pipeline):
     )
     assert plan.status == "ready"
     assert plan.skill_name == "director-motion-study"
-    # 4 variants by default; anchored to the image's right.
-    assert len(plan.tool_calls) == 4
-    for call in plan.tool_calls:
-        assert call["tool_name"] == "canvas.createVideoNode"
-        assert call["arguments"]["x"] > image.x  # to the right of the ref
-        assert call["arguments"]["title"] in {"Slow push", "Whip pan", "Pull back", "Hold still", "Orbit", "Push and tilt"}
+    # 4 variants by default × (createVideoNode + attachReferenceNode pair) = 8 calls.
+    assert len(plan.tool_calls) == 8
+    create_calls = [c for c in plan.tool_calls if c["tool_name"] == "canvas.createVideoNode"]
+    attach_calls = [c for c in plan.tool_calls if c["tool_name"] == "canvas.attachReferenceNode"]
+    assert len(create_calls) == 4
+    assert len(attach_calls) == 4
+    # Every create call binds an alias; every attach call references it.
+    create_aliases = [c["arguments"]["_alias"] for c in create_calls]
+    attach_alias_refs = [c["arguments"]["video_node_id_alias"] for c in attach_calls]
+    assert sorted(create_aliases) == sorted(attach_alias_refs)
+    # All attach calls point at the real selected image id.
+    for call in attach_calls:
+        assert call["arguments"]["image_node_id"] == image.id
 
 
 def test_atelier_structure_planner_character_ref_creates_one_draft(pipeline):
@@ -1056,9 +1072,79 @@ def test_atelier_structure_planner_character_ref_creates_one_draft(pipeline):
 
     assert plan.status == "ready"
     assert plan.skill_name == "director-character-ref"
-    assert len(plan.tool_calls) == 1
-    assert plan.tool_calls[0]["tool_name"] == "canvas.createVideoNode"
-    assert plan.tool_calls[0]["arguments"]["title"] == "Character shot"
+    # createVideoNode + attachReferenceNode pair (cross-call ref binding).
+    assert len(plan.tool_calls) == 2
+    create_call, attach_call = plan.tool_calls
+    assert create_call["tool_name"] == "canvas.createVideoNode"
+    assert create_call["arguments"]["title"] == "Character shot"
+    assert create_call["arguments"]["_alias"] == "draft"
+    assert attach_call["tool_name"] == "canvas.attachReferenceNode"
+    assert attach_call["arguments"]["video_node_id_alias"] == "draft"
+    assert attach_call["arguments"]["image_node_id"] == image.id
+
+
+def test_atelier_structure_planner_motion_study_executes_with_real_attachments(pipeline):
+    """End-to-end: build a motion-study plan, switch policy to never, run
+    the plan, and verify each new draft has the original image attached
+    as a reference (alias resolution happened in the harness)."""
+    project = pipeline.create_atelier_project("Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+    image = pipeline.create_atelier_node(
+        project.id,
+        {"type": "image", "title": "Hero ref", "media_urls": ["uploads/hero.png"], "x": 0.0, "y": 0.0},
+    )
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "anything",
+        planner="structure",
+        selected_node_id=image.id,
+        planner_input={"intent_kind": "motion_study", "count": 2},
+    )
+    assert plan.status == "ready"
+    # 2 variants × 2 calls each = 4 calls.
+    assert len(plan.tool_calls) == 4
+
+    turn = pipeline.run_atelier_agent_turn(project.id, plan.tool_calls)
+    assert turn.status == "completed", turn.tool_calls
+    # All four calls completed.
+    statuses = [c.status for c in turn.tool_calls]
+    assert statuses.count("completed") == 4
+
+    # Each new draft now carries the image as a reference.
+    project_state = pipeline.get_atelier_project(project.id)
+    drafts = [n for n in project_state.nodes if n.type == "video"]
+    assert len(drafts) == 2
+    for draft in drafts:
+        ref_ids = (draft.data or {}).get("reference_node_ids") or []
+        assert image.id in ref_ids, f"draft {draft.id} missing ref {image.id}"
+
+
+def test_atelier_structure_planner_unresolved_alias_fails_cleanly(pipeline):
+    """If a consumer alias references something that wasn't bound (because
+    its producer call failed or was skipped), the harness must fail the
+    consumer with a clean reason rather than passing the literal alias
+    string to the executor."""
+    project = pipeline.create_atelier_project("Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [
+            {
+                "tool_name": "canvas.attachReferenceNode",
+                "arguments": {
+                    "video_node_id_alias": "ghost",
+                    "image_node_id": "also-ghost",
+                },
+            },
+        ],
+    )
+
+    assert turn.status == "failed"
+    assert turn.tool_calls[0].status == "failed"
+    assert "Unresolved planner aliases" in (turn.tool_calls[0].error or "")
+    assert "ghost" in (turn.tool_calls[0].error or "")
 
 
 def test_atelier_structure_planner_blocks_unrecognized_intent(pipeline):

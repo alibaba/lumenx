@@ -9,7 +9,11 @@ vi.mock('@/lib/api', () => ({
         planAtelierAgentTurn: vi.fn(),
         runAtelierAgentTurn: vi.fn(),
         updateAtelierAgentPolicy: vi.fn(),
+        createAtelierProject: vi.fn(),
+        createAtelierNode: vi.fn(),
+        listAtelierProjects: vi.fn(),
         updateAtelierNode: vi.fn(),
+        uploadFile: vi.fn(),
     },
 }));
 
@@ -105,6 +109,54 @@ describe('atelier store canvas interactions', () => {
 
         expect(api.listAtelierAgentTools).toHaveBeenCalledWith('atelier-1');
         expect(useAtelierStore.getState().agentTools.map((tool) => tool.name)).toEqual(['canvas.createVideoNode']);
+    });
+
+    it('deduplicates concurrent empty-project bootstraps and keeps nodes in their owning project', async () => {
+        const { api } = await import('@/lib/api');
+        const { useAtelierStore } = await import('@/store/atelierStore');
+        const emptyProject: AtelierProject = {
+            ...cloneProject(),
+            id: 'atelier-empty',
+            nodes: [],
+        };
+        const createdNode = {
+            ...project.nodes[0],
+            id: 'created-video',
+            project_id: 'atelier-empty',
+            title: 'Video Node 1',
+        };
+        useAtelierStore.setState({
+            projects: [],
+            currentProject: null,
+            selectedNodeId: null,
+            agentTools: [],
+            agentTurns: [],
+            pendingAgentTurn: null,
+            isLoading: false,
+            isAgentRunning: false,
+            error: null,
+        });
+        vi.mocked(api.listAtelierProjects).mockResolvedValue([]);
+        vi.mocked(api.createAtelierProject).mockResolvedValue(emptyProject);
+        vi.mocked(api.createAtelierNode).mockResolvedValue(createdNode);
+
+        const [first, second] = await Promise.all([
+            useAtelierStore.getState().ensureProject(),
+            useAtelierStore.getState().ensureProject(),
+        ]);
+        await Promise.all([
+            useAtelierStore.getState().createVideoNode(),
+            useAtelierStore.getState().createVideoNode(),
+        ]);
+
+        expect(first.id).toBe('atelier-empty');
+        expect(second.id).toBe('atelier-empty');
+        expect(api.createAtelierProject).toHaveBeenCalledTimes(1);
+        expect(api.createAtelierNode).toHaveBeenCalledTimes(2);
+        expect(api.createAtelierNode).toHaveBeenNthCalledWith(1, 'atelier-empty', expect.objectContaining({ type: 'video' }));
+        expect(api.createAtelierNode).toHaveBeenNthCalledWith(2, 'atelier-empty', expect.objectContaining({ type: 'video' }));
+        expect(useAtelierStore.getState().currentProject?.id).toBe('atelier-empty');
+        expect(useAtelierStore.getState().currentProject?.nodes.every((node) => node.project_id === 'atelier-empty')).toBe(true);
     });
 
     it('requests agent plans from Atelier Core instead of local-only planning', async () => {
@@ -601,10 +653,11 @@ describe('atelier store canvas interactions', () => {
         expect(nodes[0].data.reference_node_ids).toEqual(['image-1']);
     });
 
-    it('rejects attaching one image node to a different video while already bound', async () => {
+    it('allows shared image refs across multiple video nodes (N:M)', async () => {
         const { api } = await import('@/lib/api');
         const { useAtelierStore } = await import('@/store/atelierStore');
         const linkedProject = cloneProject();
+        // Add a second video node and pre-bind image-1 to node-1.
         linkedProject.nodes.push({
             ...linkedProject.nodes[0],
             id: 'node-2',
@@ -619,11 +672,32 @@ describe('atelier store canvas interactions', () => {
             projects: [linkedProject],
             currentProject: linkedProject,
         });
+        vi.mocked(api.updateAtelierNode)
+            .mockResolvedValueOnce({
+                ...linkedProject.nodes[2],
+                data: {
+                    reference_image_urls: ['uploads/ref-a.png'],
+                    reference_node_ids: ['image-1'],
+                },
+            })
+            .mockResolvedValueOnce(linkedProject.nodes[1]);
 
-        await expect(useAtelierStore.getState().attachReferenceNode('node-2', 'image-1')).rejects.toThrow(
-            'Reference node is already attached to another video node'
-        );
-        expect(api.updateAtelierNode).not.toHaveBeenCalled();
+        await useAtelierStore.getState().attachReferenceNode('node-2', 'image-1');
+
+        // Second attach succeeds — image is now referenced by BOTH videos.
+        expect(api.updateAtelierNode).toHaveBeenNthCalledWith(1, 'atelier-1', 'node-2', {
+            data: {
+                reference_image_urls: ['uploads/ref-a.png'],
+                reference_node_ids: ['image-1'],
+            },
+        });
+        // parent_node_id stays at the first attacher (node-1).
+        expect(api.updateAtelierNode).toHaveBeenNthCalledWith(2, 'atelier-1', 'image-1', {
+            data: {
+                parent_node_id: 'node-1',
+                reference_role: 'video_reference_image',
+            },
+        });
     });
 
     it('detaches a reference without deleting the image node', async () => {

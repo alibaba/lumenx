@@ -44,6 +44,55 @@ PLANNER_OUTPUT_CONTRACT = {
 }
 
 
+# Alias keys used by multi-step planner output. `_alias` on a call's
+# arguments dict marks the call as a producer (its result.node.id will be
+# bound to that alias name within the turn). `<field>_alias` keys are
+# consumer references (e.g. `video_node_id_alias: "draft_2"` resolves to
+# the real `video_node_id` once the alias is bound). Aliases are
+# turn-scoped — each run_turn invocation builds a fresh map.
+_ALIAS_KEY = "_alias"
+_ALIAS_SUFFIX = "_alias"
+
+
+def _resolve_argument_aliases(
+    arguments: Dict[str, Any],
+    alias_map: Dict[str, str],
+) -> Tuple[Dict[str, Any], Optional[str], List[str]]:
+    """Translate `_alias` and `*_alias` keys against the turn alias map.
+
+    Returns (resolved_arguments, produced_alias_name, unresolved_aliases).
+    `produced_alias_name` is the value of `_alias` if present (the call
+    intends to bind its result to this name). `unresolved_aliases` is the
+    list of consumer alias keys that couldn't be resolved — callers should
+    fail the call rather than passing literal alias strings to the
+    executor (which would surface as "node not found" further down the
+    stack and confuse the user).
+    """
+    out = dict(arguments)
+    produced: Optional[str] = None
+    raw_alias = out.pop(_ALIAS_KEY, None)
+    if isinstance(raw_alias, str) and raw_alias:
+        produced = raw_alias
+    unresolved: List[str] = []
+    for key in list(out.keys()):
+        if key == _ALIAS_KEY or not key.endswith(_ALIAS_SUFFIX):
+            continue
+        real_key = key[: -len(_ALIAS_SUFFIX)]
+        alias_value = out[key]
+        if not isinstance(alias_value, str) or not alias_value:
+            del out[key]
+            continue
+        if alias_value in alias_map:
+            out[real_key] = alias_map[alias_value]
+            del out[key]
+        else:
+            # Leave alias key in place so the caller can detect it; the
+            # consumer alias remains so the call-level error message can
+            # reference the symbolic name the planner emitted.
+            unresolved.append(alias_value)
+    return out, produced, unresolved
+
+
 def _redact_planner_context_input(
     planner_input: Dict[str, Any],
     tool_calls: Optional[List[Dict[str, Any]]] = None,
@@ -679,7 +728,8 @@ class StructurePlanner:
         selected_node: Optional[AtelierNode],
     ) -> List[Dict[str, Any]]:
         # If a real image ref is selected, anchor variants to its right and
-        # attach the ref to each. Otherwise lay out variants horizontally.
+        # auto-attach the ref to every variant via the harness alias map.
+        # Otherwise lay out variants horizontally with no attaches.
         title = _compact_intent_title(prompt) or "Variant"
         calls: List[Dict[str, Any]] = []
         anchor_x = drop_x
@@ -688,17 +738,8 @@ class StructurePlanner:
         if attach_to:
             anchor_x = float(attach_to.x or 0) + self.IMG_W + self.COL_GAP
             anchor_y = float(attach_to.y or 0)
-        # Pseudo node ids for the plan are just placeholders the harness
-        # ignores; only the title + position + ref attach matter. The
-        # attach call below uses the real selected_node.id (if any) for
-        # the image side. The video side is filled in at execution by
-        # whatever node id `canvas.createVideoNode` returns — but tool
-        # calls here are independent (no ref binding between calls in
-        # v1 of the planner output contract). For v1 we only emit the
-        # attach call when selected_node is the IMAGE side; the user can
-        # then re-run the planner with the new draft selected to pull in
-        # additional refs. (Cross-call ref binding is a v1.1 feature.)
         for i in range(count):
+            alias = f"draft_{i + 1}"
             calls.append({
                 "tool_name": "canvas.createVideoNode",
                 "arguments": {
@@ -707,8 +748,17 @@ class StructurePlanner:
                     "model": model_id,
                     "x": anchor_x + (i % 2) * (self.DRAFT_W + self.COL_GAP),
                     "y": anchor_y + (i // 2) * (self.DRAFT_W * 0.5 + self.ROW_GAP),
+                    _ALIAS_KEY: alias,
                 },
             })
+            if attach_to:
+                calls.append({
+                    "tool_name": "canvas.attachReferenceNode",
+                    "arguments": {
+                        "video_node_id_alias": alias,
+                        "image_node_id": attach_to.id,
+                    },
+                })
         return calls
 
     def _build_motion_study(
@@ -720,24 +770,17 @@ class StructurePlanner:
         model_id: str,
         selected_node: Optional[AtelierNode],
     ) -> List[Dict[str, Any]]:
-        # Selected image is mandatory (validated upstream). Stack the
-        # variants vertically to the right of the ref so the cluster reads
-        # as "this ref → these takes".
+        # Selected image is mandatory (validated upstream). Stack drafts
+        # vertically to the right of the ref so the cluster reads as
+        # "this ref → these takes". Each createVideoNode binds an alias;
+        # the paired attachReferenceNode resolves it to attach the ref.
         assert selected_node is not None
         anchor_x = float(selected_node.x or 0) + self.IMG_W + self.COL_GAP
         anchor_y = float(selected_node.y or 0)
         intents = ["Slow push", "Whip pan", "Pull back", "Hold still", "Orbit", "Push and tilt"][:count]
         calls: List[Dict[str, Any]] = []
-        # createVideoNode + attachReferenceNode pairs. Note: attach uses
-        # the selected image node id directly; the new draft id is not
-        # known at plan time, so v1 emits attach calls referencing a
-        # stable placeholder ("$last_video_node") that the harness today
-        # cannot resolve. Until cross-call binding lands (planner v1.1),
-        # we omit the attach calls for motion_study and instead pre-fill
-        # the prompt with @图1 mention syntax so the user can attach
-        # after creation. This keeps the plan executable today without
-        # silently producing orphan attach calls that always fail.
         for i, intent in enumerate(intents):
+            alias = f"motion_{i + 1}"
             calls.append({
                 "tool_name": "canvas.createVideoNode",
                 "arguments": {
@@ -746,6 +789,14 @@ class StructurePlanner:
                     "model": model_id,
                     "x": anchor_x,
                     "y": anchor_y + i * (self.DRAFT_W * 0.5 + self.ROW_GAP),
+                    _ALIAS_KEY: alias,
+                },
+            })
+            calls.append({
+                "tool_name": "canvas.attachReferenceNode",
+                "arguments": {
+                    "video_node_id_alias": alias,
+                    "image_node_id": selected_node.id,
                 },
             })
         return calls
@@ -760,14 +811,12 @@ class StructurePlanner:
         kind: str,
     ) -> List[Dict[str, Any]]:
         # Selected image is mandatory (validated upstream). Place the new
-        # draft to the right of the ref. Same caveat as motion_study: the
-        # planner cannot bind the new draft id back to attachReferenceNode
-        # in v1, so the user finishes the wiring by hand (or the front-end
-        # follows up with a separate attach call once it knows the id).
+        # draft to the right of the ref and auto-attach via alias.
         assert selected_node is not None
         intent_label = "Character shot" if kind == "character_ref" else "Establishing shot"
         anchor_x = float(selected_node.x or 0) + self.IMG_W + self.COL_GAP
         anchor_y = float(selected_node.y or 0)
+        alias = "draft" if kind == "character_ref" else "establishing"
         return [
             {
                 "tool_name": "canvas.createVideoNode",
@@ -777,6 +826,14 @@ class StructurePlanner:
                     "model": model_id,
                     "x": anchor_x,
                     "y": anchor_y,
+                    _ALIAS_KEY: alias,
+                },
+            },
+            {
+                "tool_name": "canvas.attachReferenceNode",
+                "arguments": {
+                    "video_node_id_alias": alias,
+                    "image_node_id": selected_node.id,
                 },
             },
         ]
@@ -1022,6 +1079,11 @@ class AtelierAgentHarness:
 
         projected_node_cost = 0
         appending_new_turn = not (approve and turn_id)
+        # Turn-scoped alias bindings. Producer calls (`_alias` set) bind
+        # their result.node.id here; consumer calls (`*_alias` keys)
+        # resolve against this map at executor-call time. Reset on every
+        # run_turn so aliases never leak across turns.
+        alias_map: Dict[str, str] = {}
 
         for raw_call, existing_call in source_tool_calls:
             tool_name = str(raw_call.get("tool_name") or raw_call.get("name") or "")
@@ -1061,19 +1123,46 @@ class AtelierAgentHarness:
             if preview:
                 call.status = AtelierAgentToolStatus.PROPOSED
                 call.approval_required = policy_status == AtelierAgentToolStatus.APPROVAL_REQUIRED.value
+                # Register a placeholder alias so chained preview calls
+                # render with meaningful symbolic ids (the user sees
+                # "draft_1 → ref" rather than two unrelated calls).
+                preview_alias = arguments.get(_ALIAS_KEY)
+                if isinstance(preview_alias, str) and preview_alias:
+                    alias_map[preview_alias] = f"<preview:{preview_alias}>"
                 if existing_call is None:
                     turn.tool_calls.append(call)
                 continue
 
             assert entry is not None
             spec, executor = entry
+            # Resolve aliases just before executor call. Stored
+            # call.arguments keeps the symbolic form so approval-flow
+            # payload-match still works (the user-visible plan still
+            # carries `_alias` / `*_alias` keys).
+            resolved_arguments, produced_alias, unresolved = _resolve_argument_aliases(
+                arguments, alias_map
+            )
+            if unresolved:
+                call.status = AtelierAgentToolStatus.FAILED
+                call.error = f"Unresolved planner aliases: {', '.join(sorted(set(unresolved)))}"
+                call.completed_at = time.time()
+                if existing_call is None:
+                    turn.tool_calls.append(call)
+                continue
             try:
-                result = executor(project_id, arguments, self.pipeline)
+                result = executor(project_id, resolved_arguments, self.pipeline)
                 call.status = AtelierAgentToolStatus.COMPLETED
                 call.approval_required = policy_status == AtelierAgentToolStatus.APPROVAL_REQUIRED.value
                 call.approval_granted = call.approval_required and approve
                 call.result_snapshot = result
                 call.completed_at = time.time()
+                # Bind the alias once the producer call succeeds.
+                if produced_alias and isinstance(result, dict):
+                    node_payload = result.get("node")
+                    if isinstance(node_payload, dict):
+                        node_id = node_payload.get("id")
+                        if isinstance(node_id, str) and node_id:
+                            alias_map[produced_alias] = node_id
             except Exception as exc:
                 call.status = AtelierAgentToolStatus.FAILED
                 call.error = str(exc)
@@ -1199,19 +1288,15 @@ def _execute_attach_reference_node(project_id: str, arguments: Dict[str, Any], p
         raise ValueError("video_node_id must reference a video node")
     if image_node.type != "image" or not image_node.media_urls:
         raise ValueError("image_node_id must reference an image node with media")
+    # N:M attachments: an image can be referenced by any number of video
+    # nodes. (The earlier 1:1 lock was a vestige of the pre-graph-first
+    # design and made shared character / scene refs impossible — see the
+    # motion_study / character_ref structure planner patterns.) Edge
+    # uniqueness is still enforced *per video* via the reference_node_ids
+    # check below, so re-attaching the same ref to the same video is a
+    # no-op rather than a duplicate.
     image_data = dict(image_node.data or {})
-    parent_node_id = image_data.get("parent_node_id")
-    if parent_node_id and parent_node_id != video_node.id:
-        raise ValueError("Reference node is already attached to another video node")
     image_url = image_node.media_urls[0]
-    for node in project.nodes:
-        if node.id == video_node.id or node.type != "video":
-            continue
-        node_data = dict(node.data or {})
-        if image_node.id in list(node_data.get("reference_node_ids") or []):
-            raise ValueError("Reference node is already attached to another video node")
-        if image_url in list(node_data.get("reference_image_urls") or []):
-            raise ValueError("Reference media is already attached to another video node")
     video_data = dict(video_node.data or {})
     reference_image_urls = list(video_data.get("reference_image_urls") or [])
     reference_node_ids = list(video_data.get("reference_node_ids") or [])
@@ -1224,10 +1309,21 @@ def _execute_attach_reference_node(project_id: str, arguments: Dict[str, Any], p
         video_node.id,
         {"data": {**video_data, "reference_image_urls": reference_image_urls, "reference_node_ids": reference_node_ids}},
     )
+    # parent_node_id keeps its first-attacher semantics for the
+    # back-pointer used by buildReferenceLinks (frontend) — we no longer
+    # enforce uniqueness, but we also don't overwrite the existing value
+    # if the image is being attached to a second video. Subsequent edges
+    # are derivable from the videos' reference_node_ids list.
+    next_image_data = {
+        **image_data,
+        "reference_role": "video_reference_image",
+    }
+    if not image_data.get("parent_node_id"):
+        next_image_data["parent_node_id"] = video_node.id
     updated_image = pipeline.update_atelier_node(
         project_id,
         image_node.id,
-        {"data": {**image_data, "parent_node_id": video_node.id, "reference_role": "video_reference_image"}},
+        {"data": next_image_data},
     )
     return {"video_node": _compact_node(updated_video), "image_node": _compact_node(updated_image)}
 
