@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, CreditCard, FolderOpen, Pencil, Play, Plus, Scissors, Share2, Trash2, User, X } from "lucide-react";
+import { Check, ChevronDown, CreditCard, FolderOpen, Pencil, Play, Plus, Scissors, Share2, Trash2, X } from "lucide-react";
 import {
   SelectionActionBar,
   BottomNavRail,
@@ -812,6 +812,12 @@ export function AtelierShellV3() {
           void pasteClipboard().catch((err: unknown) => {
             pushToast("error", `Duplicate failed: ${err instanceof Error ? err.message : String(err)}`);
           });
+          return;
+        }
+        if (key === "p") {
+          // Cmd+P = command palette. Open the global node search.
+          e.preventDefault();
+          setCommandPaletteOpen(true);
           return;
         }
       }
@@ -2188,6 +2194,18 @@ export function AtelierShellV3() {
   // Project picker popover.
   const [showProjectPicker, setShowProjectPicker] = useState(false);
 
+  // T3.1: command palette (Cmd+P). Searches across all nodes in the
+  // current project — title, prompt body, intent — and jumps to the
+  // selected node on Enter.
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const [commandPaletteHighlight, setCommandPaletteHighlight] = useState(0);
+  useEffect(() => {
+    if (!commandPaletteOpen) return;
+    setCommandPaletteQuery("");
+    setCommandPaletteHighlight(0);
+  }, [commandPaletteOpen]);
+
   // A11y: focus return-to-trigger across overlay open/close transitions.
   // We capture activeElement when *any* tracked modal/overlay opens, and
   // restore it when *all* are closed. Keyboard users land back on the
@@ -3239,25 +3257,14 @@ export function AtelierShellV3() {
             >
               <Share2 size={13} aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              aria-label="Credits"
-              data-tip="Credits · placeholder"
-              onClick={() => pushToast("info", "Credits accounting will land with the billing layer.")}
-              className="btn-tip inline-flex h-8 items-center gap-1 rounded-full px-2 text-text-muted transition-colors hover:bg-white/[0.06] hover:text-foreground"
+            <span
+              aria-label="Local-first runtime"
+              data-tip="LumenX runs against your own provider keys — no platform credits"
+              className="btn-tip inline-flex h-8 items-center gap-1 rounded-full px-2 text-emerald-200/85"
             >
               <CreditCard size={12} aria-hidden="true" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.22em]">∞</span>
-            </button>
-            <button
-              type="button"
-              aria-label="Profile"
-              data-tip="Profile · coming soon"
-              onClick={() => pushToast("info", "Profile / sign-in is the next chrome wave.")}
-              className="btn-tip grid h-8 w-8 place-items-center rounded-full bg-primary/12 text-primary transition-colors hover:bg-primary/22"
-            >
-              <User size={13} aria-hidden="true" />
-            </button>
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em]">Local</span>
+            </span>
           </div>
         </header>
       ) : null}
@@ -5335,6 +5342,143 @@ export function AtelierShellV3() {
 
       {/* Keyboard shortcut help overlay (press '?'). Outside-click + Esc
           to close. Production-grade learning surface — a glance is enough. */}
+      {/* T3.1: Cmd+P command palette. Searches every node in the
+          current project — title, prompt, intent body — and jumps to
+          the chosen node on Enter. Skips drafts that have nothing
+          searchable so a blank canvas doesn't show 8 "Untitled" rows. */}
+      {commandPaletteOpen && project ? (() => {
+        const q = commandPaletteQuery.trim().toLowerCase();
+        type Match = { node: AtelierNode; label: string; kind: string; sub: string };
+        const allMatches: Match[] = [];
+        for (const n of project.nodes) {
+          const data = (n.data ?? {}) as Record<string, unknown>;
+          const title = readString(n.title);
+          const prompt = readString(n.prompt) || readString(data.prompt);
+          const intent = readString(data.intent);
+          const body = readString(data.body);
+          const haystack = [title, prompt, intent, body].filter(Boolean).join(" ").toLowerCase();
+          const label = title || intent || (body ? body.slice(0, 36) : "") || `${n.type} · ${n.id.slice(-6)}`;
+          const sub =
+            n.type === "video"
+              ? prompt?.slice(0, 60) ?? ""
+              : n.type === "idea" || n.type === "comment"
+                ? body?.slice(0, 60) ?? ""
+                : intent ?? "";
+          if (q && !haystack.includes(q)) continue;
+          allMatches.push({ node: n, label: label || n.type, kind: n.type, sub });
+        }
+        const matches = allMatches.slice(0, 30);
+        const safeHighlight = Math.max(0, Math.min(commandPaletteHighlight, matches.length - 1));
+        const close = () => setCommandPaletteOpen(false);
+        const jumpTo = (node: AtelierNode) => {
+          selectNode(node.id);
+          // Center the viewport on the node. Roughly: pan such that
+          // node's world-coords land at the visible center.
+          const rect = mainRef.current?.getBoundingClientRect();
+          if (rect) {
+            const targetScreenX = rect.width / 2;
+            const targetScreenY = rect.height / 2;
+            const w = node.width || 240;
+            const h = node.height || 110;
+            const newPanX = targetScreenX - (node.x + w / 2) * zoomFactor;
+            const newPanY = targetScreenY - (node.y + h / 2) * zoomFactor;
+            setPanX(newPanX);
+            setPanY(newPanY);
+          }
+          close();
+        };
+        return (
+          <>
+            <div
+              aria-hidden="true"
+              className="fixed inset-0 z-[60] bg-black/40"
+              onClick={close}
+            />
+            <div
+              role="dialog"
+              aria-label="Command palette"
+              className="fixed left-1/2 top-[18vh] z-[61] w-[min(560px,90vw)] -translate-x-1/2 overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_24px_48px_-22px_rgba(0,0,0,0.85),0_4px_14px_-4px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
+            >
+              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary/85 via-primary/35 to-transparent" />
+              <input
+                autoFocus
+                value={commandPaletteQuery}
+                onChange={(e) => {
+                  setCommandPaletteQuery(e.target.value);
+                  setCommandPaletteHighlight(0);
+                }}
+                placeholder="Search nodes by title, prompt, or intent…"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    close();
+                    return;
+                  }
+                  if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    setCommandPaletteHighlight((h) => Math.min(h + 1, matches.length - 1));
+                    return;
+                  }
+                  if (e.key === "ArrowUp") {
+                    e.preventDefault();
+                    setCommandPaletteHighlight((h) => Math.max(0, h - 1));
+                    return;
+                  }
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const target = matches[safeHighlight];
+                    if (target) jumpTo(target.node);
+                    return;
+                  }
+                }}
+                className="block w-full bg-transparent px-4 py-3 text-[14px] leading-[1.4] text-foreground outline-none placeholder:text-text-muted/85"
+              />
+              <div className="border-t border-white/6 px-3 py-1 font-mono text-[8.5px] uppercase tracking-[0.28em] text-text-muted/85">
+                {matches.length === 0 ? "No matches" : `${matches.length} match${matches.length === 1 ? "" : "es"}${allMatches.length > matches.length ? ` of ${allMatches.length}` : ""}`}
+              </div>
+              <ul role="listbox" className="max-h-[40vh] overflow-y-auto py-1">
+                {matches.map((m, i) => {
+                  const active = i === safeHighlight;
+                  return (
+                    <li key={m.node.id} role="option" aria-selected={active}>
+                      <button
+                        type="button"
+                        onClick={() => jumpTo(m.node)}
+                        onMouseEnter={() => setCommandPaletteHighlight(i)}
+                        className={`flex w-full items-center gap-3 px-3.5 py-2 text-left transition-colors ${
+                          active ? "bg-primary/15" : "hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="inline-flex shrink-0 items-center rounded-[3px] border border-dashed border-white/22 bg-black/40 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-text-muted/85"
+                        >
+                          {m.kind}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-display text-[13px] tracking-[-0.005em] text-foreground/95">
+                            {m.label}
+                          </div>
+                          {m.sub ? (
+                            <div className="truncate text-[11.5px] leading-[1.4] text-text-secondary/85">
+                              {m.sub}
+                            </div>
+                          ) : null}
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="flex items-center justify-between border-t border-white/6 px-3 py-1.5 font-mono text-[8.5px] uppercase tracking-[0.22em] text-text-muted/70">
+                <span>Atelier · Search · No 001</span>
+                <span>↑↓ navigate · ↵ jump · esc close</span>
+              </div>
+            </div>
+          </>
+        );
+      })() : null}
+
       {showHelp ? (() => {
         // Grouped sections — turns the wall of bindings into a learnable
         // map. Sections are uppercase mono captions; rows are label / kbd
