@@ -3166,6 +3166,161 @@ class ComicGenPipeline:
             raise ValueError("Atelier node not found")
         return project, node
 
+    def export_atelier_sequence(
+        self,
+        project_id: str,
+        entries: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Concat sequence entries into a single MP4. Each entry resolves
+        to a candidate's video file under output/; per-entry trim points
+        (trimStart / trimEnd, in seconds) are applied with ffmpeg before
+        concat. Re-encodes everything so the output is uniform.
+
+        Returns: {"video_url": "videos/<file>.mp4", "filename": ..., "size_mb": ...}.
+
+        Raises ValueError on schema / data issues, RuntimeError on
+        missing ffmpeg / ffmpeg failure.
+        """
+        if not entries:
+            raise ValueError("Sequence is empty — add at least one clip before exporting.")
+
+        project = self.get_atelier_project(project_id)
+        if not project:
+            raise ValueError("Atelier project not found")
+
+        ffmpeg_path = get_ffmpeg_path()
+        if not ffmpeg_path:
+            raise RuntimeError(
+                "FFmpeg is required for sequence export but was not found.\n\n"
+                f"{get_ffmpeg_install_instructions()}"
+            )
+
+        # Resolve each entry against its parent node's candidate list.
+        nodes_by_id = {n.id: n for n in project.nodes}
+        resolved: List[Tuple[str, Optional[float], Optional[float]]] = []
+        for idx, entry in enumerate(entries):
+            parent_id = entry.get("parentId") or entry.get("parent_id")
+            cand_id = entry.get("candidateId") or entry.get("candidate_id")
+            trim_start = entry.get("trimStart")
+            if trim_start is None:
+                trim_start = entry.get("trim_start")
+            trim_end = entry.get("trimEnd")
+            if trim_end is None:
+                trim_end = entry.get("trim_end")
+            if not parent_id or not cand_id:
+                raise ValueError(f"Sequence entry #{idx + 1} is missing parentId / candidateId.")
+            parent = nodes_by_id.get(str(parent_id))
+            if not parent:
+                raise ValueError(f"Sequence entry #{idx + 1}: parent node {parent_id} not found.")
+            try:
+                cand = self._get_atelier_candidate(parent, str(cand_id))
+            except ValueError:
+                raise ValueError(f"Sequence entry #{idx + 1}: candidate {cand_id} not found.")
+            video_url = cand.get("video_url")
+            if not video_url:
+                raise ValueError(f"Sequence entry #{idx + 1}: candidate has no rendered video yet.")
+            if isinstance(video_url, str) and video_url.startswith("http"):
+                # v1 only supports local-file candidates. Remote URLs would
+                # need a download step; deferring until a use case shows up.
+                raise ValueError(
+                    f"Sequence entry #{idx + 1}: remote candidate URLs aren't supported for export yet."
+                )
+            ts = float(trim_start) if isinstance(trim_start, (int, float)) else None
+            te = float(trim_end) if isinstance(trim_end, (int, float)) else None
+            if ts is not None and te is not None and te <= ts:
+                raise ValueError(f"Sequence entry #{idx + 1}: trimEnd must be greater than trimStart.")
+            resolved.append((str(video_url), ts, te))
+
+        ts_now = int(time.time())
+        work_dir = _safe_resolve_path("output", f"atelier_export_{project_id}_{ts_now}")
+        os.makedirs(work_dir, exist_ok=True)
+
+        clip_paths: List[str] = []
+        try:
+            for i, (rel_url, ts_in, ts_out) in enumerate(resolved):
+                # Local files: candidate.video_url is relative to output/
+                # (e.g. "videos/atelier_xxx.mp4"). Resolve against output/.
+                src_path = _safe_resolve_path("output", rel_url)
+                if not os.path.exists(src_path):
+                    raise ValueError(f"Source clip missing on disk: {rel_url}")
+                if ts_in is None and ts_out is None:
+                    # No trim — feed source directly. Re-encode happens in
+                    # the concat pass anyway, so we don't lose anything.
+                    clip_paths.append(src_path)
+                    continue
+                trimmed = os.path.join(work_dir, f"clip_{i:03d}.mp4")
+                cmd = [ffmpeg_path, "-y"]
+                if ts_in is not None:
+                    cmd += ["-ss", f"{ts_in:.3f}"]
+                if ts_out is not None:
+                    cmd += ["-to", f"{ts_out:.3f}"]
+                cmd += [
+                    "-i", src_path,
+                    "-c:v", "libx264", "-crf", "23", "-preset", "fast",
+                    "-c:a", "aac", "-b:a", "128k",
+                    trimmed,
+                ]
+                try:
+                    subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+                except subprocess.CalledProcessError as e:
+                    stderr = e.stderr.decode() if e.stderr else "no output"
+                    raise RuntimeError(
+                        f"ffmpeg failed trimming clip #{i + 1}: {stderr[-400:]}"
+                    )
+                clip_paths.append(trimmed)
+
+            list_path = os.path.join(work_dir, "concat.txt")
+            with open(list_path, "w") as f:
+                for p in clip_paths:
+                    # ffmpeg concat list format: paths must be quoted with
+                    # single quotes; escape any embedded ones.
+                    safe = p.replace("'", "'\\''")
+                    f.write(f"file '{safe}'\n")
+
+            output_filename = f"atelier_seq_{project_id}_{ts_now}.mp4"
+            output_path = _safe_resolve_path(os.path.join("output", "video"), output_filename)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+            cmd = [
+                ffmpeg_path, "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", list_path,
+                "-c:v", "libx264", "-crf", "23", "-preset", "fast",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart",
+                output_path,
+            ]
+            try:
+                subprocess.run(cmd, check=True, capture_output=True, timeout=900)
+            except subprocess.CalledProcessError as e:
+                stderr = e.stderr.decode() if e.stderr else "no output"
+                raise RuntimeError(f"ffmpeg concat failed: {stderr[-600:]}")
+
+            size_mb = (
+                os.path.getsize(output_path) / (1024 * 1024)
+                if os.path.exists(output_path) else 0.0
+            )
+            return {
+                "video_url": f"videos/{output_filename}",
+                "filename": output_filename,
+                "size_mb": round(size_mb, 2),
+                "clip_count": len(clip_paths),
+            }
+        finally:
+            # Best-effort cleanup of trimmed temp files. Leaving sources
+            # alone (they live under output/video/).
+            try:
+                for p in clip_paths:
+                    if p.startswith(work_dir) and os.path.exists(p):
+                        os.remove(p)
+                list_path = os.path.join(work_dir, "concat.txt")
+                if os.path.exists(list_path):
+                    os.remove(list_path)
+                if os.path.isdir(work_dir):
+                    os.rmdir(work_dir)
+            except Exception:
+                logger.warning("Failed to clean up atelier export work dir: %s", work_dir)
+
     def _get_atelier_candidate(self, node: AtelierNode, candidate_id: str) -> Dict[str, Any]:
         node_data = dict(node.data or {})
         candidates = node_data.get("candidates") or []

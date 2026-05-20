@@ -965,6 +965,16 @@ export const api = {
         const response = await axios.post(`${API_URL}/atelier/projects/${projectId}/agent/turns`, payload);
         return response.data;
     },
+    exportAtelierSequence: async (
+        projectId: string,
+        entries: Array<{ parentId: string; candidateId: string; trimStart?: number; trimEnd?: number }>,
+    ): Promise<{ video_url: string; filename: string; size_mb: number; clip_count: number }> => {
+        const response = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/sequence/export`,
+            { entries },
+        );
+        return response.data;
+    },
     createAtelierNode: async (
         projectId: string,
         payload: AtelierNodePayload

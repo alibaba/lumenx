@@ -2277,6 +2277,11 @@ export function AtelierShellV3() {
   const [sequence, setSequence] = useState<SequenceEntry[]>([]);
   // Which clip in the strip is showing the trim popover. null = closed.
   const [trimEditingIndex, setTrimEditingIndex] = useState<number | null>(null);
+  // T1.4: in-flight flag for the sequence export call. Disables the
+  // Export button while ffmpeg is running on the backend so the user
+  // can't double-fire (each export takes seconds-to-minutes depending
+  // on clip count).
+  const [exportingSequence, setExportingSequence] = useState(false);
   // Hydrate from localStorage when project id changes.
   useEffect(() => {
     if (!project?.id || typeof window === "undefined") return;
@@ -4555,12 +4560,58 @@ export function AtelierShellV3() {
               {String(sequenceEntries.length).padStart(2, "0")}
             </span>
             {sequenceEntries.length > 0 ? (
-              <button
-                onClick={() => setSequence([])}
-                className="ml-1 rounded px-1.5 py-0.5 tracking-[0.24em] text-text-muted/70 transition-colors hover:bg-white/[0.06] hover:text-foreground"
-              >
-                Clear
-              </button>
+              <>
+                <button
+                  onClick={() => setSequence([])}
+                  className="ml-1 rounded px-1.5 py-0.5 tracking-[0.24em] text-text-muted/70 transition-colors hover:bg-white/[0.06] hover:text-foreground"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => {
+                    if (!project) return;
+                    if (exportingSequence) return;
+                    const payload = sequence.map((s) => ({
+                      parentId: s.parentId,
+                      candidateId: s.candidateId,
+                      ...(typeof s.trimStart === "number" ? { trimStart: s.trimStart } : {}),
+                      ...(typeof s.trimEnd === "number" ? { trimEnd: s.trimEnd } : {}),
+                    }));
+                    setExportingSequence(true);
+                    void api
+                      .exportAtelierSequence(project.id, payload)
+                      .then((res) => {
+                        pushToast(
+                          "success",
+                          `Exported ${res.clip_count} clip${res.clip_count === 1 ? "" : "s"} · ${res.size_mb} MB`,
+                        );
+                        // Trigger browser download. video_url is relative
+                        // to /files/; assume the static mount serves it.
+                        try {
+                          const a = document.createElement("a");
+                          a.href = getAssetUrl(res.video_url);
+                          a.download = res.filename;
+                          a.target = "_blank";
+                          a.rel = "noopener";
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        } catch {
+                          /* download is best-effort; URL still surfaced via toast */
+                        }
+                      })
+                      .catch((err: unknown) => {
+                        const detail = err instanceof Error ? err.message : String(err);
+                        pushToast("error", `Export failed: ${detail}`);
+                      })
+                      .finally(() => setExportingSequence(false));
+                  }}
+                  disabled={exportingSequence}
+                  className="ml-1 rounded bg-primary/15 px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.24em] text-primary/95 transition-colors hover:bg-primary/25 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {exportingSequence ? "Exporting…" : "Export"}
+                </button>
+              </>
             ) : null}
           </div>
         </div>

@@ -1208,6 +1208,66 @@ def test_atelier_structure_planner_blocks_unrecognized_intent(pipeline):
     assert plan.tool_calls == []
 
 
+def test_atelier_sequence_export_validates_entries(pipeline):
+    """Schema validation in pipeline.export_atelier_sequence — empty list,
+    missing parent, missing candidate, invalid trim ranges."""
+    project = pipeline.create_atelier_project("Board")
+
+    # Empty list
+    with pytest.raises(ValueError, match="empty"):
+        pipeline.export_atelier_sequence(project.id, [])
+
+    # Unknown parent
+    with pytest.raises(ValueError, match="parent node"):
+        pipeline.export_atelier_sequence(project.id, [
+            {"parentId": "ghost", "candidateId": "x"},
+        ])
+
+    # Real video node but no candidate yet
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    with pytest.raises(ValueError, match="candidate"):
+        pipeline.export_atelier_sequence(project.id, [
+            {"parentId": video.id, "candidateId": "x"},
+        ])
+
+    # Add a fake candidate without video_url → still errors
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {**(video.data or {}), "candidates": [{"id": "c1", "status": "completed"}]},
+    })
+    with pytest.raises(ValueError, match="no rendered video"):
+        pipeline.export_atelier_sequence(project.id, [
+            {"parentId": video.id, "candidateId": "c1"},
+        ])
+
+    # Trim end ≤ start should reject before touching ffmpeg.
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            **(video.data or {}),
+            "candidates": [
+                {"id": "c1", "status": "completed", "video_url": "videos/atelier_c1.mp4"},
+            ],
+        },
+    })
+    with pytest.raises(ValueError, match="trimEnd"):
+        pipeline.export_atelier_sequence(project.id, [
+            {"parentId": video.id, "candidateId": "c1", "trimStart": 2.0, "trimEnd": 1.0},
+        ])
+
+    # Remote URLs explicitly out-of-scope for v1.
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            **(video.data or {}),
+            "candidates": [
+                {"id": "c1", "status": "completed", "video_url": "https://cdn/x.mp4"},
+            ],
+        },
+    })
+    with pytest.raises(ValueError, match="remote candidate"):
+        pipeline.export_atelier_sequence(project.id, [
+            {"parentId": video.id, "candidateId": "c1"},
+        ])
+
+
 def test_atelier_structure_planner_explicit_intent_kind_overrides_message(pipeline):
     project = pipeline.create_atelier_project("Board")
 

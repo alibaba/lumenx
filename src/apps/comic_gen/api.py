@@ -399,6 +399,24 @@ class BuildAtelierAgentPlannerPackageRequest(BaseModel):
     skill_name: Optional[str] = None
 
 
+class AtelierSequenceEntry(BaseModel):
+    parentId: str
+    candidateId: str
+    trimStart: Optional[float] = None
+    trimEnd: Optional[float] = None
+
+
+class ExportAtelierSequenceRequest(BaseModel):
+    entries: List[AtelierSequenceEntry] = Field(default_factory=list)
+
+
+class ExportAtelierSequenceResponse(BaseModel):
+    video_url: str
+    filename: str
+    size_mb: float
+    clip_count: int
+
+
 @app.post("/atelier/projects", response_model=AtelierProject)
 async def create_atelier_project(request: CreateAtelierProjectRequest):
     try:
@@ -489,6 +507,23 @@ async def plan_atelier_agent_turn(project_id: str, request: PlanAtelierAgentTurn
         return signed_response(plan)
     except ValueError as e:
         raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+@app.post(
+    "/atelier/projects/{project_id}/sequence/export",
+    response_model=ExportAtelierSequenceResponse,
+)
+async def export_atelier_sequence(project_id: str, request: ExportAtelierSequenceRequest):
+    try:
+        result = pipeline.export_atelier_sequence(
+            project_id,
+            [entry.model_dump() for entry in request.entries],
+        )
+        return signed_response(result)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/atelier/projects/{project_id}/agent/turns", response_model=AtelierAgentTurn)
