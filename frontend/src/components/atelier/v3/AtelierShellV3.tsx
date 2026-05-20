@@ -2136,6 +2136,21 @@ export function AtelierShellV3() {
       return;
     }
 
+    if (action === "replace") {
+      // Image-only replacement: keep the same node id (so existing ref
+      // edges survive) but swap media_urls. Reuses the existing
+      // imageNodeIdForUploadRef path which already replaces media_urls
+      // and bumps updated_at — that flips the stale-ref badge on every
+      // downstream draft automatically.
+      if (node.type !== "image") {
+        pushToast("info", "Replace is for image nodes.");
+        return;
+      }
+      imageNodeIdForUploadRef.current = node.id;
+      fileInputRef.current?.click();
+      return;
+    }
+
     if (action === "addToAgent") {
       // v1: stub. We mark the node with `agent_pinned: true` so the
       // future Agent planner_package builder can pick it up as

@@ -11,6 +11,7 @@ import {
   Download,
   Maximize2,
   Bot,
+  RefreshCw,
 } from "lucide-react";
 
 // Per Codex doc §4.6 / §7.6 — completed-take nodes need a richer action
@@ -27,6 +28,7 @@ export type ActionKey =
   | "download"
   | "fullscreen"
   | "addToAgent"
+  | "replace"
   | "delete";
 
 interface Props {
@@ -57,6 +59,7 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   download: { key: "download", label: "Download", Icon: Download },
   fullscreen: { key: "fullscreen", label: "Fullscreen preview", Icon: Maximize2 },
   addToAgent: { key: "addToAgent", label: "Send to Agent", Icon: Bot },
+  replace: { key: "replace", label: "Replace media", Icon: RefreshCw },
   delete: { key: "delete", label: "Delete", Icon: Trash2, variant: "danger" },
 };
 
@@ -83,9 +86,9 @@ const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
   ],
   audio: ["play", "useAsRef", "addToSequence", "divider", "download", "addToAgent", "divider", "delete"],
   // Branch is meaningless on a static image (you branch FROM a take, not
-  // from a reference). Image action bar: attach + post-judgment (full /
-  // download / agent) + delete.
-  image: ["useAsRef", "divider", "fullscreen", "download", "addToAgent", "divider", "delete"],
+  // from a reference). Image action bar: attach + replace + post-judgment
+  // (full / download / agent) + delete.
+  image: ["useAsRef", "replace", "divider", "fullscreen", "download", "addToAgent", "divider", "delete"],
   // Drafts use the floating Composer as their editor — no "regenerate"
   // (would silently 400 without payload). Branch is meaningless on an
   // intent (you branch FROM a take). Just Delete.
