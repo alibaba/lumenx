@@ -2607,6 +2607,39 @@ export function AtelierShellV3() {
               pushToast("error", `Set category failed: ${err instanceof Error ? err.message : String(err)}`),
             );
         }}
+        onBulkAttach={(imageNodeIds) => {
+          // Bulk-attach: target is the currently-selected draft. If none
+          // selected, surface a clear toast instead of silently picking
+          // an arbitrary draft (which would be its own bug class).
+          if (!selectedNode || !isDraftVideo(selectedNode)) {
+            pushToast(
+              "info",
+              "Select a draft on the canvas first, then bulk-attach refs.",
+            );
+            return;
+          }
+          const targetId = selectedNode.id;
+          (async () => {
+            const store = useAtelierStore.getState();
+            let ok = 0;
+            let fail = 0;
+            for (const imgId of imageNodeIds) {
+              try {
+                await store.attachReferenceNode(targetId, imgId);
+                ok += 1;
+              } catch {
+                fail += 1;
+              }
+            }
+            if (ok > 0 && fail === 0) {
+              pushToast("success", `Attached ${ok} reference${ok === 1 ? "" : "s"}.`);
+            } else if (ok > 0 && fail > 0) {
+              pushToast("info", `Attached ${ok}, ${fail} skipped.`);
+            } else {
+              pushToast("error", "All attaches failed — check the console.");
+            }
+          })();
+        }}
       />
 
       {/* LeftRailV3 — vertical mode rail at the left edge (replaces the

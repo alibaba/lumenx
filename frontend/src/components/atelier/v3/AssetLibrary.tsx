@@ -22,7 +22,7 @@
 // 36×36 button on the left edge. Toggle via the same button or the `A`
 // keyboard shortcut.
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Image as ImageIcon, Music, Search, Video, X } from "lucide-react";
+import { Check, CheckSquare, ChevronLeft, ChevronRight, Image as ImageIcon, Link2, Music, Search, Square, Video, X } from "lucide-react";
 import type { AtelierNode } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 
@@ -93,6 +93,12 @@ interface Props {
    *  (matches the original solo-drawer position). LeftRailV3 passes 80
    *  (rail width 56 + 24 gap) so the panel docks against the rail. */
   leftOffsetPx?: number;
+  /** Bulk-attach handler. When the user toggles into multi-select mode
+   *  and picks one or more image cards, the bottom CTA fires this with
+   *  the list of selected image node ids. Shell decides "attach to
+   *  what" (typically the currently-selected draft, with a fallback
+   *  toast). When omitted, multi-select mode is hidden. */
+  onBulkAttach?: (imageNodeIds: string[]) => void;
 }
 
 export function AssetLibrary({
@@ -102,10 +108,28 @@ export function AssetLibrary({
   onCycleCategory,
   hideCollapsedHandle = false,
   leftOffsetPx = 16,
+  onBulkAttach,
 }: Props) {
   const [kindFilter, setKindFilter] = useState<AssetKind>("all");
   const [imageCategoryFilter, setImageCategoryFilter] = useState<"all" | Exclude<AssetCategory, null>>("all");
   const [search, setSearch] = useState("");
+  // Multi-select mode: when on, image cards become click-to-toggle
+  // checkboxes and the bottom of the panel surfaces an "Attach N" CTA.
+  // Off-mode click still drag-and-drop / opens (existing behavior).
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
 
   const allCards = useMemo(
     () => nodes.map(nodeToCard).filter((c): c is AssetCard => c !== null),
@@ -184,7 +208,7 @@ export function AssetLibrary({
         </button>
       </div>
 
-      {/* Brand row + count */}
+      {/* Brand row + count + select-mode toggle */}
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/6 px-3.5 py-2.5">
         <div className="leading-tight">
           <div className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">
@@ -194,6 +218,20 @@ export function AssetLibrary({
             {counts.all} item{counts.all === 1 ? "" : "s"}
           </div>
         </div>
+        {onBulkAttach ? (
+          <button
+            type="button"
+            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            data-tip={selectMode ? "Cancel selection" : "Multi-select"}
+            className={`btn-tip rounded-full border px-2 py-[3px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] transition-colors ${
+              selectMode
+                ? "border-primary/45 bg-primary/15 text-primary"
+                : "border-dashed border-white/15 text-text-muted/85 hover:border-white/25 hover:text-foreground"
+            }`}
+          >
+            {selectMode ? "Cancel" : "Select"}
+          </button>
+        ) : null}
       </header>
 
       {/* Search */}
@@ -304,11 +342,15 @@ export function AssetLibrary({
           </div>
         ) : (
           <ul className="grid grid-cols-2 gap-2">
-            {filtered.map((card) => (
+            {filtered.map((card) => {
+              const checked = selectedIds.has(card.nodeId);
+              const selectableInThisMode = selectMode && card.kind === "image";
+              return (
               <li key={card.nodeId}>
                 <div
-                  draggable
+                  draggable={!selectMode}
                   onDragStart={(e) => {
+                    if (selectMode) return;
                     // Carry a custom mime so canvas drop targets (drafts /
                     // composer ref slots) can recognize a library drag and
                     // distinguish it from take drags or external file drops.
@@ -319,7 +361,21 @@ export function AssetLibrary({
                     );
                     e.dataTransfer.setData("text/plain", `@${card.title}`);
                   }}
-                  className="group relative cursor-grab overflow-hidden rounded-md border border-white/8 bg-black/30 transition-shadow hover:border-primary/45 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.22)] active:cursor-grabbing"
+                  onClick={() => {
+                    if (!selectableInThisMode) return;
+                    toggleSelected(card.nodeId);
+                  }}
+                  className={`group relative overflow-hidden rounded-md border bg-black/30 transition-shadow ${
+                    selectableInThisMode
+                      ? "cursor-pointer"
+                      : selectMode
+                        ? "cursor-not-allowed opacity-55"
+                        : "cursor-grab active:cursor-grabbing"
+                  } ${
+                    checked
+                      ? "border-primary/65 shadow-[0_0_0_2px_rgba(100,108,255,0.35)]"
+                      : "border-white/8 hover:border-primary/45 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.22)]"
+                  }`}
                 >
                   <div className="relative aspect-[4/3] bg-black/40">
                     {card.thumbUrl && card.kind === "image" ? (
@@ -374,12 +430,46 @@ export function AssetLibrary({
                       {card.title}
                     </div>
                   </div>
+                  {/* Multi-select corner checkbox — image cards only,
+                      visible only in select mode. */}
+                  {selectableInThisMode ? (
+                    <span
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-[4px] border ${
+                        checked
+                          ? "border-primary/70 bg-primary/30 text-primary"
+                          : "border-white/30 bg-black/55 text-white/70"
+                      }`}
+                    >
+                      {checked ? <Check size={11} aria-hidden="true" /> : <Square size={11} aria-hidden="true" />}
+                    </span>
+                  ) : null}
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
+      {/* Bulk-attach CTA — only renders when multi-select mode is on
+          AND the user has picked ≥1 image. The shell decides which
+          draft to attach to. */}
+      {selectMode && selectedIds.size > 0 && onBulkAttach ? (
+        <div className="shrink-0 border-t border-white/8 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => {
+              const ids = Array.from(selectedIds);
+              onBulkAttach(ids);
+              exitSelectMode();
+            }}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.5)] transition-all hover:bg-primary/92 active:scale-[0.97]"
+          >
+            <Link2 size={11} aria-hidden="true" />
+            Attach {selectedIds.size} ref{selectedIds.size === 1 ? "" : "s"}
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }
