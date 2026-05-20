@@ -19,6 +19,7 @@ from .models import (
     AtelierAgentPlannerPackage,
     AtelierNode,
     AtelierProject,
+    AtelierSequenceEntry,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -399,13 +400,6 @@ class BuildAtelierAgentPlannerPackageRequest(BaseModel):
     skill_name: Optional[str] = None
 
 
-class AtelierSequenceEntry(BaseModel):
-    parentId: str
-    candidateId: str
-    trimStart: Optional[float] = None
-    trimEnd: Optional[float] = None
-
-
 class ExportAtelierSequenceRequest(BaseModel):
     entries: List[AtelierSequenceEntry] = Field(default_factory=list)
 
@@ -505,6 +499,25 @@ async def plan_atelier_agent_turn(project_id: str, request: PlanAtelierAgentTurn
             planner_input=request.planner_input,
         )
         return signed_response(plan)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+class ReplaceAtelierSequenceRequest(BaseModel):
+    entries: List[AtelierSequenceEntry] = Field(default_factory=list)
+
+
+@app.put(
+    "/atelier/projects/{project_id}/sequence",
+    response_model=AtelierProject,
+)
+async def replace_atelier_sequence(project_id: str, request: ReplaceAtelierSequenceRequest):
+    try:
+        project = pipeline.replace_atelier_sequence(
+            project_id,
+            [entry.model_dump() for entry in request.entries],
+        )
+        return signed_response(project)
     except ValueError as e:
         raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
 

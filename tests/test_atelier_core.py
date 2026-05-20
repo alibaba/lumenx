@@ -1208,6 +1208,45 @@ def test_atelier_structure_planner_blocks_unrecognized_intent(pipeline):
     assert plan.tool_calls == []
 
 
+def test_atelier_sequence_persists_on_project(pipeline):
+    """T2.5: replace_atelier_sequence persists the cut on the project so
+    it survives device / browser changes (no longer localStorage-only)."""
+    project = pipeline.create_atelier_project("Board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            "candidates": [
+                {"id": "c1", "status": "completed", "video_url": "videos/atelier_c1.mp4"},
+                {"id": "c2", "status": "completed", "video_url": "videos/atelier_c2.mp4"},
+            ],
+        },
+    })
+
+    saved = pipeline.replace_atelier_sequence(project.id, [
+        {"parentId": video.id, "candidateId": "c1", "trimStart": 0.5, "trimEnd": 4.0},
+        {"parentId": video.id, "candidateId": "c2"},
+    ])
+    assert len(saved.sequence) == 2
+    assert saved.sequence[0].trimStart == 0.5
+    assert saved.sequence[0].trimEnd == 4.0
+    assert saved.sequence[1].trimStart is None
+    assert saved.sequence[1].trimEnd is None
+
+    # Round-trip: persistence + reload from disk should preserve.
+    fetched = pipeline.get_atelier_project(project.id)
+    assert fetched is not None
+    assert [e.candidateId for e in fetched.sequence] == ["c1", "c2"]
+
+
+def test_atelier_sequence_replace_rejects_unknown_candidate(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    with pytest.raises(ValueError, match="candidate"):
+        pipeline.replace_atelier_sequence(project.id, [
+            {"parentId": video.id, "candidateId": "ghost"},
+        ])
+
+
 def test_atelier_sequence_export_validates_entries(pipeline):
     """Schema validation in pipeline.export_atelier_sequence — empty list,
     missing parent, missing candidate, invalid trim ranges."""

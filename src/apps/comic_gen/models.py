@@ -468,6 +468,19 @@ class AtelierNode(BaseModel):
     updated_at: float = Field(default_factory=time.time)
 
 
+class AtelierSequenceEntry(BaseModel):
+    """One clip in the project's exported sequence (Sequence Strip).
+
+    Coordinates a parent video node + a candidate id; trim points are
+    optional seconds (used by ffmpeg -ss / -to during export). Stored
+    on the project so the cut survives device / browser changes.
+    """
+    parentId: str = Field(..., description="Parent video node id holding the candidate")
+    candidateId: str = Field(..., description="Candidate id within the parent's data.candidates")
+    trimStart: Optional[float] = Field(None, description="Optional in-point in seconds")
+    trimEnd: Optional[float] = Field(None, description="Optional out-point in seconds")
+
+
 class AtelierProject(BaseModel):
     id: str = Field(..., description="Unique Atelier project ID")
     title: str = Field(..., description="Canvas project title")
@@ -476,5 +489,9 @@ class AtelierProject(BaseModel):
     nodes: List[AtelierNode] = Field(default_factory=list)
     agent_policy: AtelierAgentPolicy = Field(default_factory=AtelierAgentPolicy)
     agent_turns: List[AtelierAgentTurn] = Field(default_factory=list)
+    sequence: List[AtelierSequenceEntry] = Field(
+        default_factory=list,
+        description="Ordered list of clips assembled in the Sequence Strip; persisted server-side so the cut survives across devices",
+    )
     created_at: float
     updated_at: float

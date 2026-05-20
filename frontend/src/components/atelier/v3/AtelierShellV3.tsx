@@ -2282,9 +2282,26 @@ export function AtelierShellV3() {
   // can't double-fire (each export takes seconds-to-minutes depending
   // on clip count).
   const [exportingSequence, setExportingSequence] = useState(false);
-  // Hydrate from localStorage when project id changes.
+  // Hydrate from the project's server-stored sequence when the project
+  // changes (T2.5 — was localStorage-only). LocalStorage is kept as a
+  // soft fallback for transient offline / pre-T2.5 leftovers.
   useEffect(() => {
-    if (!project?.id || typeof window === "undefined") return;
+    if (!project?.id) return;
+    const serverSeq = (project.sequence ?? []).map((e) => {
+      const out: SequenceEntry = { parentId: e.parentId, candidateId: e.candidateId };
+      if (typeof e.trimStart === "number" && Number.isFinite(e.trimStart)) out.trimStart = e.trimStart;
+      if (typeof e.trimEnd === "number" && Number.isFinite(e.trimEnd)) out.trimEnd = e.trimEnd;
+      return out;
+    });
+    if (serverSeq.length > 0) {
+      setSequence(serverSeq);
+      return;
+    }
+    // No server sequence → check localStorage for legacy data.
+    if (typeof window === "undefined") {
+      setSequence([]);
+      return;
+    }
     try {
       const raw = window.localStorage.getItem(sequenceStorageKey(project.id));
       if (!raw) {
@@ -2293,8 +2310,6 @@ export function AtelierShellV3() {
       }
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        // Defensively validate shape so a corrupted payload can't crash render.
-        // trimStart/trimEnd are optional — we accept them only if numeric.
         const valid: SequenceEntry[] = parsed
           .filter(
             (e): e is { parentId: string; candidateId: string } =>
@@ -2317,16 +2332,32 @@ export function AtelierShellV3() {
     } catch {
       setSequence([]);
     }
-  }, [project?.id]);
-  // Persist on every change. Coalesce to localStorage; the storage write is
-  // synchronous but cheap (<1ms for a few dozen entries).
+  }, [project?.id, project?.sequence]);
+  // Persist on every change: localStorage immediately (synchronous +
+  // cheap, fastest recovery if the user reloads), and a debounced PUT
+  // to the server (T2.5 — survives device / browser change). Debounce
+  // prevents trim-handle keystrokes from spamming the server.
   useEffect(() => {
-    if (!project?.id || typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(sequenceStorageKey(project.id), JSON.stringify(sequence));
-    } catch {
-      /* quota exceeded / Safari private mode etc. — fall back to in-memory */
+    if (!project?.id) return;
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(sequenceStorageKey(project.id), JSON.stringify(sequence));
+      } catch {
+        /* quota exceeded / Safari private mode etc. */
+      }
     }
+    const projectId = project.id;
+    const handle = window.setTimeout(() => {
+      void api
+        .replaceAtelierSequence(projectId, sequence)
+        .catch((err: unknown) => {
+          // Don't toast on every failure — could be flaky during a
+          // disconnect. Console it; localStorage already covers this
+          // window's recovery path.
+          console.warn("Sequence persist failed:", err instanceof Error ? err.message : err);
+        });
+    }, 500);
+    return () => window.clearTimeout(handle);
   }, [project?.id, sequence]);
 
   // Resolve sequence entries against current project candidates so we can

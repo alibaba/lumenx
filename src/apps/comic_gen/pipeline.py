@@ -15,6 +15,7 @@ from .models import (
     AtelierAgentTurn,
     AtelierNode,
     AtelierProject,
+    AtelierSequenceEntry,
     Script,
     GenerationStatus,
     VideoTask,
@@ -2727,6 +2728,52 @@ class ComicGenPipeline:
                     if key == "source_project_id" and value and value not in self.scripts:
                         raise ValueError("Source project not found")
                     setattr(project, key, value)
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+            return project
+
+    def replace_atelier_sequence(
+        self,
+        project_id: str,
+        entries: List[Dict[str, Any]],
+    ) -> AtelierProject:
+        """Replace the project's sequence with the given ordered list.
+        v1: full replace (PUT semantics) — the front-end ships the entire
+        list every change. Cheap because sequences are O(dozens) of items.
+        Validates each entry's parent + candidate exist; trim points are
+        normalized to floats or None."""
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                raise ValueError("Atelier project not found")
+            nodes_by_id = {n.id: n for n in project.nodes}
+            validated: List[AtelierSequenceEntry] = []
+            for idx, entry in enumerate(entries):
+                parent_id = entry.get("parentId") or entry.get("parent_id")
+                cand_id = entry.get("candidateId") or entry.get("candidate_id")
+                if not parent_id or not cand_id:
+                    raise ValueError(f"Sequence entry #{idx + 1} missing parentId / candidateId")
+                parent = nodes_by_id.get(str(parent_id))
+                if not parent:
+                    raise ValueError(f"Sequence entry #{idx + 1}: parent {parent_id} not found")
+                candidates = (parent.data or {}).get("candidates") or []
+                if not any(c.get("id") == cand_id for c in candidates):
+                    raise ValueError(f"Sequence entry #{idx + 1}: candidate {cand_id} not found")
+                trim_start = entry.get("trimStart")
+                if trim_start is None:
+                    trim_start = entry.get("trim_start")
+                trim_end = entry.get("trimEnd")
+                if trim_end is None:
+                    trim_end = entry.get("trim_end")
+                ts = float(trim_start) if isinstance(trim_start, (int, float)) else None
+                te = float(trim_end) if isinstance(trim_end, (int, float)) else None
+                validated.append(AtelierSequenceEntry(
+                    parentId=str(parent_id),
+                    candidateId=str(cand_id),
+                    trimStart=ts,
+                    trimEnd=te,
+                ))
+            project.sequence = validated
             project.updated_at = time.time()
             self._save_atelier_data_unlocked()
             return project

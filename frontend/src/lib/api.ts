@@ -236,6 +236,13 @@ export interface AtelierGenerationConfig {
     params: Record<string, unknown>;
 }
 
+export interface AtelierSequenceEntry {
+    parentId: string;
+    candidateId: string;
+    trimStart?: number | null;
+    trimEnd?: number | null;
+}
+
 export interface AtelierProject {
     id: string;
     title: string;
@@ -244,6 +251,7 @@ export interface AtelierProject {
     nodes: AtelierNode[];
     agent_policy: AtelierAgentPolicy;
     agent_turns?: AtelierAgentTurn[];
+    sequence?: AtelierSequenceEntry[];
     created_at: number;
     updated_at: number;
 }
@@ -971,6 +979,16 @@ export const api = {
     ): Promise<{ video_url: string; filename: string; size_mb: number; clip_count: number }> => {
         const response = await axios.post(
             `${API_URL}/atelier/projects/${projectId}/sequence/export`,
+            { entries },
+        );
+        return response.data;
+    },
+    replaceAtelierSequence: async (
+        projectId: string,
+        entries: Array<{ parentId: string; candidateId: string; trimStart?: number; trimEnd?: number }>,
+    ): Promise<AtelierProject> => {
+        const response = await axios.put(
+            `${API_URL}/atelier/projects/${projectId}/sequence`,
             { entries },
         );
         return response.data;
