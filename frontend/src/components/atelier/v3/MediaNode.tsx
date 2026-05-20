@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronDown, ImageIcon, Loader2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
 import { TearLine } from "./ornaments";
+import { DiagnoseModal } from "@/components/shared/PendingTaskAffordance";
 
 interface Props {
   id: string;
@@ -35,6 +36,11 @@ interface Props {
    *  same bordered box (no separate floating overlay). */
   onUpload?: (id: string) => void;
   onGenerate?: (id: string) => void;
+  /** Cancel callback for pending/processing tasks. When provided, after a
+   *  soft stuck threshold the overlay surfaces a Cancel button next to
+   *  the spinner. Caller is responsible for hitting the backend cancel
+   *  endpoint and refreshing local state. */
+  onCancel?: (id: string) => Promise<void> | void;
 }
 
 const DEFAULT_SIZE: Record<MediaKind, { w: number; h: number }> = {
@@ -212,6 +218,7 @@ export function MediaNode({
   onGenerate,
   retryModelOptions,
   onRetryWithModel,
+  onCancel,
 }: Props) {
   const def = DEFAULT_SIZE[kind];
   const w = Math.max(40, Math.min(width ?? def.w, MAX_WIDTH));
@@ -219,6 +226,26 @@ export function MediaNode({
   const ring = ringClass(status, selected, selectedAsTake);
   const showProcessing = status === "processing" || status === "pending";
   const showFailed = status === "failed";
+
+  // Stuck-task affordances. When a candidate sits in pending/processing
+  // for longer than this threshold, surface Cancel + Diagnose so the user
+  // can recover instead of waiting on a frozen spinner. The component
+  // itself just times the mount — actual created_at is up the tree (and
+  // not always available because candidates are nested inside the parent
+  // node's data), so this approximation is good enough for "is the
+  // current view session waiting too long?".
+  const PENDING_REVEAL_MS = 60_000;
+  const [pendingMountedAt] = useState(() => Date.now());
+  const [pendingNow, setPendingNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!showProcessing) return;
+    const id = window.setInterval(() => setPendingNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [showProcessing]);
+  const pendingElapsedMs = pendingNow - pendingMountedAt;
+  const showStuckActions = showProcessing && pendingElapsedMs >= PENDING_REVEAL_MS;
+  const [diagnoseOpen, setDiagnoseOpen] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   // An empty image node with upload/generate callbacks becomes a unified
   // actionable card. We hide the bare placeholder + the hover TypeChip in
   // that mode so the buttons don't compete with stacked chrome.
@@ -523,6 +550,42 @@ export function MediaNode({
               {typeof etaSeconds === "number" && etaSeconds > 0 ? (
                 <span className="font-mono text-[9px] text-blue-100/85">~{etaSeconds}s left</span>
               ) : null}
+              {showStuckActions ? (
+                <div
+                  className="mt-1 flex items-center gap-1"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {onCancel ? (
+                    <button
+                      type="button"
+                      disabled={canceling}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        setCanceling(true);
+                        try {
+                          await onCancel(id);
+                        } finally {
+                          setCanceling(false);
+                        }
+                      }}
+                      className="rounded-[3px] border border-red-300/40 bg-red-400/15 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-red-100 transition-colors hover:bg-red-400/25 disabled:cursor-wait disabled:opacity-60"
+                    >
+                      {canceling ? "…" : "Cancel"}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDiagnoseOpen(true);
+                    }}
+                    className="rounded-[3px] border border-white/30 bg-black/40 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-blue-50/95 transition-colors hover:border-primary/60"
+                  >
+                    Diagnose
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
           {typeof progress === "number" ? (
@@ -532,6 +595,13 @@ export function MediaNode({
                 style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
               />
             </div>
+          ) : null}
+          {diagnoseOpen ? (
+            <DiagnoseModal
+              taskId={id}
+              elapsedLabel={`${Math.floor(pendingElapsedMs / 1000)}s`}
+              onClose={() => setDiagnoseOpen(false)}
+            />
           ) : null}
         </>
       ) : null}

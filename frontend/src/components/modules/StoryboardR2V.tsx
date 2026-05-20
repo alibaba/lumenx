@@ -551,6 +551,24 @@ export default function StoryboardR2V() {
                             onSetTabMode={(mode) => setTabMode(index, mode)}
                             onOpenDrawer={() => setDrawerState({ isOpen: true, targetShotIndex: index })}
                             onRegisterTextarea={(element) => registerTextarea(index, element)}
+                            onCancelVideo={
+                                shot.videoTaskId && currentProjectId
+                                    ? async () => {
+                                        try {
+                                            await api.cancelVideoTask(currentProjectId, shot.videoTaskId!);
+                                        } finally {
+                                            // Optimistically flip local state so the spinner clears
+                                            // even before the next refetch lands. Failed status
+                                            // shows the existing Retry affordance.
+                                            setShots((prev) =>
+                                                prev.map((s, i) =>
+                                                    i === index ? { ...s, videoStatus: "failed" as const } : s,
+                                                ),
+                                            );
+                                        }
+                                    }
+                                    : undefined
+                            }
                         />
                     </motion.div>
                 ))}

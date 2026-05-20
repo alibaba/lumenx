@@ -318,6 +318,7 @@ export function renderCandidatesAsMediaNodes(
   onRetry: (parentId: string, candidateId: string) => void,
   retryModelOptions?: string[],
   onRetryWithModel?: (parentId: string, candidateId: string, modelLabel: string) => void,
+  onCancel?: (parentId: string, candidateId: string) => Promise<void> | void,
 ): React.ReactNode[] {
   if (node.type !== "video") return [];
   const candidates = readCandidates(node);
@@ -428,6 +429,11 @@ export function renderCandidatesAsMediaNodes(
           onRetryWithModel={
             c.status === "failed" && onRetryWithModel
               ? (_, modelLabel) => onRetryWithModel(node.id, c.id, modelLabel)
+              : undefined
+          }
+          onCancel={
+            (c.status === "pending" || c.status === "processing") && onCancel
+              ? () => onCancel(node.id, c.id)
               : undefined
           }
         />

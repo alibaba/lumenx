@@ -93,6 +93,182 @@ class ComicGenPipeline:
         self._kling_model = None
         self._vidu_model = None
 
+        # Recover orphan async tasks. FastAPI BackgroundTasks live in the
+        # process — any restart between submit + execute leaves them
+        # permanently `pending` (or `processing` if interrupted mid-call).
+        # We mark such tasks `failed` with a clear reason so the user sees
+        # a Retry affordance instead of an eternal spinner. We do NOT
+        # auto-resume because re-running a half-completed video task could
+        # double-charge or double-render.
+        try:
+            self._recover_orphan_tasks()
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("Orphan task recovery failed: %s", exc)
+
+    _ORPHAN_RECOVERY_REASON = (
+        "Backend was restarted while this task was running. Click Retry to run it again."
+    )
+
+    def _recover_orphan_tasks(self) -> None:
+        """Sweep persisted state for tasks left in pending/processing.
+
+        FastAPI's BackgroundTasks queue lives entirely in process memory:
+        if uvicorn restarts (dev --reload, OOM, --no-server-header crash,
+        OS reboot, or just a manual ctrl-C) every queued processor is
+        gone but the task records on disk still say "pending" or
+        "processing". The frontend then shows an eternal spinner.
+
+        Strategy: on boot, find every such record and stamp it `failed`
+        with a clear, user-readable reason. We don't auto-resume because
+        a half-run video generation may have already incurred provider
+        cost — the safe action is to surface the failure and let the
+        user decide whether to Retry.
+
+        Touched task families:
+          - Studio Script.video_tasks (status: pending|processing)
+          - Atelier project candidates inside node.data['candidates']
+          - Atelier video nodes (top-level node.status when no candidates)
+        Asset / motion-ref tasks live in transient in-process dicts
+        (self.asset_generation_tasks etc.) and never persist, so they
+        die naturally with the process and don't need recovery.
+        """
+        STUCK = ("pending", "processing")
+        recovered = 0
+
+        # Studio video tasks
+        for script in self.scripts.values():
+            tasks = getattr(script, "video_tasks", None) or []
+            for task in tasks:
+                if getattr(task, "status", None) in STUCK:
+                    task.status = "failed"
+                    if not getattr(task, "error", None):
+                        try:
+                            task.error = self._ORPHAN_RECOVERY_REASON
+                        except Exception:
+                            pass
+                    recovered += 1
+
+        # Atelier candidates
+        for project in self.atelier_projects.values():
+            for node in project.nodes:
+                data = node.data or {}
+                candidates = data.get("candidates") or []
+                node_dirty = False
+                for cand in candidates:
+                    if isinstance(cand, dict) and cand.get("status") in STUCK:
+                        cand["status"] = "failed"
+                        if not cand.get("error"):
+                            cand["error"] = self._ORPHAN_RECOVERY_REASON
+                        node_dirty = True
+                        recovered += 1
+                if node_dirty:
+                    node.data = data
+                    # Refresh node aggregate status from candidates so the
+                    # parent doesn't keep showing "processing" when none
+                    # are running anymore.
+                    try:
+                        self._refresh_atelier_node_status(project, node)
+                    except Exception:
+                        # Not critical for recovery itself.
+                        pass
+
+                # Top-level video nodes that have no candidates yet but
+                # are themselves marked pending/processing (e.g. a fresh
+                # generate call interrupted before candidates were
+                # written) get the same treatment.
+                if (
+                    node.type == "video"
+                    and getattr(node, "status", None) in STUCK
+                    and not candidates
+                ):
+                    node.status = "failed"
+                    recovered += 1
+
+        if recovered > 0:
+            try:
+                self._save_data()
+            except Exception:
+                logger.warning("Orphan recovery: failed to persist Studio sweep")
+            try:
+                self._save_atelier_data()
+            except Exception:
+                logger.warning("Orphan recovery: failed to persist Atelier sweep")
+            logger.warning(
+                "Orphan task recovery: marked %d stuck task(s) as failed.",
+                recovered,
+            )
+        else:
+            logger.debug("Orphan task recovery: no stuck tasks found.")
+
+    def mark_video_task_failed(
+        self, script_id: str, task_id: str, error_message: str
+    ) -> bool:
+        """Belt-and-suspenders setter used by BG-task wrappers when an
+        exception escapes the pipeline's own try/except. Writes
+        status='failed' + error so the UI never sees an eternal spinner.
+        Returns True if the task was found and marked."""
+        with self._save_lock:
+            script = self.scripts.get(script_id)
+            if not script:
+                return False
+            tasks = getattr(script, "video_tasks", None) or []
+            task = next((t for t in tasks if getattr(t, "id", None) == task_id), None)
+            if not task:
+                return False
+            if getattr(task, "status", None) == "completed":
+                # Already successfully completed by the time wrapper got
+                # the spurious exception — don't downgrade.
+                return False
+            task.status = "failed"
+            try:
+                if not getattr(task, "error", None):
+                    task.error = error_message
+            except Exception:
+                pass
+            try:
+                self._save_data()
+            except Exception:
+                logger.warning("mark_video_task_failed: save failed")
+            return True
+
+    def mark_atelier_candidate_failed(
+        self,
+        project_id: str,
+        node_id: str,
+        candidate_id: str,
+        error_message: str,
+    ) -> bool:
+        """Atelier sibling of mark_video_task_failed. Marks a single
+        candidate within a video node as failed when its BG processor
+        raised before its own internal try/except could write back."""
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                return False
+            node = next((n for n in project.nodes if n.id == node_id), None)
+            if not node:
+                return False
+            data = node.data or {}
+            candidates = data.get("candidates") or []
+            cand = next((c for c in candidates if isinstance(c, dict) and c.get("id") == candidate_id), None)
+            if not cand:
+                return False
+            if cand.get("status") == "completed":
+                return False
+            cand["status"] = "failed"
+            if not cand.get("error"):
+                cand["error"] = error_message
+            node.data = data
+            try:
+                self._refresh_atelier_node_status(project, node)
+            except Exception:
+                pass
+            try:
+                self._save_atelier_data_unlocked()
+            except Exception:
+                logger.warning("mark_atelier_candidate_failed: save failed")
+            return True
+
     def _resolve_video_backend(self, model_name: str) -> str:
         try:
             return resolve_provider_backend(model_name)

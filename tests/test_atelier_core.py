@@ -1208,6 +1208,89 @@ def test_atelier_structure_planner_blocks_unrecognized_intent(pipeline):
     assert plan.tool_calls == []
 
 
+def test_atelier_orphan_candidate_marked_failed_on_recover(pipeline, tmp_path):
+    """The user reports: video generation stuck on 排队中. Often it's
+    backend restart eating the in-memory BG task. Recovery sweeps the
+    persisted state on boot and marks orphan candidates failed so the
+    UI shows a Retry affordance instead of an eternal spinner."""
+    # Build a project with a stuck pending candidate persisted to disk.
+    project = pipeline.create_atelier_project("Board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            "candidates": [
+                {"id": "c1", "status": "pending", "video_url": None},
+                {"id": "c2", "status": "processing", "video_url": None},
+                {"id": "c3", "status": "completed", "video_url": "videos/x.mp4"},
+            ],
+        },
+    })
+
+    # Force a fresh ComicGenPipeline that re-reads from disk and runs
+    # _recover_orphan_tasks in __init__.
+    from unittest.mock import patch
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+    with patch("src.apps.comic_gen.pipeline.ScriptProcessor"), \
+         patch("src.apps.comic_gen.pipeline.AssetGenerator"), \
+         patch("src.apps.comic_gen.pipeline.StoryboardGenerator"), \
+         patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
+         patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
+         patch("src.apps.comic_gen.pipeline.ExportManager"):
+        # Build a new pipeline that loads from the same on-disk state.
+        fresh = ComicGenPipeline()
+        fresh.atelier_data_file = pipeline.atelier_data_file
+        fresh.data_file = pipeline.data_file
+        fresh.series_data_file = pipeline.series_data_file
+        # Re-load + recover.
+        fresh.atelier_projects = fresh._load_atelier_data()
+        fresh.scripts = fresh._load_data()
+        fresh.series_store = fresh._load_series_data()
+        fresh._recover_orphan_tasks()
+
+    state = fresh.get_atelier_project(project.id)
+    candidates = (state.nodes[0].data or {}).get("candidates") or []
+    by_id = {c["id"]: c for c in candidates}
+    assert by_id["c1"]["status"] == "failed"
+    assert by_id["c2"]["status"] == "failed"
+    assert "Backend was restarted" in by_id["c1"]["error"]
+    # Completed candidate untouched.
+    assert by_id["c3"]["status"] == "completed"
+    assert "error" not in by_id["c3"] or not by_id["c3"].get("error")
+
+
+def test_atelier_mark_candidate_failed_writes_status_and_error(pipeline):
+    """T1.4 #2: belt-and-suspenders writeback. mark_atelier_candidate_failed
+    flips status + writes error so the UI never sees an eternal spinner."""
+    project = pipeline.create_atelier_project("Board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {"candidates": [{"id": "c1", "status": "processing"}]},
+    })
+
+    ok = pipeline.mark_atelier_candidate_failed(
+        project.id, video.id, "c1", "Background error: boom"
+    )
+    assert ok
+    state = pipeline.get_atelier_project(project.id)
+    cand = ((state.nodes[0].data or {}).get("candidates") or [])[0]
+    assert cand["status"] == "failed"
+    assert cand["error"] == "Background error: boom"
+
+    # No-op on completed candidate (don't downgrade success).
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {"candidates": [{"id": "c2", "status": "completed", "video_url": "videos/c2.mp4"}]},
+    })
+    ok2 = pipeline.mark_atelier_candidate_failed(project.id, video.id, "c2", "spurious")
+    assert ok2 is False
+    state = pipeline.get_atelier_project(project.id)
+    cand2 = ((state.nodes[0].data or {}).get("candidates") or [])[0]
+    assert cand2["status"] == "completed"
+
+    # Unknown candidate id returns False.
+    ok3 = pipeline.mark_atelier_candidate_failed(project.id, video.id, "ghost", "x")
+    assert ok3 is False
+
+
 def test_atelier_sequence_persists_on_project(pipeline):
     """T2.5: replace_atelier_sequence persists the cut on the project so
     it survives device / browser changes (no longer localStorage-only)."""

@@ -3678,6 +3678,20 @@ export function AtelierShellV3() {
                     pushToast("error", `Retry failed: ${err instanceof Error ? err.message : String(err)}`),
                   );
               },
+              // T1.4 fix #3: Cancel for stuck pending/processing candidates.
+              // Calls the new backend cancel endpoint; the candidate is
+              // marked failed server-side and the next refresh shows the
+              // existing Retry affordance.
+              async (parentId, candidateId) => {
+                if (!project?.id) return;
+                try {
+                  await api.cancelAtelierCandidate(project.id, parentId, candidateId);
+                  await refreshCurrentProject();
+                  pushToast("info", "Canceled");
+                } catch (err) {
+                  pushToast("error", `Cancel failed: ${err instanceof Error ? err.message : String(err)}`);
+                }
+              },
             ),
           )}
 

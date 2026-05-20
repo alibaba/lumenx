@@ -393,6 +393,36 @@ export const api = {
         return response.json();
     },
 
+    healthCheck: async (): Promise<{
+        ok: boolean;
+        time: number;
+        log_file: string;
+        log_dir: string;
+        studio_projects: number;
+        atelier_projects: number;
+    }> => {
+        const res = await axios.get(`${API_URL}/health`, { timeout: 5000 });
+        return res.data;
+    },
+
+    cancelVideoTask: async (scriptId: string, taskId: string) => {
+        const res = await axios.post(
+            `${API_URL}/projects/${scriptId}/video_tasks/${taskId}/cancel`,
+        );
+        return res.data;
+    },
+
+    cancelAtelierCandidate: async (
+        projectId: string,
+        nodeId: string,
+        candidateId: string,
+    ) => {
+        const res = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/nodes/${nodeId}/video_candidates/${candidateId}/cancel`,
+        );
+        return res.data;
+    },
+
     /**
      * Upload an asset image as a new variant.
      * The uploaded image will be marked as the 'upload source' for reverse generation.
