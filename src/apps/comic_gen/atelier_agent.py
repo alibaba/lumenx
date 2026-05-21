@@ -1381,6 +1381,60 @@ def _execute_attach_reference_node(project_id: str, arguments: Dict[str, Any], p
     return {"video_node": _compact_node(updated_video), "image_node": _compact_node(updated_image)}
 
 
+def _execute_create_region(project_id: str, arguments: Dict[str, Any], pipeline: Any) -> Dict[str, Any]:
+    # Region (B-α): a type:"region" container node. Children are bound
+    # via `data.region_id` set on each child by separate attachToRegion
+    # calls. v1 does not nest, so we don't wire region_id on the region
+    # node itself.
+    title = arguments.get("title") or "Region"
+    color = arguments.get("color") or "default"
+    region = pipeline.create_atelier_node(
+        project_id,
+        {
+            "type": "region",
+            "title": title,
+            "status": "completed",
+            "x": float(arguments.get("x", 80.0)),
+            "y": float(arguments.get("y", 80.0)),
+            "width": float(arguments.get("width", 600.0)),
+            "height": float(arguments.get("height", 400.0)),
+            "data": {"color": color},
+            "created_by": "agent",
+        },
+    )
+    return {"region": _compact_node(region), "node": _compact_node(region)}
+
+
+def _execute_attach_to_region(project_id: str, arguments: Dict[str, Any], pipeline: Any) -> Dict[str, Any]:
+    node_id = arguments.get("node_id")
+    region_id = arguments.get("region_id")
+    if not node_id:
+        raise ValueError("node_id is required")
+    if not region_id:
+        raise ValueError("region_id is required")
+    project, node = pipeline._get_atelier_node_pair(project_id, node_id)
+    region = next((n for n in project.nodes if n.id == region_id), None)
+    if region is None:
+        raise ValueError("region_id does not reference an existing node")
+    if region.type != "region":
+        raise ValueError("region_id must reference a node of type 'region'")
+    if node.type == "region":
+        raise ValueError("region nodes cannot be attached to other regions (no nesting in v1)")
+    next_data = {**dict(node.data or {}), "region_id": region_id}
+    updated = pipeline.update_atelier_node(project_id, node_id, {"data": next_data})
+    return {"node": _compact_node(updated)}
+
+
+def _execute_detach_from_region(project_id: str, arguments: Dict[str, Any], pipeline: Any) -> Dict[str, Any]:
+    node_id = arguments.get("node_id")
+    if not node_id:
+        raise ValueError("node_id is required")
+    _, node = pipeline._get_atelier_node_pair(project_id, node_id)
+    next_data = {k: v for k, v in (node.data or {}).items() if k != "region_id"}
+    updated = pipeline.update_atelier_node(project_id, node_id, {"data": next_data})
+    return {"node": _compact_node(updated)}
+
+
 def _execute_create_video_candidates(project_id: str, arguments: Dict[str, Any], pipeline: Any) -> Dict[str, Any]:
     node_id = arguments.get("node_id")
     if not node_id:
@@ -1471,6 +1525,58 @@ def build_default_atelier_tool_registry() -> AtelierToolRegistry:
             mutates_canvas=True,
         ),
         _execute_attach_reference_node,
+    )
+    registry.register(
+        AtelierToolSpec(
+            name="canvas.createRegion",
+            description="Create a region (board) container on the canvas. Child nodes attach via canvas.attachToRegion. Regions cannot nest in v1.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "color": {"type": "string"},
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                    "width": {"type": "number"},
+                    "height": {"type": "number"},
+                },
+            },
+            required_permission=CANVAS_WRITE_PERMISSION,
+            mutates_canvas=True,
+            max_count_cost=1,
+        ),
+        _execute_create_region,
+    )
+    registry.register(
+        AtelierToolSpec(
+            name="canvas.attachToRegion",
+            description="Attach an existing canvas node to a region (sets data.region_id). Errors if region_id does not reference a region, or if the target is itself a region.",
+            input_schema={
+                "type": "object",
+                "required": ["node_id", "region_id"],
+                "properties": {
+                    "node_id": {"type": "string"},
+                    "region_id": {"type": "string"},
+                },
+            },
+            required_permission=CANVAS_WRITE_PERMISSION,
+            mutates_canvas=True,
+        ),
+        _execute_attach_to_region,
+    )
+    registry.register(
+        AtelierToolSpec(
+            name="canvas.detachFromRegion",
+            description="Detach a node from any region it is currently attached to. No-op if not attached.",
+            input_schema={
+                "type": "object",
+                "required": ["node_id"],
+                "properties": {"node_id": {"type": "string"}},
+            },
+            required_permission=CANVAS_WRITE_PERMISSION,
+            mutates_canvas=True,
+        ),
+        _execute_detach_from_region,
     )
     registry.register(
         AtelierToolSpec(

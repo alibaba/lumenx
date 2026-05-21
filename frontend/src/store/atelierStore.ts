@@ -11,6 +11,7 @@ import {
     type AtelierProject,
     type RunAtelierAgentTurnPayload,
 } from "@/lib/api";
+import { computeRegionBoundsForNodes } from "@/components/atelier/v3/regionGeometry";
 
 interface AtelierStore {
     projects: AtelierProject[];
@@ -49,6 +50,28 @@ interface AtelierStore {
     createCommentNode: (body?: string) => Promise<AtelierNode>;
     deleteAtelierNode: (nodeId: string) => Promise<void>;
     branchFromCandidate: (parentId: string, candidateId: string) => Promise<AtelierNode>;
+    /** Region (B-α): create a region node — a type:"region" container.
+     *  When `wrap` is given, the new region's bounds are computed from
+     *  the union bounding box of those nodes (with padding) and each
+     *  is attached via `attachToRegion`. */
+    createRegion: (opts: {
+        title: string;
+        color?: string;
+        wrap?: string[];
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+    }) => Promise<AtelierNode>;
+    /** Set `data.region_id` on the given node, preserving existing data. */
+    attachToRegion: (nodeId: string, regionId: string) => Promise<AtelierNode>;
+    /** Clear `data.region_id` on the given node. */
+    detachFromRegion: (nodeId: string) => Promise<AtelierNode>;
+    /** Move the region by (dx, dy), and translate every attached child
+     *  by the same delta so the contents follow the container. Sibling
+     *  nodes (no `data.region_id` or attached to a different region)
+     *  are unaffected. */
+    moveRegion: (regionId: string, dx: number, dy: number) => Promise<void>;
     updateNode: (nodeId: string, patch: Partial<AtelierNode>) => Promise<AtelierNode>;
     uploadReferenceImage: (nodeId: string, file: File) => Promise<AtelierNode>;
     attachReferenceNode: (videoNodeId: string, imageNodeId: string) => Promise<AtelierNode>;
@@ -390,6 +413,25 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
         const project = await get().ensureProject();
         if (!isNodeInProject(project, nodeId)) return;
         const target = project.nodes.find((n) => n.id === nodeId);
+        // Region cascade (B-α): when deleting a region, the contained
+        // child nodes survive — they just lose their region_id binding.
+        // We detach BEFORE deletion so the children never spend a tick
+        // pointing at a vanished region. Sorted by id for deterministic
+        // call order in tests.
+        if (target?.type === "region") {
+            const children = project.nodes
+                .filter((n) => (n.data as { region_id?: string })?.region_id === nodeId)
+                .sort((a, b) => a.id.localeCompare(b.id));
+            for (const child of children) {
+                try {
+                    await get().detachFromRegion(child.id);
+                } catch {
+                    // Best effort — partial detach still allows delete to
+                    // proceed; orphaned region_id will be cleaned up on
+                    // the next user edit of the child.
+                }
+            }
+        }
         // Cascade: if this is an image node, scan every video draft for a
         // reference back to it (via reference_node_ids OR reference_image_urls
         // matching the image's media_urls) and detach those references BEFORE
@@ -506,6 +548,135 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             currentProject: state.currentProject ? replaceNode(state.currentProject, node) : state.currentProject,
         }));
         return node;
+    },
+
+    createRegion: async (opts) => {
+        const project = await get().ensureProject();
+        // Bounds: derived from wrap selection, or default size offset by
+        // existing nodes (matches the cascade pattern used by createIdeaNode
+        // / createCommentNode for "user keeps clicking add").
+        const wrapIds = opts.wrap ?? [];
+        const wrapNodes = wrapIds
+            .map((id) => project.nodes.find((n) => n.id === id))
+            .filter((n): n is AtelierNode => !!n);
+        let x = opts.x ?? 80 + project.nodes.length * 24;
+        let y = opts.y ?? 80 + project.nodes.length * 24;
+        let width = opts.width ?? 600;
+        let height = opts.height ?? 400;
+        if (wrapNodes.length > 0) {
+            const bounds = computeRegionBoundsForNodes(
+                wrapNodes.map((n) => ({
+                    id: n.id,
+                    type: n.type,
+                    x: n.x,
+                    y: n.y,
+                    width: n.width,
+                    height: n.height,
+                })),
+            );
+            if (bounds) {
+                x = bounds.x;
+                y = bounds.y;
+                width = bounds.width;
+                height = bounds.height;
+            }
+        }
+        const region = await api.createAtelierNode(project.id, {
+            type: "region",
+            title: opts.title,
+            status: "completed",
+            x,
+            y,
+            width,
+            height,
+            data: { color: opts.color ?? "default" },
+        });
+        set((state) => ({
+            currentProject: state.currentProject?.id === region.project_id
+                ? { ...state.currentProject, nodes: [...state.currentProject.nodes, region] }
+                : state.currentProject,
+            selectedNodeId: state.currentProject?.id === region.project_id ? region.id : state.selectedNodeId,
+        }));
+        // Attach wrapped nodes one by one so each respects the same
+        // store update path used by drag-drop spatial attach.
+        for (const child of wrapNodes) {
+            try {
+                await get().attachToRegion(child.id, region.id);
+            } catch {
+                // Best effort — partial wrap is recoverable, the user can
+                // drag missed nodes in. Surfacing toast here would mask
+                // the original creation success.
+            }
+        }
+        return region;
+    },
+
+    attachToRegion: async (nodeId, regionId) => {
+        const project = await get().ensureProject();
+        const node = project.nodes.find((n) => n.id === nodeId);
+        if (!node) throw new Error("Atelier node not found");
+        const updated = await api.updateAtelierNode(project.id, nodeId, {
+            data: { ...(node.data ?? {}), region_id: regionId },
+        });
+        set((state) => ({
+            currentProject: state.currentProject
+                ? replaceNode(state.currentProject, updated)
+                : state.currentProject,
+        }));
+        return updated;
+    },
+
+    detachFromRegion: async (nodeId) => {
+        const project = await get().ensureProject();
+        const node = project.nodes.find((n) => n.id === nodeId);
+        if (!node) throw new Error("Atelier node not found");
+        // Build a new data object without region_id. Backend update
+        // replaces the data dict whole (see pipeline.update_atelier_node),
+        // so we need to omit the key, not set it to null.
+        const nextData: Record<string, unknown> = { ...(node.data ?? {}) };
+        delete nextData.region_id;
+        const updated = await api.updateAtelierNode(project.id, nodeId, {
+            data: nextData,
+        });
+        set((state) => ({
+            currentProject: state.currentProject
+                ? replaceNode(state.currentProject, updated)
+                : state.currentProject,
+        }));
+        return updated;
+    },
+
+    moveRegion: async (regionId, dx, dy) => {
+        if (dx === 0 && dy === 0) return;
+        const project = await get().ensureProject();
+        const region = project.nodes.find((n) => n.id === regionId);
+        if (!region) throw new Error("Atelier region not found");
+        const children = project.nodes.filter(
+            (n) => (n.data as { region_id?: string })?.region_id === regionId,
+        );
+        // Issue updates in parallel — they're independent rows on the
+        // server side. The server save lock serializes them anyway.
+        const updates: Array<Promise<AtelierNode>> = [];
+        updates.push(
+            api.updateAtelierNode(project.id, region.id, {
+                x: region.x + dx,
+                y: region.y + dy,
+            }),
+        );
+        for (const child of children) {
+            updates.push(
+                api.updateAtelierNode(project.id, child.id, {
+                    x: child.x + dx,
+                    y: child.y + dy,
+                }),
+            );
+        }
+        const updatedNodes = await Promise.all(updates);
+        set((state) => ({
+            currentProject: state.currentProject
+                ? replaceNodes(state.currentProject, updatedNodes)
+                : state.currentProject,
+        }));
     },
 
     uploadReferenceImage: async (nodeId, file) => {

@@ -27,6 +27,13 @@ import {
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
+import { RegionFrame } from "@/components/atelier/v3/RegionFrame";
+import {
+  findRegionAtPoint,
+  readRegionId,
+  regionsFromNodes,
+  type RegionLike,
+} from "@/components/atelier/v3/regionGeometry";
 import { VIDEO_I2V_MODELS } from "@/lib/modelCatalog";
 import {
   // Pure helpers + node renderers extracted to keep this file under
@@ -820,6 +827,38 @@ export function AtelierShellV3() {
           setCommandPaletteOpen(true);
           return;
         }
+        if (key === "g") {
+          // Cmd+G = group selection into a region (B-α). Mirrors Figma's
+          // "Group" convention. With nothing selected, fall through (the
+          // browser's "find next" default doesn't apply here anyway since
+          // we're not in a find dialog).
+          if (allSelectedIds.size === 0) return;
+          e.preventDefault();
+          const proj = useAtelierStore.getState().currentProject;
+          if (!proj) return;
+          const wrap = Array.from(allSelectedIds).filter((id) => {
+            // Skip virtual candidates (they aren't real persisted nodes)
+            // and skip regions themselves (no nesting in v1).
+            if (parseCandidateNodeId(id)) return false;
+            const n = proj.nodes.find((x) => x.id === id);
+            return n && n.type !== "region";
+          });
+          if (wrap.length === 0) {
+            pushToast("info", "Select at least one non-region node to group.");
+            return;
+          }
+          void useAtelierStore.getState()
+            .createRegion({ title: "Region", wrap })
+            .then((region) => {
+              selectNode(region.id);
+              setExtraSelectedIds(new Set());
+              pushToast("info", `Grouped ${wrap.length} node${wrap.length === 1 ? "" : "s"} into a region.`);
+            })
+            .catch((err: unknown) =>
+              pushToast("error", `Group failed: ${err instanceof Error ? err.message : String(err)}`),
+            );
+          return;
+        }
       }
 
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1049,8 +1088,41 @@ export function AtelierShellV3() {
     startPointerX: number;
     startPointerY: number;
     moved: boolean;
+    /** B-α: when true (Cmd/Ctrl held at drag start), skip the spatial
+     *  region attach/detach that would otherwise happen at commit. Lets
+     *  the user route a node *across* a region without it being eaten. */
+    suppressRegion: boolean;
+    /** B-α: when the dragged node is itself a region, this carries the
+     *  starting positions of every child node attached to it. Each tick
+     *  applies the same delta to those children, so dragging the title
+     *  bar visually moves the whole "board" as one. Empty when the
+     *  drag target is not a region. */
+    regionChildren: Array<{ nodeId: string; startWorldX: number; startWorldY: number }>;
   } | null>(null);
   const panDragRef = useRef<{ startX: number; startY: number; startPanX: number; startPanY: number } | null>(null);
+
+  // B-α: region resize ref. Captured at corner-handle pointerdown, used
+  // by the move handler to compute the new bbox. Anchor coords identify
+  // which corner stays fixed while the opposite corner follows the
+  // pointer. Commit on pointerup pushes one history entry covering the
+  // whole resize (so undo restores both bounds and any side effects).
+  const regionResizeRef = useRef<{
+    regionId: string;
+    corner: "nw" | "ne" | "sw" | "se";
+    anchorX: number;
+    anchorY: number;
+    startX: number;
+    startY: number;
+    startWidth: number;
+    startHeight: number;
+    startPointerX: number;
+    startPointerY: number;
+    moved: boolean;
+  } | null>(null);
+  /** Smallest practical region. Anything below this is hard to title-bar
+   *  drag and the corner handles overlap. */
+  const REGION_MIN_W = 160;
+  const REGION_MIN_H = 100;
 
   // Group drag — when the user starts dragging a node that's part of a
   // multi-selection (size > 1), every other real node in the selection moves
@@ -1336,6 +1408,39 @@ export function AtelierShellV3() {
       }
       return;
     }
+    // B-α: region resize. Active corner stays fixed (anchor); opposite
+    // corner follows the pointer. Width/height clamp to MIN constants so
+    // a frantic drag can't collapse the region into a 0×0 box.
+    if (regionResizeRef.current) {
+      const r = regionResizeRef.current;
+      const dx = event.clientX - r.startPointerX;
+      const dy = event.clientY - r.startPointerY;
+      if (Math.abs(dx) + Math.abs(dy) > 3) r.moved = true;
+      const wd = screenDeltaToWorld(dx, dy);
+      const wantsLeft = r.corner === "nw" || r.corner === "sw";
+      const wantsTop = r.corner === "nw" || r.corner === "ne";
+      let newX = r.startX;
+      let newY = r.startY;
+      let newW = r.startWidth;
+      let newH = r.startHeight;
+      if (wantsLeft) {
+        const proposedX = Math.min(r.anchorX - REGION_MIN_W, r.startX + wd.x);
+        newX = proposedX;
+        newW = r.anchorX - proposedX;
+      } else {
+        newW = Math.max(REGION_MIN_W, r.startWidth + wd.x);
+      }
+      if (wantsTop) {
+        const proposedY = Math.min(r.anchorY - REGION_MIN_H, r.startY + wd.y);
+        newY = proposedY;
+        newH = r.anchorY - proposedY;
+      } else {
+        newH = Math.max(REGION_MIN_H, r.startHeight + wd.y);
+      }
+      const store = useAtelierStore.getState();
+      store.resizeNodeLocal(r.regionId, newX, newY, newW, newH);
+      return;
+    }
     // Node drag
     if (nodeDragRef.current) {
       const dx = event.clientX - nodeDragRef.current.startPointerX;
@@ -1345,7 +1450,21 @@ export function AtelierShellV3() {
       const newY = snap(nodeDragRef.current.startWorldY + wd.y);
       if (Math.abs(dx) + Math.abs(dy) > 3) nodeDragRef.current.moved = true;
       // Optimistic local update
-      useAtelierStore.getState().moveNodeLocal(nodeDragRef.current.nodeId, newX, newY);
+      const store = useAtelierStore.getState();
+      store.moveNodeLocal(nodeDragRef.current.nodeId, newX, newY);
+      // B-α: if the dragged node is a region, slide its children by the
+      // same delta so the whole board moves as one unit.
+      if (nodeDragRef.current.regionChildren.length > 0) {
+        const regionDx = newX - nodeDragRef.current.startWorldX;
+        const regionDy = newY - nodeDragRef.current.startWorldY;
+        for (const child of nodeDragRef.current.regionChildren) {
+          store.moveNodeLocal(
+            child.nodeId,
+            snap(child.startWorldX + regionDx),
+            snap(child.startWorldY + regionDy),
+          );
+        }
+      }
     }
   };
 
@@ -1417,19 +1536,105 @@ export function AtelierShellV3() {
       }
       return;
     }
+    // B-α: region resize commit. Pushes a single history entry as a
+    // bounds change, then commits to the server.
+    if (regionResizeRef.current) {
+      const r = regionResizeRef.current;
+      regionResizeRef.current = null;
+      if (r.moved) {
+        const store = useAtelierStore.getState();
+        const real = store.currentProject?.nodes.find((n) => n.id === r.regionId);
+        if (real) {
+          void store
+            .commitNodeBounds(r.regionId, real.x, real.y, real.width || r.startWidth, real.height || r.startHeight)
+            .catch(() => { /* save chip surfaces */ });
+        }
+      }
+      return;
+    }
     if (nodeDragRef.current) {
       const drag = nodeDragRef.current;
       nodeDragRef.current = null;
       if (drag.moved) {
-        const real = useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === drag.nodeId);
+        const store = useAtelierStore.getState();
+        const real = store.currentProject?.nodes.find((n) => n.id === drag.nodeId);
         if (real) {
-          pushHistory({
-            kind: "move",
-            entries: [{ nodeId: drag.nodeId, prevX: drag.startWorldX, prevY: drag.startWorldY, nextX: real.x, nextY: real.y }],
-          });
-          void useAtelierStore.getState().commitNodePosition(drag.nodeId, real.x, real.y).catch(() => {});
+          // B-α: history entry covers the region itself plus every child
+          // (so a single undo restores the whole board to its pre-drag
+          // layout in one step).
+          const entries: MoveEntry[] = [{
+            nodeId: drag.nodeId,
+            prevX: drag.startWorldX,
+            prevY: drag.startWorldY,
+            nextX: real.x,
+            nextY: real.y,
+          }];
+          void store.commitNodePosition(drag.nodeId, real.x, real.y).catch(() => {});
+          for (const child of drag.regionChildren) {
+            const liveChild = store.currentProject?.nodes.find((n) => n.id === child.nodeId);
+            if (!liveChild) continue;
+            entries.push({
+              nodeId: child.nodeId,
+              prevX: child.startWorldX,
+              prevY: child.startWorldY,
+              nextX: liveChild.x,
+              nextY: liveChild.y,
+            });
+            void store.commitNodePosition(child.nodeId, liveChild.x, liveChild.y).catch(() => {});
+          }
+          pushHistory({ kind: "move", entries });
+          // Spatial region attach/detach. When the dragged node's center
+          // now lies inside a different region than before, sync binding
+          // to match. Skip when:
+          //   - the node itself is a region (no nesting)
+          //   - the user held Cmd at drag start (suppressRegion)
+          if (!drag.suppressRegion && real.type !== "region") {
+            void applySpatialRegionAttach(real.id);
+          }
         }
       }
+    }
+  };
+
+  /** Compute the region a node currently lies in (by center hit-test)
+   *  and reconcile its `data.region_id` to match. No-op when the node's
+   *  binding is already correct. Used after drag commit. */
+  const applySpatialRegionAttach = async (nodeId: string) => {
+    const proj = useAtelierStore.getState().currentProject;
+    if (!proj) return;
+    const node = proj.nodes.find((n) => n.id === nodeId);
+    if (!node || node.type === "region") return;
+    const regions = regionsFromNodes(proj.nodes);
+    if (regions.length === 0) {
+      // No regions exist — only thing to do is make sure we're not
+      // pointing at a phantom region (cleanup of legacy data).
+      const stale = readRegionId(node);
+      if (stale) {
+        try {
+          await useAtelierStore.getState().detachFromRegion(nodeId);
+        } catch { /* best-effort */ }
+      }
+      return;
+    }
+    const w = node.width ?? 0;
+    const h = node.height ?? 0;
+    const cx = node.x + w / 2;
+    const cy = node.y + h / 2;
+    const target = findRegionAtPoint({ x: cx, y: cy }, regions as RegionLike[]);
+    const current = readRegionId(node);
+    const targetId = target?.id ?? null;
+    if (current === targetId) return;
+    try {
+      if (targetId) {
+        await useAtelierStore.getState().attachToRegion(nodeId, targetId);
+      } else {
+        await useAtelierStore.getState().detachFromRegion(nodeId);
+      }
+    } catch (err) {
+      pushToast(
+        "error",
+        `Region binding failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   };
 
@@ -1665,6 +1870,15 @@ export function AtelierShellV3() {
 
     // Don't drag virtual candidates (they're derived); selection still fires.
     if (parseCandidateNodeId(node.id)) return;
+    // B-α: when starting a region drag, capture every attached child's
+    // current position so the move handler can translate them by the
+    // same delta on each tick.
+    const regionChildren: Array<{ nodeId: string; startWorldX: number; startWorldY: number }> =
+      node.type === "region"
+        ? (useAtelierStore.getState().currentProject?.nodes ?? [])
+            .filter((n) => (n.data as { region_id?: string })?.region_id === node.id)
+            .map((n) => ({ nodeId: n.id, startWorldX: n.x, startWorldY: n.y }))
+        : [];
     nodeDragRef.current = {
       nodeId: node.id,
       startWorldX: node.x,
@@ -1672,6 +1886,13 @@ export function AtelierShellV3() {
       startPointerX: event.clientX,
       startPointerY: event.clientY,
       moved: false,
+      // B-α: capture Cmd/Ctrl held state at drag start so we can decide
+      // at commit whether to run spatial region attach/detach. We snapshot
+      // it here (not at pointerup) because the user might release Cmd
+      // mid-drag yet still expect "I started this drag with Cmd held →
+      // don't eat my node."
+      suppressRegion: !!(event.metaKey || event.ctrlKey),
+      regionChildren,
     };
   };
 
@@ -2814,6 +3035,23 @@ export function AtelierShellV3() {
               },
             },
             {
+              key: "region",
+              title: "Region",
+              shortcut: "G",
+              desc: "Group nodes into a creation board.",
+              onPick: () => {
+                // B-α: a fresh empty region at default size. The user
+                // either drags nodes in afterward (spatial attach) or
+                // multi-selects + presses Cmd+G to wrap in one shot.
+                void useAtelierStore.getState()
+                  .createRegion({ title: "Region" })
+                  .catch((err: unknown) =>
+                    pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`),
+                  );
+                setActiveRailMode(null);
+              },
+            },
+            {
               key: "script",
               title: "Script",
               shortcut: "T",
@@ -3544,6 +3782,104 @@ export function AtelierShellV3() {
               </>
             );
           })()}
+
+          {/* Region frames (B-α) — translucent containers. Rendered
+              BEFORE nodes so they sit underneath in DOM order, and at
+              a lower z-index (4) so child nodes paint on top. The title
+              bar sits at the top of the region body and uses node-drag
+              infra (handleNodePointerDown) so the rest of the drag
+              pipeline — multi-select, history, snap-to-grid — keeps
+              working without a parallel handler. */}
+          {(project?.nodes ?? [])
+            .filter((n) => n.type === "region")
+            .map((node) => {
+              const isSelected = allSelectedIds.has(node.id);
+              const isBeingDragged =
+                nodeDragRef.current?.nodeId === node.id ||
+                groupDragRef.current?.members.some((m) => m.nodeId === node.id);
+              const childCount = (project?.nodes ?? []).filter(
+                (n) => (n.data as { region_id?: string })?.region_id === node.id,
+              ).length;
+              const colorRaw = (node.data as { color?: unknown })?.color;
+              const color = (typeof colorRaw === "string" ? colorRaw : "default") as
+                | "default" | "cyan" | "rose" | "amber" | "violet" | "emerald" | "slate";
+              return (
+                <div
+                  key={node.id}
+                  data-atelier-region={node.id}
+                  className="absolute"
+                  style={{
+                    inset: 0,
+                    pointerEvents: "none",
+                    // Selected region pops above unselected siblings but
+                    // still sits BELOW non-region nodes (z=10) so child
+                    // media never gets visually swallowed. Drag bumps to
+                    // 6 so the moving frame clears any other region.
+                    zIndex: isBeingDragged ? 6 : isSelected ? 5 : 4,
+                  }}
+                >
+                  <div style={{ pointerEvents: "auto" }}>
+                    <RegionFrame
+                      id={node.id}
+                      x={node.x}
+                      y={node.y}
+                      width={node.width || 600}
+                      height={node.height || 400}
+                      title={node.title}
+                      color={color}
+                      selected={isSelected}
+                      childCount={childCount}
+                      onSelect={(id) => selectNode(id)}
+                      onMoveStart={(_regionId, event) => {
+                        // Reuse the unified node-drag pipeline. Pretend
+                        // the title bar press IS a press on the region
+                        // node itself — handleNodePointerDown will set
+                        // nodeDragRef and selection state correctly.
+                        handleNodePointerDown(event, node);
+                      }}
+                      onResizeStart={(_regionId, corner, event) => {
+                        // Anchor coords identify which corner stays put
+                        // during the drag. The opposite corner is the
+                        // pointer's target. Capture starting bounds so
+                        // the move handler can compute deltas without
+                        // re-reading store state every tick.
+                        const w = node.width || 600;
+                        const h = node.height || 400;
+                        const anchorX = corner === "ne" || corner === "se" ? node.x : node.x + w;
+                        const anchorY = corner === "sw" || corner === "se" ? node.y : node.y + h;
+                        regionResizeRef.current = {
+                          regionId: node.id,
+                          corner,
+                          anchorX,
+                          anchorY,
+                          startX: node.x,
+                          startY: node.y,
+                          startWidth: w,
+                          startHeight: h,
+                          startPointerX: event.clientX,
+                          startPointerY: event.clientY,
+                          moved: false,
+                        };
+                        if (!allSelectedIds.has(node.id)) selectNode(node.id);
+                      }}
+                      onTitleCommit={(next) => {
+                        void useAtelierStore
+                          .getState()
+                          .updateNode(node.id, { title: next })
+                          .catch(() => {/* save chip surfaces failures */});
+                      }}
+                      onContextMenu={(_regionId, screenX, screenY) => {
+                        if (!allSelectedIds.has(node.id)) {
+                          selectNode(node.id);
+                          if (extraSelectedIds.size > 0) setExtraSelectedIds(new Set());
+                        }
+                        setContextMenu({ screenX, screenY, node });
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
 
           {/* nodes — each wrapped in a drag-aware div. Use *Capture* phase
               because v3 leaf nodes stopPropagation in their own onPointerDown
