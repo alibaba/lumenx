@@ -27,7 +27,11 @@ import {
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
-import { RegionFrame } from "@/components/atelier/v3/RegionFrame";
+import {
+  RegionFrame,
+  REGION_COLLAPSED_WIDTH,
+  REGION_COLLAPSED_HEIGHT,
+} from "@/components/atelier/v3/RegionFrame";
 import {
   findRegionAtPoint,
   readRegionId,
@@ -1604,7 +1608,16 @@ export function AtelierShellV3() {
     if (!proj) return;
     const node = proj.nodes.find((n) => n.id === nodeId);
     if (!node || node.type === "region") return;
-    const regions = regionsFromNodes(proj.nodes);
+    // B-β: collapsed regions hit-test against their compact bounds
+    // (200×80 from RegionFrame), not the stored expanded bounds.
+    // Otherwise dropping a node "next to" a collapsed mini-tile would
+    // land it in a phantom 600×400 area extending off-screen, which
+    // breaks the visual contract.
+    const regions = regionsFromNodes(proj.nodes).map((r) => {
+      const isCollapsed = ((r.data as { collapsed?: unknown })?.collapsed) === true;
+      if (!isCollapsed) return r;
+      return { ...r, width: REGION_COLLAPSED_WIDTH, height: REGION_COLLAPSED_HEIGHT };
+    });
     if (regions.length === 0) {
       // No regions exist — only thing to do is make sure we're not
       // pointing at a phantom region (cleanup of legacy data).
@@ -3797,12 +3810,34 @@ export function AtelierShellV3() {
               const isBeingDragged =
                 nodeDragRef.current?.nodeId === node.id ||
                 groupDragRef.current?.members.some((m) => m.nodeId === node.id);
-              const childCount = (project?.nodes ?? []).filter(
+              const childNodes = (project?.nodes ?? []).filter(
                 (n) => (n.data as { region_id?: string })?.region_id === node.id,
-              ).length;
+              );
+              const childCount = childNodes.length;
               const colorRaw = (node.data as { color?: unknown })?.color;
               const color = (typeof colorRaw === "string" ? colorRaw : "default") as
                 | "default" | "cyan" | "rose" | "amber" | "violet" | "emerald" | "slate";
+              // B-β: collapsed state lives in data.collapsed so it
+              // persists per-project and across sessions.
+              const collapsed = ((node.data as { collapsed?: unknown })?.collapsed) === true;
+              // B-β: aggregate child statuses into a single badge tone.
+              // Priority: failed > processing/pending > completed > idle.
+              // We treat draft as idle (the child has been created but
+              // the user hasn't run anything yet).
+              const statusBadge: "idle" | "processing" | "completed" | "failed" = (() => {
+                if (childNodes.some((c) => c.status === "failed")) return "failed";
+                if (childNodes.some((c) => c.status === "processing" || c.status === "pending")) return "processing";
+                if (childNodes.some((c) => c.status === "completed")) return "completed";
+                return "idle";
+              })();
+              // B-β: thumbnails — first 3 child media URLs (image or
+              // video). Sort by created_at desc so the latest-touched
+              // ones surface, mirroring how creators recall regions.
+              const thumbnails = childNodes
+                .filter((c) => (c.type === "image" || c.type === "video") && (c.media_urls?.length ?? 0) > 0)
+                .sort((a, b) => b.created_at - a.created_at)
+                .slice(0, 3)
+                .map((c) => getAssetUrl(c.media_urls[0]));
               return (
                 <div
                   key={node.id}
@@ -3829,6 +3864,25 @@ export function AtelierShellV3() {
                       color={color}
                       selected={isSelected}
                       childCount={childCount}
+                      collapsed={collapsed}
+                      statusBadge={statusBadge}
+                      thumbnails={thumbnails}
+                      onToggleCollapse={(rid) => {
+                        // Persist the toggle to data.collapsed so the
+                        // state survives reload + propagates to anyone
+                        // else viewing the project.
+                        void useAtelierStore
+                          .getState()
+                          .updateNode(rid, {
+                            data: { ...(node.data ?? {}), collapsed: !collapsed },
+                          })
+                          .catch((err: unknown) =>
+                            pushToast(
+                              "error",
+                              `Collapse failed: ${err instanceof Error ? err.message : String(err)}`,
+                            ),
+                          );
+                      }}
                       onSelect={(id) => selectNode(id)}
                       onMoveStart={(_regionId, event) => {
                         // Reuse the unified node-drag pipeline. Pretend
@@ -3905,7 +3959,22 @@ export function AtelierShellV3() {
             const draggingIds = new Set<string>();
             if (nodeDragRef.current) draggingIds.add(nodeDragRef.current.nodeId);
             if (groupDragRef.current) for (const m of groupDragRef.current.members) draggingIds.add(m.nodeId);
+            // B-β: hide nodes whose parent region is collapsed. The
+            // region's mini-tile stands in visually; children appear
+            // again when the user expands. Built as a Set so the inner
+            // filter stays O(1).
+            const collapsedRegionIds = new Set<string>();
+            for (const n of project?.nodes ?? []) {
+              if (n.type === "region" && ((n.data as { collapsed?: unknown })?.collapsed) === true) {
+                collapsedRegionIds.add(n.id);
+              }
+            }
             return (project?.nodes ?? []).filter((n) => {
+              // Regions themselves render through the dedicated region
+              // layer above — skip here regardless of cull state.
+              if (n.type === "region") return false;
+              const rid = (n.data as { region_id?: string })?.region_id;
+              if (rid && collapsedRegionIds.has(rid)) return false;
               if (allSelectedIds.has(n.id) || hoveredNodeId === n.id || draggingIds.has(n.id)) return true;
               const nx2 = n.x + (n.width || 240);
               const ny2 = n.y + (n.height || 110);
@@ -4383,6 +4452,24 @@ export function AtelierShellV3() {
                   if (parseCandidateNodeId(id)) continue;
                   const n = project?.nodes.find((nn) => nn.id === id);
                   if (n) selectedReal.push(n);
+                }
+                // B-β: when the user has just a region selected, treat
+                // "save as workflow" as "save this region's children"
+                // — the region itself is a container; the template
+                // value comes from what's inside it. We drop the region
+                // node from the set (it's not a templatable type) and
+                // expand to include every node bound to it.
+                if (selectedReal.length === 1 && selectedReal[0].type === "region") {
+                  const region = selectedReal[0];
+                  const children = (project?.nodes ?? []).filter(
+                    (n) => (n.data as { region_id?: string })?.region_id === region.id,
+                  );
+                  selectedReal.length = 0;
+                  selectedReal.push(...children);
+                  if (selectedReal.length === 0) {
+                    pushToast("info", "Region is empty — drop nodes in first, then save.");
+                    return;
+                  }
                 }
                 if (selectedReal.length === 0) {
                   pushToast("info", "Select at least one real node to save.");
@@ -5301,6 +5388,108 @@ export function AtelierShellV3() {
             },
             disabled: (project?.nodes.length ?? 0) === 0,
           });
+        } else if (node.type === "region") {
+          // B-β: region-specific context menu. Save-as-workflow expands
+          // to children; collapse/expand toggles data.collapsed; delete
+          // cascades via store.deleteAtelierNode (children survive).
+          const collapsed = ((node.data as { collapsed?: unknown })?.collapsed) === true;
+          const children = (project?.nodes ?? []).filter(
+            (n) => (n.data as { region_id?: string })?.region_id === node.id,
+          );
+          items.push({
+            label: collapsed ? "Expand" : "Collapse",
+            onClick: () => {
+              void useAtelierStore
+                .getState()
+                .updateNode(node.id, {
+                  data: { ...(node.data ?? {}), collapsed: !collapsed },
+                })
+                .catch(() => { /* save chip surfaces */ });
+              close();
+            },
+          });
+          items.push({
+            label: "Save as workflow…",
+            onClick: () => {
+              askPrompt({
+                title: "Save region as workflow",
+                description: `${children.length} child node${children.length === 1 ? "" : "s"}. Saved to your browser only.`,
+                placeholder: "Workflow name",
+                initialValue: node.title || "Region workflow",
+                submitLabel: "Save",
+                onSubmit: (name) => {
+                  const trimmed = name.trim() || "Untitled workflow";
+                  const allowedKinds: ReadonlyArray<TemplateNode["type"]> = [
+                    "image",
+                    "video",
+                    "idea",
+                    "comment",
+                  ];
+                  const minX = children.length ? Math.min(...children.map((n) => n.x)) : 0;
+                  const minY = children.length ? Math.min(...children.map((n) => n.y)) : 0;
+                  const tnodes: TemplateNode[] = children
+                    .filter((n): n is AtelierNode & { type: TemplateNode["type"] } =>
+                      allowedKinds.includes(n.type as TemplateNode["type"]),
+                    )
+                    .map((n) => ({
+                      localId: n.id,
+                      type: n.type as TemplateNode["type"],
+                      x: Math.round(n.x - minX),
+                      y: Math.round(n.y - minY),
+                      title: n.title || undefined,
+                      data: (() => {
+                        const out: Record<string, unknown> = {};
+                        const d = (n.data ?? {}) as Record<string, unknown>;
+                        for (const k of ["intent", "model", "config_summary", "prompt", "body"]) {
+                          if (k in d) out[k] = d[k];
+                        }
+                        return out;
+                      })(),
+                    }));
+                  if (tnodes.length === 0) {
+                    pushToast("info", "Region has no templatable children yet.");
+                    return;
+                  }
+                  const childIdSet = new Set(children.map((n) => n.id));
+                  const tedges: TemplateEdge[] = [];
+                  for (const n of children) {
+                    const refIds = readStringArray(
+                      (n.data as { reference_node_ids?: unknown })?.reference_node_ids,
+                    );
+                    for (const rid of refIds) {
+                      if (childIdSet.has(rid)) {
+                        tedges.push({ from: rid, to: n.id, kind: "reference" });
+                      }
+                    }
+                  }
+                  const tpl: WorkflowTemplate = {
+                    id: `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+                    name: trimmed,
+                    category: "utility" as TemplateCategory,
+                    description: `Saved from region · ${new Date().toLocaleString()}`,
+                    tags: [`${tnodes.length} nodes`, ...(tedges.length > 0 ? [`${tedges.length} refs`] : [])],
+                    nodes: tnodes,
+                    edges: tedges,
+                  };
+                  appendUserWorkflow(tpl);
+                  pushToast("success", `Saved "${trimmed}" — find it in Workflows · Mine`);
+                },
+              });
+              close();
+            },
+            disabled: children.length === 0,
+          });
+          items.push({
+            label: "Delete region",
+            onClick: () => {
+              void useAtelierStore
+                .getState()
+                .deleteAtelierNode(node.id)
+                .catch(() => { /* save chip surfaces */ });
+              close();
+            },
+            danger: true,
+          });
         } else {
         const kind = selectionKindOf(node);
         if (kind === "draft") {
@@ -5722,14 +5911,35 @@ export function AtelierShellV3() {
         const close = () => setCommandPaletteOpen(false);
         const jumpTo = (node: AtelierNode) => {
           selectNode(node.id);
-          // Center the viewport on the node. Roughly: pan such that
-          // node's world-coords land at the visible center.
+          // B-β: when the user palette-navigates to a collapsed region,
+          // auto-expand it. They're clearly intent on working with it,
+          // and arriving at a mini-tile would be more friction than help.
+          const isCollapsedRegion =
+            node.type === "region" &&
+            ((node.data as { collapsed?: unknown })?.collapsed) === true;
+          if (isCollapsedRegion) {
+            void useAtelierStore
+              .getState()
+              .updateNode(node.id, {
+                data: { ...(node.data ?? {}), collapsed: false },
+              })
+              .catch(() => { /* save chip surfaces failures */ });
+          }
+          // Center the viewport on the node. For non-region or expanded
+          // region, use stored width/height. For collapsed regions we
+          // use the compact card dimensions for the center math so the
+          // mini-tile lands smack in the middle even though it'll
+          // expand a tick later.
           const rect = mainRef.current?.getBoundingClientRect();
           if (rect) {
             const targetScreenX = rect.width / 2;
             const targetScreenY = rect.height / 2;
-            const w = node.width || 240;
-            const h = node.height || 110;
+            const w = isCollapsedRegion
+              ? REGION_COLLAPSED_WIDTH
+              : (node.width || 240);
+            const h = isCollapsedRegion
+              ? REGION_COLLAPSED_HEIGHT
+              : (node.height || 110);
             const newPanX = targetScreenX - (node.x + w / 2) * zoomFactor;
             const newPanY = targetScreenY - (node.y + h / 2) * zoomFactor;
             setPanX(newPanX);

@@ -227,4 +227,170 @@ describe("RegionFrame", () => {
     fireEvent.pointerDown(screen.getByRole("group", { name: /region/i }));
     expect(parent).not.toHaveBeenCalled();
   });
+
+  // ── B-β: collapse / status / thumbnails ────────────────────────────
+
+  it("when collapsed renders a compact mini-tile, not the full bbox", () => {
+    const { container } = render(
+      <RegionFrame
+        id="r1"
+        x={100}
+        y={100}
+        width={800}
+        height={600}
+        title="Big region"
+        collapsed
+      />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    // Compact size: 200×80 (defined in component). The full 800×600 bbox
+    // is collapsed away so the region stops shouting on the canvas.
+    expect(root.style.width).toBe("200px");
+    expect(root.style.height).toBe("80px");
+    // Position is preserved so re-expanding lands at the original anchor.
+    expect(root.style.transform).toContain("translate(100px, 100px)");
+  });
+
+  it("when collapsed still shows the child count chip", () => {
+    render(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={600}
+        height={400}
+        title="X"
+        collapsed
+        childCount={4}
+      />,
+    );
+    expect(screen.getByTestId("region-child-count")).toHaveTextContent("4");
+  });
+
+  it("does not render resize handles when collapsed (even if selected)", () => {
+    render(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={600}
+        height={400}
+        title="X"
+        collapsed
+        selected
+        onResizeStart={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("region-handle-nw")).toBeNull();
+    expect(screen.queryByTestId("region-handle-se")).toBeNull();
+  });
+
+  it("renders a collapse toggle in the title bar; clicking fires onToggleCollapse", () => {
+    const onToggleCollapse = vi.fn();
+    render(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={400}
+        height={300}
+        title="X"
+        onToggleCollapse={onToggleCollapse}
+      />,
+    );
+    const toggle = screen.getByRole("button", { name: /collapse|expand/i });
+    fireEvent.click(toggle);
+    expect(onToggleCollapse).toHaveBeenCalledWith("r1");
+  });
+
+  it("toggle aria-label flips between Collapse and Expand based on state", () => {
+    const { rerender } = render(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={400}
+        height={300}
+        title="X"
+        onToggleCollapse={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /collapse/i })).toBeInTheDocument();
+    rerender(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={400}
+        height={300}
+        title="X"
+        collapsed
+        onToggleCollapse={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /expand/i })).toBeInTheDocument();
+  });
+
+  it("renders status badge tone based on statusBadge prop", () => {
+    const { rerender, container } = render(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={400}
+        height={300}
+        title="X"
+        statusBadge="processing"
+      />,
+    );
+    let badge = container.querySelector("[data-region-status]");
+    expect(badge?.getAttribute("data-region-status")).toBe("processing");
+    rerender(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={400}
+        height={300}
+        title="X"
+        statusBadge="failed"
+      />,
+    );
+    badge = container.querySelector("[data-region-status]");
+    expect(badge?.getAttribute("data-region-status")).toBe("failed");
+  });
+
+  it("renders thumbnail strip when collapsed and thumbnails provided", () => {
+    render(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={400}
+        height={300}
+        title="X"
+        collapsed
+        thumbnails={["a.png", "b.png", "c.png", "d.png"]}
+      />,
+    );
+    // Should show at most 3 thumbnails (compact card capacity).
+    const thumbs = screen.getAllByRole("img", { name: /thumb/i });
+    expect(thumbs.length).toBeLessThanOrEqual(3);
+    expect(thumbs.length).toBeGreaterThan(0);
+  });
+
+  it("thumbnail strip is hidden when not collapsed", () => {
+    render(
+      <RegionFrame
+        id="r1"
+        x={0}
+        y={0}
+        width={400}
+        height={300}
+        title="X"
+        thumbnails={["a.png", "b.png", "c.png"]}
+      />,
+    );
+    expect(screen.queryAllByRole("img", { name: /thumb/i })).toHaveLength(0);
+  });
 });

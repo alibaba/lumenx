@@ -1,22 +1,24 @@
 "use client";
 //
-// RegionFrame — the visual container for an Atelier region. Renders a
-// translucent dashed-border frame with a 28px title bar at top and
-// 4-corner resize handles. The frame is the container; child nodes are
-// rendered separately by the shell on top of (z-index higher than) the
-// region itself.
+// RegionFrame — visual container for an Atelier region.
 //
-// This component is presentation-only: it surfaces drag-start /
-// resize-start callbacks but doesn't track pointer movement itself.
-// AtelierShellV3 owns the drag math (so it shares the same pointer
-// loop used for normal node moves and can apply the world transform).
+// Two visual states:
+//   - Expanded (default): a translucent dashed-border frame with a
+//     28px title bar at top and 4-corner resize handles when selected.
+//     Child nodes are rendered separately (z-order higher) so they
+//     paint on top of the frame.
+//   - Collapsed (B-β): the same frame compresses to a fixed 200×80
+//     mini-tile at the same anchor position. Title + child-count chip
+//     + status dot + first-N thumbnails are still visible so the user
+//     can recognize the region at a glance. Resize handles disappear.
 //
-// Visual language follows DESIGN.md §6.x — quiet glass border at rest,
-// primary ring on selection, dashed perforation on the body to read as
-// "container, not ordinary node".
+// This component stays presentation-only. AtelierShellV3 owns the
+// pointer math for move/resize and the data flow for collapsed toggle
+// (persists as `data.collapsed` on the region node).
 
 import * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 export type RegionColor =
   | "default"
@@ -27,10 +29,22 @@ export type RegionColor =
   | "emerald"
   | "slate";
 
+export type RegionStatusBadge = "idle" | "processing" | "completed" | "failed";
+
+/** Compact card geometry used in collapsed state. Fixed so visually a
+ *  collapsed region always reads the same size regardless of how big it
+ *  was when expanded — that's the LibTV pattern. */
+export const REGION_COLLAPSED_WIDTH = 200;
+export const REGION_COLLAPSED_HEIGHT = 80;
+
 interface Props {
   id: string;
   x: number;
   y: number;
+  /** Stored full-size width/height. Used when expanded. When collapsed,
+   *  the component renders at REGION_COLLAPSED_WIDTH × _HEIGHT and the
+   *  stored values are preserved (the shell does not write them on
+   *  collapse — re-expanding restores the original frame). */
   width: number;
   height: number;
   title: string;
@@ -38,11 +52,20 @@ interface Props {
   selected?: boolean;
   /** Number of child nodes (data.region_id === this.id). Hidden when 0. */
   childCount?: number;
+  /** B-β: whether the region is currently collapsed to a mini-tile. */
+  collapsed?: boolean;
+  /** B-β: aggregated child-status used to color the status dot. */
+  statusBadge?: RegionStatusBadge;
+  /** B-β: media URLs to render in the collapsed mini-tile thumbnail
+   *  strip. Up to 3 are shown; pass already-resolved URLs (no further
+   *  transformation happens inside the component). */
+  thumbnails?: string[];
   onSelect?: (id: string) => void;
   onTitleCommit?: (next: string) => void;
+  /** B-β: toggle the collapsed state. Caller writes back to data.collapsed. */
+  onToggleCollapse?: (id: string) => void;
   /** Fired when user presses on the title bar. Caller wires the move
-   *  loop and calls store.moveRegion on commit. Args echo the event so
-   *  the caller can compute world coords. */
+   *  loop and calls store.moveRegion on commit. */
   onMoveStart?: (id: string, event: React.PointerEvent) => void;
   /** Fired when user presses on a corner handle. Args identify which
    *  corner so the caller can apply the right resize direction. */
@@ -55,8 +78,6 @@ interface Props {
   onContextMenu?: (id: string, clientX: number, clientY: number) => void;
 }
 
-/** Map of region color → tailwind accent classes. Default is the quiet
- *  white-on-glass look used by every other v3 chrome surface. */
 const COLOR_ACCENT: Record<RegionColor, string> = {
   default: "bg-white/[0.04] text-text-secondary",
   cyan: "bg-cyan-400/12 text-cyan-100",
@@ -75,6 +96,15 @@ const COLOR_BORDER: Record<RegionColor, string> = {
   violet: "border-violet-400/30",
   emerald: "border-emerald-400/30",
   slate: "border-slate-400/30",
+};
+
+const STATUS_DOT: Record<RegionStatusBadge, string> = {
+  // Subtle but recognizable. Processing gets an animate-pulse so the
+  // region's "I have work in flight" reads at a glance.
+  idle: "bg-white/35",
+  processing: "bg-blue-400/85 animate-pulse",
+  completed: "bg-emerald-400/85",
+  failed: "bg-red-400/85",
 };
 
 const HANDLE_BASE =
@@ -100,8 +130,12 @@ export function RegionFrame({
   color = "default",
   selected = false,
   childCount,
+  collapsed = false,
+  statusBadge,
+  thumbnails,
   onSelect,
   onTitleCommit,
+  onToggleCollapse,
   onMoveStart,
   onResizeStart,
   onContextMenu,
@@ -110,8 +144,6 @@ export function RegionFrame({
   const [draftTitle, setDraftTitle] = useState(title);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  // Re-sync local draft if the title prop changes underneath us (e.g.
-  // another tab updated the region).
   useEffect(() => {
     if (!editing) setDraftTitle(title);
   }, [title, editing]);
@@ -127,27 +159,28 @@ export function RegionFrame({
     setDraftTitle(title);
     setEditing(true);
   };
-
   const cancel = () => {
     setEditing(false);
     setDraftTitle(title);
   };
-
   const commit = () => {
     setEditing(false);
     if (draftTitle !== title) onTitleCommit?.(draftTitle);
   };
 
-  const ringClass = selected
-    ? "ring-2 ring-primary"
-    : "ring-1 ring-transparent";
-
+  const ringClass = selected ? "ring-2 ring-primary" : "ring-1 ring-transparent";
   const accent = COLOR_ACCENT[color];
   const border = COLOR_BORDER[color];
-
-  // The displayed title text — empty falls back to "Region" so the chrome
-  // never reads as a void rectangle in the wild.
   const displayedTitle = title.trim().length > 0 ? title : "Region";
+
+  // Render geometry: collapsed mode locks to the compact card.
+  const renderW = collapsed ? REGION_COLLAPSED_WIDTH : width;
+  const renderH = collapsed ? REGION_COLLAPSED_HEIGHT : height;
+
+  // Thumbnails strip in collapsed mode: cap at 3 to fit the 200px card
+  // with the title row above. We don't decorate or fetch — the shell
+  // resolves URLs (e.g. through getAssetUrl) before passing them in.
+  const visibleThumbs = collapsed ? (thumbnails ?? []).slice(0, 3) : [];
 
   return (
     <div
@@ -155,17 +188,14 @@ export function RegionFrame({
       aria-label={`Region: ${displayedTitle}`}
       data-region-id={id}
       data-region-color={color}
+      data-region-collapsed={collapsed ? "true" : "false"}
       className={`absolute select-none rounded-md border border-dashed ${border} bg-[#0c0c10]/30 backdrop-blur-[1px] transition-shadow ${ringClass}`}
       style={{
         transform: `translate(${x}px, ${y}px)`,
-        width: `${width}px`,
-        height: `${height}px`,
+        width: `${renderW}px`,
+        height: `${renderH}px`,
       }}
       onPointerDown={(e) => {
-        // Body pointerDown selects the region but DOES NOT initiate a
-        // move — title bar handles drag. This separation lets users
-        // click inside a region (e.g. on empty area) to select it
-        // without accidentally dragging it.
         e.stopPropagation();
         onSelect?.(id);
       }}
@@ -179,7 +209,7 @@ export function RegionFrame({
       {/* Title bar — draggable, inline-editable. h-7 (28px). */}
       <div
         data-testid="region-title-bar"
-        className={`flex h-7 items-center gap-2 rounded-t-md border-b border-dashed ${border} ${accent} px-2 cursor-grab active:cursor-grabbing`}
+        className={`flex h-7 items-center gap-1.5 rounded-t-md border-b border-dashed ${border} ${accent} px-1.5 cursor-grab active:cursor-grabbing`}
         onPointerDown={(e) => {
           e.stopPropagation();
           onMoveStart?.(id, e);
@@ -189,14 +219,38 @@ export function RegionFrame({
           if (!editing) startEditing();
         }}
       >
-        {/* Color dot — gives the user a quick visual id at glance even
-            when the title is faded. Color comes from the accent palette
-            so it matches the title bg. */}
-        <span
-          aria-hidden="true"
-          className={`h-2 w-2 rounded-full ${color === "default" ? "bg-white/40" : ""}`}
-          data-region-color-dot={color}
-        />
+        {/* B-β: collapse / expand toggle. Chevron-down when expanded
+            (action = collapse), chevron-right when collapsed (action =
+            expand). Aria-label flips so screen readers track state. */}
+        {onToggleCollapse ? (
+          <button
+            type="button"
+            aria-label={collapsed ? "Expand region" : "Collapse region"}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse(id);
+            }}
+            className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-text-muted hover:bg-white/[0.08] hover:text-foreground"
+          >
+            {collapsed ? <ChevronRight size={11} aria-hidden="true" /> : <ChevronDown size={11} aria-hidden="true" />}
+          </button>
+        ) : null}
+        {/* Color dot — quick visual id. The status badge (when set)
+            replaces it so the user gets the most informative signal. */}
+        {statusBadge ? (
+          <span
+            aria-hidden="true"
+            data-region-status={statusBadge}
+            className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[statusBadge]}`}
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className={`h-2 w-2 shrink-0 rounded-full ${color === "default" ? "bg-white/40" : ""}`}
+            data-region-color-dot={color}
+          />
+        )}
         {editing ? (
           <input
             ref={inputRef}
@@ -233,9 +287,31 @@ export function RegionFrame({
         ) : null}
       </div>
 
-      {/* 4 corner resize handles. Hidden until the region is selected to
-          keep the resting visual quiet (DESIGN.md §6.1). */}
-      {selected && onResizeStart
+      {/* B-β: collapsed-only thumbnail strip. Fills the body below the
+          title bar with up to 3 tiny media previews so the user can
+          recognize "which region is this" without re-expanding. */}
+      {collapsed && visibleThumbs.length > 0 ? (
+        <div className="flex h-[52px] items-center gap-1 px-2">
+          {visibleThumbs.map((url, idx) => (
+            <span
+              key={`${url}-${idx}`}
+              className="inline-flex h-9 w-12 shrink-0 overflow-hidden rounded-sm border border-white/8 bg-black/40"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={url}
+                alt={`thumb ${idx + 1}`}
+                className="h-full w-full object-cover"
+                draggable={false}
+              />
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      {/* 4 corner resize handles. Hidden when collapsed (compact card has
+          fixed geometry) or unselected. */}
+      {!collapsed && selected && onResizeStart
         ? (Object.keys(HANDLE_POSITIONS) as Array<keyof typeof HANDLE_POSITIONS>).map(
             (corner) => {
               const def = HANDLE_POSITIONS[corner];
