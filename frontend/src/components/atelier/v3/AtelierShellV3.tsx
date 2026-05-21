@@ -2941,6 +2941,30 @@ export function AtelierShellV3() {
             setActiveRailMode((cur) => (cur === "agent" ? null : "agent"));
             return;
           }
+          if (mode === "director") {
+            // Director shares the Agent rail surface but with the
+            // structure planner active. Toggling Director: ensure the
+            // Agent rail is open, flip planner mode in localStorage,
+            // notify AgentPanelV3 via a custom event so it reacts
+            // without a prop drill. Clicking Director when already
+            // active routes back to free Agent mode (cheaper than a
+            // separate "close director" gesture).
+            const isActive = activeRailMode === "director";
+            const nextMode: "free" | "director" = isActive ? "free" : "director";
+            try {
+              window.localStorage.setItem("atelier-v3-planner-mode", nextMode);
+            } catch { /* private mode / quota */ }
+            window.dispatchEvent(
+              new CustomEvent("atelier-planner-mode-changed", { detail: nextMode }),
+            );
+            if (isActive) {
+              setActiveRailMode(null);
+              return;
+            }
+            setAgentCollapsed(false);
+            setActiveRailMode("director");
+            return;
+          }
           if (mode === "sequence") {
             setSequenceVisible((v) => !v);
             setActiveRailMode((cur) => (cur === "sequence" ? null : "sequence"));

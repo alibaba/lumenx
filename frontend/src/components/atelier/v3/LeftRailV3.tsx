@@ -26,6 +26,7 @@ import {
   BookOpen,
   Bot,
   Clapperboard,
+  Compass,
   HelpCircle,
   Layers,
   Plus,
@@ -35,7 +36,14 @@ import {
   Workflow,
 } from "lucide-react";
 
-export type LeftRailMode = "add" | "assets" | "workflows" | "history" | "agent" | "sequence";
+export type LeftRailMode =
+  | "add"
+  | "assets"
+  | "workflows"
+  | "history"
+  | "director"
+  | "agent"
+  | "sequence";
 
 export interface LeftRailModeDef {
   key: LeftRailMode;
@@ -45,12 +53,15 @@ export interface LeftRailModeDef {
 }
 
 // Order is intentional — mirrors the creation → judgment → orchestration
-// flow a creator follows during a session.
+// flow a creator follows during a session. Director sits between
+// History and Agent because it's the structured-output sibling of the
+// free Agent — same harness, different planner.
 const MODES: LeftRailModeDef[] = [
   { key: "add",       label: "Add",       Icon: Plus,        shortcut: "Click to add" },
   { key: "assets",    label: "Assets",    Icon: Layers,      shortcut: "A" },
   { key: "workflows", label: "Workflows", Icon: Workflow },
   { key: "history",   label: "History",   Icon: BookOpen },
+  { key: "director",  label: "Director",  Icon: Compass },
   { key: "agent",     label: "Agent",     Icon: Bot,         shortcut: "/" },
   { key: "sequence",  label: "Sequence",  Icon: Clapperboard },
 ];

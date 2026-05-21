@@ -143,6 +143,24 @@ export function AgentPanelV3({ pushToast }: Props) {
     if (plannedCalls.length > 0) setPlannedCalls([]);
     setPlanError(null);
   };
+
+  // G: react to LeftRail's Director toggle. The shell flips
+  // localStorage + fires this custom event; we mirror it into our
+  // local state so the segmented mode toggle visually agrees.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onModeChanged = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail === "free" || detail === "director") {
+        setPlannerMode(detail);
+        if (plannedCalls.length > 0) setPlannedCalls([]);
+        setPlanError(null);
+      }
+    };
+    window.addEventListener("atelier-planner-mode-changed", onModeChanged);
+    return () => window.removeEventListener("atelier-planner-mode-changed", onModeChanged);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Per-tool rejection (PRD §14.4). The user can flip individual proposed
   // calls off before approving — what gets executed is `proposed ∖ rejected`.
   // Reset whenever the pending turn changes so each new approval card starts
@@ -202,7 +220,7 @@ export function AgentPanelV3({ pushToast }: Props) {
     }
     setExecuting(true);
     try {
-      await runAgentTurn({
+      const turn = await runAgentTurn({
         user_message: draft,
         preview,
         tool_calls: plannedCalls,
@@ -212,6 +230,9 @@ export function AgentPanelV3({ pushToast }: Props) {
         setDraft("");
         setPlannedCalls([]);
         setPlanError(null);
+        // G: trusted-policy direct execute path — wrap if director run
+        // produced 2+ nodes.
+        void maybeWrapDirectorOutput(turn, draft);
       } else {
         pushToast?.("info", "Preview submitted — see history below.");
       }
@@ -220,6 +241,40 @@ export function AgentPanelV3({ pushToast }: Props) {
       pushToast?.("error", msg);
     } finally {
       setExecuting(false);
+    }
+  };
+
+  // G: collect node IDs created by a completed turn and (if 2+) wrap
+  // them in a Director region. We key on plannerMode at call time
+  // because AtelierAgentTurn doesn't carry the planner field directly.
+  // Region title falls back to a short hash of the user message if no
+  // skill_name-derived label is available.
+  const maybeWrapDirectorOutput = async (turn: AtelierAgentTurn | null | undefined, userMessage: string) => {
+    if (!turn || turn.status !== "completed") return;
+    if (plannerMode !== "director") return;
+    const createdIds: string[] = [];
+    for (const call of turn.tool_calls) {
+      if (
+        call.tool_name !== "canvas.createVideoNode" &&
+        call.tool_name !== "canvas.createReferenceImageNode"
+      ) continue;
+      const snap = call.result_snapshot as { node?: { id?: string } } | null | undefined;
+      const id = snap?.node?.id;
+      if (typeof id === "string") createdIds.push(id);
+    }
+    if (createdIds.length < 2) return;
+    const trimmedMessage = userMessage.trim();
+    const title = trimmedMessage
+      ? trimmedMessage.length > 32 ? trimmedMessage.slice(0, 32) + "…" : trimmedMessage
+      : "Director output";
+    try {
+      await useAtelierStore.getState().createRegion({ title, wrap: createdIds });
+      pushToast?.("success", `Wrapped ${createdIds.length} Director nodes in a region.`);
+    } catch (err) {
+      pushToast?.(
+        "error",
+        `Region wrap failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   };
 
@@ -241,7 +296,7 @@ export function AgentPanelV3({ pushToast }: Props) {
         tool_name: c.tool_name,
         arguments: c.arguments,
       }));
-      await runAgentTurn({
+      const turn = await runAgentTurn({
         user_message: pendingTurn.user_message,
         approve: true,
         turn_id: pendingTurn.id,
@@ -254,6 +309,7 @@ export function AgentPanelV3({ pushToast }: Props) {
           ? `Approved ${acceptedCalls.length}, skipped ${skipped}.`
           : "Approved & executed.",
       );
+      void maybeWrapDirectorOutput(turn, pendingTurn.user_message);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Approval execution failed";
       pushToast?.("error", msg);
