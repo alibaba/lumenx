@@ -4275,6 +4275,33 @@ export function AtelierShellV3() {
                   }
                   return stale;
                 })()}
+                takes={(() => {
+                  // I (Take version timeline): map this draft's
+                  // candidates into TakeTimeline entries. Selected
+                  // candidate is read from data.selected_candidate_id
+                  // (the same field selectCandidate writes), falling
+                  // back to "none selected" so the strip never marks
+                  // an arbitrary take as primary on first render.
+                  const cands = readCandidates(selectedNode);
+                  if (cands.length === 0) return [];
+                  const selectedCandId = readString(
+                    (selectedNode.data as { selected_candidate_id?: unknown })?.selected_candidate_id,
+                  );
+                  return cands.map((c) => ({
+                    id: c.id,
+                    thumbUrl: c.video_url ? getAssetUrl(c.video_url) : undefined,
+                    status: (c.status as "completed" | "processing" | "pending" | "failed" | "draft") || "pending",
+                    selected: !!selectedCandId && selectedCandId === c.id,
+                    createdAt: c.created_at ?? 0,
+                  }));
+                })()}
+                onPickTake={(takeId) => {
+                  void useAtelierStore.getState()
+                    .selectCandidate(selectedNode.id, takeId)
+                    .catch((err: unknown) =>
+                      pushToast("error", `Pick take failed: ${err instanceof Error ? err.message : String(err)}`),
+                    );
+                }}
               />
             </div>
           ) : null}

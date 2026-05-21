@@ -33,6 +33,7 @@ import {
 } from "./Composer";
 import type { DraftNodeStatus } from "./DraftNode";
 import { TearLine } from "./ornaments";
+import { TakeTimeline, type TakeTimelineEntry } from "./TakeTimeline";
 
 interface Props {
   id: string;
@@ -71,6 +72,14 @@ interface Props {
    *  surfaces this as a small amber chip so the user knows their
    *  current take may not reflect the latest reference state. */
   staleRefCount?: number;
+  /** I (B-α / take version timeline): every candidate take generated
+   *  from this draft, in any order — the timeline sorts internally.
+   *  When non-empty, a horizontal take strip renders between the
+   *  Composer and the status footer. */
+  takes?: TakeTimelineEntry[];
+  /** Callback when the user clicks a take in the strip. Caller should
+   *  promote that take to "primary" (e.g. store.selectCandidate). */
+  onPickTake?: (takeId: string) => void;
 }
 
 export function DraftWorkbench({
@@ -103,6 +112,8 @@ export function DraftWorkbench({
   onPromptCommit,
   mentionables,
   staleRefCount = 0,
+  takes,
+  onPickTake,
 }: Props) {
   // Title row (rename) — same affordance as DraftNode so the muscle
   // memory carries over. Double-click to rename, Enter commits, Esc
@@ -269,6 +280,13 @@ export function DraftWorkbench({
         onPromptCommit={onPromptCommit}
         mentionables={mentionables}
       />
+
+      {/* I (Take version timeline) — horizontal strip of every take
+          this draft has generated. Renders only when there is at least
+          one take so empty drafts stay quiet. */}
+      {takes && takes.length > 0 && onPickTake ? (
+        <TakeTimeline takes={takes} onPickTake={onPickTake} />
+      ) : null}
 
       {/* Status footer — same tear-stamp vocabulary as the compact
           DraftNode so the lifecycle reads identically. */}
