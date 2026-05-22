@@ -27,6 +27,7 @@ import {
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
+import { HistoryPanel } from "@/components/atelier/v3/HistoryPanel";
 import {
   RegionFrame,
   REGION_COLLAPSED_WIDTH,
@@ -3210,81 +3211,41 @@ export function AtelierShellV3() {
         />
       </RailPanel>
 
-      {/* History panel — agent-turn timeline. v1 just lists turns from
-          project.agent_turns (already in store, polled with the rest of
-          the project). Future iterations: filter by status, expand turn
-          to see tool calls, jump to the affected node. */}
+      {/* History panel — project process gallery (H). HistoryPanel
+          handles ordering, expansion, and affected-node chips; the
+          shell wires `onJumpToNode` to center + select the canvas
+          target (matches Cmd+P jump semantics). */}
       <RailPanel
         open={activeRailMode === "history"}
         title="History"
         tag="Atelier · History · No 001"
         onClose={() => setActiveRailMode(null)}
       >
-        {(() => {
-          const turns = project?.agent_turns ?? [];
-          if (turns.length === 0) {
-            return (
-              <div className="px-4 py-6 text-center">
-                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-text-muted/85">
-                  No agent turns yet
-                </div>
-                <p className="text-[12px] leading-[1.55] text-text-secondary/95">
-                  Ask the Agent to do something — the timeline will fill in
-                  as it plans, asks for approval, and executes.
-                </p>
-              </div>
-            );
-          }
-          // Most recent first reads as "what just happened?", which is
-          // what the user opens this panel to find. Backend stores
-          // chronologically.
-          const ordered = [...turns].sort((a, b) => b.created_at - a.created_at);
-          const statusTone = (s: typeof turns[number]["status"]): string => {
-            if (s === "completed") return "border-emerald-300/35 text-emerald-200/95";
-            if (s === "failed") return "border-red-300/35 text-red-200/95";
-            if (s === "waiting_approval") return "border-amber-300/35 text-amber-200/95";
-            return "border-blue-300/35 text-blue-200/95";
-          };
-          return (
-            <ul className="space-y-1.5 p-2.5">
-              {ordered.map((turn) => (
-                <li
-                  key={turn.id}
-                  className="rounded-md border border-white/8 bg-black/20 px-3 py-2"
-                >
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${statusTone(turn.status)}`}
-                    >
-                      {turn.status.replace("_", " ")}
-                    </span>
-                    <span className="font-mono text-[9px] tracking-tight text-text-muted/85">
-                      {new Date(turn.created_at * 1000).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </div>
-                  {turn.user_message ? (
-                    <p className="line-clamp-3 font-display text-[12px] italic leading-[1.45] tracking-tight text-foreground/92">
-                      {turn.user_message}
-                    </p>
-                  ) : (
-                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/70">
-                      System turn
-                    </p>
-                  )}
-                  {turn.tool_calls.length > 0 ? (
-                    <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/85">
-                      {turn.tool_calls.length} tool call
-                      {turn.tool_calls.length === 1 ? "" : "s"}
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          );
-        })()}
+        <HistoryPanel
+          turns={project?.agent_turns ?? []}
+          onJumpToNode={(nodeId) => {
+            const target = project?.nodes.find((n) => n.id === nodeId);
+            if (!target) {
+              pushToast("info", "Node no longer on the canvas.");
+              return;
+            }
+            selectNode(target.id);
+            const rect = mainRef.current?.getBoundingClientRect();
+            if (rect) {
+              const isCollapsedRegion =
+                target.type === "region" &&
+                ((target.data as { collapsed?: unknown })?.collapsed) === true;
+              const w = isCollapsedRegion
+                ? REGION_COLLAPSED_WIDTH
+                : (target.width || 240);
+              const h = isCollapsedRegion
+                ? REGION_COLLAPSED_HEIGHT
+                : (target.height || 110);
+              setPanX(rect.width / 2 - (target.x + w / 2) * zoomFactor);
+              setPanY(rect.height / 2 - (target.y + h / 2) * zoomFactor);
+            }
+          }}
+        />
       </RailPanel>
 
       {/* Top brand bar — Atelier wordmark + project picker on the left,
