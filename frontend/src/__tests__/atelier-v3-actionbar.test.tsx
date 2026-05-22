@@ -39,6 +39,26 @@ describe("SelectionActionBar", () => {
     expect(onAct).toHaveBeenCalledWith("branch");
   });
 
+  // P2 (A'): frame-capture lives only on video and routes to the
+  // shell's frameCapture handler.
+  it("renders Capture frame on video kind only", () => {
+    const { unmount: u1 } = render(<SelectionActionBar kind="video" x={0} y={100} width={200} onAct={() => {}} />);
+    expect(screen.getByLabelText("Capture frame")).toBeInTheDocument();
+    u1();
+    const { unmount: u2 } = render(<SelectionActionBar kind="image" x={0} y={100} width={200} onAct={() => {}} />);
+    expect(screen.queryByLabelText("Capture frame")).toBeNull();
+    u2();
+    render(<SelectionActionBar kind="audio" x={0} y={100} width={200} onAct={() => {}} />);
+    expect(screen.queryByLabelText("Capture frame")).toBeNull();
+  });
+
+  it("Capture frame click fires onAct('frameCapture')", () => {
+    const onAct = vi.fn();
+    render(<SelectionActionBar kind="video" x={0} y={100} width={200} onAct={onAct} />);
+    fireEvent.click(screen.getByLabelText("Capture frame"));
+    expect(onAct).toHaveBeenCalledWith("frameCapture");
+  });
+
   it("stops propagation on click so canvas doesn't deselect", () => {
     const parent = vi.fn();
     render(

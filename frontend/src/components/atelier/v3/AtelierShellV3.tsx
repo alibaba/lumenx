@@ -2467,6 +2467,107 @@ export function AtelierShellV3() {
       return;
     }
 
+    if (action === "frameCapture") {
+      // P2 (A'): grab the current frame of a video as an image and
+      // create a new image node next to the source video. v1 is pure
+      // frontend — load video into a hidden element, draw to canvas,
+      // upload via the same path image uploads use, then create the
+      // node. ffmpeg-on-server stays out of scope until we hit a video
+      // CORS or codec the browser can't decode.
+      const url = resolveMediaUrl(node);
+      if (!url) {
+        pushToast("info", "No video loaded yet — generate or upload first.");
+        return;
+      }
+      void (async () => {
+        try {
+          // Hidden video element so we can seek without touching the
+          // user's currently playing media nodes on the canvas.
+          const video = document.createElement("video");
+          video.crossOrigin = "anonymous";
+          video.muted = true;
+          video.playsInline = true;
+          video.preload = "auto";
+          video.src = url;
+          await new Promise<void>((resolve, reject) => {
+            video.onloadeddata = () => resolve();
+            video.onerror = () => reject(new Error("Video failed to load"));
+          });
+          // Seek to a non-zero time so the captured frame isn't a black
+          // intro frame. Pick the visual mid-point — for sub-second
+          // clips this still lands inside the playable range.
+          const target = Math.min(Math.max(0.1, (video.duration || 1) * 0.4), Math.max(0.1, (video.duration || 1) - 0.05));
+          await new Promise<void>((resolve, reject) => {
+            const onSeek = () => {
+              video.removeEventListener("seeked", onSeek);
+              resolve();
+            };
+            video.addEventListener("seeked", onSeek);
+            video.onerror = () => reject(new Error("Seek failed"));
+            video.currentTime = target;
+          });
+          const canvas = document.createElement("canvas");
+          const w = video.videoWidth || 1280;
+          const h = video.videoHeight || 720;
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) throw new Error("Could not init canvas 2D context");
+          ctx.drawImage(video, 0, 0, w, h);
+          const blob: Blob = await new Promise((resolve, reject) =>
+            canvas.toBlob(
+              (b) => (b ? resolve(b) : reject(new Error("Frame export failed"))),
+              "image/png",
+              0.92,
+            ),
+          );
+          const file = new File([blob], `frame-${node.id.slice(-6)}-${Math.round(target * 100) / 100}s.png`, {
+            type: "image/png",
+          });
+          const upload = await api.uploadFile(file);
+          const ensured = await useAtelierStore.getState().ensureProject();
+          const created = await api.createAtelierNode(ensured.id, {
+            type: "image",
+            title: `Frame · ${node.title || "video"}`,
+            status: "completed",
+            // Place the frame to the right of the source video so the
+            // creator sees where it landed without zooming out.
+            x: node.x + (node.width || 240) + 32,
+            y: node.y,
+            width: 220,
+            height: Math.round((220 * h) / w),
+            media_urls: [upload.url as string],
+            data: {
+              category: "scene",
+              source_video_node_id: node.id,
+              source_time_seconds: target,
+            },
+          });
+          // Locally insert + select the new image node so the user
+          // sees confirmation immediately. Bypass the store's create*
+          // helpers since the node already exists server-side; just
+          // reconcile state.
+          useAtelierStore.setState((state) => ({
+            currentProject:
+              state.currentProject?.id === created.project_id
+                ? {
+                    ...state.currentProject,
+                    nodes: [...state.currentProject.nodes, created],
+                  }
+                : state.currentProject,
+            selectedNodeId: created.id,
+          }));
+          pushToast("success", `Captured frame at ${target.toFixed(2)}s`);
+        } catch (err) {
+          pushToast(
+            "error",
+            `Frame capture failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      })();
+      return;
+    }
+
     if (action === "replace") {
       // Image-only replacement: keep the same node id (so existing ref
       // edges survive) but swap media_urls. Reuses the existing

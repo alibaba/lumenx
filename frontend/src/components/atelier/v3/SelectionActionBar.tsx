@@ -11,6 +11,7 @@ import {
   Download,
   Maximize2,
   Bot,
+  Camera,
   RefreshCw,
 } from "lucide-react";
 
@@ -28,6 +29,7 @@ export type ActionKey =
   | "download"
   | "fullscreen"
   | "addToAgent"
+  | "frameCapture"
   | "replace"
   | "delete";
 
@@ -59,6 +61,7 @@ const ACTIONS: Record<ActionKey, ActionDef> = {
   download: { key: "download", label: "Download", Icon: Download },
   fullscreen: { key: "fullscreen", label: "Fullscreen preview", Icon: Maximize2 },
   addToAgent: { key: "addToAgent", label: "Send to Agent", Icon: Bot },
+  frameCapture: { key: "frameCapture", label: "Capture frame", Icon: Camera },
   replace: { key: "replace", label: "Replace media", Icon: RefreshCw },
   delete: { key: "delete", label: "Delete", Icon: Trash2, variant: "danger" },
 };
@@ -80,6 +83,7 @@ const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
     "divider",
     "fullscreen",
     "download",
+    "frameCapture",
     "addToAgent",
     "divider",
     "delete",
