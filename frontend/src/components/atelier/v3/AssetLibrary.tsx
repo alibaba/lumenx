@@ -27,15 +27,37 @@ import type { AtelierNode } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 
 export type AssetKind = "all" | "image" | "video" | "audio";
-export type AssetCategory = "character" | "scene" | "prop" | null;
+// P2 (D'): added "style" so a creator can stamp a reference as
+// look/aesthetic. Keeps the v0 image-only scope — audio uses its own
+// SFX sub-classification (audioRoleOf below).
+export type AssetCategory =
+  | "character"
+  | "scene"
+  | "prop"
+  | "style"
+  | null;
 
 const CATEGORY_LABELS: Record<Exclude<AssetCategory, null>, string> = {
   character: "Character",
   scene: "Scene",
   prop: "Prop",
+  style: "Style",
 };
 
-const CATEGORY_CYCLE: Array<AssetCategory> = [null, "character", "scene", "prop"];
+const CATEGORY_CYCLE: Array<AssetCategory> = [null, "character", "scene", "prop", "style"];
+
+// P2 (D'): audio sub-role lives on data.audio_role. v1 surfaces it as
+// a non-cycling read-only badge inside the audio card so user-edited
+// values (whether typed manually or set via a future TTS workflow)
+// still show up; future PR can add a cycling pill if creators want to
+// tag audio quickly inside the library.
+export type AudioRole = "music" | "sfx" | "voice" | null;
+
+const AUDIO_ROLE_LABELS: Record<Exclude<AudioRole, null>, string> = {
+  music: "Music",
+  sfx: "SFX",
+  voice: "Voice",
+};
 
 interface AssetCard {
   nodeId: string;
@@ -43,11 +65,18 @@ interface AssetCard {
   title: string;
   thumbUrl?: string;
   category?: AssetCategory;
+  audioRole?: AudioRole;
 }
 
 function readCategory(node: AtelierNode): AssetCategory {
   const raw = (node.data as { category?: unknown })?.category;
-  if (raw === "character" || raw === "scene" || raw === "prop") return raw;
+  if (raw === "character" || raw === "scene" || raw === "prop" || raw === "style") return raw;
+  return null;
+}
+
+function readAudioRole(node: AtelierNode): AudioRole {
+  const raw = (node.data as { audio_role?: unknown })?.audio_role;
+  if (raw === "music" || raw === "sfx" || raw === "voice") return raw;
   return null;
 }
 
@@ -75,6 +104,7 @@ function nodeToCard(node: AtelierNode): AssetCard | null {
     title: node.title || node.id.slice(-6),
     thumbUrl: url ? getAssetUrl(url) : undefined,
     category: kind === "image" ? readCategory(node) : null,
+    audioRole: kind === "audio" ? readAudioRole(node) : null,
   };
 }
 
@@ -423,6 +453,19 @@ export function AssetLibrary({
                       >
                         {card.category ? CATEGORY_LABELS[card.category] : "Tag"}
                       </button>
+                    ) : null}
+                    {/* P2 (D'): audio-role badge — read-only in v1.
+                        Lit only when an audio asset has data.audio_role
+                        set so we don't spam an empty pill on the common
+                        case. Future PR can add cycling like the image
+                        category pill. */}
+                    {card.kind === "audio" && card.audioRole ? (
+                      <span
+                        aria-label={`Audio role: ${AUDIO_ROLE_LABELS[card.audioRole]}`}
+                        className="absolute right-1 top-1 rounded-[3px] border border-violet-300/45 bg-violet-400/20 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.2em] text-violet-100"
+                      >
+                        {AUDIO_ROLE_LABELS[card.audioRole]}
+                      </span>
                     ) : null}
                   </div>
                   <div className="px-1.5 py-1">

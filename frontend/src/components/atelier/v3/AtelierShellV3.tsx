@@ -454,6 +454,25 @@ export function AtelierShellV3() {
   }, [extraSelectedIds, selectedNodeId]);
   const isMultiSelect = allSelectedIds.size > 1;
   const [minimapOpen, setMinimapOpen] = useState(false);
+  // P2 (E'): persistent grid-snap toggle. Read from localStorage so a
+  // power user who flipped it on stays in that mode across sessions.
+  const [gridSnap, setGridSnapRaw] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("atelier-v3-grid-snap") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleGridSnap = () => {
+    setGridSnapRaw((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem("atelier-v3-grid-snap", next ? "1" : "0");
+      } catch { /* ignore quota / private mode */ }
+      return next;
+    });
+  };
   // Right Rail collapsed pref — remembered across reloads. Lazy initial
   // value so we don't read localStorage during SSR / first server render.
   const [agentCollapsed, setAgentCollapsedRaw] = useState<boolean>(() => {
@@ -864,6 +883,15 @@ export function AtelierShellV3() {
             );
           return;
         }
+      }
+
+      // P2 (E'): Option+Shift+F → auto-arrange. Mirrors LibTV's
+      // 整理画布 shortcut. Fires before the modifier-bail below so
+      // the Alt branch doesn't get short-circuited.
+      if (e.altKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
+        e.preventDefault();
+        handleAutoArrange();
+        return;
       }
 
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1399,7 +1427,12 @@ export function AtelierShellV3() {
     // world coords lock to the nearest GRID multiple — useful for tidy
     // alignment on the fly without manual nudging.
     const GRID = 8;
-    const snap = (v: number) => (event.shiftKey ? Math.round(v / GRID) * GRID : Math.round(v));
+    // P2 (E'): persistent grid-snap toggle ORs with the existing
+    // Shift-to-snap. Holding Shift always snaps (kept for power users
+    // who flip grid off but want a one-off lock); the toggle, when on,
+    // makes snap the default.
+    const snap = (v: number) =>
+      event.shiftKey || gridSnap ? Math.round(v / GRID) * GRID : Math.round(v);
 
     // Group drag (multi-selection)
     if (groupDragRef.current) {
@@ -1932,6 +1965,63 @@ export function AtelierShellV3() {
       setPanX((p) => p - event.deltaX);
       setPanY((p) => p - event.deltaY);
     }
+  };
+
+  // P2 (E'): tidy-up arrangement. Picks a target set (selection if
+  // multi-select, otherwise all real non-region top-level nodes), then
+  // packs them into a uniform grid anchored at the cluster's current
+  // top-left so the user's mental "where was that work area" stays put.
+  // Pure layout — no semantic clustering. Goes through commitNodePosition
+  // so undo restores in one step (one history entry covering all moves).
+  const handleAutoArrange = () => {
+    const proj = useAtelierStore.getState().currentProject;
+    if (!proj) return;
+    const targetIds = (() => {
+      if (allSelectedIds.size > 1) {
+        return Array.from(allSelectedIds).filter((id) => !parseCandidateNodeId(id));
+      }
+      // Default: every real non-region non-candidate node. We exclude
+      // regions because their geometry is structural; rearranging
+      // regions would scatter their bound children unpredictably.
+      return proj.nodes
+        .filter((n) => n.type !== "region")
+        .map((n) => n.id);
+    })();
+    const targets = targetIds
+      .map((id) => proj.nodes.find((n) => n.id === id))
+      .filter((n): n is AtelierNode => !!n);
+    if (targets.length < 2) {
+      pushToast("info", "Pick at least 2 nodes (or run with no selection).");
+      return;
+    }
+    // Sort by current y-then-x so the visual flow approximates what the
+    // user already had (top-left → bottom-right reading order).
+    const sorted = [...targets].sort((a, b) => (a.y - b.y) || (a.x - b.x));
+    // Anchor: the existing cluster's top-left, snapped to the 8px grid.
+    const minX = Math.min(...sorted.map((n) => n.x));
+    const minY = Math.min(...sorted.map((n) => n.y));
+    const cellW = Math.max(...sorted.map((n) => n.width || 240));
+    const cellH = Math.max(...sorted.map((n) => n.height || 180));
+    const GAP = 32;
+    const cols = Math.max(1, Math.ceil(Math.sqrt(sorted.length)));
+    const store = useAtelierStore.getState();
+    const entries: MoveEntry[] = [];
+    sorted.forEach((n, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const nextX = Math.round(minX + col * (cellW + GAP));
+      const nextY = Math.round(minY + row * (cellH + GAP));
+      if (nextX === n.x && nextY === n.y) return;
+      entries.push({ nodeId: n.id, prevX: n.x, prevY: n.y, nextX, nextY });
+      store.moveNodeLocal(n.id, nextX, nextY);
+      void store.commitNodePosition(n.id, nextX, nextY).catch(() => { /* save chip surfaces */ });
+    });
+    if (entries.length === 0) {
+      pushToast("info", "Already tidy.");
+      return;
+    }
+    pushHistory({ kind: "move", entries });
+    pushToast("info", `Arranged ${entries.length} node${entries.length === 1 ? "" : "s"}.`);
   };
 
   const handleFitView = () => {
@@ -4928,6 +5018,9 @@ export function AtelierShellV3() {
         onZoomChange={handleZoomChange}
         onFit={handleFitView}
         onToggleMinimap={() => setMinimapOpen((o) => !o)}
+        gridSnap={gridSnap}
+        onToggleGridSnap={toggleGridSnap}
+        onAutoArrange={handleAutoArrange}
       />
 
       {/* minimap floating widget — viewport rect is the actual visible

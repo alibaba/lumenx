@@ -1,6 +1,6 @@
 "use client";
 import * as React from "react";
-import { Map, Maximize, ZoomIn, ZoomOut } from "lucide-react";
+import { Grid3x3, LayoutGrid, Map, Maximize, ZoomIn, ZoomOut } from "lucide-react";
 
 interface BottomNavRailProps {
   zoom: number;
@@ -8,6 +8,14 @@ interface BottomNavRailProps {
   onFit: () => void;
   onToggleMinimap: () => void;
   minimapOpen?: boolean;
+  /** P2 (E'): persistent grid-snap toggle. When on, drags snap to the
+   *  GRID multiple even without holding Shift. Defaults to false to
+   *  match the original Shift-only behavior. */
+  gridSnap?: boolean;
+  onToggleGridSnap?: () => void;
+  /** P2 (E'): one-click "tidy up" button. Caller decides what to
+   *  arrange (selection vs whole canvas). */
+  onAutoArrange?: () => void;
 }
 
 export function BottomNavRail({
@@ -16,6 +24,9 @@ export function BottomNavRail({
   onFit,
   onToggleMinimap,
   minimapOpen,
+  gridSnap,
+  onToggleGridSnap,
+  onAutoArrange,
 }: BottomNavRailProps) {
   const HIT =
     "btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors";
@@ -23,6 +34,7 @@ export function BottomNavRail({
   const minimapClass = minimapOpen
     ? `${HIT} bg-hover-bg text-foreground`
     : HIT_QUIET;
+  const snapClass = gridSnap ? `${HIT} bg-hover-bg text-foreground` : HIT_QUIET;
 
   return (
     <div
@@ -40,6 +52,29 @@ export function BottomNavRail({
       >
         <Map size={13} aria-hidden="true" />
       </button>
+      {onToggleGridSnap ? (
+        <button
+          type="button"
+          aria-label="Toggle grid snap"
+          aria-pressed={!!gridSnap}
+          data-tip={gridSnap ? "Grid snap on (drags lock to grid)" : "Grid snap off (Shift to snap)"}
+          onClick={onToggleGridSnap}
+          className={snapClass}
+        >
+          <Grid3x3 size={13} aria-hidden="true" />
+        </button>
+      ) : null}
+      {onAutoArrange ? (
+        <button
+          type="button"
+          aria-label="Auto-arrange"
+          data-tip="Auto-arrange (⌥⇧F)"
+          onClick={onAutoArrange}
+          className={HIT_QUIET}
+        >
+          <LayoutGrid size={13} aria-hidden="true" />
+        </button>
+      ) : null}
       <span aria-hidden="true" className="mx-1 h-4 w-px bg-white/8" />
       <button
         type="button"

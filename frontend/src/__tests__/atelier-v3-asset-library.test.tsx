@@ -152,12 +152,62 @@ describe("AssetLibrary — category cycle pill", () => {
     expect(onCycle).toHaveBeenCalledWith("warrior", "scene");
   });
 
-  it("cycles prop → null (untagged)", () => {
+  // P2 (D'): the cycle now includes "style" between prop and null:
+  //   null → character → scene → prop → style → null
+  it("cycles prop → style", () => {
     const onCycle = vi.fn();
     const node = img("sword", { data: { category: "prop" } });
     render(<AssetLibrary nodes={[node]} open onToggle={noop} onCycleCategory={onCycle} />);
     const pill = screen.getByLabelText(/Set category — current prop/i);
     fireEvent.click(pill);
-    expect(onCycle).toHaveBeenCalledWith("sword", null);
+    expect(onCycle).toHaveBeenCalledWith("sword", "style");
+  });
+
+  it("cycles style → null (back to untagged)", () => {
+    const onCycle = vi.fn();
+    const node = img("dust-look", { data: { category: "style" } });
+    render(<AssetLibrary nodes={[node]} open onToggle={noop} onCycleCategory={onCycle} />);
+    const pill = screen.getByLabelText(/Set category — current style/i);
+    fireEvent.click(pill);
+    expect(onCycle).toHaveBeenCalledWith("dust-look", null);
+  });
+});
+
+describe("AssetLibrary — audio role badge (P2 D')", () => {
+  function audio(id: string, data?: Record<string, unknown>) {
+    return {
+      id,
+      project_id: "p1",
+      type: "audio",
+      title: id,
+      prompt: "",
+      status: "completed",
+      x: 0,
+      y: 0,
+      width: 220,
+      height: 56,
+      media_urls: [`uploads/${id}.mp3`],
+      data: data ?? {},
+      created_by: "user",
+      created_at: 1,
+      updated_at: 1,
+    } as unknown as Parameters<typeof AssetLibrary>[0]["nodes"][number];
+  }
+
+  it("renders the role badge when data.audio_role is set", () => {
+    const sfx = audio("explosion", { audio_role: "sfx" });
+    const music = audio("score", { audio_role: "music" });
+    const voice = audio("narration", { audio_role: "voice" });
+    render(<AssetLibrary nodes={[sfx, music, voice]} open onToggle={noop} />);
+    expect(screen.getByLabelText(/audio role: sfx/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/audio role: music/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/audio role: voice/i)).toBeInTheDocument();
+  });
+
+  it("hides the role badge when audio_role is missing or unknown", () => {
+    const bare = audio("untagged");
+    const garbage = audio("weird", { audio_role: "explosion" });
+    render(<AssetLibrary nodes={[bare, garbage]} open onToggle={noop} />);
+    expect(screen.queryByLabelText(/audio role/i)).toBeNull();
   });
 });
