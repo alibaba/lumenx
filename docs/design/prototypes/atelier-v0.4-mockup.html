@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Atelier v0.4 — visual mockup</title>
+  <meta name="viewport" content="width=1480" />
+  <style>
+    /* ── tokens ───────────────────────────────────────────────── */
+    :root {
+      --canvas-bg: #0c0c0e;
+      --canvas-dot: rgba(255,255,255,0.07);
+      --node-bg-static: rgba(20,20,22,0.40);
+      --node-bg-glass:  rgba(20,20,22,0.55);
+      --border-static:  rgba(255,255,255,0.10);
+      --border-glass:   rgba(255,255,255,0.16);
+      --text-fg:        rgba(255,255,255,0.94);
+      --text-mute:      rgba(255,255,255,0.50);
+      --text-quiet:     rgba(255,255,255,0.35);
+      --emerald-400:    #34d399;
+      --emerald-300:    #6ee7b7;
+      --amber:          #fbbf24;
+      --violet:         #a78bfa;
+      --rose:           #fb7185;
+      --slate:          #94a3b8;
+      --cyan:           #22d3ee;
+      --red:            #f87171;
+      --blue:           #60a5fa;
+    }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Helvetica Neue", sans-serif;
+      background: #1a1a1d;
+      color: var(--text-fg);
+      -webkit-font-smoothing: antialiased;
+    }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .mono-caps {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: var(--text-quiet);
+    }
+
+    /* ── viewport shell ───────────────────────────────────────── */
+    .stage {
+      width: 1440px; height: 900px;
+      margin: 24px auto;
+      position: relative;
+      background: var(--canvas-bg);
+      background-image:
+        radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
+      background-size: 28px 28px;
+      background-position: -14px -14px;
+      overflow: hidden;
+      border-radius: 12px;
+      box-shadow: 0 30px 80px -30px rgba(0,0,0,0.7);
+    }
+    .topbar {
+      position: absolute; top: 0; left: 0; right: 0; height: 44px;
+      display: flex; align-items: center; gap: 16px;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      backdrop-filter: blur(8px);
+      background: rgba(12,12,14,0.5);
+      z-index: 40;
+    }
+    .topbar-title {
+      font-size: 12px;
+      letter-spacing: -0.005em;
+      color: var(--text-fg);
+    }
+    .breadcrumb-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px;
+      color: var(--text-fg);
+    }
+    .build-label {
+      margin-left: auto;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 9px;
+      letter-spacing: 0.28em;
+      color: var(--text-quiet);
+      text-transform: uppercase;
+    }
+    .cta-emerald {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(52,211,153,0.20);
+      border: 1px solid rgba(52,211,153,0.45);
+      color: var(--emerald-300);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .cta-emerald:hover { background: rgba(52,211,153,0.30); }
+
+    /* ── left rail ────────────────────────────────────────────── */
+    .left-rail {
+      position: absolute; left: 0; top: 44px; bottom: 0;
+      width: 56px;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      background: rgba(12,12,16,0.96);
+      border-right: 1px solid rgba(255,255,255,0.08);
+      z-index: 30;
+    }
+    .left-rail-modes { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    .rail-brand {
+      width: 36px; height: 36px;
+      display: grid; place-items: center;
+      border-radius: 8px;
+      background: rgba(52,211,153,0.15);
+      color: var(--emerald-400);
+      box-shadow: inset 0 0 0 1px rgba(52,211,153,0.25);
+      margin-bottom: 4px;
+    }
+    .rail-btn {
+      position: relative;
+      width: 40px; height: 40px;
+      display: grid; place-items: center;
+      border-radius: 6px;
+      color: var(--text-mute);
+      cursor: pointer;
+    }
+    .rail-btn:hover { background: rgba(255,255,255,0.05); color: var(--text-fg); }
+    .rail-btn.active {
+      background: rgba(52,211,153,0.15);
+      color: var(--emerald-300);
+      box-shadow: inset 0 0 0 1px rgba(52,211,153,0.30);
+    }
+    .rail-btn.active::before {
+      content: ""; position: absolute; left: 0; top: 50%;
+      transform: translateY(-50%);
+      width: 3px; height: 18px;
+      border-radius: 0 2px 2px 0;
+      background: var(--emerald-400);
+    }
+
+    /* ── right rail (frosted glass) ───────────────────────────── */
+    .right-rail {
+      position: absolute; right: 0; top: 44px; bottom: 0;
+      width: 320px;
+      background: var(--node-bg-glass);
+      backdrop-filter: blur(14px) saturate(180%);
+      border-left: 1px solid var(--border-glass);
+      box-shadow:
+        0 24px 48px -22px rgba(0,0,0,0.8),
+        0 4px 14px -4px rgba(0,0,0,0.55),
+        inset 0 1px 0 0 rgba(255,255,255,0.06);
+      z-index: 25;
+      padding: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .right-rail h3 {
+      margin: 0; font-size: 11px; font-weight: 600;
+      color: var(--text-fg);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .right-rail-sub { font-size: 10px; color: var(--text-quiet); }
+    .agent-bubble {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.06);
+      font-size: 11.5px; line-height: 1.55;
+      color: var(--text-fg);
+    }
+    .agent-bubble.user {
+      align-self: flex-end;
+      background: rgba(52,211,153,0.10);
+      border-color: rgba(52,211,153,0.20);
+      color: var(--emerald-300);
+      font-style: italic;
+    }
+    .composer-stub {
+      margin-top: auto;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .composer-stub-input {
+      flex: 1;
+      font-size: 11.5px;
+      color: var(--text-mute);
+    }
+    .seg-toggle {
+      display: inline-flex;
+      padding: 2px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .seg-toggle .seg {
+      padding: 4px 10px;
+      font-size: 10px;
+      font-family: ui-monospace, monospace;
+      color: var(--text-mute);
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .seg-toggle .seg.on {
+      background: rgba(52,211,153,0.18);
+      color: var(--emerald-300);
+    }
+
+    /* ── bottom nav rail ──────────────────────────────────────── */
+    .bottom-rail {
+      position: absolute; left: 84px; bottom: 16px;
+      height: 36px;
+      display: flex; align-items: center; gap: 2px;
+      padding: 0 4px;
+      border-radius: 999px;
+      background: rgba(20,20,22,0.96);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow:
+        0 14px 30px -18px rgba(0,0,0,0.7),
+        0 2px 6px -2px rgba(0,0,0,0.5),
+        inset 0 1px 0 0 rgba(255,255,255,0.06);
+      z-index: 30;
+    }
+    .bottom-btn {
+      width: 28px; height: 28px;
+      display: grid; place-items: center;
+      border-radius: 6px;
+      color: var(--text-mute);
+      cursor: pointer;
+    }
+    .bottom-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-fg); }
+    .bottom-btn.on { background: rgba(255,255,255,0.06); color: var(--text-fg); }
+    .bottom-divider { width: 1px; height: 16px; background: rgba(255,255,255,0.08); margin: 0 4px; }
+    .bottom-zoom-readout {
+      font-family: ui-monospace, monospace;
+      font-size: 9.5px;
+      letter-spacing: 0.22em;
+      color: var(--text-mute);
+      text-transform: uppercase;
+      padding: 0 8px;
+      cursor: pointer;
+    }
+    .bottom-zoom-readout .v {
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      letter-spacing: -0.005em;
+      font-size: 11px;
+      color: var(--text-fg);
+      margin-left: 4px;
+    }
+
+    /* ── nodes ────────────────────────────────────────────────── */
+    .node {
+      position: absolute;
+      background: var(--node-bg-static);
+      border: 1px solid var(--border-static);
+      border-radius: 10px;
+      box-shadow: 0 8px 20px -10px rgba(0,0,0,0.5);
+      overflow: hidden;
+      color: var(--text-fg);
+    }
+    .node.selected-flat { box-shadow: 0 0 0 2px var(--emerald-400), 0 8px 20px -10px rgba(0,0,0,0.5); }
+
+    /* media node — image */
+    .node-img {
+      width: 180px; height: 180px;
+    }
+    .node-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    /* media node — video tile */
+    .node-vid {
+      width: 200px; height: 113px;
+    }
+    .node-vid .placeholder {
+      width: 100%; height: 100%;
+      background: linear-gradient(135deg, #1f2937, #0f172a);
+      display: grid; place-items: center;
+      color: var(--text-mute);
+      font-size: 10px;
+    }
+
+    /* idea node */
+    .node-idea {
+      width: 200px; padding: 10px 12px;
+      font-family: -apple-system, sans-serif;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* draft node compact */
+    .node-draft {
+      width: 244px;
+      padding: 10px 12px;
+    }
+    .node-draft .draft-intent {
+      font-size: 12.5px; font-weight: 500;
+      color: var(--text-fg);
+      margin-bottom: 6px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .node-draft .meta-row {
+      display: flex; gap: 6px; align-items: center;
+      font-size: 9.5px;
+      font-family: ui-monospace, monospace;
+      color: var(--text-mute);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .node-draft .meta-dot { color: rgba(255,255,255,0.35); }
+
+    /* focal workbench (glass) */
+    .workbench {
+      position: absolute;
+      width: 480px;
+      background: var(--node-bg-glass);
+      backdrop-filter: blur(14px) saturate(180%);
+      border: 1px solid var(--border-glass);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow:
+        0 24px 48px -22px rgba(0,0,0,0.8),
+        0 4px 14px -4px rgba(0,0,0,0.55),
+        inset 0 1px 0 0 rgba(255,255,255,0.06);
+    }
+    .workbench-title {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 12px;
+    }
+    .workbench-title .sparkle { color: var(--emerald-400); }
+    .workbench-title h2 {
+      margin: 0; font-size: 14px; font-weight: 500;
+      letter-spacing: -0.005em;
+      color: var(--text-fg);
+    }
+    .workbench-title .take-pill {
+      margin-left: auto;
+      display: inline-flex; gap: 6px;
+      padding: 2px 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 8.5px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      border: 1px dashed rgba(110,231,183,0.35);
+      color: var(--emerald-300);
+      border-radius: 3px;
+    }
+    .workbench-meta {
+      font-family: ui-monospace, monospace;
+      font-size: 10px;
+      color: var(--text-mute);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 12px;
+    }
+    .workbench-prompt {
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.06);
+      font-size: 12px; line-height: 1.55;
+      color: var(--text-fg);
+      margin-bottom: 12px;
+    }
+    .workbench-refs {
+      display: flex; gap: 6px;
+      margin-bottom: 12px;
+    }
+    .ref-slot {
+      width: 48px; height: 48px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(110,231,183,0.30);
+      overflow: hidden;
+    }
+    .ref-slot img { width: 100%; height: 100%; object-fit: cover; }
+    .workbench-controls {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .pill-control {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 10.5px;
+      color: var(--text-fg);
+      cursor: pointer;
+    }
+    .workbench-generate {
+      margin-left: auto;
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: rgba(52,211,153,0.20);
+      border: 1px solid rgba(52,211,153,0.55);
+      color: var(--emerald-300);
+      font-size: 11.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .workbench-generate:hover { background: rgba(52,211,153,0.32); }
+
+    /* take strip inside workbench */
+    .take-strip {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 14px; padding-top: 10px;
+      border-top: 1px dashed rgba(255,255,255,0.08);
+    }
+    .take-strip-label {
+      font-family: ui-monospace, monospace;
+      font-size: 9px;
+      color: var(--text-quiet);
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+    }
+    .take-tile {
+      width: 36px; height: 36px;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.4);
+      flex-shrink: 0;
+    }
+    .take-tile img { width: 100%; height: 100%; object-fit: cover; }
+    .take-tile.current {
+      border-color: var(--emerald-400);
+      box-shadow: 0 0 0 1px var(--emerald-400);
+    }
+    .take-tile.processing {
+      background: rgba(96,165,250,0.15);
+      display: grid; place-items: center;
+      color: var(--blue);
+    }
+
+    /* region frame */
+    .region {
+      position: absolute;
+      background: rgba(34,211,238,0.04);
+      border: 1px dashed rgba(34,211,238,0.30);
+      border-radius: 6px;
+      backdrop-filter: blur(1px);
+    }
+    .region-title-bar {
+      height: 28px;
+      display: flex; align-items: center; gap: 6px;
+      padding: 0 8px;
+      background: rgba(34,211,238,0.08);
+      border-bottom: 1px dashed rgba(34,211,238,0.30);
+      border-radius: 6px 6px 0 0;
+      cursor: grab;
+    }
+    .region-title-bar .chev {
+      width: 14px; height: 14px;
+      display: grid; place-items: center;
+      color: var(--text-mute);
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .region-title-bar .dot { width: 6px; height: 6px; border-radius: 999px; }
+    .region-title-bar .dot.cyan { background: var(--cyan); }
+    .region-title-bar .title {
+      flex: 1;
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      color: rgba(207,250,254,0.92);
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .region-title-bar .count {
+      background: rgba(255,255,255,0.10);
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-family: ui-monospace, monospace;
+      font-size: 9px;
+      color: var(--text-mute);
+    }
+    .region-body { position: relative; padding: 18px; }
+
+    /* polaroid stack */
+    .poloroid-stack {
+      position: absolute;
+      width: 200px; height: 113px;
+    }
+    .poloroid-stack .layer {
+      position: absolute;
+      width: 200px; height: 113px;
+      border-radius: 6px;
+      background: var(--node-bg-static);
+      border: 1px solid var(--border-static);
+      box-shadow: 0 8px 20px -10px rgba(0,0,0,0.5);
+    }
+    .poloroid-stack .layer.l3 {
+      transform: translate(12px, 8px) rotate(1deg);
+      background: linear-gradient(135deg, #1a1a1f, #0f0f12);
+    }
+    .poloroid-stack .layer.l2 {
+      transform: translate(6px, 4px) rotate(0.5deg);
+      background: linear-gradient(135deg, #1f1f25, #131316);
+    }
+    .poloroid-stack .layer.l1 {
+      transform: translate(0, 0);
+      overflow: hidden;
+    }
+    .poloroid-stack .layer.l1 img {
+      width: 100%; height: 100%; object-fit: cover;
+    }
+    .poloroid-stack .status-dot {
+      position: absolute; top: 6px; right: 6px;
+      width: 7px; height: 7px; border-radius: 999px;
+      background: var(--emerald-400);
+      box-shadow: 0 0 0 2px rgba(52,211,153,0.18);
+      z-index: 3;
+    }
+    .poloroid-stack .count-badge {
+      position: absolute; bottom: 6px; right: 6px;
+      padding: 2px 6px;
+      background: rgba(0,0,0,0.65);
+      border-radius: 4px;
+      font-family: ui-monospace, monospace;
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      color: rgba(255,255,255,0.92);
+      z-index: 3;
+    }
+
+    /* polaroid stack — fanned out variant */
+    .stack-fan {
+      position: absolute;
+      display: flex; gap: 6px;
+      padding: 6px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.20);
+      border: 1px dashed rgba(255,255,255,0.10);
+    }
+    .stack-fan .take-card {
+      width: 110px; height: 62px;
+      border-radius: 4px;
+      border: 1px solid var(--border-static);
+      overflow: hidden;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .stack-fan .take-card.current {
+      border-color: var(--emerald-400);
+      box-shadow: 0 0 0 1px var(--emerald-400);
+    }
+    .stack-fan .take-card img { width: 100%; height: 100%; object-fit: cover; }
+    .stack-fan .take-card.processing {
+      background: rgba(96,165,250,0.15);
+      display: grid; place-items: center;
+      color: var(--blue);
+    }
+    .stack-fan .take-card.failed {
+      background: rgba(248,113,113,0.15);
+      display: grid; place-items: center;
+      color: var(--red);
+    }
+
+    /* edge labels */
+    .edge-label {
+      position: absolute;
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(12,12,14,0.92);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-family: ui-monospace, monospace;
+      font-size: 8.5px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .edge-label .dot { width: 5px; height: 5px; border-radius: 999px; }
+
+    /* SVG edges layer */
+    .edges-svg {
+      position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    /* legend (mockup-only, not part of product) */
+    .legend {
+      position: absolute; left: 84px; top: 60px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.55);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 10px; line-height: 1.7;
+      color: var(--text-mute);
+      max-width: 220px;
+      z-index: 35;
+    }
+    .legend h4 {
+      margin: 0 0 6px 0;
+      font-family: ui-monospace, monospace;
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      color: var(--text-quiet);
+      text-transform: uppercase;
+    }
+    .legend .row { display: flex; align-items: center; gap: 6px; }
+    .legend .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+    /* annotation labels (mockup-only) */
+    .anno {
+      position: absolute;
+      font-family: ui-monospace, monospace;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--emerald-300);
+      background: rgba(52,211,153,0.12);
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid rgba(52,211,153,0.25);
+      pointer-events: none;
+      z-index: 50;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <!-- ── top bar ─────────────────────────────────────────────── -->
+    <div class="topbar">
+      <div class="topbar-title">Atelier</div>
+      <span class="breadcrumb-pill">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 18l-6-6 6-6"/></svg>
+        Moonlit chase · take 4
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18l6-6-6-6"/></svg>
+      </span>
+      <span class="mono-caps" style="margin-left: 4px;">canvas-uplift</span>
+      <span class="build-label">Atelier · v0.4 · mockup</span>
+      <button class="cta-emerald">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+        Share
+      </button>
+    </div>
+
+    <!-- ── left rail ───────────────────────────────────────────── -->
+    <aside class="left-rail">
+      <div class="left-rail-modes">
+        <div class="rail-brand">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
+        </div>
+        <div class="rail-btn" title="Add"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M12 5v14M5 12h14"/></svg></div>
+        <div class="rail-btn" title="Assets"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+        <div class="rail-btn" title="Workflows"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-btn" title="History"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+        <div class="rail-btn active" title="Director">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        </div>
+        <div class="rail-btn" title="Agent"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h0M16 16h0"/></svg></div>
+        <div class="rail-btn" title="Sequence"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10v4M10 10v4M14 10v4M18 10v4"/></svg></div>
+      </div>
+      <div class="left-rail-modes">
+        <div class="rail-btn" title="Undo"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg></div>
+        <div class="rail-btn" title="Redo"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 014-4h12"/></svg></div>
+        <div class="rail-btn" title="Help"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg></div>
+      </div>
+    </aside>
+
+    <!-- ── right rail (frosted glass) — Agent panel ───────────── -->
+    <aside class="right-rail">
+      <h3>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" style="color: var(--emerald-400);"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg>
+        Atelier Agent
+        <span class="right-rail-sub" style="margin-left: auto;">untrusted · approve each</span>
+      </h3>
+      <div class="seg-toggle">
+        <span class="seg">Free</span>
+        <span class="seg on">Director</span>
+      </div>
+
+      <div class="agent-bubble user">3-shot story · moonlit chase · seedance 2.0</div>
+      <div class="agent-bubble">
+        Plan ready: 3 video nodes (Setup → Turn → Payoff) wrapped in a
+        new region "moonlit chase". 3 tool calls.
+      </div>
+      <div class="agent-bubble" style="border-color: rgba(52,211,153,0.30); background: rgba(52,211,153,0.06);">
+        <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--emerald-300)" stroke-width="1.5"><path d="M20 6L9 17l-5-5"/></svg>
+          <span class="mono-caps" style="color: var(--emerald-300);">Awaiting approval</span>
+        </div>
+        canvas.createRegion · canvas.createVideoNode × 3 · canvas.attachToRegion × 3
+      </div>
+
+      <div class="composer-stub">
+        <span class="composer-stub-input">Describe the structure…</span>
+        <button class="cta-emerald" style="padding: 4px 10px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Preview
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── edges SVG layer ─────────────────────────────────────── -->
+    <svg class="edges-svg" width="100%" height="100%">
+      <!-- emerald reference: image → draft workbench -->
+      <path d="M 470 280 C 530 280, 540 380, 600 380" fill="none" stroke="rgba(52,211,153,0.55)" stroke-width="1.25" stroke-dasharray="1 5"/>
+      <!-- emerald reference: image → standalone draft -->
+      <path d="M 470 480 C 540 480, 560 560, 660 560" fill="none" stroke="rgba(52,211,153,0.55)" stroke-width="1.25" stroke-dasharray="1 5"/>
+      <!-- amber branch: take stack → branch draft -->
+      <path d="M 950 600 C 1010 600, 1010 720, 880 720" fill="none" stroke="rgba(251,191,36,0.85)" stroke-width="1.75" stroke-dasharray="1 5"/>
+      <!-- endpoint dots on the branch (hover-related state demo) -->
+      <circle cx="950" cy="600" r="2.5" fill="var(--amber)"/>
+      <circle cx="880" cy="720" r="2.5" fill="var(--amber)"/>
+      <!-- violet sequence: hover-revealed between two takes -->
+      <path d="M 760 560 C 800 560, 800 720, 760 720" fill="none" stroke="rgba(167,139,250,0.55)" stroke-width="1.25" stroke-dasharray="1 5"/>
+    </svg>
+
+    <!-- ── legend ──────────────────────────────────────────────── -->
+    <div class="legend">
+      <h4>Chromatic edges</h4>
+      <div class="row"><div class="swatch" style="background: var(--emerald-400);"></div> reference</div>
+      <div class="row"><div class="swatch" style="background: var(--amber);"></div> branch</div>
+      <div class="row"><div class="swatch" style="background: var(--violet);"></div> sequence (hover)</div>
+      <div class="row"><div class="swatch" style="background: var(--slate);"></div> generic</div>
+    </div>
+
+    <!-- ── region: "moonlit chase" ─────────────────────────────── -->
+    <div class="region" style="left: 300px; top: 220px; width: 480px; height: 220px;">
+      <div class="region-title-bar">
+        <span class="chev">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+        <span class="dot cyan"></span>
+        <span class="title">Moonlit Chase</span>
+        <span class="count">3</span>
+      </div>
+      <div class="region-body">
+        <!-- 2 image refs inside region — flat static -->
+      </div>
+    </div>
+
+    <!-- ── image node 1 (inside region) ────────────────────────── -->
+    <div class="node node-img" style="left: 320px; top: 270px; width: 140px; height: 140px;">
+      <img src="https://picsum.photos/seed/atelier-img-1/280/280" alt="" />
+    </div>
+
+    <!-- ── image node 2 ─────────────────────────────────────────── -->
+    <div class="node node-img" style="left: 320px; top: 460px; width: 140px; height: 140px;">
+      <img src="https://picsum.photos/seed/atelier-img-2/280/280" alt="" />
+    </div>
+
+    <!-- ── focal DraftWorkbench (glass, selected, mid-canvas) ──── -->
+    <div class="workbench" style="left: 600px; top: 290px;">
+      <div class="workbench-title">
+        <svg class="sparkle" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
+        <h2>Moonlit chase — wide shot</h2>
+        <span class="take-pill">take 3/4</span>
+      </div>
+      <div class="workbench-meta">Seedance 2.0 · 1280×720 · 5s · 4×</div>
+      <div class="workbench-prompt">A figure in a long coat runs through frost-covered grass, moonlight casting long shadows. Handheld camera, 24fps, slight motion blur.</div>
+      <div class="workbench-refs">
+        <div class="ref-slot"><img src="https://picsum.photos/seed/atelier-img-1/96/96" alt="" /></div>
+        <div class="ref-slot"><img src="https://picsum.photos/seed/atelier-img-2/96/96" alt="" /></div>
+      </div>
+      <div class="workbench-controls">
+        <span class="pill-control">16:9 ▾</span>
+        <span class="pill-control">5s ▾</span>
+        <span class="pill-control">4× ▾</span>
+        <button class="workbench-generate">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Generate
+        </button>
+      </div>
+      <div class="take-strip">
+        <span class="take-strip-label">Takes</span>
+        <div class="take-tile"><img src="https://picsum.photos/seed/take-a/72/72" /></div>
+        <div class="take-tile"><img src="https://picsum.photos/seed/take-b/72/72" /></div>
+        <div class="take-tile current"><img src="https://picsum.photos/seed/take-c/72/72" /></div>
+        <div class="take-tile processing">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="animation: spin 1.5s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── standalone draft + polaroid stack ──────────────────── -->
+    <div class="node node-draft" style="left: 660px; top: 530px;">
+      <div class="draft-intent">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--emerald-400)" stroke-width="1.5"><path d="M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
+        Branch · scene cut B
+      </div>
+      <div class="meta-row">
+        <span style="color: var(--emerald-300);">Seedance 2.0</span>
+        <span class="meta-dot">·</span>
+        <span>1280×720 · 5s · 2×</span>
+      </div>
+    </div>
+
+    <!-- polaroid stack — 3 layers offset -->
+    <div class="poloroid-stack" style="left: 930px; top: 530px;">
+      <div class="layer l3"></div>
+      <div class="layer l2"></div>
+      <div class="layer l1">
+        <img src="https://picsum.photos/seed/take-d/400/226" alt="" />
+        <div class="status-dot" title="primary completed"></div>
+        <div class="count-badge">3/5</div>
+      </div>
+    </div>
+
+    <!-- branch draft (down-right) -->
+    <div class="node node-draft" style="left: 680px; top: 700px;">
+      <div class="draft-intent">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="1.5"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+        Branched · alt POV
+      </div>
+      <div class="meta-row">
+        <span style="color: var(--emerald-300);">Wan 2.7</span>
+        <span class="meta-dot">·</span>
+        <span>1280×720 · 3s · 4×</span>
+      </div>
+    </div>
+
+    <!-- polaroid stack — fanned-out variant (showing hover state) -->
+    <div class="stack-fan" style="left: 280px; top: 690px;">
+      <div class="take-card"><img src="https://picsum.photos/seed/fan-a/220/124" /></div>
+      <div class="take-card current"><img src="https://picsum.photos/seed/fan-b/220/124" /></div>
+      <div class="take-card processing">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="animation: spin 1.5s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/></svg>
+      </div>
+      <div class="take-card failed">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+    </div>
+
+    <!-- mid-edge label demos -->
+    <div class="edge-label" style="left: 506px; top: 270px;">
+      <span class="dot" style="background: var(--emerald-400);"></span>
+      reference
+    </div>
+    <div class="edge-label" style="left: 956px; top: 670px;">
+      <span class="dot" style="background: var(--amber);"></span>
+      branch
+    </div>
+
+    <!-- annotations (mockup-only callouts) -->
+    <div class="anno" style="left: 600px; top: 268px;">focal frosted glass (Q2)</div>
+    <div class="anno" style="left: 930px; top: 510px;">polaroid stack (Q5)</div>
+    <div class="anno" style="left: 280px; top: 670px;">stack — hover fan-out (Q5)</div>
+    <div class="anno" style="left: 84px; top: 372px;">left rail · emerald active (Q1+Q4)</div>
+    <div class="anno" style="left: 84px; top: 232px;">build-label · Q3+Q4 chromatic edges below</div>
+
+    <!-- ── bottom nav rail ────────────────────────────────────── -->
+    <div class="bottom-rail">
+      <div class="bottom-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/></svg></div>
+      <div class="bottom-btn on" title="Grid snap on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+      <div class="bottom-btn" title="Auto-arrange"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/><path d="M9 6h6M9 18h6M6 9v6M18 9v6"/></svg></div>
+      <span class="bottom-divider"></span>
+      <div class="bottom-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></div>
+      <div class="bottom-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
+      <input type="range" min="25" max="300" value="100" style="width: 88px; margin: 0 6px; accent-color: var(--emerald-400);" />
+      <div class="bottom-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
+      <span class="bottom-zoom-readout">Zoom <span class="v">100</span></span>
+    </div>
+
+  </div>
+
+  <style>
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+  </style>
+</body>
+</html>
