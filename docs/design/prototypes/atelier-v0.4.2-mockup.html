@@ -85,6 +85,40 @@
     /* lighter grain on canvas bg — 6-8% per spec */
     .grain-canvas::after { opacity: 0.07; }
 
+    /* ── v0.4.2 §10.9: IRIDESCENT RIM GLOW ── */
+    /* multi-hue spectrum bar bleeding from the top edge of focal surfaces.
+       static, top-edge only, max 3 surfaces wear it at a time
+       (focal workbench / polaroid primary / approval bubble). */
+    .iridescent-rim {
+      position: relative;
+    }
+    .iridescent-rim::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: 8%;
+      right: 8%;
+      height: 3px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,140,200,0.55) 18%,
+        rgba(180,140,255,0.70) 38%,
+        rgba(140,200,255,0.55) 62%,
+        rgba(180,255,220,0.45) 82%,
+        transparent 100%);
+      filter: blur(4px);
+      border-radius: 999px;
+      pointer-events: none;
+      z-index: 2;
+    }
+    /* narrower rim for smaller surfaces (polaroid / approval bubble) */
+    .iridescent-rim.narrow::before {
+      left: 14%;
+      right: 14%;
+      height: 2.5px;
+      filter: blur(3px);
+    }
+
     /* ── reusable: AEROGEL diffuse aura (v0.4.2 — 3-stop atmospheric) ── */
     .aura-focal::before {
       content: '';
@@ -746,7 +780,7 @@
     .palette-demo {
       position: absolute; left: 78px; top: 200px;
       display: flex; gap: 0;
-      width: 240px; height: 56px;
+      width: 320px; height: 56px;
       border-radius: 10px;
       overflow: hidden;
       border: 1px solid rgba(255,255,255,0.08);
@@ -819,7 +853,7 @@
       <div class="agent-bubble">
         Plan ready: 3 video nodes (Setup → Turn → Payoff) wrapped in a new region "moonlit chase". 3 tool calls.
       </div>
-      <div class="agent-bubble approval">
+      <div class="agent-bubble approval iridescent-rim narrow">
         <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-300)" stroke-width="1.5"><path d="M20 6L9 17l-5-5"/></svg>
           <span style="font-size: 12px; font-weight: 500; color: var(--brand-300);">Awaiting approval</span>
@@ -852,9 +886,10 @@
       <div class="swatch" style="background: var(--sky-300); color: #1a1a1c;">9CC4E8</div>
       <div class="swatch" style="background: var(--sky-100); color: #1a1a1c;">DDE9F4</div>
       <div class="swatch" style="background: var(--peach-200); color: #1a1a1c;">E8B89C</div>
+      <div class="swatch" style="background: linear-gradient(90deg, rgba(255,140,200,0.85), rgba(180,140,255,0.95), rgba(140,200,255,0.85), rgba(180,255,220,0.75)); color: white;">RIM</div>
     </div>
     <div style="position: absolute; left: 78px; top: 178px; z-index: 35;">
-      <span class="build-label">Aerogel palette · cobalt → sky → light → peach</span>
+      <span class="build-label">Aerogel palette · cobalt · sky · light · peach · iridescent-rim</span>
     </div>
 
     <!-- ── legend ──────────────────────────────────────────────── -->
@@ -895,8 +930,8 @@
       <img src="https://picsum.photos/seed/atelier-img-2/280/280" alt="" />
     </div>
 
-    <!-- ── focal DraftWorkbench (glass + AEROGEL aura + 11% grain) ── -->
-    <div class="workbench aura-focal grain" style="left: 600px; top: 290px;">
+    <!-- ── focal DraftWorkbench (glass + AEROGEL aura + 11% grain + IRIDESCENT RIM) ── -->
+    <div class="workbench aura-focal grain iridescent-rim" style="left: 600px; top: 290px;">
       <div class="workbench-title">
         <svg class="sparkle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
         <h2>Moonlit chase — wide shot</h2>
@@ -943,7 +978,7 @@
     <div class="poloroid-stack" style="left: 940px; top: 530px;">
       <div class="layer l3"></div>
       <div class="layer l2"></div>
-      <div class="layer l1 aura-take">
+      <div class="layer l1 aura-take iridescent-rim narrow">
         <img src="https://picsum.photos/seed/take-d/400/226" alt="" />
         <div class="status-dot"></div>
         <div class="count-badge">3/5</div>
@@ -973,8 +1008,8 @@
     </div>
 
     <!-- annotations -->
-    <div class="anno" style="left: 600px; top: 268px;">focal · aerogel aura (cobalt → sky → peach) + 11% grain</div>
-    <div class="anno" style="left: 940px; top: 510px;">polaroid · aerogel halo on primary</div>
+    <div class="anno" style="left: 600px; top: 268px;">focal · aerogel aura + 11% grain + iridescent rim (top edge)</div>
+    <div class="anno" style="left: 940px; top: 510px;">polaroid primary · aerogel halo + iridescent rim</div>
     <div class="anno" style="left: 78px; top: 142px;">v0.4.2 atmospheric palette</div>
     <div class="anno" style="right: 340px; top: 280px;">right rail · sky aura bleeds left into canvas</div>
     <div class="anno" style="left: 50%; bottom: 100px; transform: translateX(-50%);">dock · aerogel aura at bottom edge</div>

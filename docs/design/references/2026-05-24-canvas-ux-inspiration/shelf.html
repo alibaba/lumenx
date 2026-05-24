@@ -538,6 +538,46 @@
       opacity: 0.22;
     }
 
+    /* iridescent rim glow demo (the technique missed in card 03) */
+    .demo-iridescent {
+      position: relative;
+      width: 220px;
+      padding: 18px 20px;
+      background: rgba(20,20,22,0.65);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 12px;
+      box-shadow: 0 8px 20px -10px rgba(0,0,0,0.6);
+      color: rgba(255,255,255,0.92);
+    }
+    .demo-iridescent::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: 8%;
+      right: 8%;
+      height: 3px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,140,200,0.55) 18%,
+        rgba(180,140,255,0.70) 38%,
+        rgba(140,200,255,0.55) 62%,
+        rgba(180,255,220,0.45) 82%,
+        transparent 100%);
+      filter: blur(4px);
+      border-radius: 999px;
+      pointer-events: none;
+    }
+    .demo-iridescent .title {
+      display: block;
+      font-size: 13px; font-weight: 500;
+      margin-bottom: 4px;
+    }
+    .demo-iridescent .meta {
+      display: block;
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+    }
+
     /* hidden peach bleed demo */
     .demo-bleed {
       width: 280px; height: 160px;
@@ -824,6 +864,43 @@
         </details>
       </div>
 
+      <div class="repro">
+        <h3>Reproduction 3 · <span class="name">Iridescent rim glow</span> · <span class="tag tag-tech">tech</span></h3>
+        <div class="sandbox">
+          <div class="demo-iridescent">
+            <span class="title">Image Generator</span>
+            <span class="meta">model · positive · negative</span>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> iridescent rim glow（虹彩边缘晕 / aurora bloom）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 元素边缘（通常是顶部弧线）渗出一道**多色光谱**——粉→紫→蓝→青同时存在，柔模糊。像 Arc 浏览器顶 tab 选中态、Apple Vision Pro 焦点高光、肥皂泡油膜——给静态 UI 一种"被光照亮 / 在呼吸"的活物感。和 hidden warm bleed 不同：那是单一暖色藏冷调里，这是**整段光谱**铺在边缘。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>.demo-iridescent {
+  position: relative;
+  background: rgba(20,20,22,0.65);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 12px;
+}
+.demo-iridescent::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 8%; right: 8%;
+  height: 3px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,140,200,0.55) 18%,
+    rgba(180,140,255,0.70) 38%,
+    rgba(140,200,255,0.55) 62%,
+    rgba(180,255,220,0.45) 82%,
+    transparent 100%);
+  filter: blur(4px);
+  border-radius: 999px;
+}</pre>
+        </details>
+      </div>
+
       <div class="palette">
         <p class="section-title">Palette</p>
         <div class="palette-strip">
@@ -851,6 +928,12 @@
             <p class="feel">协作者 Kate 的别针色</p>
             <div class="rgb-hex">RGB 96,165,250</div>
           </div>
+          <div class="palette-card on-dark" style="background: linear-gradient(90deg, #ff8cc8, #b88cff, #8cc8ff, #b8ffdc);">
+            <div class="hex-pill dark-on" style="background: rgba(0,0,0,0.55);">spectrum</div>
+            <h4 class="poetic-name">Iridescent</h4>
+            <p class="feel">多色光谱 rim，焦点元素的"活光"</p>
+            <div class="rgb-hex">pink → violet → sky → mint</div>
+          </div>
         </div>
       </div>
 
@@ -859,6 +942,7 @@
         <ul>
           <li><strong>multiplayer pin</strong> — 协作者头像作为小药丸钉在他们正编辑的节点角落</li>
           <li><strong>screen-pinned composer</strong> — 永远 visible 的 prompt 输入条，浮在屏幕底部固定位置</li>
+          <li><strong>iridescent rim glow</strong> — 元素边缘渗出多色光谱（粉→紫→蓝→青），柔模糊，给静态 UI 活物感</li>
         </ul>
       </div>
     </article>

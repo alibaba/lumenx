@@ -570,3 +570,110 @@ step 2 (connector lines). Updated order:
 
 Steps 2-5, 7, 9 are pure CSS-token work, mostly trivial; the heavy
 work remains the original v0.4 plan.
+
+### 10.9 Iridescent rim glow — the missing focal signal
+
+After v0.4.2 mockup landed, user feedback identified that I had
+missed a technique present on `03-instagram.jpeg`: a multi-hue
+spectrum bar bleeding from the top edge of focal nodes (the
+"Image Generator" node and the screen-pinned composer pill). Where
+the aerogel aura is a wide, soft, atmospheric halo BEHIND the
+element, the **iridescent rim** is a thin, sharp(er), prismatic
+spectrum ON the element's top edge — pink → violet → sky → mint all
+at once.
+
+Reference patterns: Apple Vision Pro selected rim, Arc Browser tab
+bar active indicator, oil-slick water surface, holographic foil.
+
+The aerogel aura (§10.3) and the iridescent rim solve different
+problems:
+
+- **Aerogel aura**: atmospheric weight around the focal element —
+  "this element has space around it that is also alive"
+- **Iridescent rim**: localised hyper-focal accent on the element
+  itself — "this element is lit from a direction we can't see; it
+  has its own subtle aliveness"
+
+They compose — focal workbench gets **both**: aerogel aura behind +
+iridescent rim on top edge.
+
+#### Token
+
+Add to the atmospheric tier (§10.1):
+
+| Role | Token | Value | Used for |
+|---|---|---|---|
+| Spectrum rim | `--iridescent-band` | `linear-gradient(90deg, transparent 0%, rgba(255,140,200,0.55) 18%, rgba(180,140,255,0.70) 38%, rgba(140,200,255,0.55) 62%, rgba(180,255,220,0.45) 82%, transparent 100%)` | top-edge rim on focal surfaces |
+
+#### Implementation
+
+A `::before` pseudo-element with a thin horizontal spectrum bar,
+positioned 1-2 px above the element's top border, with `filter:
+blur(4px)` for the soft bleed.
+
+```css
+.iridescent-top-rim {
+  position: relative;
+}
+.iridescent-top-rim::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 8%;
+  right: 8%;
+  height: 3px;
+  background: var(--iridescent-band);
+  filter: blur(4px);
+  border-radius: 999px;
+  pointer-events: none;
+}
+```
+
+#### Where it appears in v0.4.2 (post-§10.9 update)
+
+Apply only on the **3 highest-attention focal surfaces** — these are
+where the user is currently looking; iridescent rim says "this is
+where you are." More than 3 simultaneous rims dilute the signal.
+
+1. **Selected DraftWorkbench** — top-edge iridescent rim, ~80%
+   width centered.
+2. **Polaroid stack — primary take (top layer)** — top-edge rim,
+   ~70% width centered.
+3. **Agent panel "Awaiting approval" bubble** (when present) —
+   top-edge rim, ~90% width centered.
+
+Other glass surfaces (right rail base, bottom dock, take strip,
+chips) **do not** get the rim. They stay quiet so the rim signal
+remains rare and meaningful.
+
+#### Discipline
+
+- The rim is **always horizontal across the top edge** in v0.4.2.
+  Full-perimeter conic-gradient rims (Arc Browser style) are v0.5
+  candidates — they're more complex and risk visual noise.
+- Opacity values in the gradient are tuned for a dark background.
+  If light-mode lands in the future (§7 of original v0.4 spec
+  flagged off-white cream backgrounds), the alphas need bumping
+  ~1.5×.
+- The rim must not be animated in v0.4.x. Static only. (A subtle
+  ~6s drift could be a v0.5 polish but risks being noticeable in
+  peripheral vision and tiring.)
+
+#### Updated implementation order (replaces §10.8)
+
+The iridescent rim slots in **alongside** the aura step:
+
+1. Brand recolor — cobalt blue primary (from v0.4 §6 step 1).
+2. Atmospheric palette tier — add `sky-300`, `sky-100`, `peach-200`,
+   `cream-100`, `--iridescent-band` tokens.
+3. Canvas background — atmospheric wash overlay (§10.4).
+4. Aura recipe update — multi-stop atmospheric (§10.3).
+5. **(also new in this step)** Iridescent rim on focal workbench,
+   polaroid primary, approval bubble (§10.9).
+6. Pigment grain bump — 6% → 10-12% + add canvas layer (§10.2).
+7. Connector lines — chromatic-semantic edges (from v0.4 §6 step 2).
+8. Selected edge halo — 2-stop drop-shadow (§10.6).
+9. Icon discipline (from v0.4 §6 step 3).
+10. Typography breathing — spacing-only tweaks (§10.5).
+11. Focal frosted glass (from v0.4 §6 step 4).
+12. Polaroid stack (from v0.4 §6 step 5).

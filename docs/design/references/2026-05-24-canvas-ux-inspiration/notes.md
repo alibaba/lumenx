@@ -137,6 +137,44 @@ When you want to say "I want this kind of thing", these are the words:
 | Always-visible bottom prompt input | **Screen-pinned composer** | #03 |
 | Subtle "tool placed on a desk" framing | **Artifact-on-desk** | #01 |
 
+## Wave 1.5 — `03-instagram` corrected (missed observation)
+
+### Missed in initial analysis: **iridescent rim glow**
+
+The user flagged that I missed a critical technique on `03-instagram.jpeg`:
+**a multi-hue spectrum glow that bleeds along the top edge of certain
+nodes** (specifically the "Image Generator" node header) and the
+bottom "screen-pinned composer" pill. It reads as pink → violet → sky
+→ mint **all at once**, soft and blurred — not a single color, not a
+gradient between 2 colors, but a **spectrum band**.
+
+This is different from the `hidden warm bleed` I noted on the Arpan
+poster (single warm color hidden in a cool dominant gradient). The
+iridescent rim is **the full prismatic spectrum laid along an edge**,
+like:
+
+- Apple Vision Pro selected-state rim
+- Arc Browser tab bar active indicator
+- Oil-slick on water surface
+- Holographic foil on a credit card
+- Aurora borealis (the visual quality, not the meteorological reality)
+
+**Naming**: `iridescent rim glow` (industry term, with synonyms
+`aurora bloom`, `holographic edge`, `spectral rim light`). Distinct
+from `hidden warm bleed`.
+
+**Why it matters for Atelier**: this is the missing piece on focal
+elements. v0.4.2 added cobalt + sky + peach aerogel aura behind
+focal surfaces — but the **top edge** of the focal workbench still
+reads as flat. A 2-3 px iridescent rim on the top edge would give
+the focal moment a "lit by something we can't see" feeling that pure
+gradient aura doesn't achieve. v0.4.3 (or in-place v0.4.2 update)
+adds this.
+
+The card-03 entry in shelf.html has been updated to include this as
+Reproduction 3 with a live HTML/CSS demo (a multi-hue blurred bar
+along the top of a card).
+
 ## Wave 2 — Arpan addition (single ref)
 
 ### `05-arpan-karmakar.jpeg` — "Why Less Is More" newsletter cover
