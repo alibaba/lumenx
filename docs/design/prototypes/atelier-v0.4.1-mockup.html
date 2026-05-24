@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Atelier v0.4.1 — visual mockup</title>
+  <meta name="viewport" content="width=1480" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <style>
+    /* ── tokens ───────────────────────────────────────────────── */
+    :root {
+      /* canvas */
+      --canvas-bg: #0c0c0e;
+      --canvas-dot: rgba(255,255,255,0.06);
+
+      /* chrome surfaces */
+      --node-bg-static: rgba(20,20,22,0.40);
+      --node-bg-glass:  rgba(18,18,22,0.52);
+      --border-static:  rgba(255,255,255,0.10);
+      --border-glass:   rgba(255,255,255,0.14);
+
+      /* text */
+      --text-fg:        rgba(255,255,255,0.95);
+      --text-mute:      rgba(255,255,255,0.55);
+      --text-quiet:     rgba(255,255,255,0.38);
+
+      /* brand — cobalt blue replaces emerald */
+      --brand-400:      #3b6bff;
+      --brand-300:      #6e8fff;
+      --brand-500:      #2548d8;
+      --brand-glow-30:  rgba(59,107,255,0.30);
+      --brand-glow-15:  rgba(59,107,255,0.15);
+      --brand-glow-08:  rgba(59,107,255,0.08);
+
+      /* semantic accents */
+      --amber:          #fbbf24;
+      --violet:         #a78bfa;
+      --cyan:           #22d3ee;
+      --slate:          #94a3b8;
+
+      /* status — emerald demoted here */
+      --status-completed: #34d399;
+      --status-processing:#60a5fa;
+      --status-failed:    #f87171;
+    }
+
+    html, body {
+      margin: 0; padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background: #1a1a1d;
+      color: var(--text-fg);
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: "cv11", "ss01";
+    }
+    .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; }
+    .font-mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+    /* the ONE sanctioned mono-caps style — build label only */
+    .build-label {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.28em;
+      color: var(--text-quiet);
+      text-transform: uppercase;
+    }
+
+    /* ── reusable: grain overlay (6% noise on glass surfaces) ── */
+    .grain {
+      position: relative;
+    }
+    .grain::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+      opacity: 0.06;
+      border-radius: inherit;
+    }
+
+    /* ── reusable: cobalt diffuse aura ────────────────────────── */
+    .aura-focal::before {
+      content: '';
+      position: absolute;
+      inset: -60px;
+      background:
+        radial-gradient(ellipse at 35% 40%, var(--brand-glow-30) 0%, var(--brand-glow-08) 35%, transparent 65%);
+      filter: blur(24px);
+      pointer-events: none;
+      z-index: -1;
+      border-radius: inherit;
+    }
+    .aura-side-left::before {
+      /* used for the right rail — aura bleeds LEFT into the canvas */
+      content: '';
+      position: absolute;
+      top: 10%; bottom: 10%; left: -120px; width: 200px;
+      background:
+        radial-gradient(ellipse at 70% 50%, var(--brand-glow-30) 0%, transparent 70%);
+      filter: blur(28px);
+      pointer-events: none;
+      z-index: -1;
+    }
+    .aura-bottom::before {
+      /* used for the bottom dock — aura bleeds UP from the dock */
+      content: '';
+      position: absolute;
+      left: -40px; right: -40px; bottom: -70px; height: 140px;
+      background:
+        radial-gradient(ellipse at 50% 80%, var(--brand-glow-30) 0%, transparent 70%);
+      filter: blur(28px);
+      pointer-events: none;
+      z-index: -1;
+    }
+    .aura-take::before {
+      /* small halo around a polaroid stack's top take */
+      content: '';
+      position: absolute;
+      inset: -14px;
+      background: radial-gradient(ellipse at center, var(--brand-glow-30) 0%, transparent 60%);
+      filter: blur(14px);
+      pointer-events: none;
+      z-index: -1;
+      border-radius: inherit;
+    }
+
+    /* ── viewport shell ───────────────────────────────────────── */
+    .stage {
+      width: 1440px; height: 900px;
+      margin: 24px auto;
+      position: relative;
+      background: var(--canvas-bg);
+      background-image:
+        radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
+      background-size: 28px 28px;
+      background-position: -14px -14px;
+      overflow: hidden;
+      border-radius: 14px;
+      box-shadow: 0 30px 80px -30px rgba(0,0,0,0.7);
+    }
+
+    /* ── top bar ──────────────────────────────────────────────── */
+    .topbar {
+      position: absolute; top: 0; left: 0; right: 0; height: 48px;
+      display: flex; align-items: center; gap: 14px;
+      padding: 0 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      backdrop-filter: blur(10px);
+      background: rgba(12,12,14,0.55);
+      z-index: 40;
+    }
+    .topbar-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      color: var(--text-fg);
+    }
+    .breadcrumb-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-fg);
+    }
+    .breadcrumb-pill svg { color: var(--text-mute); }
+    .build-label.in-topbar { margin-left: auto; }
+    .cta-brand {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 7px 13px;
+      border-radius: 999px;
+      background: rgba(59,107,255,0.18);
+      border: 1px solid rgba(59,107,255,0.50);
+      color: var(--brand-300);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .cta-brand:hover { background: rgba(59,107,255,0.28); }
+
+    /* ── left rail ────────────────────────────────────────────── */
+    .left-rail {
+      position: absolute; left: 0; top: 48px; bottom: 0;
+      width: 56px;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      background: rgba(12,12,16,0.96);
+      border-right: 1px solid rgba(255,255,255,0.08);
+      z-index: 30;
+    }
+    .left-rail-modes { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+    .rail-brand {
+      width: 36px; height: 36px;
+      display: grid; place-items: center;
+      border-radius: 8px;
+      background: var(--brand-glow-15);
+      color: var(--brand-400);
+      box-shadow: inset 0 0 0 1px rgba(59,107,255,0.30);
+      margin-bottom: 6px;
+    }
+    .rail-btn {
+      position: relative;
+      width: 40px; height: 40px;
+      display: grid; place-items: center;
+      border-radius: 6px;
+      color: var(--text-mute);
+      cursor: pointer;
+    }
+    .rail-btn:hover { background: rgba(255,255,255,0.05); color: var(--text-fg); }
+    .rail-btn.active {
+      background: var(--brand-glow-15);
+      color: var(--brand-300);
+      box-shadow: inset 0 0 0 1px rgba(59,107,255,0.32);
+    }
+    .rail-btn.active::after {
+      content: ""; position: absolute; left: 0; top: 50%;
+      transform: translateY(-50%);
+      width: 3px; height: 20px;
+      border-radius: 0 2px 2px 0;
+      background: var(--brand-400);
+    }
+
+    /* ── right rail (frosted glass + aura + grain) ────────────── */
+    .right-rail {
+      position: absolute; right: 0; top: 48px; bottom: 0;
+      width: 320px;
+      background: var(--node-bg-glass);
+      backdrop-filter: blur(14px) saturate(180%);
+      border-left: 1px solid var(--border-glass);
+      box-shadow:
+        0 24px 48px -22px rgba(0,0,0,0.8),
+        0 4px 14px -4px rgba(0,0,0,0.55),
+        inset 0 1px 0 0 rgba(255,255,255,0.05);
+      z-index: 25;
+      padding: 18px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .right-rail h3 {
+      margin: 0; font-size: 13px; font-weight: 600;
+      color: var(--text-fg);
+      display: flex; align-items: center; gap: 8px;
+      letter-spacing: -0.005em;
+    }
+    .right-rail-sub { font-size: 11px; color: var(--text-quiet); }
+    .agent-bubble {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.06);
+      font-size: 13px; line-height: 1.55;
+      color: var(--text-fg);
+    }
+    .agent-bubble.user {
+      align-self: flex-end;
+      background: rgba(59,107,255,0.12);
+      border-color: rgba(59,107,255,0.28);
+      color: var(--brand-300);
+      font-style: italic;
+    }
+    .agent-bubble.approval {
+      border-color: rgba(59,107,255,0.32);
+      background: rgba(59,107,255,0.06);
+    }
+    .seg-toggle {
+      display: inline-flex;
+      padding: 2px;
+      border-radius: 7px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .seg-toggle .seg {
+      padding: 5px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-mute);
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .seg-toggle .seg.on {
+      background: rgba(59,107,255,0.20);
+      color: var(--brand-300);
+    }
+
+    /* ── bottom-center DOCK (composer + quick-add) ───────────── */
+    .dock {
+      position: absolute;
+      left: 50%; bottom: 32px;
+      transform: translateX(-50%);
+      width: 640px; height: 56px;
+      display: flex; align-items: center;
+      padding: 0 8px 0 12px;
+      gap: 6px;
+      border-radius: 28px;
+      background: var(--node-bg-glass);
+      backdrop-filter: blur(14px) saturate(180%);
+      border: 1px solid var(--border-glass);
+      box-shadow:
+        0 24px 48px -22px rgba(0,0,0,0.8),
+        0 4px 14px -4px rgba(0,0,0,0.55),
+        inset 0 1px 0 0 rgba(255,255,255,0.05);
+      z-index: 35;
+    }
+    .dock-chips { display: flex; gap: 6px; align-items: center; }
+    .dock-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-fg);
+      cursor: pointer;
+    }
+    .dock-chip:hover {
+      background: rgba(59,107,255,0.10);
+      border-color: rgba(59,107,255,0.30);
+      color: var(--brand-300);
+    }
+    .dock-chip kbd {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.30);
+      color: var(--text-quiet);
+      margin-left: 2px;
+    }
+    .dock-divider {
+      width: 1px; height: 24px;
+      background: rgba(255,255,255,0.08);
+      margin: 0 6px;
+    }
+    .dock-composer {
+      flex: 1;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dock-input {
+      flex: 1;
+      font-size: 13px;
+      color: var(--text-mute);
+      padding: 6px 4px;
+    }
+    .dock-mode-seg { font-size: 10px; }
+    .dock-submit {
+      width: 36px; height: 36px;
+      display: grid; place-items: center;
+      border-radius: 999px;
+      background: rgba(59,107,255,0.22);
+      border: 1px solid rgba(59,107,255,0.55);
+      color: var(--brand-300);
+      cursor: pointer;
+    }
+    .dock-submit:hover { background: rgba(59,107,255,0.34); }
+
+    /* ── bottom-left viewport rail (kept separate) ───────────── */
+    .bottom-rail {
+      position: absolute; left: 78px; bottom: 18px;
+      height: 36px;
+      display: flex; align-items: center; gap: 2px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: rgba(20,20,22,0.96);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow:
+        0 14px 30px -18px rgba(0,0,0,0.7),
+        0 2px 6px -2px rgba(0,0,0,0.5),
+        inset 0 1px 0 0 rgba(255,255,255,0.05);
+      z-index: 30;
+    }
+    .bottom-btn {
+      width: 28px; height: 28px;
+      display: grid; place-items: center;
+      border-radius: 6px;
+      color: var(--text-mute);
+      cursor: pointer;
+    }
+    .bottom-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-fg); }
+    .bottom-btn.on { background: rgba(255,255,255,0.06); color: var(--text-fg); }
+    .bottom-divider { width: 1px; height: 16px; background: rgba(255,255,255,0.08); margin: 0 4px; }
+    .bottom-zoom-readout {
+      font-size: 11px;
+      color: var(--text-mute);
+      padding: 0 10px;
+      cursor: pointer;
+      display: inline-flex; align-items: baseline; gap: 4px;
+    }
+    .bottom-zoom-readout .label { font-size: 10px; color: var(--text-quiet); }
+
+    /* ── nodes ────────────────────────────────────────────────── */
+    .node {
+      position: absolute;
+      background: var(--node-bg-static);
+      border: 1px solid var(--border-static);
+      border-radius: 10px;
+      box-shadow: 0 8px 20px -10px rgba(0,0,0,0.5);
+      overflow: hidden;
+      color: var(--text-fg);
+    }
+    .node-img { width: 140px; height: 140px; }
+    .node-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    .node-draft {
+      width: 244px;
+      padding: 12px 14px;
+    }
+    .node-draft .draft-intent {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 14px; font-weight: 500;
+      color: var(--text-fg);
+      letter-spacing: -0.005em;
+      margin-bottom: 6px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .node-draft .meta-row {
+      display: flex; gap: 6px; align-items: center;
+      font-size: 11px; font-weight: 500;
+      color: var(--text-mute);
+    }
+    .node-draft .meta-row .model { color: var(--brand-300); }
+    .node-draft .meta-dot { color: var(--text-quiet); }
+
+    /* ── focal workbench (glass + aura + grain) ─────────────── */
+    .workbench {
+      position: absolute;
+      width: 480px;
+      background: var(--node-bg-glass);
+      backdrop-filter: blur(14px) saturate(180%);
+      border: 1px solid var(--border-glass);
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow:
+        0 24px 48px -22px rgba(0,0,0,0.85),
+        0 4px 14px -4px rgba(0,0,0,0.55),
+        inset 0 1px 0 0 rgba(255,255,255,0.05);
+      z-index: 20;
+    }
+    .workbench-title {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 10px;
+    }
+    .workbench-title .sparkle { color: var(--brand-400); }
+    .workbench-title h2 {
+      margin: 0;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 15px; font-weight: 500;
+      letter-spacing: -0.005em;
+      color: var(--text-fg);
+    }
+    .workbench-title .take-pill {
+      margin-left: auto;
+      display: inline-flex; gap: 6px; align-items: baseline;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(110,143,255,0.30);
+      background: rgba(59,107,255,0.10);
+      color: var(--brand-300);
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .workbench-title .take-pill .num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .workbench-meta {
+      font-size: 11px;
+      color: var(--text-mute);
+      font-weight: 500;
+      margin-bottom: 14px;
+    }
+    .workbench-meta .model { color: var(--brand-300); }
+    .workbench-prompt {
+      padding: 11px 13px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.06);
+      font-size: 13px; line-height: 1.55;
+      color: var(--text-fg);
+      margin-bottom: 14px;
+    }
+    .workbench-refs { display: flex; gap: 7px; margin-bottom: 14px; }
+    .ref-slot {
+      width: 48px; height: 48px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(110,143,255,0.32);
+      overflow: hidden;
+    }
+    .ref-slot img { width: 100%; height: 100%; object-fit: cover; }
+    .workbench-controls { display: flex; gap: 8px; align-items: center; }
+    .pill-control {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 6px 11px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px;
+      color: var(--text-fg);
+      cursor: pointer;
+    }
+    .workbench-generate {
+      margin-left: auto;
+      padding: 8px 16px;
+      border-radius: 999px;
+      background: rgba(59,107,255,0.22);
+      border: 1px solid rgba(59,107,255,0.55);
+      color: var(--brand-300);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .workbench-generate:hover { background: rgba(59,107,255,0.34); }
+
+    /* take strip inside workbench */
+    .take-strip {
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 14px; padding-top: 12px;
+      border-top: 1px dashed rgba(255,255,255,0.08);
+    }
+    .take-strip-label {
+      font-size: 11px;
+      color: var(--text-quiet);
+      font-weight: 500;
+      margin-right: 2px;
+    }
+    .take-tile {
+      width: 36px; height: 36px;
+      border-radius: 5px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.4);
+      flex-shrink: 0;
+    }
+    .take-tile img { width: 100%; height: 100%; object-fit: cover; }
+    .take-tile.current {
+      border-color: var(--brand-400);
+      box-shadow: 0 0 0 1px var(--brand-400);
+    }
+    .take-tile.processing {
+      background: rgba(96,165,250,0.15);
+      display: grid; place-items: center;
+      color: var(--status-processing);
+    }
+
+    /* ── region frame ────────────────────────────────────────── */
+    .region {
+      position: absolute;
+      background: rgba(34,211,238,0.04);
+      border: 1px dashed rgba(34,211,238,0.32);
+      border-radius: 8px;
+    }
+    .region-title-bar {
+      height: 30px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 10px;
+      background: rgba(34,211,238,0.07);
+      border-bottom: 1px dashed rgba(34,211,238,0.30);
+      border-radius: 8px 8px 0 0;
+      cursor: grab;
+    }
+    .region-title-bar .chev {
+      width: 14px; height: 14px;
+      display: grid; place-items: center;
+      color: var(--text-mute);
+      cursor: pointer;
+    }
+    .region-title-bar .dot { width: 6px; height: 6px; border-radius: 999px; }
+    .region-title-bar .dot.cyan { background: var(--cyan); }
+    .region-title-bar .title {
+      flex: 1;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px; font-weight: 500;
+      color: rgba(207,250,254,0.95);
+      letter-spacing: -0.005em;
+    }
+    .region-title-bar .count {
+      background: rgba(255,255,255,0.10);
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--text-mute);
+    }
+
+    /* ── polaroid stack ──────────────────────────────────────── */
+    .poloroid-stack {
+      position: absolute;
+      width: 200px; height: 113px;
+    }
+    .poloroid-stack .layer {
+      position: absolute;
+      width: 200px; height: 113px;
+      border-radius: 6px;
+      background: var(--node-bg-static);
+      border: 1px solid var(--border-static);
+      box-shadow: 0 8px 20px -10px rgba(0,0,0,0.5);
+    }
+    .poloroid-stack .layer.l3 {
+      transform: translate(12px, 8px) rotate(1deg);
+      background: linear-gradient(135deg, #1a1a1f, #0f0f12);
+    }
+    .poloroid-stack .layer.l2 {
+      transform: translate(6px, 4px) rotate(0.5deg);
+      background: linear-gradient(135deg, #1f1f25, #131316);
+    }
+    .poloroid-stack .layer.l1 {
+      transform: translate(0, 0);
+      overflow: hidden;
+      border-color: rgba(110,143,255,0.40);
+      box-shadow:
+        0 8px 20px -10px rgba(0,0,0,0.5),
+        0 0 0 1px rgba(59,107,255,0.20);
+    }
+    .poloroid-stack .layer.l1 img { width: 100%; height: 100%; object-fit: cover; }
+    .poloroid-stack .status-dot {
+      position: absolute; top: 6px; right: 6px;
+      width: 7px; height: 7px; border-radius: 999px;
+      background: var(--status-completed);
+      box-shadow: 0 0 0 2px rgba(52,211,153,0.18);
+      z-index: 3;
+    }
+    .poloroid-stack .count-badge {
+      position: absolute; bottom: 6px; right: 6px;
+      padding: 2px 7px;
+      background: rgba(0,0,0,0.65);
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: rgba(255,255,255,0.95);
+      z-index: 3;
+    }
+
+    /* polaroid stack — fanned out variant */
+    .stack-fan {
+      position: absolute;
+      display: flex; gap: 6px;
+      padding: 7px;
+      border-radius: 9px;
+      background: rgba(0,0,0,0.22);
+      border: 1px dashed rgba(255,255,255,0.10);
+    }
+    .stack-fan .take-card {
+      width: 110px; height: 62px;
+      border-radius: 5px;
+      border: 1px solid var(--border-static);
+      overflow: hidden;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .stack-fan .take-card.current {
+      border-color: var(--brand-400);
+      box-shadow: 0 0 0 1px var(--brand-400);
+    }
+    .stack-fan .take-card img { width: 100%; height: 100%; object-fit: cover; }
+    .stack-fan .take-card.processing {
+      background: rgba(96,165,250,0.15);
+      display: grid; place-items: center;
+      color: var(--status-processing);
+    }
+    .stack-fan .take-card.failed {
+      background: rgba(248,113,113,0.15);
+      display: grid; place-items: center;
+      color: var(--status-failed);
+    }
+
+    /* edge labels */
+    .edge-label {
+      position: absolute;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(12,12,14,0.92);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-fg);
+      pointer-events: none;
+      z-index: 5;
+    }
+    .edge-label .dot { width: 6px; height: 6px; border-radius: 999px; }
+
+    /* SVG edges layer */
+    .edges-svg {
+      position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .edge-glow-cobalt { filter: drop-shadow(0 0 4px rgba(59,107,255,0.65)); }
+
+    /* legend */
+    .legend {
+      position: absolute; left: 78px; top: 68px;
+      padding: 12px 14px;
+      border-radius: 9px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px; line-height: 1.75;
+      color: var(--text-mute);
+      max-width: 240px;
+      z-index: 35;
+    }
+    .legend h4 {
+      margin: 0 0 6px 0;
+      font-size: 11px; font-weight: 600;
+      color: var(--text-fg);
+      letter-spacing: -0.005em;
+    }
+    .legend .row { display: flex; align-items: center; gap: 8px; }
+    .legend .swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+    .anno {
+      position: absolute;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--brand-300);
+      background: rgba(59,107,255,0.14);
+      padding: 3px 7px;
+      border-radius: 4px;
+      border: 1px solid rgba(59,107,255,0.30);
+      pointer-events: none;
+      z-index: 50;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <!-- ── top bar ─────────────────────────────────────────────── -->
+    <div class="topbar">
+      <div class="topbar-title">Atelier</div>
+      <span class="breadcrumb-pill">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 18l-6-6 6-6"/></svg>
+        Moonlit chase · take 4
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18l6-6-6-6"/></svg>
+      </span>
+      <span class="build-label in-topbar">Atelier · v0.4.1 · mockup</span>
+      <button class="cta-brand">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+        Share
+      </button>
+    </div>
+
+    <!-- ── left rail ───────────────────────────────────────────── -->
+    <aside class="left-rail">
+      <div class="left-rail-modes">
+        <div class="rail-brand">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
+        </div>
+        <div class="rail-btn" title="Add"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M12 5v14M5 12h14"/></svg></div>
+        <div class="rail-btn" title="Assets"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+        <div class="rail-btn" title="Workflows"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+        <div class="rail-btn" title="History"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></div>
+        <div class="rail-btn active" title="Director">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        </div>
+        <div class="rail-btn" title="Agent"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h0M16 16h0"/></svg></div>
+        <div class="rail-btn" title="Sequence"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10v4M10 10v4M14 10v4M18 10v4"/></svg></div>
+      </div>
+      <div class="left-rail-modes">
+        <div class="rail-btn" title="Undo"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 00-4-4H4"/></svg></div>
+        <div class="rail-btn" title="Redo"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><polyline points="15 14 20 9 15 4"/><path d="M4 20v-7a4 4 0 014-4h12"/></svg></div>
+        <div class="rail-btn" title="Help"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg></div>
+      </div>
+    </aside>
+
+    <!-- ── right rail (frosted glass + aura + grain) ───────────── -->
+    <aside class="right-rail aura-side-left grain">
+      <h3>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" style="color: var(--brand-400);"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg>
+        Atelier Agent
+        <span class="right-rail-sub" style="margin-left: auto;">untrusted · approve each</span>
+      </h3>
+      <div class="seg-toggle">
+        <span class="seg">Free</span>
+        <span class="seg on">Director</span>
+      </div>
+
+      <div class="agent-bubble user">3-shot story · moonlit chase · seedance 2.0</div>
+      <div class="agent-bubble">
+        Plan ready: 3 video nodes (Setup → Turn → Payoff) wrapped in a new region "moonlit chase". 3 tool calls.
+      </div>
+      <div class="agent-bubble approval">
+        <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-300)" stroke-width="1.5"><path d="M20 6L9 17l-5-5"/></svg>
+          <span style="font-size: 11px; font-weight: 500; color: var(--brand-300);">Awaiting approval</span>
+        </div>
+        canvas.createRegion · canvas.createVideoNode × 3 · canvas.attachToRegion × 3
+      </div>
+    </aside>
+
+    <!-- ── edges SVG layer ─────────────────────────────────────── -->
+    <svg class="edges-svg" width="100%" height="100%">
+      <!-- cobalt reference (was emerald): image → focal workbench, SELECTED → drop-shadow halo -->
+      <g class="edge-glow-cobalt">
+        <path d="M 460 285 C 530 285, 540 380, 600 380" fill="none" stroke="rgba(59,107,255,0.95)" stroke-width="2" stroke-dasharray="1 5"/>
+        <circle cx="460" cy="285" r="2.5" fill="var(--brand-400)"/>
+        <circle cx="600" cy="380" r="2.5" fill="var(--brand-400)"/>
+      </g>
+      <!-- cobalt reference: image → standalone draft (default, not selected) -->
+      <path d="M 460 475 C 540 475, 560 560, 660 560" fill="none" stroke="rgba(59,107,255,0.55)" stroke-width="1.25" stroke-dasharray="1 5"/>
+      <!-- amber branch: take stack → branch draft, hover-related -->
+      <path d="M 960 595 C 1010 595, 1010 715, 880 715" fill="none" stroke="rgba(251,191,36,0.85)" stroke-width="1.75" stroke-dasharray="1 5"/>
+      <circle cx="960" cy="595" r="2.5" fill="var(--amber)"/>
+      <circle cx="880" cy="715" r="2.5" fill="var(--amber)"/>
+      <!-- violet sequence: hover-revealed -->
+      <path d="M 760 560 C 800 560, 800 715, 760 715" fill="none" stroke="rgba(167,139,250,0.55)" stroke-width="1.25" stroke-dasharray="1 5"/>
+    </svg>
+
+    <!-- ── legend ──────────────────────────────────────────────── -->
+    <div class="legend">
+      <h4>Chromatic edges</h4>
+      <div class="row"><div class="swatch" style="background: var(--brand-400);"></div> reference (brand)</div>
+      <div class="row"><div class="swatch" style="background: var(--amber);"></div> branch</div>
+      <div class="row"><div class="swatch" style="background: var(--violet);"></div> sequence (hover)</div>
+      <div class="row"><div class="swatch" style="background: var(--slate);"></div> generic</div>
+      <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08);">
+        <div class="row"><div class="swatch" style="background: var(--status-completed); border-radius: 999px; width: 8px; height: 8px;"></div> status · completed</div>
+        <div class="row"><div class="swatch" style="background: var(--status-processing); border-radius: 999px; width: 8px; height: 8px;"></div> status · processing</div>
+        <div class="row"><div class="swatch" style="background: var(--status-failed); border-radius: 999px; width: 8px; height: 8px;"></div> status · failed</div>
+      </div>
+    </div>
+
+    <!-- ── region: "moonlit chase" ─────────────────────────────── -->
+    <div class="region" style="left: 290px; top: 220px; width: 490px; height: 230px;">
+      <div class="region-title-bar">
+        <span class="chev">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+        <span class="dot cyan"></span>
+        <span class="title">Moonlit chase</span>
+        <span class="count">3</span>
+      </div>
+    </div>
+
+    <div class="node node-img" style="left: 310px; top: 270px;">
+      <img src="https://picsum.photos/seed/atelier-img-1/280/280" alt="" />
+    </div>
+    <div class="node node-img" style="left: 310px; top: 460px;">
+      <img src="https://picsum.photos/seed/atelier-img-2/280/280" alt="" />
+    </div>
+
+    <!-- ── focal DraftWorkbench (glass + cobalt aura + grain) ──── -->
+    <div class="workbench aura-focal grain" style="left: 600px; top: 290px;">
+      <div class="workbench-title">
+        <svg class="sparkle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
+        <h2>Moonlit chase — wide shot</h2>
+        <span class="take-pill"><span class="num">3</span><span>of 4</span></span>
+      </div>
+      <div class="workbench-meta"><span class="model">Seedance 2.0</span> · 1280×720 · 5s · 4×</div>
+      <div class="workbench-prompt">A figure in a long coat runs through frost-covered grass, moonlight casting long shadows. Handheld camera, 24fps, slight motion blur.</div>
+      <div class="workbench-refs">
+        <div class="ref-slot"><img src="https://picsum.photos/seed/atelier-img-1/96/96" alt="" /></div>
+        <div class="ref-slot"><img src="https://picsum.photos/seed/atelier-img-2/96/96" alt="" /></div>
+      </div>
+      <div class="workbench-controls">
+        <span class="pill-control">16:9 ▾</span>
+        <span class="pill-control">5s ▾</span>
+        <span class="pill-control">4× ▾</span>
+        <button class="workbench-generate">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Generate
+        </button>
+      </div>
+      <div class="take-strip">
+        <span class="take-strip-label">Takes</span>
+        <div class="take-tile"><img src="https://picsum.photos/seed/take-a/72/72" /></div>
+        <div class="take-tile"><img src="https://picsum.photos/seed/take-b/72/72" /></div>
+        <div class="take-tile current"><img src="https://picsum.photos/seed/take-c/72/72" /></div>
+        <div class="take-tile processing">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="animation: spin 1.5s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── standalone draft + polaroid stack (with aura on top take) ──────────────────── -->
+    <div class="node node-draft" style="left: 660px; top: 530px;">
+      <div class="draft-intent">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-400)" stroke-width="1.5"><path d="M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
+        Branch · scene cut B
+      </div>
+      <div class="meta-row">
+        <span class="model">Seedance 2.0</span>
+        <span class="meta-dot">·</span>
+        <span>1280×720 · 5s · 2×</span>
+      </div>
+    </div>
+
+    <div class="poloroid-stack" style="left: 940px; top: 530px;">
+      <div class="layer l3"></div>
+      <div class="layer l2"></div>
+      <div class="layer l1 aura-take">
+        <img src="https://picsum.photos/seed/take-d/400/226" alt="" />
+        <div class="status-dot"></div>
+        <div class="count-badge">3/5</div>
+      </div>
+    </div>
+
+    <!-- branch draft (down-right) -->
+    <div class="node node-draft" style="left: 680px; top: 695px;">
+      <div class="draft-intent">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="1.5"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+        Branched · alt POV
+      </div>
+      <div class="meta-row">
+        <span class="model">Wan 2.7</span>
+        <span class="meta-dot">·</span>
+        <span>1280×720 · 3s · 4×</span>
+      </div>
+    </div>
+
+    <!-- polaroid stack — fanned-out variant -->
+    <div class="stack-fan" style="left: 268px; top: 700px;">
+      <div class="take-card"><img src="https://picsum.photos/seed/fan-a/220/124" /></div>
+      <div class="take-card current"><img src="https://picsum.photos/seed/fan-b/220/124" /></div>
+      <div class="take-card processing">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="animation: spin 1.5s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/></svg>
+      </div>
+      <div class="take-card failed">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+    </div>
+
+    <!-- mid-edge labels (hover-related state demo) -->
+    <div class="edge-label" style="left: 503px; top: 270px;">
+      <span class="dot" style="background: var(--brand-400);"></span>
+      Reference
+    </div>
+    <div class="edge-label" style="left: 956px; top: 666px;">
+      <span class="dot" style="background: var(--amber);"></span>
+      Branch
+    </div>
+
+    <!-- annotations (mockup-only) -->
+    <div class="anno" style="left: 600px; top: 268px;">focal · glass + aura + grain</div>
+    <div class="anno" style="left: 940px; top: 510px;">polaroid · cobalt halo on primary</div>
+    <div class="anno" style="left: 268px; top: 680px;">stack fan-out (hover state)</div>
+    <div class="anno" style="left: 78px; top: 372px;">director · cobalt active</div>
+    <div class="anno" style="left: 78px; top: 230px;">build label · only mono-caps allowed</div>
+    <div class="anno" style="left: 50%; bottom: 100px; transform: translateX(-50%);">dock · quick-add + composer · always visible</div>
+
+    <!-- ── bottom-center DOCK (new in v0.4.1) ─────────────────── -->
+    <div class="dock aura-bottom grain">
+      <div class="dock-chips">
+        <button class="dock-chip">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+          Image <kbd>I</kbd>
+        </button>
+        <button class="dock-chip">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          Video <kbd>V</kbd>
+        </button>
+        <button class="dock-chip">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
+          Idea <kbd>T</kbd>
+        </button>
+      </div>
+      <span class="dock-divider"></span>
+      <div class="dock-composer">
+        <span class="dock-input">Describe to create, or ask the agent…</span>
+        <div class="seg-toggle dock-mode-seg">
+          <span class="seg">Free</span>
+          <span class="seg on">Director</span>
+        </div>
+        <button class="dock-submit">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── bottom-left viewport rail (kept separate) ─────────── -->
+    <div class="bottom-rail">
+      <div class="bottom-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/></svg></div>
+      <div class="bottom-btn on" title="Grid snap on"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+      <div class="bottom-btn" title="Auto-arrange"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/><path d="M9 6h6M9 18h6M6 9v6M18 9v6"/></svg></div>
+      <span class="bottom-divider"></span>
+      <div class="bottom-btn" title="Fit view"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></div>
+      <div class="bottom-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
+      <input type="range" min="25" max="300" value="100" style="width: 88px; margin: 0 6px; accent-color: var(--brand-400);" />
+      <div class="bottom-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></div>
+      <span class="bottom-zoom-readout"><span class="label">Zoom</span> 100</span>
+    </div>
+
+  </div>
+
+  <style>
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+  </style>
+</body>
+</html>

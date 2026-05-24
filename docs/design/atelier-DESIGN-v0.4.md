@@ -261,3 +261,138 @@ This document supersedes the visual sections of
 [`atelier-DESIGN.md`](atelier-DESIGN.md) for any new work. Until a
 v0.5 lands, the older doc remains canonical for what's already
 shipped; this doc is canonical for the v0.4 direction.
+
+---
+
+## 9. v0.4.1 update — editorial / print upgrade
+
+After the first v0.4 mockup landed, user feedback (2026-05-24)
+identified four shortfalls: color usage felt "tech SaaS" not
+"premium creative tool"; typography read "developer tool" not
+"creative studio"; the bottom-dock pattern universal to canvas tools
+was missing. A second grilling session locked the v0.4.1 deltas
+below. Earlier §0-§8 decisions are otherwise unchanged.
+
+Mockup: [`prototypes/atelier-v0.4.1-mockup.html`](prototypes/atelier-v0.4.1-mockup.html).
+
+### 9.1 Brand palette — emerald demoted, cobalt blue primary
+
+The reference image that anchored the upgrade was a Chinese poster
+of cobalt-blue liquid ink dispersed on cream paper. That print/print
+aesthetic — depth, restraint, editorial — is the new direction.
+
+| Role | v0.4 | v0.4.1 |
+|---|---|---|
+| Primary brand | emerald-400 `#34d399` | **cobalt `#3b6bff`** |
+| Hover-up brand | emerald-300 `#6ee7b7` | **cobalt-300 `#6e8fff`** |
+| Pressed brand | emerald-500 `#10b981` | **cobalt-500 `#2548d8`** |
+| `reference` edge | emerald | **cobalt** |
+| `branch` edge | amber | amber (unchanged) |
+| `sequence` edge | violet | violet (unchanged) |
+| Status — completed | (used the brand) | **emerald-400** ← demoted here |
+| Status — processing | blue | blue (unchanged) |
+| Status — failed | red | red (unchanged) |
+
+The brand color and the "completed" status color are now distinct.
+This is the Linear-Cron convention and is critical for users who scan
+status by hue — emerald = "I'm done", cobalt = "this is Atelier".
+
+### 9.2 Diffuse aura + grain — material upgrade for focal surfaces
+
+Focal frosted glass (§2.2) gains two new layers:
+
+**Diffuse aura.** A radial cobalt glow placed underneath the focal
+element. Technically: `radial-gradient` in a positioned pseudo-element
+plus `filter: blur(20-28px)`. Behavior: applies to the **three** focal
+surfaces — selected DraftWorkbench (large outer aura), RightRail
+AgentPanel (side-bleed aura leaking left into the canvas), polaroid
+stack's primary take (small halo). Static nodes get no aura. Edges get
+no aura except the selected edge (see §9.4 selected-edge halo).
+
+**Grain (6% opacity SVG noise).** A subtle paper-grain overlay applied
+to all frosted-glass surfaces (DraftWorkbench, AgentPanel, the new
+bottom dock). Implementation: a single SVG `feTurbulence` data-URI
+applied via `::after` with `mix-blend-mode: overlay; opacity: 0.06`.
+Cost: one cached paint per surface. Removes the "plastic" feel of flat
+glass; signals editorial / print provenance.
+
+### 9.3 Typography — mono-caps purge + Space Grotesk display
+
+The "developer tool" feel was traced to 147 occurrences of
+`font-mono uppercase tracking-wide` scattered across 20 components.
+v0.4.1 removes almost all of them.
+
+| Use | Family | Size | Weight | Case | Notes |
+|---|---|---|---|---|---|
+| Project title (top bar) | Space Grotesk display | 18 | 500 | Sentence | new |
+| Region title | Space Grotesk display | 13 | 500 | Sentence | was mono-caps |
+| Draft intent heading | Space Grotesk display | 15 | 500 | Sentence | was mono-caps |
+| AgentPanel section header | Inter | 13 | 600 | Sentence | was mono-caps |
+| Body / Prompt | Inter | 13 | 400 | Sentence | unchanged |
+| Chrome labels (chips, buttons, toasts) | Inter | 12 | 500 | Sentence | was mono-caps |
+| Meta info (model · 1280×720) | Inter | 11 | 500 | Sentence | was mono-caps |
+| Numeric counter (3/5, 100%) | JetBrains Mono | 11 | 500 | — | mono retained for alignment |
+| Build label only | JetBrains Mono | 9 | 500 | UPPERCASE | the **single** sanctioned mono-caps use |
+
+Type scale crunched to six values: **11 / 13 / 15 / 18 / 22 / 28**.
+Any other size is a smell.
+
+### 9.4 Bottom dock — quick-add + composer
+
+A canvas-product universal pattern v0.4 omitted. v0.4.1 adds a
+bottom-center dock as the "high-frequency intent" surface.
+
+**Layout.** Bottom-center floating pill, 640px × 56px, 32px above
+canvas bottom. Material: focal frosted glass + grain + bottom-edge
+cobalt aura (third aura element in §9.2).
+
+**Left half — quick-add chips.** Three sentence-case chips for the
+highest-frequency node types: `+ Image (I)`, `+ Video (V)`,
+`+ Idea (T)`. Single-click creation; bypasses the LeftRail Add panel
+for these three (the Add panel still handles Comment / Script /
+From Library / Region / etc.).
+
+**Right half — global composer.** A text input ("Describe to create,
+or ask the agent…"), a `Free | Director` segment toggle mirroring
+AgentPanelV3's planner mode, and a cobalt-tinted submit button.
+Keyboard `/` focuses this input from anywhere on the canvas.
+
+**Always visible**, with two state nuances:
+- When a draft is selected and DraftWorkbench is open, the dock
+  remains visible but the placeholder text shifts to
+  "Ask the agent about anything…" — signaling "the workbench composer
+  iterates the current draft; the dock composer starts new things".
+- Modal contexts (Cmd+P palette, full-screen preview) hide the dock
+  briefly to avoid occluding the focus surface.
+
+**Division of labor.** LeftRail = mode/panel switching (Assets,
+Workflows, History, Director, Agent, Sequence). Dock = immediate
+action (quick-add, agent input). They share no overlap; the dock is
+the express lane for what users do most.
+
+### 9.5 Selected-edge cobalt halo
+
+A small craft addition: a selected chromatic edge gets
+`filter: drop-shadow(0 0 4px rgba(59,107,255,0.65))` — a soft cobalt
+glow tracing its path. Default and hover edges keep flat color.
+Cost: trivial (one filter per selected edge, typically ≤1 at a time).
+Effect: selection is felt visually without thickening the line.
+
+### 9.6 Updated implementation order
+
+The v0.4.1 deltas slot into the v0.4 implementation order (§6) like so:
+
+1. **Brand recolor — cobalt blue primary** (replaces the v0.4 emerald
+   step). Token rename plus emerald demotion to a status-only color.
+2. **Typography purge** (Q3 of v0.4.1). The 147 mono-caps replacement
+   + Space Grotesk display + type-scale enforcement. Mechanical but
+   large.
+3. **Bottom dock** (Q4 of v0.4.1). New `<AtelierDock />` component;
+   wires quick-add to existing creator actions and composer to
+   `planAgentTurn` / `runAgentTurn`. Replaces the v0.4 brand recolor
+   slot for "first visible upgrade".
+4. **Chromatic-semantic connector lines** (unchanged from v0.4 §6).
+5. **Icon discipline** (unchanged from v0.4 §6).
+6. **Focal frosted glass + diffuse aura + grain** (extends v0.4 §6
+   step 4 — same PR, additional layers).
+7. **Polaroid stack** (unchanged from v0.4 §6).
