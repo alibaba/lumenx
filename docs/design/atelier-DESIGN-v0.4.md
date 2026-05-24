@@ -686,3 +686,189 @@ The iridescent rim slots in **alongside** the aura step:
 10. Typography breathing — spacing-only tweaks (§10.5).
 11. Focal frosted glass (from v0.4 §6 step 4).
 12. Polaroid stack (from v0.4 §6 step 5).
+
+---
+
+### 10.10 v0.4.3 bloom deployment roster — where + when iridescent bloom appears
+
+**Problem this section fixes.** §10.9 introduced iridescent bloom (4-stop
+radial gradient with `mix-blend-mode: screen`) but only deployed it on
+the focal DraftWorkbench. Reviewing 03-instagram.jpeg (whole-node bloom
+on important nodes) and 04-tranmautritam.jpeg (edge-endpoint bloom at
+signal junctions) revealed two distinct deployment patterns that bloom
+should cover. This section makes the deployment rules normative.
+
+Reference mockup: `docs/design/prototypes/atelier-v0.4.3-mockup.html`.
+
+#### 10.10.1 Two patterns
+
+- **Pattern A — whole-node bloom**: bloom wraps the full perimeter of a
+  surface. Signals "this surface matters right now". Inspired by
+  03-instagram's halo around the Image Generator node.
+- **Pattern B — edge endpoint bloom**: bloom sits at the connection
+  point between an edge and a node. Signals "signal is converging /
+  relationship is live". Inspired by 04-tranmautritam's chromatic
+  endpoints on signal-junction edges.
+
+Pattern A and Pattern B can co-occur — a selected workbench wears
+Pattern A, and the edges flowing into it wear Pattern B endpoints in
+the workbench's edge-color.
+
+#### 10.10.2 Single recipe + strength multiplier
+
+There is **one** bloom CSS recipe (the four-gradient `.bloom::after`
+from §10.9). It scales via a CSS custom property:
+
+```css
+:root { --bloom-strength: 1; }
+
+.bloom::after {
+  inset: calc(-40px * var(--bloom-strength));
+  /* 4 radial gradients, each alpha multiplied by var(--bloom-strength) */
+  filter: blur(calc(28px + 8px * var(--bloom-strength)));
+}
+
+.bloom-hero      { --bloom-strength: 1.5; }  /* selected focal surface */
+.bloom-secondary { --bloom-strength: 1.0; }  /* live-state surfaces   */
+.bloom-ambient   { --bloom-strength: 0.6; }  /* low-key acknowledgers */
+```
+
+Three tiers, never more. The tier is a deployment classification, not a
+prop the user toggles per component.
+
+#### 10.10.3 Pattern A deployment roster
+
+| Tier | Strength | Surface(s) | Trigger |
+|---|---|---|---|
+| **HERO** | 1.5× | Selected DraftWorkbench (only one at a time) | `selected` state |
+| **SECONDARY** | 1.0× | Polaroid stack current take · Approval bubble · Processing node | take is current / approval pending / task in flight |
+| **AMBIENT** | 0.6× | LeftRail active mode · Dock when composer focused · Connect port on hover · Selected or hover-related edge endpoints (Pattern B) | active / focused / hovered / edge selected |
+
+Components **not** in this roster (region containers, static media
+nodes, take strip non-current takes, chips, top-bar project name, region
+title bars) do not wear bloom. Adding bloom there clutters the canvas
+without a real meaning.
+
+#### 10.10.4 Breathing — when bloom pulses
+
+Bloom is static by default. Two animation rates add liveness when the
+surface is doing something:
+
+| Animation | Rate | Easing | When |
+|---|---|---|---|
+| `breath-generating` | 2.4s | ease-in-out | Task in flight (processing node, generating polaroid). The pulse is visible — it says "I'm working." |
+| `breath-attending` | 4.5s | ease-in-out | Selected hero + polaroid current take + connected edge endpoints. The pulse is barely-there — it says "you are here." |
+
+Opacity range is intentionally narrow (`0.85→1.0` for generating,
+`0.92→1.0` for attending) — the breath should be perceived as alive,
+not as a strobe.
+
+**Critical rule — selected-node breath propagates to connected edges.**
+This is the user's key insight: when a node is selected, its connected
+edges' endpoints also wear `breath-attending` (Pattern B inherits from
+Pattern A). This makes "what is this node related to" visible at a
+glance without adding chrome — the breath itself is the answer.
+
+#### 10.10.5 Pattern B — endpoint bloom recipe
+
+Endpoint bloom is **edge-color-inherited**: it picks up the chromatic
+color of the edge it sits on (cobalt for ref edges, amber for hover-
+related branches, violet for special, etc.). Implementation is a stack
+of three drop-shadows on the endpoint circle:
+
+```css
+.endpoint-cobalt {
+  filter:
+    drop-shadow(0 0 3px  rgba(59,107,255, 0.65))   /* core */
+    drop-shadow(0 0 6px  rgba(156,196,232, 0.35))  /* mid */
+    drop-shadow(0 0 10px rgba(180,140,255, 0.18)); /* iridescent outer */
+}
+```
+
+`.endpoint-amber`, `.endpoint-violet`, `.endpoint-slate` follow the same
+3-stop pattern with edge-color in the core stop and progressively cooler
+tones outward. The outermost stop is always a hint of iridescence — it
+visually ties the endpoint family to the same atmospheric palette as
+Pattern A.
+
+Endpoint bloom only appears at the endpoints of edges that are
+**selected, hover-related, or connected to a selected node**. Idle
+edges stay endpoint-bloom-free — otherwise every junction lights up
+and the discipline collapses.
+
+#### 10.10.6 Discipline cap — the rules of arbitration
+
+At any moment the canvas must show **at most**:
+
+- **≤1 HERO** bloom (selected focal surface)
+- **≤3 SECONDARY** bloom
+- **≤4 AMBIENT** bloom
+- **Total ≤8** simultaneously visible bloom instances
+
+When more candidates qualify than the cap allows, drop in this order:
+
+| Tier | Priority (keep) | Drop |
+|---|---|---|
+| HERO | Most recent selection | older selections lose hero, downgrade to secondary if approval/polaroid roles apply, else no bloom |
+| SECONDARY | (1) approval pending  (2) polaroid current take  (3) processing nodes by `created_at` ascending | excess processing nodes lose bloom but keep status dot |
+| AMBIENT | (1) LeftRail active mode  (2) Dock when focused  (3) Hover ports  (4) selected/hover edge endpoints | excess endpoints stay color-tinted but lose drop-shadow stack |
+
+The cap exists because the v0.4.2 review surfaced "everything wears
+bloom = nothing reads as focal". Bloom is a scarcity-driven signal.
+
+#### 10.10.7 Layer composition order
+
+Bloom interacts with aura, rim, and the element body. To keep the
+layering legible across surfaces, use this z-index discipline on every
+bloom-bearing surface:
+
+| Layer | z-index | What |
+|---|---|---|
+| Bloom (`::after`) | -3 | Outermost atmospheric halo |
+| Aura (`::before`) | -1 | Mid-distance atmospheric wash (from §10.3) |
+| Element body | 0 (default) | The actual card / button / glass surface |
+| Iridescent rim (`::before` of inner wrapper) | 1 | Crisp top-edge spectrum bar (from §10.9) |
+
+The aura sits *between* bloom and the element body — aura adds local
+warmth, bloom adds field-radius color. The rim sits *above* the body —
+it's the only sharp light in the stack.
+
+**Do not** stack bloom on a surface that already has a hard drop-shadow
+in the same color family — the shadow + bloom muddy each other. Either
+remove the drop-shadow or downgrade bloom to ambient.
+
+#### 10.10.8 What v0.4.3 explicitly does NOT change
+
+- Bloom recipe (4 radial gradients + screen blend) — unchanged from §10.9.
+- Aerogel palette tokens — unchanged from §10.1.
+- Pigment grain percentages — unchanged from §10.2.
+- Typography breathing — unchanged from §10.5.
+- Bloom is still **never** applied to region containers, static media
+  nodes, chips, the top bar, or take strip non-current takes.
+
+#### 10.10.9 Updated implementation order (replaces §10.9's order)
+
+The bloom roster slots in after the rim step:
+
+1. Brand recolor — cobalt blue primary (from v0.4 §6 step 1).
+2. Atmospheric palette tier (§10.1).
+3. Canvas background — atmospheric wash overlay (§10.4).
+4. Aura recipe update — multi-stop atmospheric (§10.3).
+5. Iridescent rim on focal workbench + polaroid primary + approval
+   bubble (§10.9).
+6. **(new)** Bloom variable system — `--bloom-strength` + the three
+   tier classes (§10.10.2).
+7. **(new)** Pattern A roster — HERO/SECONDARY/AMBIENT deployment per
+   §10.10.3, with discipline cap (§10.10.6).
+8. **(new)** Breathing animations — `breath-generating` + `breath-
+   attending`, including the selected-node-to-edge-endpoint
+   inheritance rule (§10.10.4).
+9. **(new)** Pattern B endpoint bloom — per-color 3-stop drop-shadows
+   on selected / hover-related / connected edges (§10.10.5).
+10. Pigment grain bump — 6% → 10-12% + add canvas layer (§10.2).
+11. Connector lines — chromatic-semantic edges (from v0.4 §6 step 2).
+12. Selected edge halo — 2-stop drop-shadow (§10.6).
+13. Icon discipline (from v0.4 §6 step 3).
+14. Typography breathing — spacing-only tweaks (§10.5).
+15. Focal frosted glass (from v0.4 §6 step 4).
+16. Polaroid stack (from v0.4 §6 step 5).
