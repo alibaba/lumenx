@@ -396,3 +396,177 @@ The v0.4.1 deltas slot into the v0.4 implementation order (§6) like so:
 6. **Focal frosted glass + diffuse aura + grain** (extends v0.4 §6
    step 4 — same PR, additional layers).
 7. **Polaroid stack** (unchanged from v0.4 §6).
+
+---
+
+## 10. v0.4.2 update — Aerogel atmospheric upgrade
+
+The v0.4.1 mockup made progress (cobalt + grain + bottom dock) but
+user feedback flagged that **the cobalt was still too cold and
+synthetic**, and pointed at a new reference (`05-arpan-karmakar.jpeg`
+— see references batch) showing the desired direction: soft sky-blue
+gradients with heavy film grain and editorial poster typography.
+
+v0.4.2 keeps every v0.4.1 decision intact and **adds** an
+atmospheric layer on top, code-named "Aerogel" after the lightest
+known solid — sky-blue, half-translucent, almost ethereal.
+
+Mockup: [`prototypes/atelier-v0.4.2-mockup.html`](prototypes/atelier-v0.4.2-mockup.html).
+
+### 10.1 Palette extension — atmospheric tier
+
+Cobalt is not retired. It still owns **structural** uses (CTA,
+selected ring, ref edge — anywhere high-contrast is required). What's
+new is a parallel **atmospheric tier** — soft sky-blue plus a peach
+grace note — for backgrounds, ambient auras, and any place a
+gradient lives.
+
+| Role | Token | Value | Used for |
+|---|---|---|---|
+| Structural — primary | `brand-400` | `#3b6bff` cobalt | CTA, selected ring, ref edge (unchanged from v0.4.1) |
+| Atmospheric — base | `sky-300` | `#9cc4e8` | aura center, focal-glass tint, ambient wash |
+| Atmospheric — light | `sky-100` | `#dde9f4` | aura mid-stop, gradient horizon line |
+| Atmospheric — warmth | `peach-200` | `#e8b89c` | aura edge "hidden bleed", ambient gradient corner accent |
+| Atmospheric — paper | `cream-100` | `#f3efe6` | reserved for any cream-background context |
+
+The cobalt-sky-peach triplet is the new **aura recipe**. See §10.3.
+
+### 10.2 Pigment grain — bump from 6% to 10-12%
+
+v0.4.1 placed 6% SVG noise on focal glass surfaces only. v0.4.2:
+
+- **Glass surfaces**: 10-12% opacity (was 6%) — the grain should be
+  visible up close, not invisible.
+- **Canvas background**: add a layer at 6-8% opacity over the
+  dot-grid. The whole canvas now has a subtle pigment quality;
+  it never feels "screen-flat" again.
+- Implementation: keep the SVG `feTurbulence` data URI from v0.4.1;
+  just adjust opacity. Cost remains a cached single paint.
+
+### 10.3 Aura — from solid radial to multi-stop atmospheric
+
+v0.4.1 aura was a single-stop cobalt radial gradient at 30% alpha.
+v0.4.2 makes the aura a **3-stop atmospheric gradient** to match the
+Arpan aerogel quality:
+
+```css
+.aura-focal-v042::before {
+  content: '';
+  position: absolute;
+  inset: -80px;
+  background:
+    radial-gradient(ellipse at 35% 40%,
+      rgba(59,107,255,0.32) 0%,        /* cobalt — structural center */
+      rgba(156,196,232,0.18) 35%,      /* sky-blue — atmospheric middle */
+      rgba(232,184,156,0.06) 60%,      /* peach hint — hidden warmth */
+      transparent 80%);
+  filter: blur(28px);
+  pointer-events: none;
+  z-index: -1;
+  border-radius: inherit;
+}
+```
+
+The peach hint at 6% alpha is the **critical detail**. Mathematically
+barely there, but transforms the aura from "tinted light" into
+"atmosphere with depth". Don't omit it.
+
+### 10.4 Canvas background — atmospheric wash overlay
+
+v0.4.1 canvas was `bg #0c0c0e` + dot grid. v0.4.2 adds a **very wide,
+low-opacity atmospheric gradient** underneath the grid, giving the
+whole canvas a sense of place:
+
+```css
+.canvas {
+  background:
+    /* dot grid (top layer) */
+    radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px),
+    /* atmospheric wash — peach corner */
+    radial-gradient(ellipse 120% 80% at 70% 15%,
+      rgba(232,184,156,0.06) 0%,
+      transparent 40%),
+    /* atmospheric wash — sky pool */
+    radial-gradient(ellipse 100% 100% at 30% 70%,
+      rgba(156,196,232,0.08) 0%,
+      transparent 50%),
+    /* base color */
+    #0c0c0e;
+  background-size: 28px 28px, auto, auto, auto;
+  background-position: -14px -14px, 0 0, 0 0, 0 0;
+}
+```
+
+Plus the new noise overlay layer (§10.2). Net effect: the dark canvas
+no longer feels like a blank dark room — it feels like a slightly
+foggy room with a hint of dawn light coming from somewhere.
+
+### 10.5 Typography breathing — same fonts, more space
+
+v0.4.1 typography decisions (Inter body + Space Grotesk display +
+sentence case + 6-step scale) stand. v0.4.2 only adjusts **spacing
+and weight contrast** to match Arpan's editorial poster feel:
+
+- **Hero / project title**: scale up from 18px → 24-28px (top bar
+  and "moments of arrival" only — not every heading).
+- **Display weight bias**: 500 (Medium), not 600/700 (Bold). Heavy
+  weight + dense layout reads "tech"; medium weight + generous space
+  reads "editorial".
+- **Letter-spacing on display**: -0.012em (slight tighten) for big
+  headings 22px+.
+- **Line-height on observation copy**: 1.65 (was 1.55) — breathing.
+
+No new font loads. No type-scale additions.
+
+### 10.6 Selected edge halo — extend the aura recipe
+
+v0.4.1: `drop-shadow(0 0 4px rgba(59,107,255,0.65))` (single cobalt).
+
+v0.4.2: 2-stop drop-shadow mirroring the aura:
+
+```css
+.edge-selected-v042 {
+  filter:
+    drop-shadow(0 0 4px rgba(59,107,255,0.55))    /* cobalt structural */
+    drop-shadow(0 0 8px rgba(156,196,232,0.30));  /* sky atmospheric */
+}
+```
+
+The sky-blue outer drop-shadow gives the line a "lit fog" quality
+without thickening it.
+
+### 10.7 What v0.4.2 explicitly does NOT change
+
+- Chrome layout (left rail, right rail, bottom dock)
+- Mode dispatch and behavior
+- Connector line semantic colors (cobalt for `reference` stays — it
+  owns the structural high-contrast role)
+- Icon stroke / size / state colors
+- Polaroid stack mechanics
+- The 8 P0+P1+P2 code commits already on this branch
+
+This is a **visual material upgrade**, not a layout or behavior
+change. When implementing, all changes land in CSS tokens and 2-3
+component files (aura, canvas, focal glass) — no React component
+restructure.
+
+### 10.8 Implementation order — slots into v0.4 §6
+
+v0.4.2 deltas slot in between v0.4 step 1 (brand recolor) and v0.4
+step 2 (connector lines). Updated order:
+
+1. Brand recolor — cobalt blue primary (from v0.4 §6 step 1).
+2. **(new)** Atmospheric palette tier: register `sky-300`, `sky-100`,
+   `peach-200`, `cream-100` tokens.
+3. **(new)** Canvas background — atmospheric wash overlay (§10.4).
+4. **(new)** Aura recipe update — multi-stop atmospheric (§10.3).
+5. **(new)** Pigment grain bump — 6% → 10-12% + add canvas layer (§10.2).
+6. Connector lines — chromatic-semantic edges (from v0.4 §6 step 2).
+7. **(updated)** Selected edge halo — 2-stop drop-shadow (§10.6).
+8. Icon discipline (from v0.4 §6 step 3).
+9. Typography breathing — spacing-only tweaks (§10.5).
+10. Focal frosted glass (from v0.4 §6 step 4).
+11. Polaroid stack (from v0.4 §6 step 5).
+
+Steps 2-5, 7, 9 are pure CSS-token work, mostly trivial; the heavy
+work remains the original v0.4 plan.

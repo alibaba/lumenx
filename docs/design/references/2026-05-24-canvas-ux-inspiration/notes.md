@@ -137,6 +137,64 @@ When you want to say "I want this kind of thing", these are the words:
 | Always-visible bottom prompt input | **Screen-pinned composer** | #03 |
 | Subtle "tool placed on a desk" framing | **Artifact-on-desk** | #01 |
 
+## Wave 2 — Arpan addition (single ref)
+
+### `05-arpan-karmakar.jpeg` — "Why Less Is More" newsletter cover
+
+- **Source**: Arpan Karmakar (@thearpankarmakar) on Threads; design for
+  KriateDesign Newsletter #025
+- **Observation**:
+  - Editorial poster format, portrait. Top 2/3 is pure atmospheric
+    gradient sky; bottom 1/3 is content.
+  - **Color**: a multi-stop gradient — sky blue (~#9cc4e8) dominant,
+    fading to almost white near the horizon line at ~70% height, with
+    a single hidden bleed of peach/coral (~#e8b89c) in the upper-right
+    corner. The blue is **light, soft, atmospheric** — NOT cobalt /
+    ocean / midnight. Reads as morning sky or watercolor wash.
+  - **Heavy film grain** across the whole gradient — visually ~12-15%
+    opacity. The grain is what makes the color feel like physical
+    pigment on paper rather than digital fill. This is the editorial
+    print quality.
+  - **Typography**: hero "Why Less Is More" set huge, geometric heavy
+    sans, full white, very tight to the bottom-left of the page; tiny
+    mono labels at corners (NEWSLETTER / //025 / SUBSCRIBE) at ~9-10
+    px, also white; body text small multi-column white; brand
+    "kriatedesign" in italic display serif. **All text white**.
+  - Massive **negative space** in the top 2/3 — the page is mostly
+    sky. This is the editorial poster move.
+- **Naming**:
+  - **Aerogel gradient** — the soft, multi-stop, atmospheric wash that
+    has no visible "stops" — it feels continuous like sky or fog. Not
+    `linear-gradient(blue, white)` flat; more like radial + masked +
+    multiple layers blended.
+  - **Pigment grain** — heavy visible film grain (10-15% opacity)
+    applied as a noise overlay. The signature of editorial / print /
+    physical-media aesthetic.
+  - **Hidden peach bleed** — a small off-key warm color (peach,
+    coral, rust) intentionally placed in a corner of an otherwise
+    cool gradient. Adds depth + suggests three-dimensional atmosphere
+    rather than two-color flatness.
+  - **Sky on poster** — a large editorial format where the top 2/3 is
+    pure atmospheric color and the bottom 1/3 is dense content. The
+    "weight at the bottom" reads as gravity; the sky reads as space.
+- **Canvas fit (for Atelier)**:
+  - Aerogel gradient: **directly transplantable to Atelier focal aura**
+    — currently the aura is a single cobalt radial gradient. Upgrade
+    to multi-stop: cobalt center → sky blue mid → peach hint edge →
+    transparent. The peach hint is the critical detail (warmth on
+    cool) that makes it feel "alive" not "tinted".
+  - Pigment grain: **directly transplantable** — currently Atelier
+    has 6% grain on glass surfaces; bump to 10-12% AND extend to the
+    canvas background (not just glass).
+  - Sky on poster: less directly applicable (Atelier is a working
+    canvas not a poster), but suggests the **landing screen / project
+    picker / hero state** of Atelier could use this format. v0.5 idea.
+  - Soft sky-blue palette: **most important takeaway** — the cobalt
+    we picked is too dark / too saturated. Need to introduce a
+    softer "atmospheric blue" sibling color and use IT for
+    aura / background tint, while keeping cobalt for structural
+    high-contrast uses (CTA, edges).
+
 ## Cross-wave DNA (final)
 
 > Wave 2+ deferred — the user locked her preferences off wave 1 alone
