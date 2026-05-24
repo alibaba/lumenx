@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Visual Shelf · 2026-05-24-canvas-ux-inspiration</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap" />
+  <style>
+    /* fonts loaded: Inter (body), Space Grotesk (display), JetBrains Mono (hex + build label) */
+    :root {
+      --bg: #0c0c0e;
+      --surface: rgba(20,20,22,0.40);
+      --surface-2: rgba(20,20,22,0.65);
+      --border: rgba(255,255,255,0.10);
+      --fg: rgba(255,255,255,0.95);
+      --mute: rgba(255,255,255,0.55);
+      --quiet: rgba(255,255,255,0.38);
+      --tag-tech: #a5b4fc;
+      --tag-comp: #6ee7b7;
+      --tag-color: #fcd34d;
+      --tag-type: #fda4af;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.55;
+      font-size: 14px;
+    }
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+      opacity: 0.07;
+      z-index: 9999;
+    }
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 56px 32px 32px;
+    }
+
+    /* hero */
+    .hero {
+      margin-bottom: 80px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 38px;
+      font-weight: 500;
+      letter-spacing: -0.018em;
+      margin: 0 0 12px;
+      line-height: 1.15;
+    }
+    .hero .meta {
+      display: flex; gap: 14px;
+      color: var(--mute);
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* analysis card */
+    .card {
+      margin-bottom: 96px;
+      padding: 48px 0;
+    }
+    .card .hero-img {
+      width: 100%;
+      max-width: 720px;
+      border-radius: 10px;
+      display: block;
+      margin-bottom: 24px;
+      box-shadow: 0 16px 40px -16px rgba(0,0,0,0.7);
+    }
+    .card h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: -0.012em;
+      margin: 0 0 10px;
+    }
+    .tags {
+      display: flex; gap: 6px;
+      margin-bottom: 20px;
+    }
+    .tag {
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .tag-tech { background: rgba(165,180,252,0.12); color: var(--tag-tech); }
+    .tag-comp { background: rgba(110,231,183,0.12); color: var(--tag-comp); }
+    .tag-color { background: rgba(252,211,77,0.12); color: var(--tag-color); }
+    .tag-type { background: rgba(253,164,175,0.12); color: var(--tag-type); }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--mute);
+      margin: 0 0 8px;
+    }
+    .observation p {
+      margin: 0 0 32px;
+      color: var(--fg);
+      line-height: 1.65;
+    }
+
+    .repro {
+      margin-bottom: 28px;
+      padding-top: 20px;
+      border-top: 1px dashed rgba(255,255,255,0.08);
+    }
+    .repro h3 {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--mute);
+      margin: 0 0 14px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .repro h3 .name {
+      color: var(--fg);
+      font-weight: 500;
+    }
+    .sandbox {
+      width: 100%;
+      max-width: 320px;
+      height: 200px;
+      background: #1a1a1f;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      position: relative;
+      margin: 0 0 14px;
+    }
+    .repro .term {
+      font-size: 13px;
+      margin: 6px 0 4px;
+    }
+    .repro .term strong { color: var(--fg); }
+    .repro .plain {
+      font-size: 13px;
+      color: var(--mute);
+      margin: 0 0 8px;
+      line-height: 1.65;
+    }
+    .repro details {
+      margin-top: 6px;
+    }
+    .repro details summary {
+      font-size: 11px;
+      color: var(--quiet);
+      cursor: pointer;
+      list-style: none;
+    }
+    .repro details summary::before { content: '▾ '; margin-right: 4px; }
+    .repro details[open] summary::before { content: '▴ '; }
+    .repro details pre {
+      margin: 8px 0 0;
+      padding: 12px 14px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      color: var(--mute);
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    /* palette card strip */
+    .palette {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px dashed rgba(255,255,255,0.08);
+    }
+    .palette-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .palette-card {
+      position: relative;
+      height: 200px;
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+    .hex-pill {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+    }
+    .hex-pill.dark-on { background: rgba(0,0,0,0.55); color: rgba(255,255,255,0.92); }
+    .hex-pill.light-on { background: rgba(255,255,255,0.85); color: rgba(20,20,20,0.92); }
+    .poetic-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 18px;
+      font-weight: 500;
+      letter-spacing: -0.008em;
+      margin: 0;
+    }
+    .feel {
+      font-size: 11px;
+      line-height: 1.45;
+      margin: 4px 0 0;
+      opacity: 0.88;
+    }
+    .rgb-hex {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      letter-spacing: 0.04em;
+    }
+    .palette-card.on-dark { color: white; }
+    .palette-card.on-light { color: #1a1a1c; }
+
+    .terms-used {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px dashed rgba(255,255,255,0.08);
+    }
+    .terms-used h3 {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--mute);
+      margin: 0 0 10px;
+    }
+    .terms-used ul {
+      margin: 0; padding: 0;
+      list-style: none;
+    }
+    .terms-used li {
+      padding: 4px 0;
+      font-size: 12.5px;
+      color: var(--mute);
+    }
+    .terms-used li strong { color: var(--fg); margin-right: 6px; }
+
+    /* DNA section */
+    .dna {
+      margin: 96px 0 64px;
+      padding: 48px 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .dna > h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 28px;
+      font-weight: 500;
+      letter-spacing: -0.015em;
+      margin: 0 0 8px;
+    }
+    .dna > p {
+      color: var(--mute);
+      font-size: 13px;
+      margin: 0 0 36px;
+    }
+    .dna h3 {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--fg);
+      margin: 28px 0 12px;
+    }
+    .dna ol, .dna ul {
+      margin: 0; padding: 0 0 0 20px;
+      color: var(--mute);
+      font-size: 13px;
+      line-height: 1.85;
+    }
+    .dna .evidence {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--quiet);
+      margin-left: 6px;
+    }
+
+    /* glossary */
+    .glossary {
+      margin-bottom: 80px;
+    }
+    .glossary h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: -0.012em;
+      margin: 0 0 24px;
+    }
+    .glossary dl {
+      margin: 0;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 12px 24px;
+      font-size: 13px;
+    }
+    .glossary dt {
+      font-weight: 500;
+      color: var(--fg);
+    }
+    .glossary dd {
+      margin: 0;
+      color: var(--mute);
+      line-height: 1.55;
+    }
+
+    /* build label */
+    .build-label {
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--quiet);
+      padding: 32px 0;
+    }
+
+    /* ─── reproduction-specific styles (per sandbox) ─── */
+
+    /* mono-accent demo */
+    .demo-mono { display: flex; flex-direction: column; gap: 8px; }
+    .demo-mono-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.45);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      font-size: 11px;
+    }
+    .demo-mono-row.active {
+      border-color: rgba(52,211,153,0.45);
+      background: rgba(52,211,153,0.08);
+      color: #6ee7b7;
+    }
+    .demo-mono-row .dot {
+      width: 6px; height: 6px; border-radius: 999px;
+      background: rgba(255,255,255,0.35);
+    }
+    .demo-mono-row.active .dot { background: #34d399; box-shadow: 0 0 0 2px rgba(52,211,153,0.2); }
+
+    /* polaroid stack demo */
+    .demo-stack { position: relative; width: 160px; height: 90px; }
+    .demo-stack > div {
+      position: absolute;
+      width: 160px; height: 90px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #1f1f25, #0f0f12);
+      border: 1px solid rgba(255,255,255,0.10);
+      box-shadow: 0 6px 16px -8px rgba(0,0,0,0.6);
+    }
+    .demo-stack .l3 { transform: translate(10px, 6px) rotate(1deg); }
+    .demo-stack .l2 { transform: translate(5px, 3px) rotate(0.5deg); }
+    .demo-stack .l1 {
+      background: linear-gradient(135deg, #4f6cb8, #6a4a3a);
+    }
+
+    /* gallery on black demo */
+    .demo-gallery {
+      width: 280px; height: 160px;
+      background: #000;
+      border-radius: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+    .demo-gallery .glow {
+      position: absolute;
+      width: 200px; height: 200px;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, #ff6ad4 0%, #6a4ff3 40%, transparent 70%);
+      filter: blur(20px);
+      opacity: 0.6;
+    }
+    .demo-gallery .tag-pill {
+      position: absolute;
+      bottom: 12px; left: 12px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: #fbbf24;
+      color: #1a1a1c;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    /* chromatic capsule demo */
+    .demo-capsule { display: flex; gap: 8px; flex-direction: column; }
+    .demo-capsule .pill {
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .demo-capsule .pill.weber { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.85); }
+    .demo-capsule .pill.alex { background: #fbbf24; color: #1a1a1c; }
+    .demo-capsule .pill.ethan { background: #34d399; color: #053a26; }
+
+    /* multiplayer pins demo */
+    .demo-pins {
+      width: 240px; height: 140px;
+      background: rgba(20,20,22,0.7);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 8px;
+      position: relative;
+      padding: 12px;
+      font-size: 11px;
+      color: var(--mute);
+    }
+    .demo-pins .pin {
+      position: absolute;
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 500;
+    }
+    .demo-pins .pin.paul { top: -8px; right: 12px; background: #fbbf24; color: #1a1a1c; }
+    .demo-pins .pin.mona { top: -8px; right: 60px; background: #fb7185; color: white; }
+    .demo-pins .pin.kate { bottom: 8px; right: 12px; background: #60a5fa; color: #0a1a3a; }
+    .demo-pins .row {
+      display: flex; justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px dashed rgba(255,255,255,0.08);
+    }
+    .demo-pins .row .v { color: var(--fg); }
+
+    /* screen-pinned composer demo */
+    .demo-composer {
+      width: 280px;
+      padding: 6px 8px 6px 12px;
+      background: rgba(20,20,22,0.7);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 28px;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px;
+      color: var(--mute);
+    }
+    .demo-composer .submit {
+      width: 24px; height: 24px;
+      border-radius: 999px;
+      background: rgba(59,107,255,0.22);
+      border: 1px solid rgba(59,107,255,0.50);
+      color: #6e8fff;
+      display: grid; place-items: center;
+      font-size: 11px;
+    }
+
+    /* frosted glass node demo */
+    .demo-frosted-bg {
+      width: 280px; height: 160px;
+      background: linear-gradient(135deg, #4f3aa8, #2d4d9a 60%, #3a8aa8);
+      border-radius: 8px;
+      display: grid; place-items: center;
+    }
+    .demo-frosted-node {
+      width: 180px;
+      padding: 10px 12px;
+      background: rgba(18,18,22,0.55);
+      backdrop-filter: blur(14px) saturate(180%);
+      border: 1px solid rgba(255,255,255,0.16);
+      border-radius: 10px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.92);
+    }
+    .demo-frosted-node .row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 0;
+    }
+    .demo-frosted-node .row .coin {
+      width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0;
+    }
+    .demo-frosted-node .row .coin.o { background: #fb923c; }
+    .demo-frosted-node .row .coin.b { background: #60a5fa; }
+    .demo-frosted-node .row .coin.g { background: #34d399; }
+
+    /* chromatic edge demo */
+    .demo-edges svg { display: block; }
+
+    /* aerogel gradient demo */
+    .demo-aerogel {
+      width: 280px; height: 200px;
+      border-radius: 12px;
+      background:
+        radial-gradient(ellipse at 70% 18%,
+          rgba(232,184,156,0.45) 0%, transparent 45%),
+        radial-gradient(ellipse at 35% 60%,
+          rgba(156,196,232,0.85) 0%, rgba(221,233,244,0.6) 35%, transparent 70%),
+        linear-gradient(180deg, #b8d4f0 0%, #dde9f4 75%, #f0e8e2 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .demo-aerogel::after {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+      opacity: 0.18;
+    }
+
+    /* pigment grain demo */
+    .demo-grain {
+      width: 280px; height: 160px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #3b6bff 0%, #9cc4e8 100%);
+      position: relative;
+      overflow: hidden;
+      display: grid; place-items: center;
+    }
+    .demo-grain .lbl {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px; font-weight: 500;
+      color: white;
+      position: relative; z-index: 1;
+    }
+    .demo-grain::after {
+      content: '';
+      position: absolute; inset: 0;
+      background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='gr'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23gr)'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+      opacity: 0.22;
+    }
+
+    /* hidden peach bleed demo */
+    .demo-bleed {
+      width: 280px; height: 160px;
+      border-radius: 8px;
+      background:
+        radial-gradient(ellipse at 75% 20%,
+          rgba(232,184,156,0.30) 0%, transparent 45%),
+        linear-gradient(180deg, #6e8fff 0%, #9cc4e8 100%);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- ─── HERO ─── -->
+    <header class="hero">
+      <h1>2026-05-24 · canvas-ux-inspiration</h1>
+      <div class="meta">
+        <span>5 images</span>
+        <span>·</span>
+        <span>analysed 2026-05-24</span>
+        <span>·</span>
+        <span>generated by visual-shelf v0.1</span>
+      </div>
+    </header>
+
+    <!-- ─── card 01 ─── -->
+    <article class="card">
+      <img class="hero-img" src="01-ai-dashboard.jpeg" alt="" />
+      <h2>01-ai-dashboard.jpeg · "Visual Mood Experiment"</h2>
+      <div class="tags">
+        <span class="tag tag-tech">tech</span>
+        <span class="tag tag-comp">comp</span>
+        <span class="tag tag-color">color</span>
+      </div>
+
+      <div class="observation">
+        <p class="section-title">What I see</p>
+        <p>一个 AI 工作流仪表盘，部署在暗画布上、外面包了一层淡 sage green 的 ambient 背景。整套 UI 只用一个电光 emerald 色作为唯一 accent——active 态、连接线、中心 hub 节点全是它。右侧把结果堆成错位的 polaroid 叠层，暗示"还有更多 take，这是当前选中的"。</p>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 1 · <span class="name">单色 accent 体系</span> · <span class="tag tag-tech">tech</span></h3>
+        <div class="sandbox">
+          <div class="demo-mono">
+            <div class="demo-mono-row active"><span class="dot"></span> Active task</div>
+            <div class="demo-mono-row"><span class="dot"></span> Pending task</div>
+            <div class="demo-mono-row"><span class="dot"></span> Queued task</div>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> mono-accent system（单色 accent 体系）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 整个 UI 只用一种品牌色承担激活/CTA/focus，其他全是灰阶。靠"克制"出识别度——所有彩色的东西都被解读为"激活"。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>.demo-mono-row { background: rgba(0,0,0,0.45); ... }
+.demo-mono-row.active {
+  border-color: rgba(52,211,153,0.45);
+  background: rgba(52,211,153,0.08);
+  color: #6ee7b7;
+}</pre>
+        </details>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 2 · <span class="name">Polaroid stack / take pile</span> · <span class="tag tag-comp">comp</span></h3>
+        <div class="sandbox">
+          <div class="demo-stack">
+            <div class="l3"></div>
+            <div class="l2"></div>
+            <div class="l1"></div>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> polaroid stack（叠层结果卡）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 多张卡片错位叠成一摞物理照片，每层旋转 0.5-1°。视觉上暗示"还有更多 take，这是当前那张"——比铺开 N 张省地方又有"实体感"。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>.demo-stack .l3 { transform: translate(10px, 6px) rotate(1deg); }
+.demo-stack .l2 { transform: translate(5px, 3px) rotate(0.5deg); }
+.demo-stack .l1 { /* primary, no offset */ }</pre>
+        </details>
+      </div>
+
+      <div class="palette">
+        <p class="section-title">Palette</p>
+        <div class="palette-strip">
+          <div class="palette-card on-light" style="background: #c8d4cb;">
+            <div class="hex-pill light-on">#c8d4cb</div>
+            <h4 class="poetic-name">Sage Whisper</h4>
+            <p class="feel">外层 ambient 背景，把暗画布"托起"</p>
+            <div class="rgb-hex">RGB 200,212,203</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #0c0c0e;">
+            <div class="hex-pill dark-on">#0c0c0e</div>
+            <h4 class="poetic-name">Ink Black</h4>
+            <p class="feel">工作画布本体，深而不死</p>
+            <div class="rgb-hex">RGB 12,12,14</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #34d399;">
+            <div class="hex-pill dark-on">#34d399</div>
+            <h4 class="poetic-name">Electric Lime</h4>
+            <p class="feel">唯一的 accent，所有"激活"信号</p>
+            <div class="rgb-hex">RGB 52,211,153</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #1e2128;">
+            <div class="hex-pill dark-on">#1e2128</div>
+            <h4 class="poetic-name">Slate Stone</h4>
+            <p class="feel">节点本体，比画布稍亮一档撑层级</p>
+            <div class="rgb-hex">RGB 30,33,40</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="terms-used">
+        <h3>Terms used in this card</h3>
+        <ul>
+          <li><strong>mono-accent system</strong> — 整个 UI 只用一种品牌色承担所有激活/CTA/focus，其他全部灰阶</li>
+          <li><strong>polaroid stack</strong> — 多张卡片错位叠成一摞照片，暗示"还有更多 take，这是当前那张"</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ─── card 02 ─── -->
+    <article class="card">
+      <img class="hero-img" src="02-unknown.jpeg" alt="" />
+      <h2>02-unknown.jpeg · "Welcome to Flora"</h2>
+      <div class="tags">
+        <span class="tag tag-tech">tech</span>
+        <span class="tag tag-comp">comp</span>
+      </div>
+
+      <div class="observation">
+        <p class="section-title">What I see</p>
+        <p>纯黑画布上飘着两张神荧光花的渲染图，chromatic 满饱和；chrome 几乎完全隐形（左 rail 40px、顶部一条 thin bar）。协作者别针（Weber 灰 / Alex 黄 / Ethan 绿）以 floating chromatic capsule 形式钉在画布坐标里。整体像把工作空间当美术馆。</p>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 1 · <span class="name">Gallery-on-black</span> · <span class="tag tag-tech">tech</span></h3>
+        <div class="sandbox">
+          <div class="demo-gallery">
+            <div class="glow"></div>
+            <div class="tag-pill">Weber</div>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> gallery-on-black（黑画廊）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 工作画布全黑、chrome 极薄。所有 chromatic 都留给用户生成物，让作品像挂在美术馆暗墙上发光的画。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>.demo-gallery {
+  background: #000;
+}
+.demo-gallery .glow {
+  background: radial-gradient(circle, #ff6ad4 0%, #6a4ff3 40%, transparent 70%);
+  filter: blur(20px);
+}</pre>
+        </details>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 2 · <span class="name">Floating chromatic capsule</span> · <span class="tag tag-comp">comp</span></h3>
+        <div class="sandbox">
+          <div class="demo-capsule">
+            <div class="pill weber">Weber</div>
+            <div class="pill alex">Alex</div>
+            <div class="pill ethan">Ethan</div>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> floating chromatic capsule（漂浮色丸）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 小药丸形状的高饱和色块——每个协作者一色（也可作分类/状态）。直接钉在画布坐标里，不在 chrome 上。视觉上像物理便利贴。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>.pill {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}</pre>
+        </details>
+      </div>
+
+      <div class="palette">
+        <p class="section-title">Palette</p>
+        <div class="palette-strip">
+          <div class="palette-card on-dark" style="background: #000;">
+            <div class="hex-pill dark-on">#000000</div>
+            <h4 class="poetic-name">Void Black</h4>
+            <p class="feel">极黑画布，让 chromatic 内容像在发光</p>
+            <div class="rgb-hex">RGB 0,0,0</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #6a4ff3;">
+            <div class="hex-pill dark-on">#6a4ff3</div>
+            <h4 class="poetic-name">Ultraviolet</h4>
+            <p class="feel">神性紫，幻觉感的渲染主调</p>
+            <div class="rgb-hex">RGB 106,79,243</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #ff6ad4;">
+            <div class="hex-pill dark-on">#ff6ad4</div>
+            <h4 class="poetic-name">Neon Pink</h4>
+            <p class="feel">霓虹粉，做高对比 highlight</p>
+            <div class="rgb-hex">RGB 255,106,212</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #34d399;">
+            <div class="hex-pill dark-on">#34d399</div>
+            <h4 class="poetic-name">Spring Fresh</h4>
+            <p class="feel">协作者 Ethan 的"在线"色</p>
+            <div class="rgb-hex">RGB 52,211,153</div>
+          </div>
+          <div class="palette-card on-light" style="background: #fbbf24;">
+            <div class="hex-pill light-on">#fbbf24</div>
+            <h4 class="poetic-name">Solar Amber</h4>
+            <p class="feel">协作者 Alex 的"在线"色</p>
+            <div class="rgb-hex">RGB 251,191,36</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="terms-used">
+        <h3>Terms used in this card</h3>
+        <ul>
+          <li><strong>gallery-on-black</strong> — 工作画布全黑、chrome 极薄；让 chromatic 内容像在美术馆暗墙上发光</li>
+          <li><strong>floating chromatic capsule</strong> — 小药丸形高饱和色块钉在画布坐标里，可作协作者/分类/状态</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ─── card 03 ─── -->
+    <article class="card">
+      <img class="hero-img" src="03-instagram.jpeg" alt="" />
+      <h2>03-instagram.jpeg · "image generation v3"</h2>
+      <div class="tags">
+        <span class="tag tag-comp">comp</span>
+        <span class="tag tag-type">type</span>
+      </div>
+
+      <div class="observation">
+        <p class="section-title">What I see</p>
+        <p>节点图工作流（Model → Positive/Negative → Image Generator → Preview），每个节点角落钉着协作者别针（Paul 黄 / Mona 粉 / Kate 蓝）。底部居中浮一个 screen-pinned composer——永远在那等你输入新 intent，与节点选中无关。顶部一个 build-label "image generation v3"，工艺感水印。</p>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 1 · <span class="name">Multiplayer pin</span> · <span class="tag tag-comp">comp</span></h3>
+        <div class="sandbox">
+          <div class="demo-pins">
+            <div class="pin paul">Paul</div>
+            <div class="pin mona">Mona</div>
+            <div class="pin kate">Kate</div>
+            <div class="row">model<span class="v">DreamShaper 6</span></div>
+            <div class="row">positive<span class="v">a black bear...</span></div>
+            <div class="row" style="border: 0;">negative<span class="v">text, objects</span></div>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> multiplayer pin（协作者别针）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 协作者头像/名字以小药丸形式钉在他们正在编辑的节点角落。Figma cursors 的等价物，但锚在 canvas 对象不锚在指针位置。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>.pin {
+  position: absolute;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+}
+.pin.paul { top: -8px; right: 12px; background: #fbbf24; }</pre>
+        </details>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 2 · <span class="name">Screen-pinned composer</span> · <span class="tag tag-comp">comp</span></h3>
+        <div class="sandbox">
+          <div class="demo-composer">
+            <span style="flex: 1;">Describe to create…</span>
+            <div class="submit">↑</div>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> screen-pinned composer（屏锚 composer）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 一个永远 visible 的 prompt 输入条，浮在屏幕底部固定位置（不跟画布滚动）。任何时候按"/"或点击就能输入新 intent。解决"没有选中任何节点时 agent 输入在哪儿"的问题。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>.dock {
+  position: fixed;
+  left: 50%; bottom: 32px;
+  transform: translateX(-50%);
+  width: 640px;
+  border-radius: 28px;
+  backdrop-filter: blur(14px) saturate(180%);
+}</pre>
+        </details>
+      </div>
+
+      <div class="palette">
+        <p class="section-title">Palette</p>
+        <div class="palette-strip">
+          <div class="palette-card on-dark" style="background: #1a1a1d;">
+            <div class="hex-pill dark-on">#1a1a1d</div>
+            <h4 class="poetic-name">Studio Charcoal</h4>
+            <p class="feel">节点 body，明显比 canvas 暗</p>
+            <div class="rgb-hex">RGB 26,26,29</div>
+          </div>
+          <div class="palette-card on-light" style="background: #fbbf24;">
+            <div class="hex-pill light-on">#fbbf24</div>
+            <h4 class="poetic-name">Pin Yellow</h4>
+            <p class="feel">协作者 Paul 的别针色</p>
+            <div class="rgb-hex">RGB 251,191,36</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #fb7185;">
+            <div class="hex-pill dark-on">#fb7185</div>
+            <h4 class="poetic-name">Coral Pin</h4>
+            <p class="feel">协作者 Mona 的别针色</p>
+            <div class="rgb-hex">RGB 251,113,133</div>
+          </div>
+          <div class="palette-card on-light" style="background: #60a5fa;">
+            <div class="hex-pill light-on">#60a5fa</div>
+            <h4 class="poetic-name">Sky Pin</h4>
+            <p class="feel">协作者 Kate 的别针色</p>
+            <div class="rgb-hex">RGB 96,165,250</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="terms-used">
+        <h3>Terms used in this card</h3>
+        <ul>
+          <li><strong>multiplayer pin</strong> — 协作者头像作为小药丸钉在他们正编辑的节点角落</li>
+          <li><strong>screen-pinned composer</strong> — 永远 visible 的 prompt 输入条，浮在屏幕底部固定位置</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ─── card 04 ─── -->
+    <article class="card">
+      <img class="hero-img" src="04-tranmautritam.jpeg" alt="" />
+      <h2>04-tranmautritam.jpeg · "New Character"</h2>
+      <div class="tags">
+        <span class="tag tag-tech">tech</span>
+        <span class="tag tag-color">color</span>
+      </div>
+
+      <div class="observation">
+        <p class="section-title">What I see</p>
+        <p>分屏 split workbench——左侧节点 canvas、右侧整张 character 高分辨预览 + 时间轴 + waveform。左侧的 settings 节点是真 frosted glass（可见 backdrop-blur），每行带一个小 chromatic 圆点 (orange/blue/green) 像硬件 LED。连接线不是灰色——是 chromatic edge（橙、蓝），把"语义"染进边里。</p>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 1 · <span class="name">Frosted glass node</span> · <span class="tag tag-tech">tech</span></h3>
+        <div class="sandbox">
+          <div class="demo-frosted-bg">
+            <div class="demo-frosted-node">
+              <div class="row"><span class="coin o"></span> Mode · Fun</div>
+              <div class="row"><span class="coin b"></span> Trim · Auto</div>
+              <div class="row"><span class="coin g"></span> Voice · Happy</div>
+            </div>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> frosted glass node（毛玻璃节点）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 节点用真高斯模糊半透材质，下层 chromatic 内容隐约透出来。配上每行的 micro-coin 色丸（OS-硬件 LED 的感觉），让"工具感"变成"设备感"。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>.demo-frosted-node {
+  background: rgba(18,18,22,0.55);
+  backdrop-filter: blur(14px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.16);
+}
+.coin.o { background: #fb923c; }  /* orange */
+.coin.b { background: #60a5fa; }  /* blue */
+.coin.g { background: #34d399; }  /* green */</pre>
+        </details>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 2 · <span class="name">Chromatic edge</span> · <span class="tag tag-tech">tech</span></h3>
+        <div class="sandbox">
+          <div class="demo-edges">
+            <svg width="280" height="160" viewBox="0 0 280 160">
+              <path d="M 30 40 C 80 40, 100 80, 150 80" stroke="#fb923c" stroke-width="2" fill="none" stroke-dasharray="1 5"/>
+              <path d="M 30 120 C 80 120, 100 80, 150 80" stroke="#60a5fa" stroke-width="2" fill="none" stroke-dasharray="1 5"/>
+              <circle cx="30" cy="40" r="4" fill="#fb923c"/>
+              <circle cx="30" cy="120" r="4" fill="#60a5fa"/>
+              <circle cx="150" cy="80" r="6" fill="rgba(255,255,255,0.85)" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>
+            </svg>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> chromatic edge（语义色连线）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 连接线不用统一灰色，按"关系类型"染色（橙=A 关系、蓝=B 关系）。看一眼就读懂"哪条线是干嘛的"，比 hover 才出标签快。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>&lt;path stroke="#fb923c" stroke-width="2" stroke-dasharray="1 5" /&gt;
+&lt;path stroke="#60a5fa" stroke-width="2" stroke-dasharray="1 5" /&gt;</pre>
+        </details>
+      </div>
+
+      <div class="palette">
+        <p class="section-title">Palette</p>
+        <div class="palette-strip">
+          <div class="palette-card on-dark" style="background: #4a3a8a;">
+            <div class="hex-pill dark-on">#4a3a8a</div>
+            <h4 class="poetic-name">Twilight Plum</h4>
+            <p class="feel">canvas 背景，紫调而非冷蓝</p>
+            <div class="rgb-hex">RGB 74,58,138</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #fb923c;">
+            <div class="hex-pill dark-on">#fb923c</div>
+            <h4 class="poetic-name">Sunset Orange</h4>
+            <p class="feel">A 关系连线主色 + 温暖 coin</p>
+            <div class="rgb-hex">RGB 251,146,60</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #60a5fa;">
+            <div class="hex-pill dark-on">#60a5fa</div>
+            <h4 class="poetic-name">Cool Steel</h4>
+            <p class="feel">B 关系连线主色 + 状态 coin</p>
+            <div class="rgb-hex">RGB 96,165,250</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #8b5cf6;">
+            <div class="hex-pill dark-on">#8b5cf6</div>
+            <h4 class="poetic-name">Royal Violet</h4>
+            <p class="feel">主 CTA "Export" 按钮</p>
+            <div class="rgb-hex">RGB 139,92,246</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="terms-used">
+        <h3>Terms used in this card</h3>
+        <ul>
+          <li><strong>frosted glass node</strong> — 节点用真高斯模糊半透材质，配 micro-coin 色丸像硬件 LED</li>
+          <li><strong>chromatic edge</strong> — 连线按"关系类型"染色而不是统一灰色，让边本身变成语义信号</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ─── card 05 (Arpan) ─── -->
+    <article class="card">
+      <img class="hero-img" src="05-arpan-karmakar.jpeg" alt="" />
+      <h2>05-arpan-karmakar.jpeg · "Why Less Is More" newsletter</h2>
+      <div class="tags">
+        <span class="tag tag-tech">tech</span>
+        <span class="tag tag-color">color</span>
+        <span class="tag tag-type">type</span>
+      </div>
+
+      <div class="observation">
+        <p class="section-title">What I see</p>
+        <p>Editorial poster：上 2/3 是大面积 aerogel 蓝色渐变（晨雾感），上半右藏一抹 peach；下 1/3 才出现内容，hero "Why Less Is More" 巨大白色 sans 字。整张图覆盖明显胶片颗粒（约 12-15% 强度），让纯色不"塑料"。视觉气质是"水彩 / 印刷品"，不是"屏幕"。</p>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 1 · <span class="name">Aerogel gradient</span> · <span class="tag tag-tech">tech</span></h3>
+        <div class="sandbox">
+          <div class="demo-aerogel"></div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> aerogel gradient（气凝胶渐变）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 多 stop 大面积氛围渐变——没有可见 "硬阶 stop"，感觉像晨雾。用法：1 个 radial 蓝色作为主域 + 1 个 radial peach 作为暖调"暗灯" + 底色作为基础。叠起来。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>background:
+  radial-gradient(ellipse at 70% 18%,
+    rgba(232,184,156,0.45) 0%, transparent 45%),
+  radial-gradient(ellipse at 35% 60%,
+    rgba(156,196,232,0.85) 0%,
+    rgba(221,233,244,0.6) 35%, transparent 70%),
+  linear-gradient(180deg, #b8d4f0 0%, #dde9f4 75%, #f0e8e2 100%);</pre>
+        </details>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 2 · <span class="name">Pigment grain</span> · <span class="tag tag-tech">tech</span></h3>
+        <div class="sandbox">
+          <div class="demo-grain">
+            <span class="lbl">grain</span>
+          </div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> pigment grain（颜料颗粒）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 一张 SVG noise 贴图盖在彩色之上（mix-blend-mode: overlay, 12-22% opacity）。让纯色不再"塑料"——有了"印刷在纸上"的物理感。editorial / print 美学的核心黑科技。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>&lt;svg&gt;&lt;filter id="g"&gt;
+  &lt;feTurbulence type="fractalNoise" baseFrequency="0.92" /&gt;
+&lt;/filter&gt;
+&lt;rect filter="url(#g)" /&gt;&lt;/svg&gt;
+
+/* opacity 12-22%, mix-blend-mode: overlay */</pre>
+        </details>
+      </div>
+
+      <div class="repro">
+        <h3>Reproduction 3 · <span class="name">Hidden peach bleed</span> · <span class="tag tag-color">color</span></h3>
+        <div class="sandbox">
+          <div class="demo-bleed"></div>
+        </div>
+        <p class="term"><strong>Industry term:</strong> hidden warm bleed（藏起来的暖色渗透）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 一个本来冷色调的渐变里，**偷偷藏一小块对比暖色**（peach / coral / rust）在角落，6-10% opacity。数学上几乎看不到，但少了它整张图会"扁"——这是把 2D 渐变变成"有大气深度"的核心。</p>
+        <details>
+          <summary>View source</summary>
+          <pre>background:
+  /* 暖色暗灯，藏在右上角 */
+  radial-gradient(ellipse at 75% 20%,
+    rgba(232,184,156,0.30) 0%, transparent 45%),
+  /* 冷色主调 */
+  linear-gradient(180deg, #6e8fff, #9cc4e8);</pre>
+        </details>
+      </div>
+
+      <div class="palette">
+        <p class="section-title">Palette</p>
+        <div class="palette-strip">
+          <div class="palette-card on-light" style="background: #b8d4f0;">
+            <div class="hex-pill light-on">#b8d4f0</div>
+            <h4 class="poetic-name">Morning Mist</h4>
+            <p class="feel">aerogel 顶端主调，淡而柔的天空蓝</p>
+            <div class="rgb-hex">RGB 184,212,240</div>
+          </div>
+          <div class="palette-card on-light" style="background: #9cc4e8;">
+            <div class="hex-pill light-on">#9cc4e8</div>
+            <h4 class="poetic-name">Sky Aqua</h4>
+            <p class="feel">中段水彩蓝，温柔却饱和</p>
+            <div class="rgb-hex">RGB 156,196,232</div>
+          </div>
+          <div class="palette-card on-light" style="background: #dde9f4;">
+            <div class="hex-pill light-on">#dde9f4</div>
+            <h4 class="poetic-name">Cloud Veil</h4>
+            <p class="feel">渐变过渡色，几乎白</p>
+            <div class="rgb-hex">RGB 221,233,244</div>
+          </div>
+          <div class="palette-card on-light" style="background: #e8b89c;">
+            <div class="hex-pill light-on">#e8b89c</div>
+            <h4 class="poetic-name">Peach Whisper</h4>
+            <p class="feel">藏在角落的暖色，让冷色"立体"</p>
+            <div class="rgb-hex">RGB 232,184,156</div>
+          </div>
+          <div class="palette-card on-dark" style="background: #ffffff; color: #1a1a1c;">
+            <div class="hex-pill light-on">#ffffff</div>
+            <h4 class="poetic-name" style="color: #1a1a1c;">Page White</h4>
+            <p class="feel" style="color: #555;">hero 字与小标签全部用纯白</p>
+            <div class="rgb-hex">RGB 255,255,255</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="terms-used">
+        <h3>Terms used in this card</h3>
+        <ul>
+          <li><strong>aerogel gradient</strong> — 多 stop 大面积氛围渐变，没有可见 "硬阶 stop"，感觉像晨雾</li>
+          <li><strong>pigment grain</strong> — SVG noise 贴图叠在彩色之上 12-22% opacity，让纯色不"塑料"</li>
+          <li><strong>hidden warm bleed</strong> — 冷色渐变里偷偷藏一小块暖色 6-10% opacity，给"大气深度"</li>
+        </ul>
+      </div>
+    </article>
+
+    <!-- ─── CROSS-IMAGE DNA ─── -->
+    <section class="dna">
+      <h2>Visual DNA across this batch</h2>
+      <p>跨 5 张参考反复出现的视觉手法、组件、配色、字体规则。"seen in N/M" 是证据计数。</p>
+
+      <h3><span class="tag tag-tech">tech</span> Recurring techniques</h3>
+      <ol>
+        <li>Curved bezier connector lines (chromatic 或 mono) — <span class="evidence">seen in 4/5 (`01`, `02`, `03`, `04`)</span></li>
+        <li>Frosted glass / 半透层级表面 — <span class="evidence">seen in 3/5 (`01`, `03`, `04`)</span></li>
+        <li>Diffuse glow / aura behind focal content — <span class="evidence">seen in 3/5 (`02`, `04`, `05`)</span></li>
+        <li>Pigment grain / film noise overlay — <span class="evidence">seen in 1/5 (`05`) — 但 user 明确这是"想加进 Atelier"的方向</span></li>
+      </ol>
+
+      <h3><span class="tag tag-color">color</span> Recurring palette tendency</h3>
+      <ul>
+        <li>Single saturated accent on near-black canvas — <span class="evidence">3/5 (`01` emerald, `02` neon, `03` 协作色)</span></li>
+        <li>Cool dominant + 一抹暖色对比 — <span class="evidence">2/5 (`04` 紫+橙, `05` 蓝+peach)</span></li>
+        <li>Chromatic micro-tokens (status dots / coin icons / pin pills) — <span class="evidence">3/5 (`02`, `03`, `04`)</span></li>
+        <li><strong>Aerogel tier (sky-blue + peach)</strong> 仅 `05` 独占——这是 user 在 Wave 2 才发现并锁定的偏好方向</li>
+      </ul>
+
+      <h3><span class="tag tag-comp">comp</span> Recurring components</h3>
+      <ul>
+        <li>Card-as-node on dot grid canvas — <span class="evidence">4/5 (`01`, `02`, `03`, `04`)</span></li>
+        <li>Floating chromatic capsule（color pill 钉在节点上） — <span class="evidence">3/5 (`02`, `03`, `04`)</span></li>
+        <li>Polaroid stack（叠层结果） — <span class="evidence">1/5 (`01`) — 但 user 明确这是 v0.4.1 锁定的方向</span></li>
+        <li>Screen-pinned bottom composer — <span class="evidence">2/5 (`01` 工具栏, `03` 输入条)</span></li>
+      </ul>
+
+      <h3><span class="tag tag-type">type</span> Recurring typography rules</h3>
+      <ul>
+        <li>Sentence-case 全用 humanist sans body — <span class="evidence">5/5</span></li>
+        <li>Display 字号反差明显（hero 字 vs body 字差 2 档以上）— <span class="evidence">4/5 (`01`, `02`, `03`, `05`)</span></li>
+        <li>Mono-caps 仅用于 build-label / version 水印 — <span class="evidence">2/5 (`01`, `03`)</span></li>
+        <li><strong>White text on muted background 高对比</strong> — <span class="evidence">2/5 (`02`, `05`)</span></li>
+      </ul>
+    </section>
+
+    <!-- ─── GLOSSARY ─── -->
+    <section class="glossary">
+      <h2>Glossary</h2>
+      <dl>
+        <dt>aerogel gradient</dt>
+        <dd>多 stop 大面积氛围渐变，看不到硬阶 stop，像晨雾或水彩晕开。技术上至少 3 层 radial-gradient + 1 层 linear 底色。</dd>
+
+        <dt>chromatic edge</dt>
+        <dd>连接线按"关系类型"染色而不是统一灰色，每种关系一色（reference / branch / sequence 等）。让边本身变语义信号。</dd>
+
+        <dt>floating chromatic capsule</dt>
+        <dd>小药丸形的高饱和色块，钉在画布坐标里（不在 chrome 上）。常用于协作者标识、分类标签、状态指示。</dd>
+
+        <dt>frosted glass node</dt>
+        <dd>节点用真高斯模糊半透材质（backdrop-filter: blur），让下层 chromatic 内容隐约透过来。比平面 chrome 更有"重量"。</dd>
+
+        <dt>gallery-on-black</dt>
+        <dd>工作画布全黑、chrome 极薄，所有 chromatic 留给用户生成物。让作品像挂在美术馆暗墙上发光。</dd>
+
+        <dt>hidden warm bleed</dt>
+        <dd>冷色调渐变中偷偷藏一小块对比暖色（peach/coral/rust）在角落，6-10% opacity。数学上几乎看不到，但少了它整张图就"扁"——给"大气深度"。</dd>
+
+        <dt>mono-accent system</dt>
+        <dd>整个 UI 只用一种品牌色承担激活/CTA/focus，其他全部灰阶。靠"克制"出识别度。</dd>
+
+        <dt>multiplayer pin</dt>
+        <dd>协作者头像/名字以小药丸形式钉在他们正在编辑的节点角落。Figma cursors 的等价物，但锚在 canvas 对象而非指针。</dd>
+
+        <dt>pigment grain</dt>
+        <dd>SVG noise 贴图叠在彩色之上（mix-blend-mode: overlay, 6-22% opacity）。让纯色有"印刷在纸上"的物理感。editorial / print 美学核心。</dd>
+
+        <dt>polaroid stack</dt>
+        <dd>多张卡片错位叠成一摞物理照片，每层旋转 0.5-1°。暗示"还有更多 take，这是当前那张"，比铺开 N 张省地方又有实体感。</dd>
+
+        <dt>screen-pinned composer</dt>
+        <dd>永远 visible 的 prompt 输入条，浮在屏幕底部固定位置（不随画布滚动）。解决"没选中节点时 agent 输入在哪儿"的问题。</dd>
+      </dl>
+    </section>
+
+    <div class="build-label">REGENERATED 2026-05-24 13:50 · 5 images · visual-shelf v0.1</div>
+  </div>
+</body>
+</html>
