@@ -86,9 +86,11 @@
     .grain-canvas::after { opacity: 0.07; }
 
     /* ── v0.4.2 §10.9: IRIDESCENT RIM GLOW ── */
-    /* multi-hue spectrum bar bleeding from the top edge of focal surfaces.
-       static, top-edge only, max 3 surfaces wear it at a time
-       (focal workbench / polaroid primary / approval bubble). */
+    /* two variants: rim (top edge only, subtle) + bloom (full
+       perimeter wash, "活物感" much stronger). bloom is for the single
+       most important focal surface; rim for secondary focal accents. */
+
+    /* RIM — top-edge only, subtle */
     .iridescent-rim {
       position: relative;
     }
@@ -111,12 +113,40 @@
       pointer-events: none;
       z-index: 2;
     }
-    /* narrower rim for smaller surfaces (polaroid / approval bubble) */
     .iridescent-rim.narrow::before {
       left: 14%;
       right: 14%;
       height: 2.5px;
       filter: blur(3px);
+    }
+
+    /* BLOOM — full perimeter multi-color wash that bleeds outward.
+       4 colored radial gradients positioned at the 4 quadrants around
+       the element, blurred heavily, layered under z-index -1.
+       This matches the reference image's "整体都有漂亮的光晕" feel —
+       the element appears to BE lit from multiple invisible colored
+       light sources around it, not just rimmed. */
+    .iridescent-bloom {
+      position: relative;
+    }
+    .iridescent-bloom::after {
+      content: '';
+      position: absolute;
+      inset: -40px;
+      border-radius: inherit;
+      background:
+        radial-gradient(ellipse 60% 50% at 22% 28%,
+          rgba(255,140,200,0.42) 0%, transparent 60%),
+        radial-gradient(ellipse 55% 50% at 78% 22%,
+          rgba(180,140,255,0.46) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 55% at 82% 76%,
+          rgba(140,200,255,0.42) 0%, transparent 60%),
+        radial-gradient(ellipse 55% 50% at 18% 78%,
+          rgba(180,255,220,0.35) 0%, transparent 60%);
+      filter: blur(36px);
+      pointer-events: none;
+      z-index: -2;
+      mix-blend-mode: screen;
     }
 
     /* ── reusable: AEROGEL diffuse aura (v0.4.2 — 3-stop atmospheric) ── */
@@ -930,8 +960,8 @@
       <img src="https://picsum.photos/seed/atelier-img-2/280/280" alt="" />
     </div>
 
-    <!-- ── focal DraftWorkbench (glass + AEROGEL aura + 11% grain + IRIDESCENT RIM) ── -->
-    <div class="workbench aura-focal grain iridescent-rim" style="left: 600px; top: 290px;">
+    <!-- ── focal DraftWorkbench (glass + AEROGEL aura + 11% grain + IRIDESCENT BLOOM + top rim) ── -->
+    <div class="workbench aura-focal grain iridescent-bloom iridescent-rim" style="left: 600px; top: 290px;">
       <div class="workbench-title">
         <svg class="sparkle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
         <h2>Moonlit chase — wide shot</h2>

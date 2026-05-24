@@ -651,6 +651,15 @@ remains rare and meaningful.
 - The rim is **always horizontal across the top edge** in v0.4.2.
   Full-perimeter conic-gradient rims (Arc Browser style) are v0.5
   candidates — they're more complex and risk visual noise.
+- For the single most important focal surface (selected
+  DraftWorkbench), **rim alone is insufficient** — user feedback
+  showed the reference image (`03-instagram`) had full-perimeter
+  bloom in addition to the rim. v0.4.2 adds a **`.iridescent-bloom`**
+  variant (4 colored radial gradients positioned at the 4 outer
+  quadrants, heavy blur, `mix-blend-mode: screen`, z-index below
+  the aura) that **composes with** the rim. Apply both on the
+  focal workbench; apply rim only on polaroid primary and approval
+  bubble.
 - Opacity values in the gradient are tuned for a dark background.
   If light-mode lands in the future (§7 of original v0.4 spec
   flagged off-white cream backgrounds), the alphas need bumping

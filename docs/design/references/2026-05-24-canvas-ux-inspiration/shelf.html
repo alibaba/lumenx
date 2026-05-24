@@ -195,7 +195,9 @@
       position: relative;
       height: 200px;
       border-radius: 12px;
-      padding: 14px;
+      /* extra top padding leaves a "header strip" for the hex-pill
+         so it never overlaps the poetic name */
+      padding: 38px 14px 14px 14px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -205,7 +207,7 @@
       position: absolute;
       top: 10px;
       left: 10px;
-      padding: 2px 8px;
+      padding: 3px 9px;
       border-radius: 999px;
       font-family: 'JetBrains Mono', monospace;
       font-size: 10px;
@@ -538,7 +540,7 @@
       opacity: 0.22;
     }
 
-    /* iridescent rim glow demo (the technique missed in card 03) */
+    /* iridescent — two variants: rim (top edge) + bloom (full perimeter wash) */
     .demo-iridescent {
       position: relative;
       width: 220px;
@@ -548,13 +550,14 @@
       border-radius: 12px;
       box-shadow: 0 8px 20px -10px rgba(0,0,0,0.6);
       color: rgba(255,255,255,0.92);
+      isolation: isolate;
     }
+    /* top-edge rim */
     .demo-iridescent::before {
       content: '';
       position: absolute;
       top: -2px;
-      left: 8%;
-      right: 8%;
+      left: 8%; right: 8%;
       height: 3px;
       background: linear-gradient(90deg,
         transparent 0%,
@@ -566,6 +569,23 @@
       filter: blur(4px);
       border-radius: 999px;
       pointer-events: none;
+      z-index: 1;
+    }
+    /* full-perimeter bloom — 4 colored radial gradients around the element */
+    .demo-iridescent::after {
+      content: '';
+      position: absolute;
+      inset: -36px;
+      border-radius: inherit;
+      background:
+        radial-gradient(ellipse 60% 50% at 22% 28%, rgba(255,140,200,0.50) 0%, transparent 60%),
+        radial-gradient(ellipse 55% 50% at 78% 22%, rgba(180,140,255,0.55) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 55% at 82% 76%, rgba(140,200,255,0.50) 0%, transparent 60%),
+        radial-gradient(ellipse 55% 50% at 18% 78%, rgba(180,255,220,0.42) 0%, transparent 60%);
+      filter: blur(32px);
+      pointer-events: none;
+      z-index: -1;
+      mix-blend-mode: screen;
     }
     .demo-iridescent .title {
       display: block;
@@ -576,6 +596,11 @@
       display: block;
       font-size: 11px;
       color: rgba(255,255,255,0.5);
+    }
+    /* the demo sits inside the sandbox; sandbox background needs to read
+       the bloom — so darken it slightly */
+    .sandbox.iridescent-stage {
+      background: #08080a;
     }
 
     /* hidden peach bleed demo */
@@ -865,23 +890,38 @@
       </div>
 
       <div class="repro">
-        <h3>Reproduction 3 · <span class="name">Iridescent rim glow</span> · <span class="tag tag-tech">tech</span></h3>
-        <div class="sandbox">
+        <h3>Reproduction 3 · <span class="name">Iridescent bloom + rim</span> · <span class="tag tag-tech">tech</span></h3>
+        <div class="sandbox iridescent-stage">
           <div class="demo-iridescent">
             <span class="title">Image Generator</span>
             <span class="meta">model · positive · negative</span>
           </div>
         </div>
-        <p class="term"><strong>Industry term:</strong> iridescent rim glow（虹彩边缘晕 / aurora bloom）</p>
-        <p class="plain"><strong>Plain explanation:</strong> 元素边缘（通常是顶部弧线）渗出一道**多色光谱**——粉→紫→蓝→青同时存在，柔模糊。像 Arc 浏览器顶 tab 选中态、Apple Vision Pro 焦点高光、肥皂泡油膜——给静态 UI 一种"被光照亮 / 在呼吸"的活物感。和 hidden warm bleed 不同：那是单一暖色藏冷调里，这是**整段光谱**铺在边缘。</p>
+        <p class="term"><strong>Industry term:</strong> iridescent bloom + rim（虹彩弥散晕 + 顶边光谱）</p>
+        <p class="plain"><strong>Plain explanation:</strong> 两层叠加。<strong>Bloom</strong>：4 个多色 radial gradient（粉/紫/蓝/绿）从元素 4 个外角弥散出来，blur 重，看起来整个元素被多色光"包围"——像 Vision Pro 选中态、Arc tab 高亮、肥皂泡油膜。<strong>Rim</strong>：顶边再叠一条窄的多色光谱条做高光锐化。两者一起达到"整体都有漂亮的光晕 + 焦点处更亮"的活物感。和 hidden warm bleed 不同：那是单一暖色藏冷调里；这是<strong>整段光谱</strong>同时存在并向外弥散。</p>
         <details>
           <summary>View source</summary>
-          <pre>.demo-iridescent {
-  position: relative;
-  background: rgba(20,20,22,0.65);
-  border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 12px;
+          <pre>/* BLOOM — 4 colored radials around the element, heavy blur */
+.demo-iridescent::after {
+  content: '';
+  position: absolute;
+  inset: -36px;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 60% 50% at 22% 28%,
+      rgba(255,140,200,0.50) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 50% at 78% 22%,
+      rgba(180,140,255,0.55) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 55% at 82% 76%,
+      rgba(140,200,255,0.50) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 50% at 18% 78%,
+      rgba(180,255,220,0.42) 0%, transparent 60%);
+  filter: blur(32px);
+  mix-blend-mode: screen;
+  z-index: -1;
 }
+
+/* RIM — top-edge spectrum highlight */
 .demo-iridescent::before {
   content: '';
   position: absolute;
@@ -889,12 +929,10 @@
   left: 8%; right: 8%;
   height: 3px;
   background: linear-gradient(90deg,
-    transparent 0%,
-    rgba(255,140,200,0.55) 18%,
+    transparent, rgba(255,140,200,0.55) 18%,
     rgba(180,140,255,0.70) 38%,
     rgba(140,200,255,0.55) 62%,
-    rgba(180,255,220,0.45) 82%,
-    transparent 100%);
+    rgba(180,255,220,0.45) 82%, transparent);
   filter: blur(4px);
   border-radius: 999px;
 }</pre>
@@ -1108,7 +1146,7 @@
           <div class="demo-bleed"></div>
         </div>
         <p class="term"><strong>Industry term:</strong> hidden warm bleed（藏起来的暖色渗透）</p>
-        <p class="plain"><strong>Plain explanation:</strong> 一个本来冷色调的渐变里，**偷偷藏一小块对比暖色**（peach / coral / rust）在角落，6-10% opacity。数学上几乎看不到，但少了它整张图会"扁"——这是把 2D 渐变变成"有大气深度"的核心。</p>
+        <p class="plain"><strong>Plain explanation:</strong> 一个本来冷色调的渐变里，<strong>偷偷藏一小块对比暖色</strong>（peach / coral / rust）在角落，6-10% opacity。数学上几乎看不到，但少了它整张图会"扁"——这是把 2D 渐变变成"有大气深度"的核心。</p>
         <details>
           <summary>View source</summary>
           <pre>background:
