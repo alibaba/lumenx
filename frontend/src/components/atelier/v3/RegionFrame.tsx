@@ -81,16 +81,19 @@ interface Props {
 // v0.4.5 §13.4: region category colors shift from saturated Tailwind
 // 400-series (cyan/violet/amber/emerald) to muted artistic palette.
 // Region is decorative category encoding, not hard status signal — so it
-// belongs in the muted family. The saturated cyan-400 read as "lab
-// instrument color"; muted teal sits inside the design's pigment register.
+// belongs in the muted family.
+//
+// Self-review fix: title text uses foreground (white) on tinted bg per
+// mockup .region-title-bar .title { color: var(--text-fg) }. Using muted
+// text on muted-tinted bg of the same hue collapsed contrast.
 const COLOR_ACCENT: Record<RegionColor, string> = {
   default: "bg-white/[0.04] text-text-secondary",
-  cyan: "bg-atelier-teal-soft/12 text-atelier-teal-soft",
-  rose: "bg-atelier-coral-soft/12 text-atelier-coral-soft",
-  amber: "bg-atelier-ochre/12 text-atelier-ochre",
-  violet: "bg-atelier-mauve/12 text-atelier-mauve",
-  emerald: "bg-atelier-sage/12 text-atelier-sage",
-  slate: "bg-atelier-slate-warm/14 text-atelier-slate-warm",
+  cyan: "bg-atelier-teal-soft/14 text-foreground/95",
+  rose: "bg-atelier-coral-soft/14 text-foreground/95",
+  amber: "bg-atelier-ochre/14 text-foreground/95",
+  violet: "bg-atelier-mauve/14 text-foreground/95",
+  emerald: "bg-atelier-sage/14 text-foreground/95",
+  slate: "bg-atelier-slate-warm/16 text-foreground/95",
 };
 
 const COLOR_BORDER: Record<RegionColor, string> = {

@@ -165,7 +165,10 @@ html.dark {
 
 /* ── §11.2 opaque-base — single-frame content containers ──
    Polaroid current take + processing nodes. Small SECONDARY surfaces
-   that don't have room for a header zone. */
+   that don't have room for a header zone.
+   isolation: isolate creates a stacking context so the bloom ::after
+   z-index: -3 stays scoped to this surface (otherwise it can escape
+   and render behind canvas chrome). */
 .atelier-opaque-base {
   background: var(--atelier-opaque-fill) !important;
   backdrop-filter: blur(8px) !important;
@@ -174,6 +177,7 @@ html.dark {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 12px 24px -8px rgba(0, 0, 0, 0.6) !important;
+  isolation: isolate;
 }
 
 .atelier-opaque-base.atelier-bloom::after {
@@ -202,6 +206,12 @@ html.dark {
   gap: 10px;
   position: relative;
   overflow: hidden;
+  /* isolation: isolate creates a stacking context so the ::before bloom
+     (z-index: 0) and child .atelier-shell-header / .atelier-opaque-inner
+     (z-index: 1) layer correctly inside the shell, independent of any
+     z-indices outside. Without this the bloom can interact unexpectedly
+     with z-indices in the surrounding canvas. */
+  isolation: isolate;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 16px 32px -10px rgba(0, 0, 0, 0.7);
@@ -256,6 +266,31 @@ html.dark {
 .atelier-bloom-hero      { --bloom-strength: 1.5; }
 .atelier-bloom-secondary { --bloom-strength: 1.0; }
 .atelier-bloom-ambient   { --bloom-strength: 0.6; }
+
+/* §12.7.3 base bloom recipe — single top-edge wash (NOT all-perimeter).
+   Reference 03-instagram Image Generator: bloom is only on the top edge,
+   ~30-40px tall horizontal band, pink → violet → sky → transparent,
+   fading downward. Sides + bottom stay clean dark.
+   This applies to all .atelier-bloom surfaces by default. opaque-base
+   layers a mask on top (§11.3) to physically exclude bloom from frame
+   interior. opaque-shell overrides ::after to display:none and uses
+   ::before for an internal header-zone bloom (§12.7.4). */
+.atelier-bloom::after {
+  content: '';
+  position: absolute;
+  inset: calc(-28px * var(--bloom-strength));
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 92% 38% at 50% 0%,
+      rgba(255, 140, 200, calc(0.45 * var(--bloom-strength))) 0%,
+      rgba(180, 140, 255, calc(0.38 * var(--bloom-strength))) 22%,
+      rgba(140, 200, 255, calc(0.28 * var(--bloom-strength))) 50%,
+      transparent 78%);
+  filter: blur(calc(16px + 6px * var(--bloom-strength)));
+  pointer-events: none;
+  z-index: -3;
+  mix-blend-mode: screen;
+}
 
 /* ── §10.10.4 breathing animations ── */
 @keyframes atelier-breath-generating {
