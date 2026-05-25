@@ -1446,3 +1446,104 @@ The double-frame + editorial steps slot in after the v0.4.4 work:
     per §12.4.
 20. Polaroid stack (v0.4 §6 step 5).
 
+### 12.7 v0.4.5 patches — toggle font consistency + bloom perimeter
+
+User review of the first v0.4.5 cut surfaced two implementation bugs.
+
+#### 12.7.1 Toggle font appeared mismatched (Free vs Director)
+
+**Problem.** Free (inactive) and Director (active italic) rendered as
+visually different fonts. Root cause: **Space Grotesk has no italic
+glyph** on Google Fonts (only weight axis 300–700). When CSS sets
+`font-style: italic` on a Space Grotesk run, the browser synthesizes
+an oblique transform. Synthesis quality varies by browser and font,
+and the synthesized version reads as a different typeface beside the
+upright original.
+
+**Fix — typography rule update for §12.4.** The "italic = action" tone
+rule stands, but its mechanics tighten:
+
+| Use | Font | Style |
+|---|---|---|
+| All upright display + chrome text (titles, toggle options, pill labels) | Space Grotesk | upright, weight 500 or 600 |
+| All italic accents (primary action verbs, in-flight state labels) | **Inter** | italic, weight 500 |
+
+Inter ships real italic glyphs on Google Fonts (load `ital,wght@0,400;
+0,500;0,600;1,400;1,500`). When italic is needed, switch the
+font-family to Inter rather than relying on Space Grotesk
+italic-synthesis.
+
+For toggles specifically, italic is **removed entirely**. The active
+state now uses weight + color + cobalt underline:
+
+```css
+.editorial-toggle .opt {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 500;
+  color: var(--text-mute);
+}
+.editorial-toggle .opt.on {
+  font-weight: 600;
+  color: var(--text-fg);
+}
+/* underline rule unchanged */
+```
+
+Both Free and Director are now Space Grotesk upright; the only
+differences are weight (500→600), color, and the cobalt underline.
+Visually unified family, three signals for active state.
+
+Italic remains on primary buttons (Generate, Send) and on in-flight
+state labels (Awaiting approval) — those use `font-family: 'Inter',
+sans-serif` with `font-style: italic`.
+
+#### 12.7.2 Bloom only visible on the top edge
+
+**Problem.** The user expected bloom to glow around the entire
+perimeter of the workbench (and approval bubble). In the first v0.4.5
+cut, only the top edge showed visible bloom; the other three sides
+read as plain dark.
+
+**Root cause.** The four radial-gradient centers in `.bloom::after`
+were positioned at corner-like inner coords (22%/28%, 78%/22%,
+82%/76%, 18%/78%). After mask-composite excluded the inner frame
+area, only each gradient's *tail* reached the visible 40px ring — and
+the cumulative tail brightness was weak everywhere except the top
+(where the iridescent rim line also lived, masking the deficiency).
+The bright *centers* of the gradients were hidden under the mask.
+
+**Fix.** Two coupled changes:
+
+1. **Reposition gradient centers to the outer edges of the bloom box.**
+   Each of the four gradients now sits at a side of the `::after` box
+   rather than at an inner corner — its brightest pixel lands directly
+   in the visible perimeter ring.
+
+   ```css
+   /* top edge */     radial-gradient(ellipse 95% 60% at 50%  4%, …)
+   /* right edge */   radial-gradient(ellipse 60% 95% at 96% 50%, …)
+   /* bottom edge */  radial-gradient(ellipse 95% 60% at 50% 96%, …)
+   /* left edge */    radial-gradient(ellipse 60% 95% at  4% 50%, …)
+   ```
+
+   Each gradient ellipse spans 95% along its primary axis and 60%
+   along its secondary, so two adjacent gradients overlap at the
+   corners — a cohesive "ring of color" instead of "four corner blobs."
+   Each gradient also carries a 30%-stop secondary color, blending
+   adjacent hues so the perimeter reads as a continuous iridescent
+   spectrum (pink → violet → sky → mint → pink).
+
+2. **Widen the bloom ring.** Inset bumped from `-40px * strength` to
+   `-56px * strength`. At HERO 1.5×, this gives an 84px visible ring
+   (was 60px). Blur also bumped (`28+8s` → `38+12s`) for a softer
+   atmospheric falloff that matches the wider ring.
+
+The mask padding in `.opaque-shell.bloom::after` and
+`.opaque-base.bloom::after` must update in lockstep (40 → 56) so the
+mask matches the new inset.
+
+**Result.** Bloom now visible all four perimeter sides + corners; the
+top no longer dominates. Approval bubble (smaller, SECONDARY 1.0×)
+gets a 56px ring; workbench (HERO 1.5×) gets 84px. Both feel
+deliberately wide rather than rim-only.
+

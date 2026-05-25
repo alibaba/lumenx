@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=1480" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" />
   <style>
     /* ── tokens ───────────────────────────────────────────────── */
     :root {
@@ -130,21 +130,41 @@
     .bloom {
       position: relative;
     }
+    /* v0.4.5 patch: bloom recipe redesigned for "all-perimeter glow" instead
+       of "4-corner glow that hides under the mask."
+       Previously: gradient centers at 22%/78% (inside the frame area). With
+       the opaque-shell mask excluding the inner area, only the gradient tails
+       reached the visible ring → bloom looked like a faint top-edge halo.
+       Now: gradient centers at the OUTER edges (5%/50%/95%) so each gradient's
+       brightest part lands directly in the visible perimeter ring. Inset
+       bumped 40 → 56 for a wider ring. Blur bumped for softer atmospheric falloff. */
     .bloom::after {
       content: '';
       position: absolute;
-      inset: calc(-40px * var(--bloom-strength));
+      inset: calc(-56px * var(--bloom-strength));
       border-radius: inherit;
       background:
-        radial-gradient(ellipse 60% 50% at 22% 28%,
-          rgba(255,140,200, calc(0.42 * var(--bloom-strength))) 0%, transparent 60%),
-        radial-gradient(ellipse 55% 50% at 78% 22%,
-          rgba(180,140,255, calc(0.46 * var(--bloom-strength))) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 55% at 82% 76%,
-          rgba(140,200,255, calc(0.42 * var(--bloom-strength))) 0%, transparent 60%),
-        radial-gradient(ellipse 55% 50% at 18% 78%,
-          rgba(180,255,220, calc(0.35 * var(--bloom-strength))) 0%, transparent 60%);
-      filter: blur(calc(28px + 8px * var(--bloom-strength)));
+        /* top edge — pink → violet wash */
+        radial-gradient(ellipse 95% 60% at 50% 4%,
+          rgba(255,140,200, calc(0.58 * var(--bloom-strength))) 0%,
+          rgba(180,140,255, calc(0.36 * var(--bloom-strength))) 30%,
+          transparent 75%),
+        /* right edge — violet → sky */
+        radial-gradient(ellipse 60% 95% at 96% 50%,
+          rgba(180,140,255, calc(0.52 * var(--bloom-strength))) 0%,
+          rgba(140,200,255, calc(0.32 * var(--bloom-strength))) 30%,
+          transparent 75%),
+        /* bottom edge — sky → mint */
+        radial-gradient(ellipse 95% 60% at 50% 96%,
+          rgba(140,200,255, calc(0.52 * var(--bloom-strength))) 0%,
+          rgba(180,255,220, calc(0.32 * var(--bloom-strength))) 30%,
+          transparent 75%),
+        /* left edge — mint → pink (closing the spectrum loop) */
+        radial-gradient(ellipse 60% 95% at 4% 50%,
+          rgba(180,255,220, calc(0.48 * var(--bloom-strength))) 0%,
+          rgba(255,140,200, calc(0.28 * var(--bloom-strength))) 30%,
+          transparent 75%);
+      filter: blur(calc(38px + 12px * var(--bloom-strength)));
       pointer-events: none;
       z-index: -3;
       mix-blend-mode: screen;
@@ -180,7 +200,7 @@
        border-box XOR mask — bloom is then visible only in the 40px ring outside
        the frame. */
     .opaque-base.bloom::after {
-      padding: calc(40px * var(--bloom-strength));
+      padding: calc(56px * var(--bloom-strength));
       box-sizing: border-box;
       -webkit-mask:
         linear-gradient(#000 0 0) padding-box,
@@ -212,7 +232,7 @@
 
     /* mask bloom out of inner area (same trick as opaque-base, just at shell scope) */
     .opaque-shell.bloom::after {
-      padding: calc(40px * var(--bloom-strength));
+      padding: calc(56px * var(--bloom-strength));
       box-sizing: border-box;
       -webkit-mask:
         linear-gradient(#000 0 0) padding-box,
@@ -253,7 +273,10 @@
     .btn-editorial:hover {
       background: rgba(255, 255, 255, 0.04);
     }
+    /* v0.4.5 patch: italic primary buttons use Inter italic (real italic
+       glyph) rather than Space Grotesk synthesized italic. */
     .btn-editorial.primary {
+      font-family: 'Inter', sans-serif;
       color: var(--brand-300);
       font-style: italic;
     }
@@ -268,7 +291,12 @@
       transform: translateX(3px) translateY(1px);
     }
 
-    /* editorial toggle: text + animated cobalt underline on active option */
+    /* editorial toggle: both options use SAME font (Space Grotesk upright);
+       active state signaled by weight (500→600) + color (mute→fg) + cobalt
+       underline. v0.4.5 patch: italic was dropped here because Space Grotesk
+       has no italic glyph and browser-synthesized italic made inactive Free
+       and active Director look like two different fonts. Italic now reserved
+       for action verbs (Generate / Send / in-flight states) using Inter italic. */
     .editorial-toggle {
       display: inline-flex;
       align-items: baseline;
@@ -276,21 +304,21 @@
     }
     .editorial-toggle .opt {
       position: relative;
-      font-family: 'Space Grotesk', 'Inter', sans-serif;
+      font-family: 'Space Grotesk', sans-serif;
       font-size: 13.5px;
       font-weight: 500;
       color: var(--text-mute);
       padding: 8px 0;
       cursor: pointer;
       letter-spacing: -0.005em;
-      transition: color 0.15s ease;
+      transition: color 0.15s ease, font-weight 0.15s ease;
     }
     .editorial-toggle .opt:hover {
       color: var(--text-fg);
     }
     .editorial-toggle .opt.on {
       color: var(--text-fg);
-      font-style: italic;
+      font-weight: 600;
     }
     .editorial-toggle .opt.on::after {
       content: '';
@@ -1117,7 +1145,7 @@
         <div class="opaque-inner" style="padding: 13px 15px;">
           <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-300)" stroke-width="1.5"><path d="M20 6L9 17l-5-5"/></svg>
-            <span style="font-family: 'Space Grotesk', sans-serif; font-style: italic; font-size: 12.5px; font-weight: 500; color: var(--brand-300);">Awaiting approval</span>
+            <span style="font-family: 'Inter', sans-serif; font-style: italic; font-size: 12.5px; font-weight: 500; color: var(--brand-300);">Awaiting approval</span>
           </div>
           canvas.createRegion · canvas.createVideoNode × 3 · canvas.attachToRegion × 3
         </div>
