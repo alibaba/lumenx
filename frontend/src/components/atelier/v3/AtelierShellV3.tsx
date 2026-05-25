@@ -5191,7 +5191,7 @@ export function AtelierShellV3() {
           the LeftRailV3 Sequence mode button (Sprint D). */}
       {sequenceVisible ? (
       <div
-        className={`absolute bottom-4 left-[280px] z-20 rounded-2xl border bg-[#0c0c10]/92 p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl transition-colors ${
+        className={`atelier-chrome-opaque absolute bottom-4 left-[280px] z-20 rounded-2xl border p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors ${
           seqDropActive ? "border-primary/60 ring-2 ring-primary/35" : "border-white/8"
         }`}
         style={{ right: agentCollapsed ? 88 : 412 }}

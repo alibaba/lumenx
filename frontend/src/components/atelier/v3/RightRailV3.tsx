@@ -105,7 +105,7 @@ export function RightRailV3({
       <aside
         role="region"
         aria-label="Atelier Agent (collapsed)"
-        className="absolute right-4 top-4 bottom-4 z-30 flex w-[56px] flex-col items-center justify-start gap-3 rounded-2xl border border-white/8 bg-[#0c0c10]/92 py-3 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+        className="absolute right-4 top-4 bottom-4 z-30 flex w-[56px] flex-col items-center justify-start gap-3 rounded-2xl border border-white/8 atelier-chrome-opaque py-3 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)]"
       >
         <button
           aria-label="Expand panel"
@@ -132,7 +132,7 @@ export function RightRailV3({
     <aside
       role="region"
       aria-label="Atelier Agent"
-      className="absolute right-4 top-4 bottom-4 z-30 flex w-[380px] flex-col overflow-hidden rounded-2xl border border-white/8 bg-[#0c0c10]/92 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+      className="atelier-chrome-opaque absolute right-4 top-4 bottom-4 z-30 flex w-[380px] flex-col overflow-hidden rounded-2xl border border-white/8 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)]"
     >
       {/* Top accent — primary→transparent gradient hairline. Identifies the
           rail as the "agent zone" without shouting. */}

@@ -14,14 +14,17 @@
 //     of its features; the only difference from floating mode is no
 //     absolute positioning, no shadow, no animation, no fixed 520 width.
 //
-// Implementation notes:
-//   - Width fixed at 480 — wider than the compact DraftNode (244) so
-//     prompt + ref slots breathe, narrower than the old floating
-//     Composer (520) so two workbenches fit side-by-side at moderate
-//     zoom levels.
+// Implementation notes (v0.4.5):
+//   - Width 520 — bumped from 480 to absorb the double-frame padding
+//     overhead (atelier-opaque-shell padding 10 + atelier-opaque-inner
+//     padding 18-20) without shrinking the prompt + ref slot content.
 //   - Sits inside the canvas world transform, so it scales with zoom.
 //   - The shell renders this when (selectedNode is a draft); otherwise
 //     the compact DraftNode renders.
+//   - Outer .atelier-opaque-shell is the visible atmospheric frame
+//     (background + border + bloom internal via ::before in header zone).
+//     Inner .atelier-opaque-inner hosts the operating area (prompt,
+//     refs, controls, take strip). See globals.css §12.2 / §12.7.4.
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
 import {

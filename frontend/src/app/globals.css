@@ -163,6 +163,14 @@ html.dark {
   --bloom-strength: 1;
 }
 
+/* All .atelier-* classes go in @layer components so Tailwind utilities
+   (in @layer utilities) properly override them. Without this, CSS cascade
+   layers cause unlayered .atelier-opaque-shell { position: relative } to
+   override Tailwind's .absolute utility — breaking canvas node
+   positioning. By scoping atelier classes to a lower-priority layer,
+   utilities remain authoritative for one-off overrides. */
+@layer components {
+
 /* ── §11.2 opaque-base — single-frame content containers ──
    Polaroid current take + processing nodes. Small SECONDARY surfaces
    that don't have room for a header zone.
@@ -540,3 +548,5 @@ html.dark {
   background: var(--atelier-text-fg);
   transform: scale(1.15);
 }
+
+} /* end @layer components */

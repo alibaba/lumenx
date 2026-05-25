@@ -65,6 +65,14 @@ export function DraftNode({
     ? "ring-2 ring-primary border-primary/50"
     : STATUS_BORDER[status];
 
+  // v0.4.5 §10.10 + §11.2: running drafts wear SECONDARY bloom + generating
+  // breath, lifted onto the opaque-base surface treatment. Reads as
+  // "this card is alive — task in flight." Other statuses keep the compact
+  // node chrome.
+  const bloomClass = status === "running"
+    ? "atelier-opaque-base atelier-bloom atelier-bloom-secondary atelier-breath-generating"
+    : "";
+
   const VISIBLE_REFS = 4;
   const visibleRefs = refs ? refs.slice(0, VISIBLE_REFS) : [];
   const overflowCount = refs ? Math.max(0, refs.length - VISIBLE_REFS) : 0;
@@ -116,10 +124,11 @@ export function DraftNode({
         backgroundImage:
           "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 32%)",
       }}
-      className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-shadow duration-200 ${
+      className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-shadow duration-200 ${bloomClass} ${
         // Status rail (left-edge 2px line). Hidden when selected so the
-        // primary ring owns the chromatic signal.
-        selected
+        // primary ring owns the chromatic signal. Also hidden when running
+        // (bloom + breath signals 'alive' instead of the static rail).
+        selected || status === "running"
           ? ""
           : `before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-r ${STATUS_RAIL[status]}`
       } ${
