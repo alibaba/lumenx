@@ -1762,3 +1762,135 @@ is not a frame; it's invisible structural spacing. A frame needs
 its own background, border, and content (the header zone). Only then
 does bloom-inside-the-frame have anywhere meaningful to live.
 
+---
+
+## 13. v0.4.5 round-5 — palette philosophy shift to muted/artistic tones
+
+### 13.1 The problem
+
+User flagged three specific chromatic accents as feeling "low-end /
+tech / SaaS UI":
+
+| Element | Color used | User's read |
+|---|---|---|
+| Moonlit chase region dot | `--cyan: #22d3ee` (saturated digital cyan) | "墨绿 / lab instrument color" |
+| Annotation pills (dock idle, etc.) | `--sky-300: #9cc4e8` | "tech tooltip" |
+| User bubble ("3-shot story · …") | `--brand-300: #6e8fff` (saturated cobalt-lavender) | "Slack message UI" |
+
+The general direction: "我们的调调偏向科技，而我期望的调调偏向艺术、
+设计这些非理性风格" — current palette reads as RGB digital signaling
+(saturated, high-contrast, semantic); reference (Ron Design fox card)
+reads as printed pigment (muted, dusty, atmospheric).
+
+This is **not a hex-value issue** — `#9cc4e8` is technically a soft
+blue. It's a *saturation context* issue: every chromatic accent in
+the current palette is RGB-pure (no grey-tinge, no warm bleed), and
+when many such accents share a page, the aggregate feel is "control
+panel / dashboard," not "creative studio."
+
+### 13.2 The principle — pigment, not pixel
+
+Reference palette character:
+- All chromatic accents at **50-70% effective saturation** (not 100%)
+- Cool colors carry a **slight warm bleed** (move hue toward warmer
+  neighbor — e.g., cool blue → soft denim grey, not pure cyan)
+- Color choices echo **physical pigment** (ink, faded poster, riso
+  print) rather than RGB display primaries
+- **Status-signaling colors** (real success/failure/in-flight dots)
+  may stay saturated — they need to read as hard signals
+- **Chrome / decorative / category** colors must be muted — saturation
+  here is what produces the "tech tool" reading
+
+### 13.3 New token palette
+
+Added under `:root`:
+
+```css
+/* CHROME accent — soft slate-cobalt for non-CTA brand surfaces */
+--brand-soft:  #8a9cc4;   /* desaturated cousin of --brand-300 */
+
+/* ATMOSPHERIC tier (warmer grey-blue for chrome text on dark) */
+--sky-soft:    #b0bdc8;   /* desaturated cousin of --sky-300 */
+
+/* CATEGORY tones — muted artistic replacements */
+--sage:        #95b89e;   /* muted green */
+--ochre:       #c9a87e;   /* muted warm yellow */
+--mauve:       #b59abe;   /* muted purple */
+--teal-soft:   #88aaa6;   /* muted teal */
+--coral-soft:  #c98a7e;   /* muted warm red */
+--slate-warm:  #98a3b0;   /* muted warm grey */
+
+/* legacy aliases — old names automatically pick up the muted tones */
+--amber:  var(--ochre);
+--violet: var(--mauve);
+--cyan:   var(--teal-soft);
+--slate:  var(--slate-warm);
+```
+
+Saturated tokens **kept as-is**:
+
+```css
+/* brand cobalt — reserved for primary CTAs ONLY */
+--brand-400: #3b6bff;
+--brand-300: #6e8fff;
+
+/* status colors — hard signaling, must stay saturated */
+--status-completed: #34d399;
+--status-processing:#60a5fa;
+--status-failed:    #f87171;
+```
+
+### 13.4 Use-site reassignments
+
+| Surface | Was | Now | Why |
+|---|---|---|---|
+| `.anno` text + bg + border | `--sky-300` + saturated cobalt rgbas | `--sky-soft` + rgba(176,189,200,…) | Annotations are chrome, not signals |
+| `.agent-bubble.user` color + bg + border | `--brand-300` + rgba(59,107,255,…) | `--brand-soft` + rgba(138,156,196,…) | User input chrome, not a CTA |
+| `.agent-bubble.approval` bg + border | saturated cobalt rgba | warm slate rgba | Approval is in-flight state, not pure brand |
+| `.workbench-title .take-pill` | `--brand-300` + saturated cobalt rgba | `--brand-soft` + warm slate rgba | Counter chip is decorative |
+| `.workbench-meta .model` | `--brand-300` | `--brand-soft` | Model label is chrome, not action |
+| `.node-draft .meta-row .model` | `--brand-300` | `--brand-soft` | Same |
+| Region `.region` + title-bar (cyan rgbas) | rgba(34,211,238,…) | rgba(136,170,166,…) (muted teal) | Region container is category chrome |
+| `.endpoint-amber` filter | rgba(251,191,36,…) saturated amber | rgba(201,168,126,…) muted ochre | Edge endpoint is decorative signal |
+| `.endpoint-violet` filter | rgba(167,139,250,…) saturated violet | rgba(181,154,190,…) muted mauve | Same |
+| `.region` violet edge stroke | rgba(167,139,250,…) | rgba(181,154,190,…) | Same |
+
+Saturated brand cobalt **stays** on:
+
+- `.btn-editorial.primary` color (Generate / Send) — primary CTAs
+- `.cta-brand` color + bg + border (top-bar action button) — primary CTA
+- `.rail-btn.active` color + bg (LeftRail active mode) — semantic active state
+- `.workbench-refs .ref-slot` border — semantic "reference slot" affordance
+- Cobalt edges + endpoints — semantic "this is a reference edge"
+- Status dots (processing blue, completed green, failed red) — hard
+  signaling, must read clearly
+
+### 13.5 Rule going forward
+
+When introducing a chromatic color, ask:
+
+1. **Is this a primary CTA or a hard status signal?**
+   Yes → use saturated brand cobalt / status colors. No → muted token.
+2. **Does the user need to act on this color difference?**
+   Yes (e.g., success vs failed dot) → saturated. No (e.g.,
+   category dot) → muted.
+3. **Is this just visual category encoding (region type, edge type,
+   tag type)?** Always muted from the artistic palette. Saturated
+   category colors collapse the SaaS / studio distinction.
+
+The brand identity stays cobalt — but cobalt's *frequency* on the
+canvas drops sharply. Every saturated cobalt occurrence has to earn
+its place by being a real CTA or active state. Decorative cobalt is
+the single biggest contributor to the "tech tool" reading, and round-5
+strips it from all decorative use sites.
+
+### 13.6 What round-5 explicitly does NOT change
+
+- Bloom recipe colors (pink/violet/sky in the gradient stops) — those
+  read as "atmospheric light," not as semantic accent. Untouched.
+- Brand cobalt on primary CTAs — Generate, Send, top-bar action.
+- Status dot colors — completed green, processing blue, failed red.
+- Aerogel palette tokens (sky-300, sky-100, peach-200) — kept for the
+  bloom recipe and other atmospheric uses. The newly added `--sky-soft`
+  is *additional*, not a replacement.
+

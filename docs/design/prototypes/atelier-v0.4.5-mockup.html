@@ -22,22 +22,49 @@
       --text-mute:      rgba(255,255,255,0.55);
       --text-quiet:     rgba(255,255,255,0.38);
 
+      /* ── BRAND (saturated cobalt — reserve for primary CTAs ONLY) ── */
+      --brand-500:      #2548d8;
       --brand-400:      #3b6bff;
       --brand-300:      #6e8fff;
-      --brand-500:      #2548d8;
 
+      /* ── v0.4.5 round-5 §12.7.5: artistic muted accent palette ──
+         Reference (Ron Design fox card) uses muted, dusty, pigment-like
+         tones — not saturated RGB digital colors. Saturated brand cobalt
+         is now reserved for primary CTAs only; everywhere else (region
+         dots, category chips, annotation pills, user-bubble color) shifts
+         to the muted accent set below. Status dots remain saturated since
+         they carry hard signaling meaning. */
+
+      /* CHROME accent — soft slate-cobalt for non-CTA brand surfaces */
+      --brand-soft:     #8a9cc4;   /* muted lavender-cobalt, like brand-300 but desaturated */
+
+      /* ATMOSPHERIC tier (kept for bloom recipe) */
       --sky-300:        #9cc4e8;
+      --sky-soft:       #b0bdc8;   /* warmer grey-blue for chrome text on dark panels */
       --sky-100:        #dde9f4;
       --peach-200:      #e8b89c;
 
-      --amber:          #fbbf24;
-      --violet:         #a78bfa;
-      --cyan:           #22d3ee;
-      --slate:          #94a3b8;
+      /* CATEGORY tones — muted artistic replacements for cyan/amber/violet */
+      --sage:           #95b89e;   /* muted green (was cyan/emerald in decorative use) */
+      --ochre:          #c9a87e;   /* muted warm yellow (was amber) */
+      --mauve:          #b59abe;   /* muted purple (was violet) */
+      --teal-soft:      #88aaa6;   /* muted teal (was cyan in decorative use) */
+      --coral-soft:     #c98a7e;   /* muted warm red (was failed in decorative use) */
+      --slate-warm:     #98a3b0;   /* muted warm grey for chrome */
 
+      /* SATURATED STATUS (keep for hard signaling only — dots that say
+         "this thing succeeded / failed / is in flight") */
       --status-completed: #34d399;
       --status-processing:#60a5fa;
       --status-failed:    #f87171;
+
+      /* legacy aliases — old names point at new muted tones so any
+         CSS using --cyan / --violet / --amber for decorative purposes
+         picks up the new palette automatically */
+      --amber:          var(--ochre);
+      --violet:         var(--mauve);
+      --cyan:           var(--teal-soft);
+      --slate:          var(--slate-warm);
 
       /* v0.4.3 §10.10: bloom strength multiplier */
       --bloom-strength: 1;
@@ -587,16 +614,20 @@
       font-size: 13px; line-height: 1.65;
       color: var(--text-fg);
     }
+    /* v0.4.5 round-5: user bubble + approval bubble shift from saturated
+       cobalt (rgba 59,107,255) to muted slate-warm tones. The cobalt
+       background was reading as "Slack message UI", not "creative tool". */
     .agent-bubble.user {
       align-self: flex-end;
-      background: rgba(59,107,255,0.12);
-      border-color: rgba(59,107,255,0.28);
-      color: var(--brand-300);
+      background: rgba(138, 156, 196, 0.10);
+      border-color: rgba(138, 156, 196, 0.24);
+      color: var(--brand-soft);
       font-style: italic;
+      font-family: 'Inter', sans-serif;
     }
     .agent-bubble.approval {
-      border-color: rgba(59,107,255,0.32);
-      background: rgba(59,107,255,0.06);
+      border-color: rgba(176, 189, 200, 0.28);
+      background: rgba(176, 189, 200, 0.06);
     }
     .seg-toggle {
       display: inline-flex;
@@ -748,7 +779,7 @@
       font-size: 11px; font-weight: 500;
       color: var(--text-mute);
     }
-    .node-draft .meta-row .model { color: var(--brand-300); }
+    .node-draft .meta-row .model { color: var(--brand-soft); }
     .node-draft .meta-dot { color: var(--text-quiet); }
 
     /* processing-state video node — a draft node that's currently
@@ -807,14 +838,16 @@
       letter-spacing: -0.012em;
       color: var(--text-fg);
     }
+    /* v0.4.5 round-5: take-pill shifts from saturated cobalt to muted
+       slate. The cobalt was reading as "developer-tool badge." */
     .workbench-title .take-pill {
       margin-left: auto;
       display: inline-flex; gap: 6px; align-items: baseline;
       padding: 3px 10px;
       border-radius: 999px;
-      border: 1px solid rgba(110,143,255,0.30);
-      background: rgba(59,107,255,0.10);
-      color: var(--brand-300);
+      border: 1px solid rgba(138, 156, 196, 0.26);
+      background: rgba(138, 156, 196, 0.08);
+      color: var(--brand-soft);
       font-size: 11px;
       font-weight: 500;
     }
@@ -828,7 +861,7 @@
       font-weight: 500;
       margin-bottom: 14px;
     }
-    .workbench-meta .model { color: var(--brand-300); }
+    .workbench-meta .model { color: var(--brand-soft); }
     .workbench-prompt {
       padding: 11px 13px;
       border-radius: 8px;
@@ -901,19 +934,22 @@
       color: var(--status-processing);
     }
 
-    /* region */
+    /* region — v0.4.5 round-5: replaced saturated cyan (rgba 34,211,238 /
+       #22d3ee) with muted teal (rgba 136,170,166 / #88aaa6 = --teal-soft).
+       The cyan was reading as "lab instrument color"; muted teal sits in
+       the artistic palette family. */
     .region {
       position: absolute;
-      background: rgba(34,211,238,0.04);
-      border: 1px dashed rgba(34,211,238,0.32);
+      background: rgba(136, 170, 166, 0.05);
+      border: 1px dashed rgba(136, 170, 166, 0.26);
       border-radius: 8px;
     }
     .region-title-bar {
       height: 30px;
       display: flex; align-items: center; gap: 8px;
       padding: 0 10px;
-      background: rgba(34,211,238,0.07);
-      border-bottom: 1px dashed rgba(34,211,238,0.30);
+      background: rgba(136, 170, 166, 0.08);
+      border-bottom: 1px dashed rgba(136, 170, 166, 0.25);
       border-radius: 8px 8px 0 0;
     }
     .region-title-bar .dot { width: 6px; height: 6px; border-radius: 999px; }
@@ -1016,17 +1052,19 @@
         drop-shadow(0 0 6px rgba(156,196,232,0.35))
         drop-shadow(0 0 10px rgba(180,140,255,0.18));
     }
+    /* v0.4.5 round-5: endpoint colors shift to muted artistic tones —
+       ochre (was amber) + mauve (was violet) — to match the new accent palette. */
     .endpoint-amber {
       filter:
-        drop-shadow(0 0 3px rgba(251,191,36,0.65))
-        drop-shadow(0 0 6px rgba(232,184,156,0.35))
-        drop-shadow(0 0 10px rgba(255,180,200,0.15));
+        drop-shadow(0 0 3px rgba(201, 168, 126, 0.65))
+        drop-shadow(0 0 6px rgba(232, 184, 156, 0.32))
+        drop-shadow(0 0 10px rgba(255, 180, 200, 0.14));
     }
     .endpoint-violet {
       filter:
-        drop-shadow(0 0 3px rgba(167,139,250,0.65))
-        drop-shadow(0 0 6px rgba(156,196,232,0.35))
-        drop-shadow(0 0 10px rgba(180,255,220,0.15));
+        drop-shadow(0 0 3px rgba(181, 154, 190, 0.62))
+        drop-shadow(0 0 6px rgba(176, 189, 200, 0.32))
+        drop-shadow(0 0 10px rgba(180, 255, 220, 0.14));
     }
     /* attending-breath on endpoints (slow pulse for inherited bloom) */
     @keyframes endpoint-attending {
@@ -1073,16 +1111,19 @@
       margin-right: 4px;
     }
 
+    /* v0.4.5 round-5: annotation pills shift from sky-300 saturated to
+       sky-soft (muted warm grey-blue). Less "tech tooltip", more
+       "magazine caption". */
     .anno {
       position: absolute;
       font-family: 'Inter', sans-serif;
       font-size: 11px;
       letter-spacing: -0.005em;
-      color: var(--sky-300);
-      background: rgba(156,196,232,0.12);
+      color: var(--sky-soft);
+      background: rgba(176, 189, 200, 0.08);
       padding: 4px 9px;
       border-radius: 6px;
-      border: 1px solid rgba(156,196,232,0.30);
+      border: 1px solid rgba(176, 189, 200, 0.22);
       pointer-events: none;
       z-index: 50;
     }
@@ -1205,7 +1246,7 @@
       <circle class="endpoint-amber" cx="880" cy="715" r="2.5" fill="var(--amber)"/>
 
       <!-- violet sequence (hover only) -->
-      <path d="M 760 560 C 800 560, 800 715, 760 715" fill="none" stroke="rgba(167,139,250,0.55)" stroke-width="1.25" stroke-dasharray="1 5"/>
+      <path d="M 760 560 C 800 560, 800 715, 760 715" fill="none" stroke="rgba(181, 154, 190, 0.55)" stroke-width="1.25" stroke-dasharray="1 5"/>
     </svg>
 
     <!-- ── atmospheric palette demo ── -->
