@@ -140,9 +140,12 @@ export function DraftWorkbench({
     if (next && next !== intent) onIntentCommit(next);
   };
 
-  const borderClass = selected
-    ? "ring-2 ring-primary border-primary/55"
-    : "border-glass-border";
+  // v0.4.5 §12.2 + §12.7.4: selected workbench wears HERO bloom + attending
+  // breath. opaque-shell already provides the visible outer frame; ring +
+  // border-cobalt only when selected to reinforce the "focused" state.
+  const selectedClass = selected
+    ? "atelier-bloom atelier-bloom-hero atelier-breath-attending ring-2 ring-atelier-brand-400/55"
+    : "";
 
   // Status footer caption — same vocabulary as the compact DraftNode so
   // the lifecycle reads identically whether the node is collapsed or
@@ -170,16 +173,23 @@ export function DraftWorkbench({
           onSelect?.(id);
         }
       }}
-      style={{
-        transform: `translate(${x}px, ${y}px)`,
-        backgroundImage:
-          "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 12%)",
-      }}
-      className={`group absolute w-[480px] overflow-hidden rounded-[14px] border bg-[#141416] shadow-[0_24px_48px_-22px_rgba(0,0,0,0.8),0_4px_14px_-4px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-shadow duration-200 ${borderClass}`}
+      style={{ transform: `translate(${x}px, ${y}px)` }}
+      // v0.4.5 §12.2 + §12.7.4: outer shell is the atmospheric frame
+      // (carries bloom + visible border); inner card is the operating
+      // area. Width bumped 480 → 520 to absorb the double-frame padding
+      // overhead without shrinking the content area.
+      className={`group absolute w-[520px] atelier-opaque-shell transition-shadow duration-200 ${selectedClass}`}
     >
-      {/* Title row — sparkle + intent (rename on dblclick) + take pill */}
-      <div className="flex items-center gap-1.5 px-4 pb-2 pt-3 text-foreground">
-        <Sparkles size={11} className="shrink-0 text-primary" aria-hidden="true" />
+      {/* Header zone — sparkle + intent (rename on dblclick) + take pill.
+          Sits in the outer shell's top band (above the inner card), like
+          the "Image Generator" title in the reference. Bloom paints
+          behind this via the shell's ::before. */}
+      <div className="atelier-shell-header text-foreground">
+        <Sparkles
+          size={12}
+          className="shrink-0 text-atelier-brand-soft"
+          aria-hidden="true"
+        />
         {editing ? (
           <input
             ref={inputRef}
@@ -197,12 +207,12 @@ export function DraftWorkbench({
                 setDraft(intent);
               }
             }}
-            className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 font-display text-[14px] font-medium tracking-[-0.005em] text-foreground outline-none"
+            className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-display text-[15px] font-medium tracking-[-0.005em] text-foreground outline-none"
             aria-label="Rename draft"
           />
         ) : (
           <span
-            className={`min-w-0 flex-1 truncate font-display text-[14px] font-medium tracking-[-0.005em] ${onIntentCommit ? "cursor-text" : ""}`}
+            className={`min-w-0 flex-1 truncate font-display text-[15px] font-medium tracking-[-0.005em] ${onIntentCommit ? "cursor-text" : ""}`}
             onDoubleClick={(e) => {
               e.stopPropagation();
               startEditing();
@@ -217,7 +227,7 @@ export function DraftWorkbench({
             role="status"
             aria-label={`${staleRefCount} reference${staleRefCount === 1 ? "" : "s"} updated since last run`}
             data-tip="Reference updated since last run"
-            className="btn-tip ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed border-amber-300/45 bg-amber-400/10 px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-amber-100"
+            className="btn-tip ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed border-atelier-ochre/45 bg-atelier-ochre/10 px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-atelier-ochre"
           >
             <AlertTriangle size={9} aria-hidden="true" />
             Stale ref · {staleRefCount}
@@ -225,80 +235,87 @@ export function DraftWorkbench({
         ) : null}
         {typeof candidatesTotal === "number" && candidatesTotal > 0 ? (
           <span
-            className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${
+            className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-[2px] text-[10px] font-medium ${
               (candidatesReady ?? 0) >= candidatesTotal
-                ? "border-emerald-300/35 text-emerald-200/95"
-                : "border-blue-300/35 text-blue-200/95"
+                ? "border-atelier-sage/35 bg-atelier-sage/8 text-atelier-sage"
+                : "border-atelier-brand-soft/35 bg-atelier-brand-soft/8 text-atelier-brand-soft"
             }`}
             aria-label={`${candidatesReady ?? 0} of ${candidatesTotal} candidates ready`}
           >
-            <span>Take</span>
-            <span className="font-display text-[10px] tracking-tight">
-              {candidatesReady ?? 0}/{candidatesTotal}
+            <span className="font-display tracking-tight">
+              {candidatesReady ?? 0}
             </span>
+            <span className="opacity-60">of</span>
+            <span className="font-display tracking-tight">{candidatesTotal}</span>
           </span>
         ) : null}
         {status === "running" ? (
-          <Loader2 size={11} className="shrink-0 animate-spin text-blue-200" />
+          <Loader2 size={11} className="shrink-0 animate-spin text-atelier-brand-soft" />
         ) : null}
       </div>
 
-      {/* Meta row — model + config (same compact metadata vocabulary as
-          the collapsed DraftNode, just sized up slightly). */}
-      <div className="flex items-center gap-1.5 px-4 pb-2 text-[11px] leading-none text-text-secondary">
-        <span className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-primary/95">
-          {modelLabel}
-        </span>
-        <span aria-hidden="true" className="text-text-muted/60">·</span>
-        <span className="truncate font-mono text-[10px] tracking-[0.04em] text-text-secondary/85">
-          {configSummary}
-        </span>
-      </div>
+      {/* Inner content card — the operating area. Meta + Composer +
+          TakeTimeline + TearLine all live in here. */}
+      <div className="atelier-opaque-inner">
+        {/* Meta row — model + config. v0.4.5 §13.4: model name uses
+            --brand-soft (muted slate) not saturated cobalt. */}
+        <div className="mb-3 flex items-center gap-1.5 text-[11px] leading-none text-text-secondary">
+          <span className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-atelier-brand-soft">
+            {modelLabel}
+          </span>
+          <span aria-hidden="true" className="text-text-muted/60">·</span>
+          <span className="truncate font-mono text-[10px] tracking-[0.04em] text-text-secondary/85">
+            {configSummary}
+          </span>
+        </div>
 
-      {/* Inline Composer — workbench body. Uses mode="inline" so it
-          renders in-place (no absolute positioning, no fixed width, no
-          floating shadow). All Composer features (mention picker,
-          mismatch banner, advanced popover, chip dropdowns, generate)
-          stay intact. */}
-      <Composer
-        inline
-        activeTab={activeTab}
-        onTabChange={onTabChange}
-        prompt={prompt}
-        modelLabel={modelLabel}
-        aspect={aspect}
-        duration={duration}
-        count={count}
-        modelOptions={modelOptions}
-        aspectOptions={aspectOptions}
-        durationOptions={durationOptions}
-        countOptions={countOptions}
-        refs={refs}
-        onSubmit={onSubmit}
-        onAddRef={onAddRef}
-        onRemoveRef={onRemoveRef}
-        onPromptCommit={onPromptCommit}
-        mentionables={mentionables}
-      />
+        {/* Inline Composer — workbench body. Uses mode="inline" so it
+            renders in-place (no absolute positioning, no fixed width, no
+            floating shadow). All Composer features (mention picker,
+            mismatch banner, advanced popover, chip dropdowns, generate)
+            stay intact. */}
+        <Composer
+          inline
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          prompt={prompt}
+          modelLabel={modelLabel}
+          aspect={aspect}
+          duration={duration}
+          count={count}
+          modelOptions={modelOptions}
+          aspectOptions={aspectOptions}
+          durationOptions={durationOptions}
+          countOptions={countOptions}
+          refs={refs}
+          onSubmit={onSubmit}
+          onAddRef={onAddRef}
+          onRemoveRef={onRemoveRef}
+          onPromptCommit={onPromptCommit}
+          mentionables={mentionables}
+        />
 
-      {/* I (Take version timeline) — horizontal strip of every take
-          this draft has generated. Renders only when there is at least
-          one take so empty drafts stay quiet. */}
-      {takes && takes.length > 0 && onPickTake ? (
-        <TakeTimeline takes={takes} onPickTake={onPickTake} />
-      ) : null}
+        {/* I (Take version timeline) — horizontal strip of every take
+            this draft has generated. Renders only when there is at least
+            one take so empty drafts stay quiet. */}
+        {takes && takes.length > 0 && onPickTake ? (
+          <div className="mt-3">
+            <TakeTimeline takes={takes} onPickTake={onPickTake} />
+          </div>
+        ) : null}
 
-      {/* Status footer — same tear-stamp vocabulary as the compact
-          DraftNode so the lifecycle reads identically. */}
-      <div className="px-4 pb-3 pt-1.5">
-        <TearLine tone={m.tone} label={m.label} />
+        {/* Status footer — same tear-stamp vocabulary as the compact
+            DraftNode so the lifecycle reads identically. */}
+        <div className="mt-3">
+          <TearLine tone={m.tone} label={m.label} />
+        </div>
       </div>
 
       {status === "draft" ? (
         <span
           role="status"
           aria-label="Awaiting approval"
-          className="btn-tip absolute right-3 top-3 h-[5px] w-[5px] rounded-full bg-amber-300 shadow-[0_0_0_3px_rgba(252,211,77,0.18)]"
+          className="btn-tip absolute right-3 top-3 z-10 h-[5px] w-[5px] rounded-full bg-atelier-ochre shadow-[0_0_0_3px_rgba(201,168,126,0.18)]"
           data-tip="Awaiting approval"
         >
           <span className="sr-only">Awaiting approval</span>

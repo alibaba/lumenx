@@ -13,10 +13,13 @@ interface Props {
   pushToast?: (kind: Toast["kind"], text: string) => void;
 }
 
+// v0.4.5 §13.4: user bubble shifts from saturated cobalt (primary/0.1
+// + primary/0.2) to muted brand-soft. The cobalt was reading as "Slack
+// UI"; muted slate reads as "designed correspondence."
 function ConversationUserBubble({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[88%] rounded-[14px] rounded-tr-[6px] border border-primary/20 bg-primary/[0.1] px-3 py-2 text-[13px] leading-[1.55] text-foreground/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+      <div className="max-w-[88%] rounded-[14px] rounded-tr-[6px] border border-atelier-brand-soft/24 bg-atelier-brand-soft/[0.08] px-3 py-2 text-[13px] italic leading-[1.55] text-atelier-brand-soft shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]" style={{ fontFamily: "'Inter', sans-serif" }}>
         {children}
       </div>
     </div>
@@ -26,7 +29,7 @@ function ConversationUserBubble({ children }: { children: React.ReactNode }) {
 function ConversationAgentBubble({ children, thinking = false }: { children?: React.ReactNode; thinking?: boolean }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-primary/15 text-primary ring-1 ring-inset ring-primary/25">
+      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-atelier-brand-soft/15 text-atelier-brand-soft ring-1 ring-inset ring-atelier-brand-soft/25">
         <Bot size={13} aria-hidden="true" />
       </span>
       <div className="flex-1 rounded-[14px] rounded-tl-[6px] border border-white/6 bg-black/25 px-3 py-2 text-[13px] leading-[1.55] text-foreground/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
@@ -599,11 +602,16 @@ export function AgentPanelV3({ pushToast }: Props) {
               >
                 <Paperclip size={11} aria-hidden="true" />
               </button>
-              {/* Planner mode segmented control. Free = deterministic
-                  single-action plans (the existing behavior). Director =
-                  structure planner: maps "3-shot story" / "N variants" /
-                  "motion study" intents into multi-step canvas plans. */}
-              <div role="tablist" aria-label="Planner mode" className="inline-flex items-center rounded-full border border-white/8 bg-black/30 p-[2px]">
+              {/* Planner mode toggle. Free = deterministic single-action
+                  plans (existing). Director = structure planner: maps
+                  "3-shot story" / "N variants" / "motion study" intents
+                  into multi-step canvas plans.
+                  v0.4.5 §12.3 + §12.7.1: editorial-toggle style — Space
+                  Grotesk upright + weight 600 + cobalt underline on
+                  active (no italic — Space Grotesk has no italic glyph,
+                  so synthesized italic made Free vs Director read as
+                  two fonts). */}
+              <div role="tablist" aria-label="Planner mode" className="atelier-editorial-toggle">
                 <button
                   role="tab"
                   type="button"
@@ -611,10 +619,8 @@ export function AgentPanelV3({ pushToast }: Props) {
                   data-tip="Free intent → single action"
                   onClick={() => setPlannerModePersist("free")}
                   disabled={isLocked}
-                  className={`btn-tip inline-flex items-center gap-1 rounded-full px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.18em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                    plannerMode === "free"
-                      ? "bg-primary/20 text-primary"
-                      : "text-text-muted hover:text-foreground"
+                  className={`opt btn-tip disabled:cursor-not-allowed disabled:opacity-60 ${
+                    plannerMode === "free" ? "on" : ""
                   }`}
                 >
                   Free
@@ -626,13 +632,11 @@ export function AgentPanelV3({ pushToast }: Props) {
                   data-tip="Director · structured multi-step plans"
                   onClick={() => setPlannerModePersist("director")}
                   disabled={isLocked}
-                  className={`btn-tip inline-flex items-center gap-1 rounded-full px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.18em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                    plannerMode === "director"
-                      ? "bg-primary/20 text-primary"
-                      : "text-text-muted hover:text-foreground"
+                  className={`opt btn-tip inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60 ${
+                    plannerMode === "director" ? "on" : ""
                   }`}
                 >
-                  <Wand2 size={9} aria-hidden="true" />
+                  <Wand2 size={10} aria-hidden="true" />
                   Director
                 </button>
               </div>
@@ -654,18 +658,18 @@ export function AgentPanelV3({ pushToast }: Props) {
                 ) : null}
                 Preview
               </button>
+              {/* v0.4.5 §12.3: editorial primary — Inter italic verb + →.
+                  Replaces the cobalt-pill submit. Same affordance, new register. */}
               <button
                 disabled={isLocked || (!hasDraft && plannedCalls.length === 0)}
                 onClick={() => handleExecute(false)}
-                className={`inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-primary/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(100,108,255,0.6)] active:scale-[0.94] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 ${
+                className={`atelier-btn-editorial primary ${
                   hasDraft && !isLocked && !executing ? "motion-safe:animate-atelier-pulse-soft" : ""
                 }`}
               >
                 {executing ? (
                   <Loader2 size={11} className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <Send size={11} aria-hidden="true" />
-                )}
+                ) : null}
                 Execute
               </button>
             </div>

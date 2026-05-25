@@ -94,6 +94,9 @@ export function BottomNavRail({
       >
         <ZoomOut size={13} aria-hidden="true" />
       </button>
+      {/* v0.4.5 §12.7 / round-6: custom-styled via vendor pseudo-elements
+          in globals.css — 9px sky-soft thumb + 2px hairline track,
+          hover-only brightening. Replaces OS-default chunky cobalt thumb. */}
       <input
         type="range"
         min={25}
@@ -102,7 +105,7 @@ export function BottomNavRail({
         value={zoom}
         aria-label="Zoom level"
         onChange={(e) => onZoomChange(Number(e.target.value))}
-        className="mx-0.5 h-1 w-24 cursor-pointer appearance-none rounded-full bg-white/8 accent-primary"
+        className="atelier-zoom-slider"
       />
       <button
         type="button"

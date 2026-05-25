@@ -78,24 +78,29 @@ interface Props {
   onContextMenu?: (id: string, clientX: number, clientY: number) => void;
 }
 
+// v0.4.5 §13.4: region category colors shift from saturated Tailwind
+// 400-series (cyan/violet/amber/emerald) to muted artistic palette.
+// Region is decorative category encoding, not hard status signal — so it
+// belongs in the muted family. The saturated cyan-400 read as "lab
+// instrument color"; muted teal sits inside the design's pigment register.
 const COLOR_ACCENT: Record<RegionColor, string> = {
   default: "bg-white/[0.04] text-text-secondary",
-  cyan: "bg-cyan-400/12 text-cyan-100",
-  rose: "bg-rose-400/12 text-rose-100",
-  amber: "bg-amber-400/14 text-amber-100",
-  violet: "bg-violet-400/12 text-violet-100",
-  emerald: "bg-emerald-400/12 text-emerald-100",
-  slate: "bg-slate-400/14 text-slate-100",
+  cyan: "bg-atelier-teal-soft/12 text-atelier-teal-soft",
+  rose: "bg-atelier-coral-soft/12 text-atelier-coral-soft",
+  amber: "bg-atelier-ochre/12 text-atelier-ochre",
+  violet: "bg-atelier-mauve/12 text-atelier-mauve",
+  emerald: "bg-atelier-sage/12 text-atelier-sage",
+  slate: "bg-atelier-slate-warm/14 text-atelier-slate-warm",
 };
 
 const COLOR_BORDER: Record<RegionColor, string> = {
   default: "border-white/14",
-  cyan: "border-cyan-400/30",
-  rose: "border-rose-400/30",
-  amber: "border-amber-400/30",
-  violet: "border-violet-400/30",
-  emerald: "border-emerald-400/30",
-  slate: "border-slate-400/30",
+  cyan: "border-atelier-teal-soft/30",
+  rose: "border-atelier-coral-soft/30",
+  amber: "border-atelier-ochre/30",
+  violet: "border-atelier-mauve/30",
+  emerald: "border-atelier-sage/30",
+  slate: "border-atelier-slate-warm/30",
 };
 
 const STATUS_DOT: Record<RegionStatusBadge, string> = {

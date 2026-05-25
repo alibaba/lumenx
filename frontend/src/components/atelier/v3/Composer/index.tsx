@@ -552,20 +552,20 @@ export function Composer({
             options={countOptions.map((v) => ({ value: v, label: v }))}
             onChange={(v) => setC(v)} />
         </div>
+        {/* v0.4.5 §12.3: editorial primary button — Inter italic verb + →
+            arrow. Replaces the saturated cobalt icon-only circular submit.
+            Reads as a magazine "Read more →" action, not a SaaS submit. */}
         <button
           type="button"
           aria-label="Submit"
           data-tip="Generate (⌘⏎)"
           disabled={mismatchActive}
           onClick={submit}
-          className={`btn-tip inline-flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200 active:scale-[0.94] ${
-            mismatchActive
-              ? "cursor-not-allowed bg-primary/30 text-white/50"
-              : `bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(100,108,255,0.55)] hover:bg-primary/92 hover:scale-[1.04] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_18px_-4px_rgba(100,108,255,0.65)] ${
-                  draft.trim().length > 0 ? "motion-safe:animate-atelier-pulse-soft" : ""
-                }`
-          }`}>
-          <Wand2 size={13} aria-hidden="true" className="transition-transform duration-200 group-hover:rotate-12" />
+          className={`atelier-btn-editorial primary btn-tip ${
+            mismatchActive ? "" : draft.trim().length > 0 ? "motion-safe:animate-atelier-pulse-soft" : ""
+          }`}
+        >
+          Generate
         </button>
       </div>
 
