@@ -130,7 +130,7 @@ export function DraftNode({
         {/* Title row — Sparkles 11px primary, intent in display font tighter
             tracking, ready badge mono caps */}
         <div className="flex items-center gap-1.5 text-foreground">
-          <Sparkles size={11} className="shrink-0 text-primary" aria-hidden="true" />
+          <Sparkles size={11} className="shrink-0 text-atelier-brand-soft" aria-hidden="true" />
           {editing ? (
             <input
               ref={inputRef}
@@ -169,8 +169,8 @@ export function DraftNode({
             <span
               className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${
                 (candidatesReady ?? 0) >= candidatesTotal
-                  ? "border-emerald-300/35 text-emerald-200/95"
-                  : "border-blue-300/35 text-blue-200/95"
+                  ? "border-atelier-sage/45 text-atelier-sage"
+                  : "border-atelier-brand-soft/45 text-atelier-brand-soft"
               }`}
               aria-label={`${candidatesReady ?? 0} of ${candidatesTotal} candidates ready`}
             >
@@ -185,7 +185,7 @@ export function DraftNode({
         {/* Meta row — model name in mono caps (signature detail), thin
             divider dot, config summary in muted secondary, optional spinner */}
         <div className="mt-1.5 flex items-center gap-1.5 text-[11px] leading-none text-text-secondary">
-          <span className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-primary/95">
+          <span className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-atelier-brand-soft">
             {modelLabel}
           </span>
           <span aria-hidden="true" className="text-text-muted/60">·</span>
@@ -193,7 +193,7 @@ export function DraftNode({
             {configSummary}
           </span>
           {status === "running" ? (
-            <Loader2 size={11} className="ml-auto shrink-0 animate-spin text-blue-200" />
+            <Loader2 size={11} className="ml-auto shrink-0 animate-spin text-atelier-brand-soft" />
           ) : null}
         </div>
 
@@ -264,7 +264,7 @@ export function DraftNode({
         <span
           role="status"
           aria-label="Awaiting approval"
-          className="btn-tip absolute right-2.5 top-2.5 h-[5px] w-[5px] rounded-full bg-amber-300 shadow-[0_0_0_3px_rgba(252,211,77,0.18)]"
+          className="btn-tip absolute right-2.5 top-2.5 h-[5px] w-[5px] rounded-full bg-atelier-ochre shadow-[0_0_0_3px_rgba(201,168,126,0.18)]"
           data-tip="Awaiting approval"
         >
           <span className="sr-only">Awaiting approval</span>

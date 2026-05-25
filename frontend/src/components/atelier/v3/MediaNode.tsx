@@ -334,7 +334,7 @@ export function MediaNode({
             card is identifiable at a glance even when the thumbnail is
             similar across siblings. */}
         <div className="flex items-center gap-1.5 px-3.5 pb-1.5 pt-3 text-foreground">
-          <ImageIcon size={11} className="shrink-0 text-primary" aria-hidden="true" />
+          <ImageIcon size={11} className="shrink-0 text-atelier-brand-soft" aria-hidden="true" />
           <span className="min-w-0 flex-1 truncate font-display text-[13px] font-medium tracking-[-0.005em]">
             {cardName}
           </span>
@@ -484,9 +484,9 @@ export function MediaNode({
         <div className="flex h-full w-full flex-col gap-2.5 px-3.5 py-3.5">
           {/* Heading row: small mono caps + ImageIcon, anchored top */}
           <div className="flex items-center gap-1.5">
-            <ImageIcon size={11} aria-hidden="true" className={selected ? "text-primary" : "text-primary/75"} />
+            <ImageIcon size={11} aria-hidden="true" className={selected ? "text-atelier-brand-400" : "text-atelier-brand-soft"} />
             <span className={`font-mono text-[9px] uppercase tracking-[0.22em] ${
-              selected ? "text-primary" : "text-primary/75"
+              selected ? "text-atelier-brand-400" : "text-atelier-brand-soft"
             }`}>
               Image draft
             </span>
