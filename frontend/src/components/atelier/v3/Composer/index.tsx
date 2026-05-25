@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Settings, Wand2, X, Plus, Trash2 } from "lucide-react";
-import { CapabilityIcon } from "./CapabilityIcon";
+import { Settings, X, Plus, Trash2 } from "lucide-react";
 import { ChipDropdown } from "./ChipDropdown";
 import { composerPlacement, type ComposerAnchor, type ComposerViewport } from "./positioning";
 import { validateAtelierRefs, type AtelierRefKind } from "@/lib/modelCatalog";

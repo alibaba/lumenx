@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Loader2, Paperclip, Send, ShieldCheck, Sparkles, Wand2, X } from "lucide-react";
+import { Bot, Loader2, Paperclip, ShieldCheck, Sparkles, Wand2, X } from "lucide-react";
 import { useAtelierStore } from "@/store/atelierStore";
 import type {
   AtelierAgentTurn,
