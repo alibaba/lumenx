@@ -69,7 +69,7 @@ function TypeChip({ kind }: { kind: MediaKind }) {
   const label = kind === "image" ? "img" : kind === "video" ? "vid" : "aud";
   return (
     <span className="pointer-events-none absolute left-1.5 top-1.5 hidden items-center gap-1 rounded-[3px] border border-dashed border-white/22 bg-black/70 px-1.5 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white/90 backdrop-blur-sm group-hover:inline-flex">
-      <Icon size={9} aria-hidden="true" className="text-primary/85" />
+      <Icon size={9} aria-hidden="true" className="text-atelier-brand-soft" />
       {label}
     </span>
   );

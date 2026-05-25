@@ -75,7 +75,7 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
             tighter tracking, plus a stamped index badge in the trailing
             corner for that "agency receipt" weight. */}
         <div className="mb-2.5 flex items-center gap-2 text-foreground">
-          <span className="grid h-[20px] w-[20px] shrink-0 place-items-center rounded-[5px] bg-primary/15 text-primary ring-1 ring-inset ring-primary/25">
+          <span className="grid h-[20px] w-[20px] shrink-0 place-items-center rounded-[5px] bg-atelier-brand-soft/15 text-atelier-brand-soft ring-1 ring-inset ring-atelier-brand-soft/25">
             <Bot size={11} aria-hidden="true" />
           </span>
           {editing ? (
