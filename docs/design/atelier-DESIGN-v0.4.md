@@ -1150,3 +1150,299 @@ none of the bloom work reads correctly:
 18. Typography breathing (§10.5).
 19. Focal frosted glass (subsumed by opaque-base, v0.4 §6 step 4).
 20. Polaroid stack (v0.4 §6 step 5).
+
+---
+
+## 12. v0.4.5 — Double frame + editorial buttons
+
+### 12.1 What v0.4.5 fixes
+
+v0.4.4 made every bloom-bearing card uniformly opaque with bloom
+outside. That cleared the boundary problem, but two new issues
+surfaced on review:
+
+1. **Single-rectangle cards look uniformly "lit"**, not "framed." The
+   user's reference (Image Generator card from the canvas-UX batch)
+   has a visibly *thicker* outer atmospheric band carrying bloom + rim,
+   wrapping a distinctly *darker* inner operating area. Two rings, one
+   gap. v0.4.4's single opaque-base card couldn't express this — bloom
+   was right at the card edge, so the whole card read as "the lit
+   surface" instead of "the lit frame around a stable inner area."
+2. **Buttons still read as dev-tool chrome.** Cobalt pill toggles,
+   icon-only circular send buttons, compact pill controls — the
+   semantics are correct but the *register* is "IDE / SaaS settings
+   panel," not "magazine page." The user explicitly called this out:
+   wants more whitespace, more stylistic typography, more "creative
+   design" feel.
+
+v0.4.5 introduces two distinct patterns to address these:
+
+- **Double-frame shells** (§12.2) for the most important content
+  containers — HERO workbench + critical SECONDARY (approval bubble).
+  Polaroid current take + processing nodes keep v0.4.4's single
+  opaque-base — they're too small for double frame to read cleanly.
+- **Editorial button system** (§12.3) replaces all cobalt-pill /
+  icon-only / compact-pill chrome with Space Grotesk italic verbs +
+  cobalt underline indicators + generous padding.
+
+Reference mockup: `docs/design/prototypes/atelier-v0.4.5-mockup.html`.
+
+### 12.2 Double-frame shells
+
+The structural change: HERO + critical SECONDARY surfaces become two
+nested rectangles instead of one.
+
+```css
+.opaque-shell {
+  background: rgba(28, 32, 52, 0.94);   /* slightly lighter cool tint */
+  backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(156, 196, 232, 0.22);
+  border-radius: 16px;
+  padding: 14px;                        /* the visible gap between shells */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 32px -10px rgba(0, 0, 0, 0.7);
+}
+
+.opaque-shell.bloom::after {
+  /* same mask as opaque-base — bloom only outside shell */
+  padding: calc(40px * var(--bloom-strength));
+  box-sizing: border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.opaque-inner {
+  background: rgba(10, 12, 22, 0.96);   /* deeper than shell */
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 9px;                   /* tighter inner corner */
+  padding: 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+```
+
+HTML pattern:
+
+```html
+<div class="workbench opaque-shell bloom bloom-hero iridescent-rim">
+  <div class="opaque-inner workbench-inner">
+    <!-- title, prompt, refs, controls, take strip -->
+  </div>
+</div>
+```
+
+Why two shades of dark:
+
+- **Outer shell** is rgba(28,32,52,0.94) — slightly *lighter* than the
+  canvas and slightly *cooler* than neutral. This positions it as
+  "atmospheric material," distinct from the canvas, ready to hold
+  bloom + rim.
+- **Inner card** is rgba(10,12,22,0.96) — *darker* than canvas, almost
+  black. This positions it as "the recessed workspace" — the eye
+  recognizes it as somewhere quiet for content.
+
+The visible gap (14px shell padding) is what reads as "this card has
+a frame." Bloom and rim live on the outer shell — they decorate the
+frame. The inner card is untouched by atmosphere.
+
+#### Roster
+
+| Surface | v0.4.4 | v0.4.5 |
+|---|---|---|
+| Workbench (HERO) | single `opaque-base` | double frame: `opaque-shell` outer + `opaque-inner` inner |
+| Approval bubble (critical SECONDARY) | single `opaque-base` | double frame |
+| Polaroid current take (SECONDARY) | single `opaque-base` | unchanged — too small for double frame to read |
+| Processing node (SECONDARY) | single `opaque-base` | unchanged — too small |
+| AMBIENT bloom surfaces | unchanged | unchanged |
+
+The 14px shell padding eats screen real estate, which is why
+SECONDARY-but-not-critical surfaces stay single-frame. The double
+frame is rationed for what *really* matters.
+
+### 12.3 Editorial button system
+
+Three new component classes replace the cobalt-pill / icon-only /
+compact-pill chrome.
+
+#### `.btn-editorial`
+
+Replaces workbench Generate button, dock send button.
+
+```css
+.btn-editorial {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 13.5px;
+  letter-spacing: -0.005em;
+  padding: 11px 22px;             /* was 8 16, now generously bigger */
+  background: transparent;        /* no pill bg by default */
+  border: none;
+  color: var(--text-fg);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.btn-editorial.primary {
+  color: var(--brand-300);
+  font-style: italic;             /* the editorial signal */
+}
+
+.btn-editorial.primary::after {
+  content: '→';                   /* replaces icon-only chrome */
+  font-style: normal;
+  transition: transform 0.15s ease;
+}
+
+.btn-editorial.primary:hover::after {
+  transform: translateX(3px);
+}
+
+.btn-editorial:hover {
+  background: rgba(255, 255, 255, 0.04);  /* subtle, not chunky */
+}
+```
+
+The italic + arrow is the entire affordance. No background pill, no
+icon-only circle. "Generate →" or "Send →" reads as a magazine "Read
+more →" link, not as a SaaS submit button.
+
+#### `.editorial-toggle`
+
+Replaces Free/Director seg-toggle in both right rail and dock.
+
+```css
+.editorial-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 28px;                      /* generous breathing room */
+}
+
+.editorial-toggle .opt {
+  position: relative;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-mute);
+  padding: 8px 0;
+  cursor: pointer;
+}
+
+.editorial-toggle .opt.on {
+  color: var(--text-fg);
+  font-style: italic;             /* active option is italic */
+}
+
+.editorial-toggle .opt.on::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 2px;
+  height: 1.5px;
+  background: var(--brand-400);
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(110, 143, 255, 0.45);  /* subtle cobalt glow */
+}
+```
+
+This reads as magazine tab-nav: option labels with a cobalt underline
+on the active one. No pill background, no `seg on` color block, no
+"radio button" affordance suggestion. The italic + underline is the
+state, full stop.
+
+#### `.pill-editorial`
+
+Replaces small pill-controls (16:9 / 5s / 4×).
+
+```css
+.pill-editorial {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  padding: 7px 13px 7px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);   /* hairline, not filled */
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-mute);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.pill-editorial:hover {
+  border-color: rgba(156, 196, 232, 0.35);
+  color: var(--text-fg);
+}
+
+.pill-editorial .caret {
+  font-size: 9px;
+  opacity: 0.55;
+}
+```
+
+Ghost-border pill instead of cobalt-fill pill. The dropdown indicator
+becomes a small subtle caret rather than a tinted arrow.
+
+### 12.4 Tone rules
+
+These are normative across the editorial button system:
+
+- **Italic = action.** Active toggle option, primary verb, in-flight
+  state indicators ("Awaiting approval"). Static labels stay upright.
+- **Cobalt underline (not cobalt fill) = active.** A 1.5px brand-color
+  underline with a faint glow replaces the v0.4.4 cobalt-pill active
+  state. The pill background is reserved for *standalone* CTAs (none
+  in v0.4.5, but the door is left open).
+- **Arrow (→), not icon, for "send / submit / generate" verbs.** Icon-
+  only circular buttons are dev-tool register; arrow + verb is
+  editorial register.
+- **Padding floor: 11 vertical, 22 horizontal** on text actions; the
+  former 8/16 reads as too tight against the new register.
+
+### 12.5 What v0.4.5 does NOT change
+
+- Bloom recipe, tier multipliers, breathing, Pattern B endpoints —
+  unchanged from v0.4.3 / v0.4.4.
+- `.opaque-base` (single-frame) is **not deprecated** — it remains the
+  correct treatment for SECONDARY content containers that aren't large
+  enough to support double frame (polaroid current, processing node).
+- Right rail, dock, canvas chrome — unchanged from v0.4.4 round-2.
+- AMBIENT bloom surfaces — unchanged.
+
+### 12.6 Updated implementation order (replaces §11.8)
+
+The double-frame + editorial steps slot in after the v0.4.4 work:
+
+1. Canvas: strip atmospheric wash, dots + grain only (§11.8).
+2. Chrome panels (right rail + dock + top bar): opaque rgba 0.92 (§11.8).
+3. Brand recolor — cobalt primary (v0.4 §6 step 1).
+4. Atmospheric palette tier (§10.1).
+5. Aura — narrow residual use only (§10.3).
+6. Iridescent rim (§10.9).
+7. `--opaque-fill` + `--opaque-border` tokens (§11.2).
+8. `.opaque-base` for SECONDARY content containers that don't go
+   double-frame: polaroid current, processing node (§11.2).
+9. **(new)** `.opaque-shell` + `.opaque-inner` for HERO + critical
+   SECONDARY: workbench + approval bubble (§12.2). HTML restructure:
+   wrap each in `.opaque-inner` child.
+10. Bloom variable system + `.opaque-base.bloom::after` mask +
+    `.opaque-shell.bloom::after` mask (§10.10.2 / §11.3 / §12.2).
+11. Pattern A roster + cap (§10.10.3 / §10.10.6).
+12. Breathing + endpoint inheritance (§10.10.4).
+13. Pattern B endpoint bloom (§10.10.5).
+14. Canvas grain only (§10.2 / §11.4).
+15. Connector lines (v0.4 §6 step 2).
+16. Selected edge halo (§10.6).
+17. Icon discipline (v0.4 §6 step 3).
+18. Typography breathing (§10.5).
+19. **(new)** Editorial button system — `.btn-editorial` /
+    `.editorial-toggle` / `.pill-editorial` (§12.3). Sweep all
+    interactive surfaces: Free/Director toggles (right rail + dock),
+    Send button, workbench Generate button, pill controls. Tone rules
+    per §12.4.
+20. Polaroid stack (v0.4 §6 step 5).
+
