@@ -199,13 +199,22 @@
       mask-composite: exclude;
     }
 
-    /* ── v0.4.5 §12: DOUBLE-FRAME shells for the most important surfaces ── */
-    /* The reference (Image Generator card) shows an outer atmospheric shell
-       carrying bloom + rim + brand-tinted hairline, with an inner darker
-       "operating area" sitting inside it with its own crisper border. The gap
-       between them is the visible part of the shell — that's where bloom
-       lives. Restricted to HERO workbench + critical SECONDARY (approval
-       bubble); polaroid + processing keep v0.4.4 single opaque-base. */
+    /* ── v0.4.5 §12: DOUBLE-FRAME shells (round-4 restructure) ── */
+    /* Reference (03-instagram Image Generator) shows:
+       1. An outer atmospheric frame that is itself VISIBLE — not just padding
+          around an inner card, but a real frame with background + border.
+       2. A HEADER ZONE at the top of the outer frame containing the component
+          name + bullet dot (e.g., "Image Generator").
+       3. A separate INNER CARD below the header, with the actual controls.
+       4. BLOOM lives INSIDE the outer frame, in the header zone — light
+          appearing to emanate from the top-right corner of the outer frame,
+          painting color across the header band. NOT a free-floating bloom
+          above the card.
+
+       Earlier rounds put title inside the inner card and bloom outside the
+       shell — which made the outer frame invisible and the bloom feel like
+       a disembodied cloud floating in space. Round-4 restructures the shell
+       as a flex column with a real header zone, and moves bloom inside. */
 
     .opaque-shell {
       background: rgba(28, 32, 52, 0.94);
@@ -213,30 +222,61 @@
       -webkit-backdrop-filter: blur(8px) !important;
       border: 1px solid rgba(156, 196, 232, 0.22);
       border-radius: 16px;
-      padding: 14px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;          /* contain bloom inside the visible frame */
       box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.06),
         0 16px 32px -10px rgba(0, 0, 0, 0.7);
-      position: relative;
     }
 
-    /* mask bloom out of inner area (same trick as opaque-base, at shell scope).
-       v0.4.5 round-2 fix: padding-box → content-box (see opaque-base note). */
-    .opaque-shell.bloom::after {
-      padding: calc(28px * var(--bloom-strength));
-      box-sizing: border-box;
-      -webkit-mask:
-        linear-gradient(#000 0 0) content-box,
-        linear-gradient(#000 0 0);
-      -webkit-mask-composite: xor;
-      mask-composite: exclude;
+    /* External bloom ::after (the old top-edge accent) is suppressed on
+       shells — bloom now lives INSIDE via ::before. */
+    .opaque-shell.bloom::after { display: none !important; }
+
+    /* Internal bloom: positioned at the top-right of the outer shell,
+       paints color in the header zone like ambient light from off-frame. */
+    .opaque-shell.bloom::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 70%;
+      height: 55%;
+      background:
+        radial-gradient(ellipse 90% 100% at 62% 0%,
+          rgba(255,140,200, calc(0.42 * var(--bloom-strength))) 0%,
+          rgba(180,140,255, calc(0.36 * var(--bloom-strength))) 28%,
+          rgba(140,200,255, calc(0.22 * var(--bloom-strength))) 60%,
+          transparent 88%);
+      filter: blur(calc(18px + 6px * var(--bloom-strength)));
+      pointer-events: none;
+      mix-blend-mode: screen;
+      z-index: 0;
+      border-radius: inherit;
+    }
+
+    /* Header zone: sits as the first flex child inside the outer shell,
+       holds the component title + dot above the inner card. */
+    .shell-header {
+      position: relative;
+      z-index: 1;                /* above the bloom ::before */
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px 0 10px;
     }
 
     .opaque-inner {
+      position: relative;
+      z-index: 1;                /* above bloom */
       background: rgba(10, 12, 22, 0.96);
       border: 1px solid rgba(255, 255, 255, 0.05);
       border-radius: 9px;
-      padding: 20px;
+      padding: 18px 20px;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
     }
 
@@ -1131,13 +1171,13 @@
       <div class="agent-bubble">
         Plan ready: 3 video nodes (Setup → Turn → Payoff) wrapped in a new region "moonlit chase". 3 tool calls.
       </div>
-      <!-- v0.4.5: approval bubble now double-frame (outer shell + inner content) -->
-      <div class="agent-bubble approval opaque-shell bloom bloom-secondary iridescent-rim narrow">
-        <div class="opaque-inner" style="padding: 13px 15px;">
-          <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-300)" stroke-width="1.5"><path d="M20 6L9 17l-5-5"/></svg>
-            <span style="font-family: 'Inter', sans-serif; font-style: italic; font-size: 12.5px; font-weight: 500; color: var(--brand-300);">Awaiting approval</span>
-          </div>
+      <!-- v0.4.5 round-4: approval bubble — outer shell w/ header zone + inner content -->
+      <div class="agent-bubble approval opaque-shell bloom bloom-secondary">
+        <div class="shell-header" style="padding: 4px 8px 0 8px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--brand-300)" stroke-width="1.5"><path d="M20 6L9 17l-5-5"/></svg>
+          <span style="font-family: 'Inter', sans-serif; font-style: italic; font-size: 12.5px; font-weight: 500; color: var(--brand-300);">Awaiting approval</span>
+        </div>
+        <div class="opaque-inner" style="padding: 11px 14px; font-size: 12.5px;">
           canvas.createRegion · canvas.createVideoNode × 3 · canvas.attachToRegion × 3
         </div>
       </div>
@@ -1184,8 +1224,8 @@
     <div class="legend">
       <h4>v0.4.5 · double frame + editorial</h4>
       <div class="sub" style="margin-top: 0;">
-        <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Double-frame surfaces</div>
-        <div style="color: var(--text-mute);">Workbench (HERO) + approval bubble: <strong style="color:var(--sky-300)">outer atmospheric shell</strong> (rgba 28,32,52,0.94, carries bloom + rim) + 14px gap + <strong style="color:var(--sky-300)">inner content card</strong> (rgba 10,12,22,0.96). Operating area stays clean dark; only the outer ring glows.</div>
+        <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Outer shell with header zone</div>
+        <div style="color: var(--text-mute);">Workbench (HERO) + approval bubble: <strong style="color:var(--sky-300)">outer shell</strong> (rgba 28,32,52,0.94) — a visible frame containing a <strong style="color:var(--sky-300)">header zone</strong> at top (title + dot, like "Image Generator" in the reference) + an <strong style="color:var(--sky-300)">inner card</strong> below (operating area, clean dark).</div>
       </div>
       <div class="sub">
         <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Editorial buttons</div>
@@ -1199,7 +1239,7 @@
       </div>
       <div class="sub">
         <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Bloom isolation</div>
-        <div style="color: var(--text-mute);">Bloom is a <strong style="color:var(--sky-300)">top-edge accent only</strong> — soft pink/violet/sky band, 42px above HERO (28px above SECONDARY). Sides + bottom stay clean dark. Reference: 03-instagram Image Generator card. Restraint &gt; volume.</div>
+        <div style="color: var(--text-mute);">Bloom paints <strong style="color:var(--sky-300)">INSIDE the outer shell</strong>, in the header zone — ambient light from off-frame top-right glows behind the title. Not a free-floating cloud above the card. Reference: 03-instagram Image Generator. Restraint &gt; volume.</div>
       </div>
       <div class="sub">
         <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Canvas + chrome (v0.4.4 round-2)</div>
@@ -1237,16 +1277,16 @@
       <img src="https://picsum.photos/seed/atelier-img-2/280/280" alt="" />
     </div>
 
-    <!-- ── v0.4.5: focal DraftWorkbench — double-frame (outer shell + inner content card) ── -->
-    <!-- outer .workbench is now the atmospheric shell (carries bloom + rim).
-         inner .opaque-inner is the operating area (controls + text live cleanly here). -->
-    <div class="workbench opaque-shell bloom bloom-hero breath-attending iridescent-rim" style="left: 600px; top: 290px;">
+    <!-- ── v0.4.5 round-4: focal DraftWorkbench — outer shell w/ header zone + inner content card ── -->
+    <!-- Outer shell now contains a real header zone (with the title + take pill)
+         above the inner operating area. Bloom paints INSIDE the shell via ::before. -->
+    <div class="workbench opaque-shell bloom bloom-hero breath-attending" style="left: 600px; top: 290px;">
+      <div class="shell-header workbench-title">
+        <svg class="sparkle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
+        <h2>Moonlit chase — wide shot</h2>
+        <span class="take-pill" style="margin-left: auto;"><span class="num">3</span><span>of 4</span></span>
+      </div>
       <div class="opaque-inner workbench-inner">
-        <div class="workbench-title">
-          <svg class="sparkle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 3l2.5 5.5L21 11l-5.5 2.5L13 19l-2.5-5.5L5 11l5.5-2.5L13 3z"/></svg>
-          <h2>Moonlit chase — wide shot</h2>
-          <span class="take-pill"><span class="num">3</span><span>of 4</span></span>
-        </div>
         <div class="workbench-meta"><span class="model">Seedance 2.0</span> · 1280×720 · 5s · 4×</div>
         <div class="workbench-prompt">A figure in a long coat runs through frost-covered grass, moonlight casting long shadows. Handheld camera, 24fps, slight motion blur.</div>
         <div class="workbench-refs">

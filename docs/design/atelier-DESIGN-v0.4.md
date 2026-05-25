@@ -1644,3 +1644,121 @@ under "make it more visible" pressure tends to over-correct toward
 saturation. Anchor to the reference image before each change to a
 bloom parameter.
 
+#### 12.7.4 Round-4 — bloom belongs INSIDE the outer shell
+
+**Problem (round-3 fallout).** Round-3 made bloom a top-edge accent
+above the workbench. User flagged: "你看上面这柔带没有外部框体，只有一段过渡" —
+the soft top band has nothing supporting it; it reads as a floating
+colored cloud detached from any visible frame. Re-examined reference
+(Image Generator card).
+
+**What round-1 / 2 / 3 all got wrong.** I had been treating the
+outer shell as **invisible padding** wrapping the inner card, and the
+bloom as an **external halo** floating above the card. The reference
+actually shows:
+
+1. The outer shell is a **visible frame** — a real bordered rectangle
+   with its own background, distinct from the inner card.
+2. The outer shell contains a **header zone** at the top — where the
+   component name + bullet dot lives ("Image Generator" in the
+   reference; "Moonlit chase — wide shot" for our workbench).
+3. The inner card sits **below** the header, separated visually.
+4. Bloom paints **inside** the outer shell, in the header zone area —
+   ambient light apparently emanating from off-frame, glowing across
+   the upper-right of the shell behind the title.
+
+Earlier rounds had the title inside the inner card and bloom outside
+the shell. The shell itself had no visible role — its only function
+was being the parent of the inner card. The bloom was then a floating
+external accent with no anchor in the design.
+
+**Round-4 restructure.** Three coupled changes:
+
+1. **Shell becomes a flex column** with a real header zone:
+
+   ```css
+   .opaque-shell {
+     padding: 10px;
+     display: flex;
+     flex-direction: column;
+     gap: 10px;
+     overflow: hidden;          /* contains bloom inside the visible frame */
+     position: relative;
+   }
+   ```
+
+2. **Bloom moves to `::before`, painted INSIDE the shell** at the top-
+   right of the header zone:
+
+   ```css
+   .opaque-shell.bloom::before {
+     content: '';
+     position: absolute;
+     top: 0; right: 0;
+     width: 70%;
+     height: 55%;
+     background: radial-gradient(ellipse 90% 100% at 62% 0%,
+       rgba(255,140,200, calc(0.42 * strength)) 0%,
+       rgba(180,140,255, calc(0.36 * strength)) 28%,
+       rgba(140,200,255, calc(0.22 * strength)) 60%,
+       transparent 88%);
+     filter: blur(calc(18px + 6px * strength));
+     mix-blend-mode: screen;
+     z-index: 0;
+   }
+   .opaque-shell.bloom::after { display: none; }  /* old external bloom suppressed */
+   ```
+
+3. **HTML restructures: title row out of inner card, into the shell
+   header zone:**
+
+   ```html
+   <div class="workbench opaque-shell bloom bloom-hero ...">
+     <div class="shell-header workbench-title">
+       <svg .../><h2>Moonlit chase — wide shot</h2><span class="take-pill">…</span>
+     </div>
+     <div class="opaque-inner workbench-inner">
+       <!-- meta, prompt, refs, controls, take-strip -->
+     </div>
+   </div>
+   ```
+
+   Same restructure for approval bubble: "Awaiting approval" line
+   moves from inside the inner card to the shell header zone.
+
+**Resulting structure** (matches reference Image Generator):
+
+```
+┌──── outer shell (visible frame) ───────────────┐
+│  ✦ Title here              [pill]   bloom →    │  ← header zone (with bloom behind)
+│  ┌──── inner card (opaque dark) ─────────────┐ │
+│  │  meta line                                │ │
+│  │  prompt block                             │ │
+│  │  controls                                 │ │
+│  └───────────────────────────────────────────┘ │
+└────────────────────────────────────────────────┘
+```
+
+**`overflow: hidden` on the shell** is critical — it contains the
+bloom blur so it can't leak past the visible frame edge. The frame
+becomes the bloom's container, and the user sees the bloom as
+"belonging to" this frame, not floating in canvas space.
+
+**`iridescent-rim` is dropped** from opaque-shell HTML class lists.
+The internal bloom in the header zone takes over the rim's "this
+surface is lit" role. Rim remains a valid class for other contexts
+but is no longer composed with opaque-shell.
+
+**Polaroid + processing (opaque-base, not opaque-shell)** keep their
+round-3 external top-edge accent for now — they're small surfaces
+without header zones, so the internal-bloom pattern doesn't fit. If
+needed, those could later migrate to a smaller internal-bloom variant
+or drop bloom entirely in favor of rim + breath alone.
+
+**Lesson — the frame must be a real element, not just empty space.**
+When a design calls for "bloom inside a frame," the frame has to
+actually render as something visible. Padding around an inner card
+is not a frame; it's invisible structural spacing. A frame needs
+its own background, border, and content (the header zone). Only then
+does bloom-inside-the-frame have anywhere meaningful to live.
+
