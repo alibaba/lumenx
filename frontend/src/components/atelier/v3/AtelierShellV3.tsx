@@ -3051,7 +3051,7 @@ export function AtelierShellV3() {
 
   return (
     <div
-      className="relative h-screen w-screen overflow-hidden bg-background text-foreground"
+      className="atelier-canvas-bg relative h-screen w-screen overflow-hidden text-foreground"
       onWheel={handleWheel as unknown as React.WheelEventHandler<HTMLDivElement>}
     >
       {/* Asset Library — left-edge collapsible drawer. Toggle via the

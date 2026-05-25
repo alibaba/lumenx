@@ -26,6 +26,33 @@ const config: Config = {
         primary: "#646cff",
         secondary: "#535bf2",
         accent: "#ff0080",
+
+        // ── v0.4.5 atelier design system (DESIGN-v0.4.md §13) ──
+        // Brand cobalt (RESERVED for primary CTAs only).
+        "atelier-brand-400": "#3b6bff",
+        "atelier-brand-300": "#6e8fff",
+        "atelier-brand-500": "#2548d8",
+
+        // Muted artistic palette — chrome / category / decorative.
+        // Always prefer these over brand-cobalt outside CTAs.
+        "atelier-brand-soft": "#8a9cc4",
+        "atelier-sky-soft":   "#b0bdc8",
+        "atelier-sage":       "#95b89e",
+        "atelier-ochre":      "#c9a87e",
+        "atelier-mauve":      "#b59abe",
+        "atelier-teal-soft":  "#88aaa6",
+        "atelier-coral-soft": "#c98a7e",
+        "atelier-slate-warm": "#98a3b0",
+
+        // Atmospheric tier (bloom recipe + soft fills).
+        "atelier-sky-300":   "#9cc4e8",
+        "atelier-sky-100":   "#dde9f4",
+        "atelier-peach-200": "#e8b89c",
+
+        // Status — saturated, hard signaling only.
+        "atelier-completed":  "#34d399",
+        "atelier-processing": "#60a5fa",
+        "atelier-failed":     "#f87171",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "sans-serif"],

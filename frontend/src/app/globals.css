@@ -1,4 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+/* Google Fonts — Inter loaded WITH italic axis (Space Grotesk has no
+   italic glyph on Google Fonts; italic accents must use Inter italic).
+   See atelier-DESIGN-v0.4.md §12.7.1 for the rationale. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -101,4 +104,404 @@ body {
 .btn-tip:hover::after {
   opacity: 1;
   transition-delay: 0.25s;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   ATELIER v0.4.5 DESIGN SYSTEM
+   See docs/design/atelier-DESIGN-v0.4.md and
+   docs/design/prototypes/atelier-v0.4.5-mockup.html
+   ════════════════════════════════════════════════════════════════════ */
+
+:root,
+html.dark {
+  /* canvas — neutral dark, no atmospheric wash (round-2 §11.8 removed it) */
+  --atelier-canvas-base: #0c0c0e;
+  --atelier-canvas-dot:  rgba(255, 255, 255, 0.06);
+
+  /* text */
+  --atelier-text-fg:    rgba(255, 255, 255, 0.95);
+  --atelier-text-mute:  rgba(255, 255, 255, 0.55);
+  --atelier-text-quiet: rgba(255, 255, 255, 0.38);
+
+  /* brand cobalt — RESERVED for primary CTAs ONLY (§13)
+     do not use for decorative chrome — use --brand-soft instead */
+  --atelier-brand-400: #3b6bff;
+  --atelier-brand-300: #6e8fff;
+  --atelier-brand-500: #2548d8;
+
+  /* §13 muted artistic palette — chrome / category / decorative use */
+  --atelier-brand-soft:  #8a9cc4;   /* muted slate-cobalt (non-CTA brand surfaces) */
+  --atelier-sky-soft:    #b0bdc8;   /* warm grey-blue chrome text */
+  --atelier-sage:        #95b89e;   /* muted green */
+  --atelier-ochre:       #c9a87e;   /* muted warm yellow (was amber) */
+  --atelier-mauve:       #b59abe;   /* muted purple (was violet) */
+  --atelier-teal-soft:   #88aaa6;   /* muted teal (was cyan in decorative use) */
+  --atelier-coral-soft:  #c98a7e;   /* muted warm red */
+  --atelier-slate-warm:  #98a3b0;   /* muted warm grey */
+
+  /* atmospheric tier — kept for bloom recipe */
+  --atelier-sky-300:    #9cc4e8;
+  --atelier-sky-100:    #dde9f4;
+  --atelier-peach-200:  #e8b89c;
+
+  /* legacy aliases — old names automatically pick up muted tones */
+  --atelier-amber:  var(--atelier-ochre);
+  --atelier-violet: var(--atelier-mauve);
+  --atelier-cyan:   var(--atelier-teal-soft);
+  --atelier-slate:  var(--atelier-slate-warm);
+
+  /* saturated status — hard signaling only */
+  --atelier-status-completed:  #34d399;
+  --atelier-status-processing: #60a5fa;
+  --atelier-status-failed:     #f87171;
+
+  /* §11.2 opaque-base / §12.2 opaque-shell tokens */
+  --atelier-opaque-fill:   rgba(20, 24, 42, 0.94);
+  --atelier-opaque-border: rgba(156, 196, 232, 0.18);
+
+  /* §10.10.2 bloom strength multiplier (overridden per tier) */
+  --bloom-strength: 1;
+}
+
+/* ── §11.2 opaque-base — single-frame content containers ──
+   Polaroid current take + processing nodes. Small SECONDARY surfaces
+   that don't have room for a header zone. */
+.atelier-opaque-base {
+  background: var(--atelier-opaque-fill) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  border: 1px solid var(--atelier-opaque-border) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 24px -8px rgba(0, 0, 0, 0.6) !important;
+}
+
+.atelier-opaque-base.atelier-bloom::after {
+  padding: calc(28px * var(--bloom-strength));
+  box-sizing: border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* ── §12.2 opaque-shell — double-frame for HERO + critical SECONDARY ──
+   Workbench + approval bubble. Outer shell visible as a frame, header
+   zone at top contains the title, inner card sits below with content,
+   bloom paints INSIDE the shell in the header zone (round-4 §12.7.4). */
+.atelier-opaque-shell {
+  background: rgba(28, 32, 52, 0.94);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(156, 196, 232, 0.22);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 16px 32px -10px rgba(0, 0, 0, 0.7);
+}
+
+/* External bloom is suppressed on shells — bloom moves inside via ::before */
+.atelier-opaque-shell.atelier-bloom::after { display: none !important; }
+
+/* Internal bloom: paints in the header zone, anchored top-right.
+   Multi-color radial wash with screen blend, simulates off-frame ambient light. */
+.atelier-opaque-shell.atelier-bloom::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 70%;
+  height: 55%;
+  background:
+    radial-gradient(ellipse 90% 100% at 62% 0%,
+      rgba(255, 140, 200, calc(0.42 * var(--bloom-strength))) 0%,
+      rgba(180, 140, 255, calc(0.36 * var(--bloom-strength))) 28%,
+      rgba(140, 200, 255, calc(0.22 * var(--bloom-strength))) 60%,
+      transparent 88%);
+  filter: blur(calc(18px + 6px * var(--bloom-strength)));
+  pointer-events: none;
+  mix-blend-mode: screen;
+  z-index: 0;
+  border-radius: inherit;
+}
+
+.atelier-shell-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 0 10px;
+}
+
+.atelier-opaque-inner {
+  position: relative;
+  z-index: 1;
+  background: rgba(10, 12, 22, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 9px;
+  padding: 18px 20px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+/* ── §10.10.2 bloom tiers ── */
+.atelier-bloom         { position: relative; }
+.atelier-bloom-hero      { --bloom-strength: 1.5; }
+.atelier-bloom-secondary { --bloom-strength: 1.0; }
+.atelier-bloom-ambient   { --bloom-strength: 0.6; }
+
+/* ── §10.10.4 breathing animations ── */
+@keyframes atelier-breath-generating {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1.0;  }
+}
+@keyframes atelier-breath-attending {
+  0%, 100% { opacity: 0.92; }
+  50%      { opacity: 1.0;  }
+}
+.atelier-breath-generating::before,
+.atelier-breath-generating::after {
+  animation: atelier-breath-generating 2.4s ease-in-out infinite;
+}
+.atelier-breath-attending::before,
+.atelier-breath-attending::after {
+  animation: atelier-breath-attending 4.5s ease-in-out infinite;
+}
+
+/* ── §12.3 editorial button system ── */
+
+/* btn-editorial — replaces saturated cobalt-pill action buttons.
+   Primary = Inter italic verb (real italic glyph) + → arrow.
+   Reading register: "magazine page action", not "SaaS submit button". */
+.atelier-btn-editorial {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 13.5px;
+  letter-spacing: -0.005em;
+  padding: 11px 22px;
+  background: transparent;
+  border: none;
+  color: var(--atelier-text-fg);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+.atelier-btn-editorial:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.atelier-btn-editorial:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* primary action verb — italic, MUST use Inter for real italic glyph
+   (Space Grotesk has no italic on Google Fonts). */
+.atelier-btn-editorial.primary {
+  font-family: 'Inter', sans-serif;
+  font-style: italic;
+  color: var(--atelier-brand-300);
+}
+.atelier-btn-editorial.primary::after {
+  content: '→';
+  font-style: normal;
+  font-size: 16px;
+  transform: translateY(1px);
+  transition: transform 0.15s ease;
+}
+.atelier-btn-editorial.primary:hover::after {
+  transform: translateX(3px) translateY(1px);
+}
+
+/* editorial-toggle — replaces cobalt-pill seg-toggle.
+   Both options Space Grotesk upright (no italic — round-5 §12.7.1
+   established that toggle italic + upright reads as two fonts because
+   Space Grotesk has no italic glyph). Active = weight 600 + cobalt
+   underline + brighter color. Three signals, one family. */
+.atelier-editorial-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 28px;
+}
+.atelier-editorial-toggle .opt {
+  position: relative;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--atelier-text-mute);
+  padding: 8px 0;
+  cursor: pointer;
+  letter-spacing: -0.005em;
+  background: transparent;
+  border: none;
+  transition: color 0.15s ease;
+}
+.atelier-editorial-toggle .opt:hover { color: var(--atelier-text-fg); }
+.atelier-editorial-toggle .opt.on {
+  color: var(--atelier-text-fg);
+  font-weight: 600;
+}
+.atelier-editorial-toggle .opt.on::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 2px;
+  height: 1.5px;
+  background: var(--atelier-brand-400);
+  border-radius: 999px;
+  box-shadow: 0 0 8px rgba(110, 143, 255, 0.45);
+}
+
+/* pill-editorial — replaces cobalt-fill compact pill controls.
+   Ghost border, transparent fill, editorial font. */
+.atelier-pill-editorial {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: -0.002em;
+  padding: 7px 13px 7px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--atelier-text-mute);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.atelier-pill-editorial:hover {
+  border-color: rgba(156, 196, 232, 0.35);
+  color: var(--atelier-text-fg);
+}
+.atelier-pill-editorial .caret {
+  font-size: 9px;
+  opacity: 0.55;
+  transform: translateY(-1px);
+}
+
+/* ── §12.7.2 endpoint bloom (Pattern B) — chromatic edge endpoints ── */
+.atelier-endpoint-cobalt {
+  filter:
+    drop-shadow(0 0 3px rgba(59, 107, 255, 0.65))
+    drop-shadow(0 0 6px rgba(156, 196, 232, 0.35))
+    drop-shadow(0 0 10px rgba(180, 140, 255, 0.18));
+}
+.atelier-endpoint-amber {
+  filter:
+    drop-shadow(0 0 3px rgba(201, 168, 126, 0.65))
+    drop-shadow(0 0 6px rgba(232, 184, 156, 0.32))
+    drop-shadow(0 0 10px rgba(255, 180, 200, 0.14));
+}
+.atelier-endpoint-violet {
+  filter:
+    drop-shadow(0 0 3px rgba(181, 154, 190, 0.62))
+    drop-shadow(0 0 6px rgba(176, 189, 200, 0.32))
+    drop-shadow(0 0 10px rgba(180, 255, 220, 0.14));
+}
+
+@keyframes atelier-endpoint-attending {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1.0; }
+}
+.atelier-endpoint-breath {
+  animation: atelier-endpoint-attending 4.5s ease-in-out infinite;
+}
+
+/* ── §11.8 atelier canvas — uniform dark + dotted grid only ──
+   The .atelier-canvas-bg utility replaces any prior atmospheric wash. */
+.atelier-canvas-bg {
+  background:
+    radial-gradient(circle, var(--atelier-canvas-dot) 1px, transparent 1px),
+    var(--atelier-canvas-base);
+  background-size: 28px 28px, auto;
+  background-position: -14px -14px, 0 0;
+}
+
+/* ── §11.8 chrome panels — opaque rgba(14,16,26,0.92) ── */
+.atelier-chrome-opaque {
+  background: rgba(14, 16, 26, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* ── annotation pill — muted slate (round-5 §13.4) ── */
+.atelier-anno {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  letter-spacing: -0.005em;
+  color: var(--atelier-sky-soft);
+  background: rgba(176, 189, 200, 0.08);
+  padding: 4px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(176, 189, 200, 0.22);
+}
+
+/* ── §12.7 zoom slider — custom vendor pseudo-elements ──
+   Replaces native input[type=range] OS-default chunky cobalt thumb. */
+.atelier-zoom-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 88px;
+  height: 22px;
+  background: transparent;
+  margin: 0 8px;
+  cursor: pointer;
+}
+.atelier-zoom-slider:focus { outline: none; }
+
+.atelier-zoom-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+.atelier-zoom-slider::-moz-range-track {
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.atelier-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--atelier-sky-soft);
+  border: none;
+  margin-top: -3.5px;
+  cursor: pointer;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.45),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.20);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.atelier-zoom-slider::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--atelier-sky-soft);
+  border: none;
+  cursor: pointer;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.45),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.20);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.atelier-zoom-slider:hover::-webkit-slider-thumb {
+  background: var(--atelier-text-fg);
+  transform: scale(1.15);
+}
+.atelier-zoom-slider:hover::-moz-range-thumb {
+  background: var(--atelier-text-fg);
+  transform: scale(1.15);
 }
