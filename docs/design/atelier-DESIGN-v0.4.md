@@ -1497,53 +1497,93 @@ Italic remains on primary buttons (Generate, Send) and on in-flight
 state labels (Awaiting approval) — those use `font-family: 'Inter',
 sans-serif` with `font-style: italic`.
 
-#### 12.7.2 Bloom only visible on the top edge
+#### 12.7.2 Bloom not visible — actually a mask bug (corrected in round-2)
 
-**Problem.** The user expected bloom to glow around the entire
-perimeter of the workbench (and approval bubble). In the first v0.4.5
-cut, only the top edge showed visible bloom; the other three sides
-read as plain dark.
+**Initial diagnosis (round-1 fix, was incomplete and partially wrong).**
+First read of "bloom only on top edge" attributed it to gradient
+center positioning. Repositioning centers from inner corners to outer
+edges should have helped, but on review the bloom was *still* mostly
+invisible. Deeper inspection found the real cause:
 
-**Root cause.** The four radial-gradient centers in `.bloom::after`
-were positioned at corner-like inner coords (22%/28%, 78%/22%,
-82%/76%, 18%/78%). After mask-composite excluded the inner frame
-area, only each gradient's *tail* reached the visible 40px ring — and
-the cumulative tail brightness was weak everywhere except the top
-(where the iridescent rim line also lived, masking the deficiency).
-The bright *centers* of the gradients were hidden under the mask.
+**Actual root cause — the mask-composite trick had a box-clip bug
+since v0.4.4.** The mask declarations read:
 
-**Fix.** Two coupled changes:
+```css
+-webkit-mask:
+  linear-gradient(#000 0 0) padding-box,   /* ← bug */
+  linear-gradient(#000 0 0);                /* default = border-box */
+-webkit-mask-composite: xor;
+```
 
-1. **Reposition gradient centers to the outer edges of the bloom box.**
-   Each of the four gradients now sits at a side of the `::after` box
-   rather than at an inner corner — its brightest pixel lands directly
-   in the visible perimeter ring.
+For an element with no border, `padding-box` and `border-box` clip
+to the **same rectangle**. The two mask layers were therefore
+identical, and XOR of two identical layers = **0 alpha everywhere**.
+The mask was wiping the bloom completely.
+
+What the user was seeing on the top edge of the workbench in earlier
+rounds was **the iridescent-rim** (a 3px linear-gradient bar at the
+top edge, a separate `::before`), not bloom. The bloom had never
+actually been visible on opaque-base / opaque-shell surfaces.
+
+This bug shipped from v0.4.4 §11.3 onward. Every subsequent "bloom
+discipline" claim was technically wrong — there was no bloom to
+discipline because the mask was wiping it.
+
+**Round-2 fix — two coupled corrections.**
+
+1. **Mask clip changed from `padding-box` to `content-box`.** The
+   correct clip for "the inner frame area" is content-box: it bounds
+   to the area inside the padding, which is exactly where the
+   workbench / approval-bubble body sits. XOR of (content-box) and
+   (border-box) = the padding ring, where bloom is now actually
+   visible.
 
    ```css
-   /* top edge */     radial-gradient(ellipse 95% 60% at 50%  4%, …)
-   /* right edge */   radial-gradient(ellipse 60% 95% at 96% 50%, …)
-   /* bottom edge */  radial-gradient(ellipse 95% 60% at 50% 96%, …)
-   /* left edge */    radial-gradient(ellipse 60% 95% at  4% 50%, …)
+   -webkit-mask:
+     linear-gradient(#000 0 0) content-box,    /* correct */
+     linear-gradient(#000 0 0);
    ```
 
-   Each gradient ellipse spans 95% along its primary axis and 60%
-   along its secondary, so two adjacent gradients overlap at the
-   corners — a cohesive "ring of color" instead of "four corner blobs."
-   Each gradient also carries a 30%-stop secondary color, blending
-   adjacent hues so the perimeter reads as a continuous iridescent
-   spectrum (pink → violet → sky → mint → pink).
+2. **Gradient ellipses re-sized for the visible ring.** Round-1's
+   95%×60% ellipses extended mostly into the inner area; with the
+   mask now actually working, that inner-area bulk was being masked
+   away again. Ellipses become **short along the perpendicular axis**
+   (28%) so most of the gradient body fits inside the 84px visible
+   ring band. Centers move to 6%/94% (middle of each ring band):
 
-2. **Widen the bloom ring.** Inset bumped from `-40px * strength` to
-   `-56px * strength`. At HERO 1.5×, this gives an 84px visible ring
-   (was 60px). Blur also bumped (`28+8s` → `38+12s`) for a softer
-   atmospheric falloff that matches the wider ring.
+   ```css
+   /* top edge */     radial-gradient(ellipse 95% 28% at 50%  6%, …)
+   /* right edge */   radial-gradient(ellipse 28% 95% at 94% 50%, …)
+   /* bottom edge */  radial-gradient(ellipse 95% 28% at 50% 94%, …)
+   /* left edge */    radial-gradient(ellipse 28% 95% at  6% 50%, …)
+   ```
 
-The mask padding in `.opaque-shell.bloom::after` and
-`.opaque-base.bloom::after` must update in lockstep (40 → 56) so the
-mask matches the new inset.
+   Alpha bumped (0.42 → 0.78 peak) since screen-blend against the dark
+   canvas needs more raw alpha to reach the same perceived brightness.
 
-**Result.** Bloom now visible all four perimeter sides + corners; the
-top no longer dominates. Approval bubble (smaller, SECONDARY 1.0×)
-gets a 56px ring; workbench (HERO 1.5×) gets 84px. Both feel
-deliberately wide rather than rim-only.
+**Inset / mask padding** stay at 56 (HERO 1.5× → 84px visible ring).
+Blur stays in the 34+10s range.
+
+**Mask-trick rule going forward.** When `::after` carries the bloom
+and has no border, the correct mask composite is:
+
+```css
+padding: <ring-width>;
+box-sizing: border-box;
+-webkit-mask:
+  linear-gradient(#000 0 0) content-box,    /* inner subtracted */
+  linear-gradient(#000 0 0);                  /* full box */
+-webkit-mask-composite: xor;
+mask-composite: exclude;
+```
+
+`content-box` is always the right clip for "subtract the inner
+content area." `padding-box` should only be used when there is a
+border to separate from the padding.
+
+**Lesson.** Mask-composite bugs are silent — the page renders without
+errors, the wrong thing just appears nowhere. Future bloom-discipline
+changes should be sanity-checked by temporarily commenting out the
+mask block to confirm bloom is rendering at all before assessing how
+it composites.
 
