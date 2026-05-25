@@ -466,12 +466,15 @@ export function Composer({
             </div>
             {filteredMentionables.map((m, i) => {
               const active = i === mentionIndex;
+              // v0.4.5 §13.4: mention picker kind icons shift from saturated
+              // Tailwind 200/300 tones to muted artistic palette. These are
+              // category encoding, not status — belong in muted family.
               const kindIconColor =
-                m.kind === "video" || m.kind === "draft" ? "text-primary/85" :
-                m.kind === "image" ? "text-amber-200/85" :
-                m.kind === "audio" ? "text-emerald-200/85" :
-                m.kind === "idea" ? "text-amber-300/85" :
-                m.kind === "plan" ? "text-blue-200/85" :
+                m.kind === "video" || m.kind === "draft" ? "text-atelier-brand-soft" :
+                m.kind === "image" ? "text-atelier-ochre" :
+                m.kind === "audio" ? "text-atelier-sage" :
+                m.kind === "idea" ? "text-atelier-ochre" :
+                m.kind === "plan" ? "text-atelier-brand-soft" :
                 "text-text-muted/85";
               return (
                 <li key={m.id} role="none">
