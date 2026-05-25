@@ -234,19 +234,20 @@
     }
 
     /* ── viewport ── */
+    /* v0.4.4 patch: removed the two atmospheric radial washes (peach + sky).
+       The canvas-level "atmospheric glow" was itself a kind of background bloom
+       that competed with per-node bloom. With it gone, node bloom finally reads
+       AS bloom — a local light against a neutral dark ground.
+       Reference 03-instagram.jpeg: dark uniform canvas + dotted grid + local bloom. */
     .stage {
       width: 1440px; height: 900px;
       margin: 24px auto;
       position: relative;
       background:
         radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px),
-        radial-gradient(ellipse 120% 80% at 75% 18%,
-          rgba(232,184,156,0.07) 0%, transparent 42%),
-        radial-gradient(ellipse 100% 100% at 25% 72%,
-          rgba(156,196,232,0.09) 0%, transparent 52%),
         var(--canvas-base);
-      background-size: 28px 28px, auto, auto, auto;
-      background-position: -14px -14px, 0 0, 0 0, 0 0;
+      background-size: 28px 28px, auto;
+      background-position: -14px -14px, 0 0;
       overflow: hidden;
       border-radius: 14px;
       box-shadow: 0 30px 80px -30px rgba(0,0,0,0.7);
@@ -346,16 +347,22 @@
     }
 
     /* ── right rail ── */
+    /* v0.4.4 patch: right rail switches to opaque panel chrome (rgba 0.92).
+       Why: when the rail was translucent glass, the dialog bubbles INSIDE it
+       had nowhere to anchor — both the rail and the bubbles were translucent,
+       reading as one foggy zone. Making the rail opaque turns it into a
+       "stage" that the bubbles can sit on with their own translucent layer
+       providing the hierarchy. Bubbles now read as content; rail reads as panel. */
     .right-rail {
       position: absolute; right: 0; top: 48px; bottom: 0;
       width: 320px;
-      background: var(--node-bg-glass);
-      backdrop-filter: blur(14px) saturate(180%);
-      border-left: 1px solid var(--border-glass);
+      background: rgba(14, 16, 26, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
       box-shadow:
-        0 24px 48px -22px rgba(0,0,0,0.8),
-        0 4px 14px -4px rgba(0,0,0,0.55),
-        inset 0 1px 0 0 rgba(255,255,255,0.05);
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        -12px 0 24px -16px rgba(0, 0, 0, 0.6);
       z-index: 25;
       padding: 20px;
       display: flex; flex-direction: column; gap: 14px;
@@ -367,11 +374,14 @@
       letter-spacing: -0.005em;
     }
     .right-rail-sub { font-size: 11px; color: var(--text-quiet); }
+    /* v0.4.4 patch: bubbles are now the translucent layer ABOVE the opaque
+       rail. Slightly lifted fill + subtle border so each bubble reads as a
+       distinct "card on the panel" instead of dissolving into the rail bg. */
     .agent-bubble {
       padding: 11px 13px;
       border-radius: 12px;
-      background: rgba(0,0,0,0.30);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       font-size: 13px; line-height: 1.65;
       color: var(--text-fg);
     }
@@ -407,6 +417,8 @@
     }
 
     /* ── dock ── */
+    /* v0.4.4 patch: dock loses aura-bottom (was another canvas-level bloom).
+       Now reads as opaque pill chrome floating above the canvas. */
     .dock {
       position: absolute;
       left: 50%; bottom: 32px;
@@ -416,13 +428,13 @@
       padding: 0 8px 0 12px;
       gap: 6px;
       border-radius: 28px;
-      background: var(--node-bg-glass);
-      backdrop-filter: blur(14px) saturate(180%);
-      border: 1px solid var(--border-glass);
+      background: rgba(14, 16, 26, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.10);
       box-shadow:
-        0 24px 48px -22px rgba(0,0,0,0.8),
-        0 4px 14px -4px rgba(0,0,0,0.55),
-        inset 0 1px 0 0 rgba(255,255,255,0.05);
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 16px 32px -12px rgba(0, 0, 0, 0.7);
       z-index: 35;
     }
     .dock-chips { display: flex; gap: 6px; align-items: center; }
@@ -941,7 +953,7 @@
     </aside>
 
     <!-- ── right rail (aura) ── -->
-    <aside class="right-rail aura-side-left grain">
+    <aside class="right-rail">
       <h3>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" style="color: var(--brand-400);"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/></svg>
         Atelier Agent
@@ -1008,11 +1020,15 @@
       <h4>Boundary discipline (v0.4.4 fix)</h4>
       <div class="sub" style="margin-top: 0;">
         <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Opaque-base policy</div>
-        <div style="color: var(--text-mute);">HERO + SECONDARY content containers wear <strong style="color:var(--sky-300)">opaque base</strong>: rgba(20,24,42,<strong>0.94</strong>) fill + 1px hairline border + inner highlight + lift shadow. Bloom paints <em>around</em> the card, not <em>through</em> it.</div>
+        <div style="color: var(--text-mute);">HERO + SECONDARY content containers wear <strong style="color:var(--sky-300)">opaque base</strong>: rgba(20,24,42,<strong>0.94</strong>) fill + 1px hairline border + inner highlight + lift shadow.</div>
       </div>
       <div class="sub">
         <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Bloom isolation</div>
-        <div style="color: var(--text-mute);">Bloom <code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px;">::after</code> masked via padding-box XOR border-box — physically excluded from frame interior. Reference: 03-instagram.</div>
+        <div style="color: var(--text-mute);">Bloom <code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px;">::after</code> masked via padding-box XOR border-box — physically excluded from frame interior.</div>
+      </div>
+      <div class="sub">
+        <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Canvas + chrome (v0.4.4 round-2)</div>
+        <div style="color: var(--text-mute);">Removed canvas atmospheric wash + dock <code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px;">aura-bottom</code> (both were background bloom competing with node bloom). Right rail + dock now <strong style="color:var(--sky-300)">opaque chrome</strong> (rgba 0.92); dialog bubbles become the translucent layer above for hierarchy. Reference: 03-instagram.</div>
       </div>
       <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 10px 0;" />
       <h4 style="margin-top: 0;">Bloom tier roster (carry-over v0.4.3)</h4>
@@ -1146,7 +1162,7 @@
     <div class="anno" style="left: 50%; bottom: 100px; transform: translateX(-50%);">dock idle (no bloom) — would gain ambient bloom when composer has focus</div>
 
     <!-- ── dock (no bloom shown — only gets ambient when has focus) ── -->
-    <div class="dock aura-bottom grain">
+    <div class="dock">
       <div class="dock-chips">
         <button class="dock-chip">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>

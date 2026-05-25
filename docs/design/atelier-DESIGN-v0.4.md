@@ -1065,3 +1065,88 @@ opaque base is a precondition for bloom that reads cleanly:
 18. Focal frosted glass (from v0.4 §6 step 4). (Subsumed by opaque-base
     on the focal workbench.)
 19. Polaroid stack (from v0.4 §6 step 5).
+
+### 11.8 v0.4.4 round-2 — canvas + chrome cleanup
+
+Review of the first v0.4.4 cut found that fixing per-card boundaries
+was necessary but not sufficient. Two further sources of "background
+bloom" still competed with node bloom, keeping the canvas reading as
+foggy rather than as a neutral ground:
+
+1. **Canvas atmospheric wash** (§10.4 — peach + sky radial gradients
+   on `.stage`). Originally added to give the canvas a sense of
+   atmosphere, but in practice it functions as a canvas-wide bloom
+   that nullifies the contrast bloom-bearing nodes need to read as
+   "this surface is lit."
+2. **Dock `aura-bottom`** and right-rail `aura-side-left`. These were
+   atmospheric chrome glow ringing the canvas perimeter — same
+   problem at smaller scale.
+
+Plus a structural issue with the right rail itself: it was translucent
+glass, and the dialog bubbles inside it were also translucent. Two
+translucent layers stacked have no hierarchy — they read as one foggy
+zone. The fix is to invert the translucency: make the rail opaque so
+the bubbles' translucency provides the hierarchy.
+
+#### Changes
+
+| Surface | Before | After |
+|---|---|---|
+| `.stage` background | `canvas-base` + dots + peach radial wash + sky radial wash | `canvas-base` + dots only |
+| `.right-rail` | `rgba(18,18,22,0.52)` glass + `aura-side-left` + `grain` | `rgba(14,16,26,0.92)` opaque + 10px blur, no aura/grain |
+| `.agent-bubble` (inside opaque rail) | `rgba(0,0,0,0.30)` | `rgba(255,255,255,0.04)` — lifted card on dark panel |
+| `.dock` | glass + `aura-bottom` + `grain` | `rgba(14,16,26,0.92)` opaque pill, no aura/grain |
+
+#### Rule extraction
+
+This is the same principle applied at two scales:
+
+- **Bloom belongs to important nodes, not to the canvas.** Atmospheric
+  wash on the ground level competes with bloom on the figure level.
+  Pick one — and for Atelier, the figure (node bloom) wins because
+  it carries semantic meaning ("this is focused / generating / live").
+- **Translucent surfaces only stack one layer deep.** When a panel and
+  its children are both translucent, hierarchy collapses. The pattern
+  to enforce: chrome panels are opaque; content layers on top of them
+  are translucent. Translucency is reserved for the topmost interactive
+  layer.
+
+§10.4 (canvas atmospheric wash) is therefore **deprecated**. The
+canvas should be near-uniform dark with just the dotted grid and
+canvas-level grain. Atmospheric expression on Atelier lives in node
+bloom + iridescent rim, not in the canvas.
+
+Aura tokens (§10.3) remain valid only for translucent-glass surfaces
+that are themselves *not* chrome panels — the residual use cases are
+hover-state media nodes and selected sandbox. Both narrow.
+
+#### Updated implementation order (replaces §11.7)
+
+The canvas + chrome cleanup is the **first** step now — without it,
+none of the bloom work reads correctly:
+
+1. **(new)** Canvas: strip atmospheric wash, keep dots + grain only
+   (§11.8).
+2. **(new)** Chrome panels: right rail + dock + (later) top bar all
+   go opaque (rgba 0.92). Strip `aura-bottom` / `aura-side-left` /
+   `grain` from their HTML class lists (§11.8).
+3. Brand recolor — cobalt blue primary (from v0.4 §6 step 1).
+4. Atmospheric palette tier (§10.1).
+5. Aura recipe — retained only for the narrow residual surfaces noted
+   above (§10.3).
+6. Iridescent rim (§10.9).
+7. `--opaque-fill` + `--opaque-border` tokens (§11.2).
+8. `.opaque-base` class for HERO + SECONDARY content containers (§11.2).
+9. Bloom variable system + tier classes (§10.10.2).
+10. `.opaque-base.bloom::after` mask override (§11.3).
+11. Pattern A roster + discipline cap (§10.10.3 / §10.10.6).
+12. Breathing animations + edge-endpoint inheritance (§10.10.4).
+13. Pattern B endpoint bloom (§10.10.5).
+14. Canvas grain only — bump 6% → 10-12% on canvas, removed from
+    opaque-base surfaces (§10.2 + §11.4).
+15. Connector lines — chromatic-semantic edges (v0.4 §6 step 2).
+16. Selected edge halo — 2-stop drop-shadow (§10.6).
+17. Icon discipline (v0.4 §6 step 3).
+18. Typography breathing (§10.5).
+19. Focal frosted glass (subsumed by opaque-base, v0.4 §6 step 4).
+20. Polaroid stack (v0.4 §6 step 5).
