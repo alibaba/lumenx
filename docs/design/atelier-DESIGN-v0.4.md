@@ -872,3 +872,196 @@ The bloom roster slots in after the rim step:
 14. Typography breathing — spacing-only tweaks (§10.5).
 15. Focal frosted glass (from v0.4 §6 step 4).
 16. Polaroid stack (from v0.4 §6 step 5).
+
+---
+
+## 11. v0.4.3 → v0.4.4 patch — boundary discipline
+
+### 11.1 The bug v0.4.4 fixes
+
+Review of v0.4.3 mockup against the user's reference 03-instagram.jpeg
+surfaced a structural problem: bloom on a translucent glass frame
+dissolves the boundary between surface and canvas. The Moonlit chase
+workbench in v0.4.3 reads as "a region of the canvas that happens to
+have brighter color in it," not as "a card sitting on the canvas."
+
+The reference shows the correct mental model: **a clearly-bounded
+opaque card** with bloom radiating *outside* it. Bloom is the card's
+halo, not its substance. Three things must be true for that to work:
+
+1. The card's fill must be opaque enough that the canvas does not
+   visually leak through it.
+2. The card must have a visible edge (border + lift shadow).
+3. The bloom must be physically prevented from painting on the card
+   interior.
+
+v0.4.3 violated all three. v0.4.4 restores all three for the
+"content-container" tiers (HERO + SECONDARY). AMBIENT bloom-bearing
+surfaces (rail mode, dock focus, hover ports, edge endpoints) are
+exempt — they're chrome on structural rails, not content surfaces, and
+the boundary problem does not apply.
+
+Reference mockup: `docs/design/prototypes/atelier-v0.4.4-mockup.html`.
+
+### 11.2 Opaque-base recipe
+
+Add to `:root`:
+
+```css
+--opaque-fill:   rgba(20, 24, 42, 0.94);
+--opaque-border: rgba(156, 196, 232, 0.18);
+```
+
+Add the `.opaque-base` class:
+
+```css
+.opaque-base {
+  background: var(--opaque-fill) !important;
+  backdrop-filter: blur(8px) !important;
+  border: 1px solid var(--opaque-border) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),   /* inner top highlight */
+    0 12px 24px -8px rgba(0, 0, 0, 0.6)        /* lift shadow */
+    !important;
+}
+```
+
+Why `!important`: surfaces that adopt `.opaque-base` (workbench,
+polaroid l1, approval bubble, processing node) already carry their own
+background / border / shadow. The policy must win over those defaults
+deterministically.
+
+Three layers do the work:
+
+| Layer | What | Why |
+|---|---|---|
+| Fill `rgba(20,24,42,0.94)` | 94% opaque, slight cobalt tint | Reads as solid card; tint keeps it inside the Aerogel palette |
+| Border `rgba(156,196,232,0.18)` | 1px sky-tinted hairline | Carves the surface out of the canvas |
+| `inset 0 1px 0 rgba(255,255,255,0.04)` | barely-there top highlight | Subliminal "surface has form" — like printed paper catching light |
+| `0 12px 24px -8px rgba(0,0,0,0.6)` | lift drop-shadow | Says "this card floats above the canvas" |
+
+The 8px backdrop-blur is retained to keep a hint of glass material —
+the card is "almost solid", not "perfectly solid". This is the
+difference between Aerogel and flat material design.
+
+### 11.3 Bloom isolation — masking the interior
+
+Bloom remains on `.bloom::after`. When `.opaque-base` is also present,
+the `::after` gets a mask that subtracts the frame interior:
+
+```css
+.opaque-base.bloom::after {
+  padding: calc(40px * var(--bloom-strength));
+  box-sizing: border-box;
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+```
+
+How the mask works: the `::after` has `inset: calc(-40px * strength)`
+(it extends past the frame). With `padding: calc(40px * strength)` +
+`box-sizing: border-box`, the content-box of `::after` coincides
+exactly with the frame body, while the padding-box equals the full
+`::after`. Compositing the two mask layers with XOR (`mask-composite:
+exclude`) yields **only the padding ring** — bloom is visible only
+outside the frame.
+
+Browser support: `-webkit-mask-composite: xor` is supported in
+Safari/Chromium since 2023. Firefox uses `mask-composite: exclude`
+(both prefixed forms are listed).
+
+### 11.4 Aura removal on opaque-base surfaces
+
+Aura (§10.3) was designed to atmospherically render *inside*
+translucent glass. With 94% opaque fill, aura is 94% blocked — invisible
+in practice. Worse, the "outer glow" role aura partially fulfilled in
+v0.4.2 is now fully owned by bloom (Pattern A), so aura on a bloom-
+bearing surface is redundant.
+
+**Rule.** Any surface that adopts `.opaque-base` must not also adopt
+`.aura-focal` (or any other aura variant). In HTML class lists:
+
+```diff
+- <div class="workbench aura-focal grain bloom bloom-hero ...">
++ <div class="workbench opaque-base bloom bloom-hero ...">
+```
+
+Aura is **not deprecated** — it remains the correct treatment for
+translucent ambient surfaces (selected sandbox, hover-state media
+nodes, region containers) that do not carry bloom. Aura's role shifts
+from "atmospheric wash for everything important" to "translucent-glass
+descriptor for the still-glassy minority."
+
+Grain (the `.grain` class) is also dropped from opaque-base surfaces —
+SVG noise overlay at 7-11% on an opaque fill is invisible in practice.
+Grain continues to live on the canvas + any remaining translucent glass
+surfaces.
+
+### 11.5 Applicability roster
+
+The policy applies to **HERO + SECONDARY content containers only**:
+
+| Surface | v0.4.3 | v0.4.4 |
+|---|---|---|
+| Selected DraftWorkbench (HERO) | `aura-focal grain bloom bloom-hero` | `opaque-base bloom bloom-hero` |
+| Polaroid current take (SECONDARY) | `bloom bloom-secondary` | `opaque-base bloom bloom-secondary` |
+| Approval bubble (SECONDARY) | `bloom bloom-secondary` | `opaque-base bloom bloom-secondary` |
+| Processing node (SECONDARY) | `bloom bloom-secondary` | `opaque-base bloom bloom-secondary` |
+
+The policy does **not** apply to AMBIENT bloom-bearing surfaces:
+
+| Surface | Tier | Why exempt |
+|---|---|---|
+| LeftRail active mode button | AMBIENT | Already opaque chrome (rail background is solid) |
+| Dock when composer focused | AMBIENT | Dock chrome itself is opaque-rendered |
+| Hover ports | AMBIENT | Too small for boundary to matter; bloom reads as "lit endpoint" |
+| Edge endpoints (Pattern B) | AMBIENT | SVG circles, no fill semantic; endpoint drop-shadows already painted outside |
+
+### 11.6 What v0.4.4 does NOT change
+
+- Bloom recipe (4 radial gradients + screen blend) — unchanged from
+  §10.9 / §10.10.
+- `--bloom-strength` tier multipliers — unchanged.
+- Breathing animations — unchanged.
+- Pattern B endpoint bloom — unchanged.
+- Discipline cap — unchanged.
+- Aerogel palette tokens — unchanged.
+- Layer composition order (§10.10.7) is **refined**: on opaque-base
+  surfaces, the aura layer (z:-1) is empty; the stack is now
+  `bloom (-3) → element body (0) → rim (1)`. The aura layer is
+  retained for translucent-glass surfaces.
+
+### 11.7 Updated implementation order (replaces §10.10.9)
+
+The boundary-discipline steps slot in **before** the bloom roster — an
+opaque base is a precondition for bloom that reads cleanly:
+
+1. Brand recolor — cobalt blue primary (from v0.4 §6 step 1).
+2. Atmospheric palette tier (§10.1).
+3. Canvas background — atmospheric wash overlay (§10.4).
+4. Aura recipe update — multi-stop atmospheric (§10.3). (Still used
+   on translucent-glass surfaces.)
+5. Iridescent rim on focal workbench + polaroid primary + approval
+   bubble (§10.9).
+6. **(new)** `--opaque-fill` + `--opaque-border` tokens (§11.2).
+7. **(new)** `.opaque-base` class (§11.2). Apply to HERO + SECONDARY
+   content containers; remove `.aura-focal` / `.grain` from the same
+   surfaces (§11.4).
+8. Bloom variable system — `--bloom-strength` + tier classes (§10.10.2).
+9. **(new)** `.opaque-base.bloom::after` mask override (§11.3).
+10. Pattern A roster — HERO/SECONDARY/AMBIENT deployment per §10.10.3,
+    with discipline cap (§10.10.6).
+11. Breathing animations including edge-endpoint inheritance (§10.10.4).
+12. Pattern B endpoint bloom (§10.10.5).
+13. Pigment grain bump — 6% → 10-12% on canvas only (§10.2). (Removed
+    from opaque-base surfaces per §11.4.)
+14. Connector lines — chromatic-semantic edges (from v0.4 §6 step 2).
+15. Selected edge halo — 2-stop drop-shadow (§10.6).
+16. Icon discipline (from v0.4 §6 step 3).
+17. Typography breathing — spacing-only tweaks (§10.5).
+18. Focal frosted glass (from v0.4 §6 step 4). (Subsumed by opaque-base
+    on the focal workbench.)
+19. Polaroid stack (from v0.4 §6 step 5).
