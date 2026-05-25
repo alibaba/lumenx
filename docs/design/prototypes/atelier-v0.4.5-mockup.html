@@ -130,42 +130,26 @@
     .bloom {
       position: relative;
     }
-    /* v0.4.5 round-2 patch: bloom recipe re-tuned for visibility in the ring.
-       Round-1 v0.4.5 moved gradient centers to outer edges, but ellipse SIZE
-       was still 95%×60% — the bulk of each gradient extended into the inner
-       (masked) area, leaving only weak falloff in the visible ring.
-       Round-2: ellipses become SHORT along the perpendicular axis (28%) so
-       most of the gradient body fits inside the visible 84px ring; centers
-       sit at 6%/94% which is the middle of each ring band. Each gradient
-       therefore has its full bulk in the visible ring rather than under the
-       mask. Alpha bumped to compensate for screen-blend against dark canvas. */
+    /* v0.4.5 round-3 patch: discipline. Reference (03-instagram Image
+       Generator card) shows bloom ONLY on the top edge — a soft, narrow
+       horizontal band, ~30-40px tall, multi-color, fading downward. Sides
+       and bottom are clean dark. Round-2's all-perimeter ring was too much.
+       This round: single top-edge gradient only, smaller ring (28px base →
+       42px HERO / 28px SECONDARY), lower alpha (0.45 peak vs 0.78), smaller
+       blur. Bloom is now a restrained accent, not a wall of color. */
     .bloom::after {
       content: '';
       position: absolute;
-      inset: calc(-56px * var(--bloom-strength));
+      inset: calc(-28px * var(--bloom-strength));
       border-radius: inherit;
       background:
-        /* top edge — wide + short, hugs top ring band */
-        radial-gradient(ellipse 95% 28% at 50% 6%,
-          rgba(255,140,200, calc(0.78 * var(--bloom-strength))) 0%,
-          rgba(180,140,255, calc(0.52 * var(--bloom-strength))) 35%,
-          transparent 80%),
-        /* right edge — narrow + tall, hugs right ring band */
-        radial-gradient(ellipse 28% 95% at 94% 50%,
-          rgba(180,140,255, calc(0.72 * var(--bloom-strength))) 0%,
-          rgba(140,200,255, calc(0.48 * var(--bloom-strength))) 35%,
-          transparent 80%),
-        /* bottom edge */
-        radial-gradient(ellipse 95% 28% at 50% 94%,
-          rgba(140,200,255, calc(0.72 * var(--bloom-strength))) 0%,
-          rgba(180,255,220, calc(0.48 * var(--bloom-strength))) 35%,
-          transparent 80%),
-        /* left edge */
-        radial-gradient(ellipse 28% 95% at 6% 50%,
-          rgba(180,255,220, calc(0.65 * var(--bloom-strength))) 0%,
-          rgba(255,140,200, calc(0.45 * var(--bloom-strength))) 35%,
-          transparent 80%);
-      filter: blur(calc(34px + 10px * var(--bloom-strength)));
+        /* single top-edge wash, broad horizontal pink → violet → sky spread */
+        radial-gradient(ellipse 92% 38% at 50% 0%,
+          rgba(255,140,200, calc(0.45 * var(--bloom-strength))) 0%,
+          rgba(180,140,255, calc(0.38 * var(--bloom-strength))) 22%,
+          rgba(140,200,255, calc(0.28 * var(--bloom-strength))) 50%,
+          transparent 78%);
+      filter: blur(calc(16px + 6px * var(--bloom-strength)));
       pointer-events: none;
       z-index: -3;
       mix-blend-mode: screen;
@@ -206,7 +190,7 @@
        The correct clip for "subtract the inner frame area" is content-box —
        it bounds to inside the padding, which is exactly the workbench area. */
     .opaque-base.bloom::after {
-      padding: calc(56px * var(--bloom-strength));
+      padding: calc(28px * var(--bloom-strength));
       box-sizing: border-box;
       -webkit-mask:
         linear-gradient(#000 0 0) content-box,
@@ -239,7 +223,7 @@
     /* mask bloom out of inner area (same trick as opaque-base, at shell scope).
        v0.4.5 round-2 fix: padding-box → content-box (see opaque-base note). */
     .opaque-shell.bloom::after {
-      padding: calc(56px * var(--bloom-strength));
+      padding: calc(28px * var(--bloom-strength));
       box-sizing: border-box;
       -webkit-mask:
         linear-gradient(#000 0 0) content-box,
@@ -1215,7 +1199,7 @@
       </div>
       <div class="sub">
         <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Bloom isolation</div>
-        <div style="color: var(--text-mute);">Bloom <code style="background:rgba(255,255,255,0.06);padding:1px 4px;border-radius:3px;">::after</code> masked via content-box XOR border-box — physically excluded from frame interior.</div>
+        <div style="color: var(--text-mute);">Bloom is a <strong style="color:var(--sky-300)">top-edge accent only</strong> — soft pink/violet/sky band, 42px above HERO (28px above SECONDARY). Sides + bottom stay clean dark. Reference: 03-instagram Image Generator card. Restraint &gt; volume.</div>
       </div>
       <div class="sub">
         <div style="font-weight: 500; color: var(--text-fg); margin-bottom: 4px;">Canvas + chrome (v0.4.4 round-2)</div>

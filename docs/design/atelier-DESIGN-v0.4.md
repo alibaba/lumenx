@@ -1587,3 +1587,60 @@ changes should be sanity-checked by temporarily commenting out the
 mask block to confirm bloom is rendering at all before assessing how
 it composites.
 
+#### 12.7.3 Bloom geometry correction — top-edge accent only
+
+**Problem (round-3).** With the mask fixed in round-2, bloom finally
+became visible — but immediately read as *too much*. A continuous
+84px iridescent ring wrapped the workbench on all four sides, plus
+adjacent gradients overlapped at corners producing a saturated rainbow
+halo. User flagged: "太大了" — too big. Reference image (03-instagram
+Image Generator card) re-examined.
+
+**What the reference actually shows.**
+
+The reference card has bloom **only on the top edge** — a soft,
+~30-40px tall horizontal band, pink → violet → sky/cyan, fading
+downward across maybe one-third of the card's vertical extent. The
+sides and bottom of the card are completely clean dark. The bloom is
+a *top-edge accent*, like aurora light catching the top of a sculpture.
+Not a halo.
+
+Earlier user feedback ("更宽一些" — wider) had been read as "make the
+bloom cover more of the perimeter." The correct reading is "make the
+top-edge band itself wider/taller and softer." A top-edge band is the
+shape; the only knob is its thickness.
+
+**Round-3 fix — discipline.**
+
+| Lever | Round-2 (over-correct) | Round-3 (right size) |
+|---|---|---|
+| Gradients | 4 (top + right + bottom + left) | 1 (top only) |
+| Inset | `-56px * strength` (84px HERO ring) | `-28px * strength` (42px HERO band) |
+| Peak alpha | 0.78 | 0.45 |
+| Blur | `34 + 10s` | `16 + 6s` |
+| Mask padding | 56 | 28 |
+| Visual register | Saturated wraparound rainbow | Restrained top accent |
+
+The ellipse stays `92% wide × 38% tall at 50% 0%` — a broad short
+ellipse centered at the top edge of `::after`, so its bulk spreads
+horizontally along the top band and fades quickly downward (most of
+the lower extent gets masked away — fine).
+
+**Rule update.** Bloom on opaque-shell / opaque-base surfaces is a
+**top-edge accent**, not an all-perimeter halo. The other three edges
+stay clean dark. This holds for HERO and SECONDARY alike — the only
+tier difference is band thickness (42px vs 28px via the strength
+multiplier).
+
+If a future design wants bloom that genuinely surrounds something
+(rare — would have to overcome the strong "card sitting on canvas"
+metaphor), it would be a different effect class, not a tier
+multiplier on the same recipe.
+
+**Lesson — restraint > volume.** When in doubt about whether an
+effect is "enough," check the reference rather than turning the
+intensity knob up. The reference is the source of truth; my intuition
+under "make it more visible" pressure tends to over-correct toward
+saturation. Anchor to the reference image before each change to a
+bloom parameter.
+
