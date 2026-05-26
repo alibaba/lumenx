@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Atelier · Design History · v0.4 series</title>
+  <meta name="viewport" content="width=1480" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap" />
+  <style>
+    /* ─────────────────────────────────────────────────────────────
+       Atelier design system (v0.4.5) — applied to its own history
+       ───────────────────────────────────────────────────────────── */
+
+    :root {
+      /* canvas */
+      --canvas-base: #0c0c0e;
+      --canvas-dot:  rgba(255, 255, 255, 0.06);
+
+      /* text */
+      --text-fg:    rgba(255, 255, 255, 0.95);
+      --text-mute:  rgba(255, 255, 255, 0.55);
+      --text-quiet: rgba(255, 255, 255, 0.38);
+
+      /* brand cobalt — primary CTA only */
+      --brand-400: #3b6bff;
+      --brand-300: #6e8fff;
+      --brand-500: #2548d8;
+
+      /* muted artistic palette */
+      --brand-soft:  #8a9cc4;
+      --sky-soft:    #b0bdc8;
+      --sage:        #95b89e;
+      --ochre:       #c9a87e;
+      --mauve:       #b59abe;
+      --teal-soft:   #88aaa6;
+      --coral-soft:  #c98a7e;
+
+      /* opaque shell tokens */
+      --shell-bg:        rgba(28, 32, 52, 0.94);
+      --shell-border:    rgba(156, 196, 232, 0.22);
+      --inner-bg:        rgba(10, 12, 22, 0.96);
+      --inner-border:    rgba(255, 255, 255, 0.05);
+
+      --bloom-strength: 1;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      color: var(--text-fg);
+      background: #1a1a1d;
+      -webkit-font-smoothing: antialiased;
+      font-feature-settings: "cv11", "ss01";
+    }
+
+    .font-display { font-family: 'Space Grotesk', 'Inter', sans-serif; }
+    .font-mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+    /* canvas page (dotted grid, no atmospheric wash) */
+    .page {
+      width: 1480px;
+      margin: 0 auto;
+      padding: 60px 80px 100px;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px),
+        var(--canvas-base);
+      background-size: 28px 28px, auto;
+      background-position: -14px -14px, 0 0;
+      position: relative;
+    }
+    /* grain overlay */
+    .page::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+      mix-blend-mode: overlay;
+      opacity: 0.07;
+      z-index: 1;
+    }
+
+    /* ── opaque-shell (v0.4.5 §12.2 + §12.7.4) ── */
+    .opaque-shell {
+      background: var(--shell-bg);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--shell-border);
+      border-radius: 16px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+      isolation: isolate;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 16px 32px -10px rgba(0, 0, 0, 0.7);
+    }
+    .opaque-shell.bloom::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 70%;
+      height: 55%;
+      background:
+        radial-gradient(ellipse 90% 100% at 62% 0%,
+          rgba(255, 140, 200, calc(0.42 * var(--bloom-strength))) 0%,
+          rgba(180, 140, 255, calc(0.36 * var(--bloom-strength))) 28%,
+          rgba(140, 200, 255, calc(0.22 * var(--bloom-strength))) 60%,
+          transparent 88%);
+      filter: blur(calc(18px + 6px * var(--bloom-strength)));
+      pointer-events: none;
+      mix-blend-mode: screen;
+      z-index: 0;
+      border-radius: inherit;
+    }
+    .opaque-shell.bloom-hero      { --bloom-strength: 1.5; }
+    .opaque-shell.bloom-secondary { --bloom-strength: 1.0; }
+
+    .shell-header {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 6px 12px 0 12px;
+    }
+    .opaque-inner {
+      position: relative;
+      z-index: 1;
+      background: var(--inner-bg);
+      border: 1px solid var(--inner-border);
+      border-radius: 9px;
+      padding: 22px 26px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+    }
+
+    /* ── typography ── */
+    .mono-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.28em;
+      color: var(--text-quiet);
+    }
+    h1.hero-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 56px;
+      font-weight: 500;
+      letter-spacing: -0.025em;
+      line-height: 1.05;
+      margin: 14px 0 16px 0;
+      color: var(--text-fg);
+    }
+    h1.hero-title em {
+      font-family: 'Inter', sans-serif;
+      font-style: italic;
+      font-weight: 500;
+      color: var(--brand-300);
+    }
+    .hero-lede {
+      font-size: 16px;
+      line-height: 1.55;
+      color: var(--text-mute);
+      max-width: 720px;
+      margin: 0;
+    }
+    .section-head {
+      margin: 56px 0 24px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+      z-index: 2;
+    }
+    h2.section-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 30px;
+      font-weight: 500;
+      letter-spacing: -0.018em;
+      line-height: 1.15;
+      margin: 0;
+      color: var(--text-fg);
+    }
+    h2.section-title em {
+      font-family: 'Inter', sans-serif;
+      font-style: italic;
+      font-weight: 500;
+    }
+    h3.card-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: -0.015em;
+      line-height: 1.2;
+      margin: 0;
+      color: var(--text-fg);
+      flex: 1;
+    }
+    h3.card-title em {
+      font-family: 'Inter', sans-serif;
+      font-style: italic;
+      font-weight: 500;
+      color: var(--brand-soft);
+    }
+
+    /* ── pills & badges ── */
+    .ver-pill {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      padding: 4px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(138, 156, 196, 0.28);
+      background: rgba(138, 156, 196, 0.08);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--brand-soft);
+      letter-spacing: -0.005em;
+      white-space: nowrap;
+    }
+    .ver-pill.headline {
+      border-color: rgba(110, 143, 255, 0.40);
+      background: rgba(59, 107, 255, 0.10);
+      color: var(--brand-300);
+    }
+    .date-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10.5px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      color: var(--text-quiet);
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: -0.005em;
+    }
+    .tag.foundation { color: var(--brand-soft);  border: 1px solid rgba(138, 156, 196, 0.30); background: rgba(138, 156, 196, 0.08); }
+    .tag.patch      { color: var(--ochre);       border: 1px solid rgba(201, 168, 126, 0.30); background: rgba(201, 168, 126, 0.08); }
+    .tag.refactor   { color: var(--mauve);       border: 1px solid rgba(181, 154, 190, 0.30); background: rgba(181, 154, 190, 0.08); }
+    .tag.discipline { color: var(--teal-soft);   border: 1px solid rgba(136, 170, 166, 0.30); background: rgba(136, 170, 166, 0.08); }
+    .tag.palette    { color: var(--sage);        border: 1px solid rgba(149, 184, 158, 0.30); background: rgba(149, 184, 158, 0.08); }
+
+    /* ── reference shelf ── */
+    .ref-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      position: relative;
+      z-index: 2;
+    }
+    .ref-card {
+      background: var(--inner-bg);
+      border: 1px solid var(--inner-border);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 20px -10px rgba(0,0,0,0.6);
+      display: flex;
+      flex-direction: column;
+    }
+    .ref-thumb {
+      aspect-ratio: 4 / 3;
+      background: rgba(0,0,0,0.4);
+      overflow: hidden;
+    }
+    .ref-thumb img {
+      width: 100%; height: 100%; object-fit: cover;
+      display: block;
+    }
+    .ref-meta {
+      padding: 10px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .ref-name {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-fg);
+      letter-spacing: -0.005em;
+    }
+    .ref-impact {
+      font-family: 'Inter', sans-serif;
+      font-style: italic;
+      font-size: 11px;
+      color: var(--brand-soft);
+      line-height: 1.4;
+    }
+    .ref-arrow {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--text-quiet);
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* ── timeline ── */
+    .timeline {
+      position: relative;
+      z-index: 2;
+    }
+    .milestones {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      position: relative;
+    }
+    /* vertical rail behind cards */
+    .milestones::before {
+      content: '';
+      position: absolute;
+      left: 36px;
+      top: 24px;
+      bottom: 24px;
+      width: 1px;
+      background: linear-gradient(to bottom,
+        transparent 0%,
+        rgba(138, 156, 196, 0.25) 8%,
+        rgba(138, 156, 196, 0.25) 92%,
+        transparent 100%);
+      z-index: -1;
+    }
+
+    .milestone {
+      position: relative;
+      padding-left: 84px;
+    }
+    /* node dot on rail */
+    .milestone::before {
+      content: '';
+      position: absolute;
+      left: 28px;
+      top: 28px;
+      width: 17px;
+      height: 17px;
+      border-radius: 999px;
+      background: var(--inner-bg);
+      border: 1.5px solid var(--brand-soft);
+      z-index: 1;
+      box-shadow:
+        0 0 0 4px rgba(12, 12, 14, 1),
+        0 0 14px rgba(138, 156, 196, 0.25);
+    }
+    .milestone.headline::before {
+      border-color: var(--brand-400);
+      background: var(--brand-400);
+      box-shadow:
+        0 0 0 4px rgba(12, 12, 14, 1),
+        0 0 18px rgba(59, 107, 255, 0.55);
+    }
+
+    .meta-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      font-family: 'Inter', sans-serif;
+      font-size: 12.5px;
+      color: var(--text-mute);
+      margin-top: 4px;
+    }
+    .meta-row .label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-quiet);
+      margin-right: -10px;
+    }
+    .commits {
+      display: inline-flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .commit-hash {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-mute);
+      cursor: default;
+      transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+    .commit-hash:hover {
+      color: var(--brand-soft);
+      border-color: rgba(138, 156, 196, 0.35);
+      background: rgba(138, 156, 196, 0.08);
+    }
+
+    p.what {
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: var(--text-fg);
+      margin: 14px 0 12px 0;
+    }
+    p.what em {
+      font-family: 'Inter', sans-serif;
+      font-style: italic;
+      color: var(--brand-soft);
+    }
+    p.trigger {
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--text-mute);
+      margin: 0 0 12px 0;
+      padding-left: 14px;
+      border-left: 2px solid rgba(176, 189, 200, 0.22);
+    }
+    p.trigger::before {
+      content: 'TRIGGER · ';
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      letter-spacing: 0.22em;
+      color: var(--text-quiet);
+    }
+    p.trigger em {
+      font-family: 'Inter', sans-serif;
+      font-style: italic;
+      color: var(--coral-soft);
+    }
+
+    /* ── corrections grid ── */
+    .corr-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+      position: relative;
+      z-index: 2;
+    }
+    .corr-card {
+      background: var(--inner-bg);
+      border: 1px solid var(--inner-border);
+      border-radius: 10px;
+      padding: 18px 22px;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      box-shadow: 0 8px 20px -10px rgba(0,0,0,0.55);
+    }
+    .corr-num {
+      flex-shrink: 0;
+      width: 32px; height: 32px;
+      border-radius: 999px;
+      background: rgba(201, 168, 126, 0.10);
+      border: 1px dashed rgba(201, 168, 126, 0.45);
+      display: grid;
+      place-items: center;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ochre);
+      font-style: italic;
+    }
+    .corr-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .corr-quote {
+      font-family: 'Inter', sans-serif;
+      font-style: italic;
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--coral-soft);
+      margin: 0 0 6px 0;
+    }
+    .corr-resolution {
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: var(--text-mute);
+      margin: 0;
+    }
+    .corr-resolution strong {
+      font-weight: 500;
+      color: var(--brand-soft);
+    }
+
+    /* ── stats footer ── */
+    .stats-footer {
+      margin-top: 68px;
+      padding: 30px 36px;
+      background: var(--inner-bg);
+      border: 1px solid var(--inner-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 48px;
+      position: relative;
+      z-index: 2;
+      box-shadow: 0 12px 28px -14px rgba(0,0,0,0.6);
+    }
+    .stat-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .stat-num {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 32px;
+      font-weight: 500;
+      letter-spacing: -0.025em;
+      color: var(--text-fg);
+      line-height: 1;
+    }
+    .stat-num em {
+      font-family: 'Inter', sans-serif;
+      font-style: italic;
+      color: var(--brand-300);
+    }
+    .stat-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--text-quiet);
+    }
+    .stats-footer .divider {
+      width: 1px;
+      align-self: stretch;
+      background: rgba(255,255,255,0.08);
+    }
+    .build-label {
+      margin-left: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9.5px;
+      font-weight: 500;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--text-quiet);
+      text-align: right;
+      line-height: 1.6;
+    }
+
+    /* ── back-to-top floating chip ── */
+    .top-chip {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: rgba(14, 16, 26, 0.92);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      color: var(--text-mute);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      z-index: 100;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 6px;
+      transition: background 0.15s ease, color 0.15s ease;
+      text-decoration: none;
+    }
+    .top-chip:hover {
+      background: rgba(20, 24, 42, 0.95);
+      color: var(--text-fg);
+    }
+    .top-chip::after {
+      content: '↑';
+      font-style: normal;
+      transform: translateY(1px);
+    }
+
+    /* ── flowing iridescent rim at very top of page ── */
+    .page-rim {
+      position: absolute;
+      top: 0;
+      left: 8%;
+      right: 8%;
+      height: 3px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255, 140, 200, 0.55) 18%,
+        rgba(180, 140, 255, 0.70) 38%,
+        rgba(140, 200, 255, 0.55) 62%,
+        rgba(180, 255, 220, 0.45) 82%,
+        transparent 100%);
+      filter: blur(4px);
+      border-radius: 999px;
+      z-index: 3;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <span class="page-rim" aria-hidden="true"></span>
+
+    <!-- ─────────────── HERO ─────────────── -->
+    <header style="position: relative; z-index: 2;">
+      <span class="mono-eyebrow">Atelier · Design History · 2026.05.21 → 2026.05.25</span>
+      <h1 class="hero-title">How Atelier v0.4 <em>found its voice</em></h1>
+      <p class="hero-lede">
+        Seven versions, thirty commits, five reference images, seven course corrections —
+        a working diary of one design system iterating from a neutral baseline toward
+        a muted artistic register. Every shift is documented; every wrong turn,
+        attributable to a specific signal from the desk.
+      </p>
+    </header>
+
+    <!-- ─────────────── REFERENCES ─────────────── -->
+    <section class="references">
+      <div class="section-head">
+        <span class="mono-eyebrow">References that moved the needle</span>
+        <h2 class="section-title">Five images, <em>five doors opened</em></h2>
+      </div>
+      <div class="ref-grid">
+        <article class="ref-card">
+          <div class="ref-thumb"><img src="../references/2026-05-24-canvas-ux-inspiration/01-ai-dashboard.jpeg" alt="AI dashboard reference" /></div>
+          <div class="ref-meta">
+            <span class="ref-name">AI Dashboard</span>
+            <span class="ref-impact">Confirmed glass + atmospheric direction</span>
+            <span class="ref-arrow">→ v0.4 baseline</span>
+          </div>
+        </article>
+        <article class="ref-card">
+          <div class="ref-thumb"><img src="../references/2026-05-24-canvas-ux-inspiration/02-unknown.jpeg" alt="Reference 02" /></div>
+          <div class="ref-meta">
+            <span class="ref-name">Reference 02</span>
+            <span class="ref-impact">Soft tonal range, palette inspiration</span>
+            <span class="ref-arrow">→ v0.4.2 atmospheric</span>
+          </div>
+        </article>
+        <article class="ref-card">
+          <div class="ref-thumb"><img src="../references/2026-05-24-canvas-ux-inspiration/03-instagram.jpeg" alt="Instagram image-generator card" /></div>
+          <div class="ref-meta">
+            <span class="ref-name">Image Generator card</span>
+            <span class="ref-impact">The north star — outer frame + header zone + internal bloom</span>
+            <span class="ref-arrow">→ v0.4.3 / v0.4.4 / v0.4.5 round-4</span>
+          </div>
+        </article>
+        <article class="ref-card">
+          <div class="ref-thumb"><img src="../references/2026-05-24-canvas-ux-inspiration/04-tranmautritam.jpeg" alt="Tranmautritam edge-endpoint reference" /></div>
+          <div class="ref-meta">
+            <span class="ref-name">Tranmautritam edges</span>
+            <span class="ref-impact">Chromatic edge endpoints — Pattern B blueprint</span>
+            <span class="ref-arrow">→ v0.4.3 deployment roster</span>
+          </div>
+        </article>
+        <article class="ref-card">
+          <div class="ref-thumb"><img src="../references/2026-05-24-canvas-ux-inspiration/05-arpan-karmakar.jpeg" alt="Arpan Karmakar editorial" /></div>
+          <div class="ref-meta">
+            <span class="ref-name">Arpan Karmakar</span>
+            <span class="ref-impact">Editorial cobalt + warm bleed</span>
+            <span class="ref-arrow">→ v0.4.1 editorial upgrade</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ─────────────── TIMELINE ─────────────── -->
+    <section class="timeline">
+      <div class="section-head">
+        <span class="mono-eyebrow">Version timeline</span>
+        <h2 class="section-title">From baseline to <em>muted artistic</em></h2>
+      </div>
+      <ol class="milestones">
+
+        <!-- v0.4 -->
+        <li class="milestone">
+          <article class="opaque-shell">
+            <header class="shell-header">
+              <span class="ver-pill">v0.4</span>
+              <h3 class="card-title">Baseline — <em>establishing the language</em></h3>
+              <span class="date-pill">2026.05.24</span>
+            </header>
+            <div class="opaque-inner">
+              <div class="meta-row">
+                <span class="tag foundation">foundation</span>
+                <span class="commits">
+                  <span class="commit-hash">d729443</span>
+                </span>
+              </div>
+              <p class="what">
+                The opening move — visual references collected, DESIGN spec drafted,
+                first mockup produced. Sets the chrome vocabulary: emerald primary,
+                glass panels, mono-caps labels. Everything that follows is in
+                conversation with — and often a correction to — this baseline.
+              </p>
+              <p class="trigger">Project kickoff. Reference batch curated to anchor a direction.</p>
+            </div>
+          </article>
+        </li>
+
+        <!-- v0.4.1 -->
+        <li class="milestone">
+          <article class="opaque-shell bloom bloom-secondary">
+            <header class="shell-header">
+              <span class="ver-pill">v0.4.1</span>
+              <h3 class="card-title">Editorial upgrade — <em>cobalt over emerald</em></h3>
+              <span class="date-pill">2026.05.24</span>
+            </header>
+            <div class="opaque-inner">
+              <div class="meta-row">
+                <span class="tag refactor">refactor</span>
+                <span class="commits">
+                  <span class="commit-hash">3ec456a</span>
+                </span>
+              </div>
+              <p class="what">
+                Emerald demoted. <em>Cobalt</em> becomes primary brand color.
+                Aura + grain pattern introduced for focal surfaces.
+                Mono-caps typography purged from chrome (kept only for the
+                build-label footer). Bottom dock + quick-add composer reach
+                their shipped form. Space Grotesk display added.
+              </p>
+              <p class="trigger">User: "green feels too utility — push toward an editorial register."</p>
+            </div>
+          </article>
+        </li>
+
+        <!-- v0.4.2 -->
+        <li class="milestone">
+          <article class="opaque-shell bloom bloom-secondary">
+            <header class="shell-header">
+              <span class="ver-pill">v0.4.2</span>
+              <h3 class="card-title">Aerogel — <em>atmospheric tier</em></h3>
+              <span class="date-pill">2026.05.24 — 25</span>
+            </header>
+            <div class="opaque-inner">
+              <div class="meta-row">
+                <span class="tag refactor">refactor</span>
+                <span class="commits">
+                  <span class="commit-hash">93a2971</span>
+                  <span class="commit-hash">b482f6f</span>
+                  <span class="commit-hash">d5d48e8</span>
+                </span>
+              </div>
+              <p class="what">
+                Aerogel atmospheric tier introduced: sky-300, sky-100, peach-200.
+                Pigment grain bumped 6% → 10-12%. Aura becomes multi-stop.
+                Canvas wash added (later removed in v0.4.4). The signature
+                <em>iridescent rim</em> at the top edge of focal surfaces lands
+                this round, after the original rim-less version read as too thin.
+              </p>
+              <p class="trigger">Reference 05 (Arpan Karmakar) — atmospheric depth + warm bleed prove possible without losing structure.</p>
+            </div>
+          </article>
+        </li>
+
+        <!-- v0.4.3 -->
+        <li class="milestone">
+          <article class="opaque-shell bloom bloom-secondary">
+            <header class="shell-header">
+              <span class="ver-pill">v0.4.3</span>
+              <h3 class="card-title">Bloom roster — <em>where + when bloom appears</em></h3>
+              <span class="date-pill">2026.05.25</span>
+            </header>
+            <div class="opaque-inner">
+              <div class="meta-row">
+                <span class="tag foundation">foundation</span>
+                <span class="commits">
+                  <span class="commit-hash">463aad6</span>
+                </span>
+              </div>
+              <p class="what">
+                Systematized bloom from "focal workbench only" to a full deployment
+                roster. <em>Pattern A</em> — whole-surface bloom for important nodes.
+                <em>Pattern B</em> — chromatic edge-endpoint bloom for signal
+                junctions. Tier multipliers (HERO 1.5× / SECONDARY 1.0× / AMBIENT
+                0.6×) via a single <code style="color:var(--text-mute);background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-size:11.5px;">--bloom-strength</code>
+                variable. Breathing animations: <em>generating</em> 2.4s for
+                in-flight tasks, <em>attending</em> 4.5s for selection. Selected
+                nodes propagate their breath to connected edge endpoints.
+              </p>
+              <p class="trigger">Reference 03 (Image Generator card) + Reference 04 (Tranmautritam edges) — two distinct bloom patterns identified, both needed.</p>
+            </div>
+          </article>
+        </li>
+
+        <!-- v0.4.4 -->
+        <li class="milestone">
+          <article class="opaque-shell bloom bloom-secondary">
+            <header class="shell-header">
+              <span class="ver-pill">v0.4.4</span>
+              <h3 class="card-title">Boundary discipline — <em>opaque base + masked bloom</em></h3>
+              <span class="date-pill">2026.05.25</span>
+            </header>
+            <div class="opaque-inner">
+              <div class="meta-row">
+                <span class="tag discipline">discipline</span>
+                <span class="commits">
+                  <span class="commit-hash">a71e375</span>
+                  <span class="commit-hash">4403655</span>
+                </span>
+              </div>
+              <p class="what">
+                Cards stop melting into the canvas. Translucent glass + bloom were
+                dissolving boundaries — the fix is an <em>opaque base</em>
+                (rgba 20,24,42,0.94) + a content-box XOR border-box mask that
+                physically excludes bloom from the frame interior. Aura on opaque
+                surfaces deprecated (94% blocked anyway). Round-2: canvas
+                atmospheric wash stripped + chrome panels (right rail / dock) go
+                opaque so dialog bubbles become the translucent layer with hierarchy.
+              </p>
+              <p class="trigger">User: <em>"Moonlit chase 框体与背景几乎融为一体"</em> — translucent glass + atmospheric canvas = no boundary.</p>
+            </div>
+          </article>
+        </li>
+
+        <!-- v0.4.5 -->
+        <li class="milestone headline">
+          <article class="opaque-shell bloom bloom-hero">
+            <header class="shell-header">
+              <span class="ver-pill headline">v0.4.5</span>
+              <h3 class="card-title">Double frame + <em>muted artistic</em></h3>
+              <span class="date-pill">2026.05.25</span>
+            </header>
+            <div class="opaque-inner">
+              <div class="meta-row">
+                <span class="tag foundation">foundation</span>
+                <span class="tag patch">×6 rounds</span>
+                <span class="tag palette">palette</span>
+                <span class="commits">
+                  <span class="commit-hash">4867132</span>
+                  <span class="commit-hash">7e698ff</span>
+                  <span class="commit-hash">b82c0fa</span>
+                  <span class="commit-hash">60cae47</span>
+                  <span class="commit-hash">98a3c3f</span>
+                  <span class="commit-hash">01e1846</span>
+                  <span class="commit-hash">59edeba</span>
+                </span>
+              </div>
+              <p class="what">
+                The longest arc. Six rounds of correction land the design at its
+                current resting point:
+              </p>
+              <ul style="font-size: 13.5px; line-height: 1.65; color: var(--text-mute); margin: 8px 0 14px; padding-left: 22px;">
+                <li><strong style="color: var(--brand-soft); font-weight: 500;">round-1</strong> — Double-frame shells (outer atmospheric + inner content) + editorial buttons (italic verb + → arrow) + muted toggle with cobalt underline.</li>
+                <li><strong style="color: var(--brand-soft); font-weight: 500;">round-2</strong> — Discovered the bloom mask had been silently broken since v0.4.4 (<code style="color:var(--text-mute);background:rgba(255,255,255,0.04);padding:1px 4px;border-radius:3px;font-size:11px;">padding-box</code> → <code style="color:var(--text-mute);background:rgba(255,255,255,0.04);padding:1px 4px;border-radius:3px;font-size:11px;">content-box</code>). What we'd been seeing was the iridescent rim, not bloom itself.</li>
+                <li><strong style="color: var(--brand-soft); font-weight: 500;">round-3</strong> — Bloom pulled back from all-perimeter to top-edge accent only. Restraint &gt; volume.</li>
+                <li><strong style="color: var(--brand-soft); font-weight: 500;">round-4</strong> — Bloom moves <em>inside</em> the outer shell, in a header zone. The frame must be a real visible element, not just empty padding.</li>
+                <li><strong style="color: var(--brand-soft); font-weight: 500;">round-5</strong> — Chromatic accents shift from saturated RGB primaries to muted artistic palette. Pigment, not pixel.</li>
+                <li><strong style="color: var(--brand-soft); font-weight: 500;">round-6</strong> — Zoom slider switches from native chunky cobalt to a 9px sky-soft thumb with hairline track.</li>
+              </ul>
+              <p class="trigger">User across the round-arc: <em>"bloom 太大"</em> · <em>"字体不统一"</em> · <em>"外框消失了"</em> · <em>"调调偏科技，期望偏艺术"</em>. Each correction tightened the spec.</p>
+            </div>
+          </article>
+        </li>
+
+        <!-- Implementation -->
+        <li class="milestone">
+          <article class="opaque-shell">
+            <header class="shell-header">
+              <span class="ver-pill">implement</span>
+              <h3 class="card-title">Codebase landing — <em>9 commits, double green</em></h3>
+              <span class="date-pill">2026.05.25</span>
+            </header>
+            <div class="opaque-inner">
+              <div class="meta-row">
+                <span class="tag foundation">foundation</span>
+                <span class="tag refactor">refactor</span>
+                <span class="commits">
+                  <span class="commit-hash">00d59a1</span>
+                  <span class="commit-hash">b489310</span>
+                  <span class="commit-hash">11ce44f</span>
+                  <span class="commit-hash">9ba3051</span>
+                  <span class="commit-hash">5d5f00a</span>
+                  <span class="commit-hash">cdcca49</span>
+                  <span class="commit-hash">2478502</span>
+                  <span class="commit-hash">e8eece9</span>
+                </span>
+              </div>
+              <p class="what">
+                v0.4.5 lands in the React codebase. <code style="color:var(--text-mute);background:rgba(255,255,255,0.04);padding:1px 5px;border-radius:3px;font-size:12px;">globals.css</code>
+                gains 432 lines of design-system foundation (tokens, utility
+                classes, bloom recipe, breath animations, vendor-pseudo slider).
+                Eight components migrated. Self-review caught four real bugs
+                (missing base bloom recipe, stacking-context escape, region text
+                contrast, cascade-layer ordering breaking <code style="color:var(--text-mute);background:rgba(255,255,255,0.04);padding:1px 4px;border-radius:3px;font-size:11.5px;">position: absolute</code>).
+                TypeScript + production build both green.
+              </p>
+              <p class="trigger">User: <em>"你是主力，做完我再 Review."</em></p>
+            </div>
+          </article>
+        </li>
+
+      </ol>
+    </section>
+
+    <!-- ─────────────── CORRECTIONS ─────────────── -->
+    <section class="corrections">
+      <div class="section-head">
+        <span class="mono-eyebrow">Seven course corrections</span>
+        <h2 class="section-title">What the desk <em>actually said</em></h2>
+      </div>
+      <div class="corr-grid">
+
+        <article class="corr-card">
+          <div class="corr-num">1</div>
+          <div class="corr-body">
+            <p class="corr-quote">"字体太冷，期望 editorial 一点"</p>
+            <p class="corr-resolution"><strong>v0.4.1</strong> — emerald demoted, cobalt promoted, Space Grotesk display + mono-caps purge from chrome.</p>
+          </div>
+        </article>
+
+        <article class="corr-card">
+          <div class="corr-num">2</div>
+          <div class="corr-body">
+            <p class="corr-quote">"bloom 不够 atmospheric，参考 Arpan"</p>
+            <p class="corr-resolution"><strong>v0.4.2 round-1</strong> — Aerogel tier (sky / peach) + multi-stop aura + canvas wash + pigment grain.</p>
+          </div>
+        </article>
+
+        <article class="corr-card">
+          <div class="corr-num">3</div>
+          <div class="corr-body">
+            <p class="corr-quote">"rim 太弱，只在顶边那点点"</p>
+            <p class="corr-resolution"><strong>v0.4.2 round-2</strong> — iridescent rim glow added as a deliberate 3px top-edge spectrum bar.</p>
+          </div>
+        </article>
+
+        <article class="corr-card">
+          <div class="corr-num">4</div>
+          <div class="corr-body">
+            <p class="corr-quote">"bloom 应用太窄，只有焦点工作台一处"</p>
+            <p class="corr-resolution"><strong>v0.4.3</strong> — Pattern A + B deployment roster with tier multipliers and breath inheritance.</p>
+          </div>
+        </article>
+
+        <article class="corr-card">
+          <div class="corr-num">5</div>
+          <div class="corr-body">
+            <p class="corr-quote">"Moonlit chase 框体与背景几乎融为一体"</p>
+            <p class="corr-resolution"><strong>v0.4.4</strong> — opaque base + content-box mask. Card stops being canvas.</p>
+          </div>
+        </article>
+
+        <article class="corr-card">
+          <div class="corr-num">6</div>
+          <div class="corr-body">
+            <p class="corr-quote">"bloom 太大、外框消失、字体不统一"</p>
+            <p class="corr-resolution"><strong>v0.4.5 round-2/3/4</strong> — three coupled rounds: real mask fix, retreat to top-edge restraint, then bloom inside the visible outer shell.</p>
+          </div>
+        </article>
+
+        <article class="corr-card">
+          <div class="corr-num">7</div>
+          <div class="corr-body">
+            <p class="corr-quote">"调调偏科技，期望偏艺术、非理性"</p>
+            <p class="corr-resolution"><strong>v0.4.5 round-5</strong> — RGB-pure saturated accents → muted artistic palette (brand-soft, sage, ochre, mauve, teal-soft). Cobalt reserved for CTAs.</p>
+          </div>
+        </article>
+
+      </div>
+    </section>
+
+    <!-- ─────────────── STATS FOOTER ─────────────── -->
+    <footer class="stats-footer">
+      <div class="stat-block">
+        <span class="stat-num"><em>7</em></span>
+        <span class="stat-label">Versions</span>
+      </div>
+      <span class="divider"></span>
+      <div class="stat-block">
+        <span class="stat-num">30</span>
+        <span class="stat-label">Design commits</span>
+      </div>
+      <span class="divider"></span>
+      <div class="stat-block">
+        <span class="stat-num">9</span>
+        <span class="stat-label">Impl commits</span>
+      </div>
+      <span class="divider"></span>
+      <div class="stat-block">
+        <span class="stat-num">5</span>
+        <span class="stat-label">References</span>
+      </div>
+      <span class="divider"></span>
+      <div class="stat-block">
+        <span class="stat-num">7</span>
+        <span class="stat-label">Corrections</span>
+      </div>
+      <span class="divider"></span>
+      <div class="stat-block">
+        <span class="stat-num">4</span>
+        <span class="stat-label">Bugs self-audited</span>
+      </div>
+      <div class="build-label">
+        Atelier · Design History<br>
+        2026.05.25 · v0.4 series
+      </div>
+    </footer>
+
+  </div>
+
+  <a href="#top" class="top-chip" onclick="window.scrollTo({top:0, behavior:'smooth'}); return false;">Top</a>
+</body>
+</html>
