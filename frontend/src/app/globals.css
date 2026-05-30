@@ -453,7 +453,7 @@ html.dark {
 }
 
 @keyframes atelier-endpoint-attending {
-  0%, 100% { opacity: 0.6; }
+  0%, 100% { opacity: 0.85; }
   50%      { opacity: 1.0; }
 }
 .atelier-endpoint-breath {
