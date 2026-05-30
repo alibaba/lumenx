@@ -56,7 +56,7 @@ function ringClass(
   selected: boolean | undefined,
   selectedAsTake: boolean | undefined,
 ): string {
-  if (selected || selectedAsTake) return "ring-2 ring-primary";
+  if (selected || selectedAsTake) return "ring-2 ring-atelier-brand-400";
   if (status === "processing" || status === "pending") return "ring-1 ring-blue-400/60";
   if (status === "failed") return "ring-1 ring-red-400/60";
   return "";
@@ -295,7 +295,7 @@ export function MediaNode({
   if (kind === "image" && src && !isEmptyImageActionable) {
     const stampNum = id.slice(-3).toUpperCase();
     const cardBorder = selected || selectedAsTake
-      ? "ring-2 ring-primary border-primary/50"
+      ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/50"
       : status === "failed"
         ? "border-red-400/45"
         : "border-glass-border";
@@ -390,7 +390,7 @@ export function MediaNode({
               </div>
             ) : null}
             {selectedAsTake ? (
-              <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-white/35 bg-primary px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
+              <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-white/35 bg-atelier-brand-400 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
                 <Check size={9} aria-hidden="true" /> selected
               </span>
             ) : null}
@@ -500,7 +500,7 @@ export function MediaNode({
                 aria-label="Upload image"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); onUpload(id); }}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 py-1.5 font-display text-[12px] font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_4px_10px_-3px_rgba(100,108,255,0.5)] transition-all duration-200 hover:bg-primary/92 hover:shadow-[0_1px_0_0_rgba(255,255,255,0.12)_inset,0_6px_14px_-3px_rgba(100,108,255,0.6)] active:scale-[0.97]"
+                className="inline-flex items-center justify-center gap-1.5 rounded-md bg-atelier-brand-400 px-2.5 py-1.5 font-display text-[12px] font-medium text-white shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_4px_10px_-3px_rgba(59,107,255,0.5)] transition-all duration-200 hover:bg-atelier-brand-400/92 hover:shadow-[0_1px_0_0_rgba(255,255,255,0.12)_inset,0_6px_14px_-3px_rgba(59,107,255,0.6)] active:scale-[0.97]"
               >
                 <Upload size={11} aria-hidden="true" />
                 Upload

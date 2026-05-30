@@ -229,8 +229,17 @@ html.dark {
 .atelier-opaque-shell.atelier-bloom::after { display: none !important; }
 
 /* Internal bloom: paints in the header zone, anchored top-right.
-   Multi-color radial wash with screen blend, simulates off-frame ambient light. */
-.atelier-opaque-shell.atelier-bloom::before {
+   Multi-color radial wash with screen blend, simulates off-frame ambient light.
+
+   The recipe lives on the BASE ::before (always present) at opacity 0; only the
+   opacity flips to 1 when .atelier-bloom is added on selection. The old approach
+   CREATED the pseudo-element on select, so it had no transitionable start state
+   and the colored wash snapped in at full strength — the "嘎一下变成特别彩色的
+   大框" the user flagged. Always-present + opacity transition lets the bloom FADE
+   in over 250ms in lockstep with the selection ring. Every color/blur/alpha value
+   is identical to before, so static fidelity vs the mockup is unchanged. The
+   `, 1.5` fallback keeps the calc valid while unselected (opacity 0 anyway). */
+.atelier-opaque-shell::before {
   content: '';
   position: absolute;
   top: 0;
@@ -239,16 +248,19 @@ html.dark {
   height: 55%;
   background:
     radial-gradient(ellipse 90% 100% at 62% 0%,
-      rgba(255, 140, 200, calc(0.42 * var(--bloom-strength))) 0%,
-      rgba(180, 140, 255, calc(0.36 * var(--bloom-strength))) 28%,
-      rgba(140, 200, 255, calc(0.22 * var(--bloom-strength))) 60%,
+      rgba(255, 140, 200, calc(0.42 * var(--bloom-strength, 1.5))) 0%,
+      rgba(180, 140, 255, calc(0.36 * var(--bloom-strength, 1.5))) 28%,
+      rgba(140, 200, 255, calc(0.22 * var(--bloom-strength, 1.5))) 60%,
       transparent 88%);
-  filter: blur(calc(18px + 6px * var(--bloom-strength)));
+  filter: blur(calc(18px + 6px * var(--bloom-strength, 1.5)));
   pointer-events: none;
   mix-blend-mode: screen;
   z-index: 0;
   border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.25s ease;
 }
+.atelier-opaque-shell.atelier-bloom::before { opacity: 1; }
 
 .atelier-shell-header {
   position: relative;
@@ -313,7 +325,13 @@ html.dark {
 .atelier-breath-generating::after {
   animation: atelier-breath-generating 2.4s ease-in-out infinite;
 }
-.atelier-breath-attending::before,
+/* Attending breath rides ::after ONLY. The focal workbench bloom lives on the
+   shell ::before, which now fades in via an opacity transition on select — if the
+   breath also drove ::before opacity it would override that transition and snap
+   the bloom back to full strength on the first frame. On shells ::after is
+   display:none, so the selected workbench bloom is calm/static (matching the
+   mockup, whose focal bloom does not pulse); ::after breath still applies to any
+   opaque-base surface that blooms there. */
 .atelier-breath-attending::after {
   animation: atelier-breath-attending 4.5s ease-in-out infinite;
 }
@@ -386,7 +404,9 @@ html.dark {
   letter-spacing: -0.005em;
   background: transparent;
   border: none;
-  transition: color 0.15s ease;
+  /* font-weight in the transition softens the 500→600 jump on activate so the
+     active label thickens smoothly instead of snapping (matches the mockup). */
+  transition: color 0.15s ease, font-weight 0.15s ease;
 }
 .atelier-editorial-toggle .opt:hover { color: var(--atelier-text-fg); }
 .atelier-editorial-toggle .opt.on {
@@ -407,7 +427,7 @@ html.dark {
 /* pill-editorial — replaces cobalt-fill compact pill controls.
    Ghost border, transparent fill, editorial font. */
 .atelier-pill-editorial {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
   font-weight: 500;
   font-size: 12px;
   letter-spacing: -0.002em;

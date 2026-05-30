@@ -352,13 +352,13 @@ export function AgentPanelV3({ pushToast }: Props) {
           // possible openings — italic display body for each line, mono
           // caps tear-stamp footer caption.
           <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
-            <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-primary/45 via-primary/15 to-transparent" />
+            <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-atelier-brand-soft/40 via-atelier-brand-soft/12 to-transparent" />
             <div className="px-3.5 py-3">
-              <div className="mb-2 flex items-center gap-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-primary/85">
+              <div className="mb-2 flex items-center gap-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-atelier-brand-soft/85">
                 <Sparkles size={10} aria-hidden="true" />
                 Try asking
               </div>
-              <ul className="space-y-1.5 border-l border-white/6 pl-3 font-display text-[13px] italic leading-[1.5] tracking-tight text-foreground/92">
+              <ul className="space-y-1.5 border-l border-white/6 pl-3 font-sans text-[13px] italic leading-[1.5] tracking-tight text-foreground/92">
                 {plannerMode === "director" ? (
                   <>
                     <li>3-shot story about a rooftop chase.</li>
@@ -508,7 +508,7 @@ export function AgentPanelV3({ pushToast }: Props) {
                       className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-all duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 ${
                         allSkipped
                           ? "border border-red-300/35 bg-red-400/10 text-red-200 hover:bg-red-400/15"
-                          : "bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.5)] hover:scale-[1.02] hover:bg-primary/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(100,108,255,0.6)]"
+                          : "bg-atelier-brand-400 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(59,107,255,0.5)] hover:scale-[1.02] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(59,107,255,0.6)]"
                       }`}
                     >
                       {isLocked ? (
@@ -541,11 +541,11 @@ export function AgentPanelV3({ pushToast }: Props) {
 
         {/* Plan preview before execute */}
         {plannedCalls.length > 0 && !pendingTurn ? (
-          <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
-            <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-primary/45 via-primary/15 to-transparent" />
+          <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] motion-safe:animate-atelier-popover-in">
+            <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-atelier-brand-soft/40 via-atelier-brand-soft/12 to-transparent" />
             <div className="px-3 py-2.5">
               <div className="mb-1.5 flex items-center justify-between gap-2 font-mono text-[9px] font-medium uppercase tracking-[0.22em]">
-                <span className="flex items-center gap-1.5 text-primary/85">
+                <span className="flex items-center gap-1.5 text-atelier-brand-soft/85">
                   <Sparkles size={10} aria-hidden="true" />
                   Plan preview
                 </span>
@@ -554,7 +554,7 @@ export function AgentPanelV3({ pushToast }: Props) {
               <ul className="space-y-1 border-l border-white/6 pl-2.5 text-[12px] leading-[1.5]">
                 {plannedCalls.map((c, i) => (
                   <li key={i} className="flex items-start gap-1.5">
-                    <span aria-hidden="true" className="mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full bg-primary/85 shadow-[0_0_0_2px_rgba(100,108,255,0.18)]" />
+                    <span aria-hidden="true" className="mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-brand-soft/85 shadow-[0_0_0_2px_rgba(138,156,196,0.18)]" />
                     <span className="text-text-secondary/95">{summarizeToolCall(c)}</span>
                   </li>
                 ))}

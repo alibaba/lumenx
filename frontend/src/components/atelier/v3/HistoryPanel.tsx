@@ -97,7 +97,7 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
             </span>
           </div>
           {messageDisplay ? (
-            <p className="line-clamp-3 font-display text-[12px] italic leading-[1.45] tracking-tight text-foreground/92">
+            <p className="line-clamp-3 font-sans text-[12px] italic leading-[1.45] tracking-tight text-foreground/92">
               {messageDisplay}
             </p>
           ) : (

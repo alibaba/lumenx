@@ -462,7 +462,7 @@ export function AssetLibrary({
                     {card.kind === "audio" && card.audioRole ? (
                       <span
                         aria-label={`Audio role: ${AUDIO_ROLE_LABELS[card.audioRole]}`}
-                        className="absolute right-1 top-1 rounded-[3px] border border-violet-300/45 bg-violet-400/20 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.2em] text-violet-100"
+                        className="absolute right-1 top-1 rounded-[3px] border border-[#b59abe]/45 bg-[#b59abe]/18 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.2em] text-[#d8cce0]"
                       >
                         {AUDIO_ROLE_LABELS[card.audioRole]}
                       </span>

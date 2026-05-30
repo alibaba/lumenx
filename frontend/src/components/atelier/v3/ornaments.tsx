@@ -27,7 +27,7 @@ type OrnamentTone =
 const TONE_TEXT: Record<OrnamentTone, string> = {
   muted: "text-text-muted/85",
   primary: "text-primary/95",
-  amber: "text-amber-200/95",
+  amber: "text-atelier-ochre/90",
   emerald: "text-emerald-200/95",
   blue: "text-blue-200/95",
   red: "text-red-200/95",
@@ -36,7 +36,7 @@ const TONE_TEXT: Record<OrnamentTone, string> = {
 const TONE_BORDER: Record<OrnamentTone, string> = {
   muted: "border-white/8",
   primary: "border-primary/40",
-  amber: "border-amber-300/35",
+  amber: "border-atelier-ochre/35",
   emerald: "border-emerald-300/35",
   blue: "border-blue-300/35",
   red: "border-red-300/35",
@@ -45,7 +45,7 @@ const TONE_BORDER: Record<OrnamentTone, string> = {
 const TONE_DASH_FROM: Record<OrnamentTone, string> = {
   muted: "from-white/12",
   primary: "from-primary/35",
-  amber: "from-amber-300/35",
+  amber: "from-atelier-ochre/40",
   emerald: "from-emerald-300/35",
   blue: "from-blue-300/35",
   red: "from-red-300/35",

@@ -81,7 +81,7 @@ function PermissionSegmented({
           onKeyDown={handleKey}
           className={`rounded-full px-2.5 py-[5px] font-mono text-[9px] font-medium uppercase tracking-[0.18em] transition-colors ${
             value === m
-              ? "bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_2px_8px_-3px_rgba(100,108,255,0.45)]"
+              ? "bg-atelier-brand-400/20 text-[#6e8fff]"
               : "text-text-muted/80 hover:text-foreground"
           }`}
         >

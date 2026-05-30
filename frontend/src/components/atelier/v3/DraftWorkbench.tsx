@@ -181,7 +181,7 @@ export function DraftWorkbench({
       // (carries bloom + visible border); inner card is the operating
       // area. Width bumped 480 → 520 to absorb the double-frame padding
       // overhead without shrinking the content area.
-      className={`group absolute w-[520px] atelier-opaque-shell transition-shadow duration-200 ${selectedClass}`}
+      className={`group absolute w-[520px] origin-top-left atelier-opaque-shell transition-shadow duration-200 motion-safe:animate-atelier-workbench-in ${selectedClass}`}
     >
       {/* Header zone — sparkle + intent (rename on dblclick) + take pill.
           Sits in the outer shell's top band (above the inner card), like

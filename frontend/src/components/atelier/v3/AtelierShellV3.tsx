@@ -3501,7 +3501,7 @@ export function AtelierShellV3() {
                   {project.description ? (
                     <MiniMarkdown
                       source={project.description}
-                      className="pr-6 font-display text-[12px] italic leading-[1.5] tracking-tight text-text-secondary/95"
+                      className="pr-6 font-sans text-[12px] italic leading-[1.5] tracking-tight text-text-secondary/95"
                     />
                   ) : (
                     <p className="pr-6 font-mono text-[9.5px] uppercase tracking-[0.24em] text-text-muted/75">
@@ -4297,7 +4297,10 @@ export function AtelierShellV3() {
               }}
               onMouseEnter={() => setHoveredNodeId(selectedNode.id)}
               onMouseLeave={() => setHoveredNodeId((prev) => (prev === selectedNode.id ? null : prev))}
-              className="group/node animate-atelier-node-in motion-reduce:animate-none"
+              // The workbench plays its own grow-in (atelier-workbench-in) on the
+              // DraftWorkbench root, so the wrapper no longer fades — double-
+              // animating opacity made the bloom wash arrive in two steps.
+              className="group/node"
               style={{ touchAction: "none", zIndex: 22 }}
             >
               <DraftWorkbench
@@ -5191,8 +5194,8 @@ export function AtelierShellV3() {
           the LeftRailV3 Sequence mode button (Sprint D). */}
       {sequenceVisible ? (
       <div
-        className={`atelier-chrome-opaque absolute bottom-4 left-[280px] z-20 rounded-2xl border p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors ${
-          seqDropActive ? "border-primary/60 ring-2 ring-primary/35" : "border-white/8"
+        className={`atelier-chrome-opaque absolute bottom-16 left-[280px] z-20 rounded-2xl border p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors animate-atelier-popover-in motion-reduce:animate-none ${
+          seqDropActive ? "border-atelier-brand-400/60 ring-2 ring-atelier-brand-400/35" : "border-white/8"
         }`}
         style={{ right: agentCollapsed ? 88 : 412 }}
         onDragEnter={(e) => {
@@ -6021,7 +6024,7 @@ export function AtelierShellV3() {
           <div
             role="status"
             aria-live="polite"
-            className="absolute bottom-[120px] left-4 z-30 max-w-[300px] overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-node-in motion-reduce:animate-none"
+            className="absolute bottom-[120px] left-[72px] z-30 max-w-[300px] overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-node-in motion-reduce:animate-none"
           >
             {/* Top accent rule — primary hairline gradient signs the card as
                 'instructional', not generic info card */}

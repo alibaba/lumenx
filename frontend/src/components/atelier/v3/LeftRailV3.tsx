@@ -91,7 +91,7 @@ export function LeftRailV3({
     <aside
       role="toolbar"
       aria-label="Atelier mode rail"
-      className="atelier-chrome-opaque absolute left-0 top-0 bottom-0 z-30 flex w-[56px] flex-col items-center justify-between border-r border-white/8 py-3 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.5),inset_-1px_0_0_0_rgba(255,255,255,0.04)]"
+      className="absolute left-0 top-0 bottom-0 z-30 flex w-[56px] flex-col items-center justify-between border-r border-white/8 bg-[#0c0c10]/96 py-3 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.5),inset_-1px_0_0_0_rgba(255,255,255,0.04)]"
     >
       {/* Top — brand mark + mode buttons */}
       <div className="flex flex-col items-center gap-1">

@@ -86,24 +86,48 @@ interface Props {
 // Self-review fix: title text uses foreground (white) on tinted bg per
 // mockup .region-title-bar .title { color: var(--text-fg) }. Using muted
 // text on muted-tinted bg of the same hue collapsed contrast.
+// Title-bar tint at /8 matches the mockup's rgba(...,0.08) wash; /14 read
+// ~2× too saturated. White foreground text keeps contrast on the muted tint.
 const COLOR_ACCENT: Record<RegionColor, string> = {
   default: "bg-white/[0.04] text-text-secondary",
-  cyan: "bg-atelier-teal-soft/14 text-foreground/95",
-  rose: "bg-atelier-coral-soft/14 text-foreground/95",
-  amber: "bg-atelier-ochre/14 text-foreground/95",
-  violet: "bg-atelier-mauve/14 text-foreground/95",
-  emerald: "bg-atelier-sage/14 text-foreground/95",
-  slate: "bg-atelier-slate-warm/16 text-foreground/95",
+  cyan: "bg-atelier-teal-soft/8 text-foreground/95",
+  rose: "bg-atelier-coral-soft/8 text-foreground/95",
+  amber: "bg-atelier-ochre/8 text-foreground/95",
+  violet: "bg-atelier-mauve/8 text-foreground/95",
+  emerald: "bg-atelier-sage/8 text-foreground/95",
+  slate: "bg-atelier-slate-warm/8 text-foreground/95",
+};
+
+// Faint hue wash over the region body — mockup .region uses rgba(...,0.05).
+const COLOR_BODY: Record<RegionColor, string> = {
+  default: "bg-white/[0.02]",
+  cyan: "bg-atelier-teal-soft/5",
+  rose: "bg-atelier-coral-soft/5",
+  amber: "bg-atelier-ochre/5",
+  violet: "bg-atelier-mauve/5",
+  emerald: "bg-atelier-sage/5",
+  slate: "bg-atelier-slate-warm/5",
+};
+
+// Visible muted dot per color (mockup .dot.cyan { background: var(--cyan) }).
+const COLOR_DOT: Record<RegionColor, string> = {
+  default: "bg-white/40",
+  cyan: "bg-atelier-teal-soft",
+  rose: "bg-atelier-coral-soft",
+  amber: "bg-atelier-ochre",
+  violet: "bg-atelier-mauve",
+  emerald: "bg-atelier-sage",
+  slate: "bg-atelier-slate-warm",
 };
 
 const COLOR_BORDER: Record<RegionColor, string> = {
   default: "border-white/14",
-  cyan: "border-atelier-teal-soft/30",
-  rose: "border-atelier-coral-soft/30",
-  amber: "border-atelier-ochre/30",
-  violet: "border-atelier-mauve/30",
-  emerald: "border-atelier-sage/30",
-  slate: "border-atelier-slate-warm/30",
+  cyan: "border-atelier-teal-soft/26",
+  rose: "border-atelier-coral-soft/26",
+  amber: "border-atelier-ochre/26",
+  violet: "border-atelier-mauve/26",
+  emerald: "border-atelier-sage/26",
+  slate: "border-atelier-slate-warm/26",
 };
 
 const STATUS_DOT: Record<RegionStatusBadge, string> = {
@@ -176,9 +200,11 @@ export function RegionFrame({
     if (draftTitle !== title) onTitleCommit?.(draftTitle);
   };
 
-  const ringClass = selected ? "ring-2 ring-primary" : "ring-1 ring-transparent";
+  const ringClass = selected ? "ring-2 ring-atelier-brand-400" : "ring-1 ring-transparent";
   const accent = COLOR_ACCENT[color];
   const border = COLOR_BORDER[color];
+  const bodyBg = COLOR_BODY[color];
+  const dotColor = COLOR_DOT[color];
   const displayedTitle = title.trim().length > 0 ? title : "Region";
 
   // Render geometry: collapsed mode locks to the compact card.
@@ -197,7 +223,7 @@ export function RegionFrame({
       data-region-id={id}
       data-region-color={color}
       data-region-collapsed={collapsed ? "true" : "false"}
-      className={`absolute select-none rounded-md border border-dashed ${border} bg-[#0c0c10]/30 backdrop-blur-[1px] transition-shadow ${ringClass}`}
+      className={`absolute select-none rounded-md border border-dashed ${border} ${bodyBg} backdrop-blur-[1px] transition-[box-shadow,border-color] duration-150 ease-out ${ringClass}`}
       style={{
         transform: `translate(${x}px, ${y}px)`,
         width: `${renderW}px`,
@@ -217,7 +243,7 @@ export function RegionFrame({
       {/* Title bar — draggable, inline-editable. h-7 (28px). */}
       <div
         data-testid="region-title-bar"
-        className={`flex h-7 items-center gap-1.5 rounded-t-md border-b border-dashed ${border} ${accent} px-1.5 cursor-grab active:cursor-grabbing`}
+        className={`flex h-[30px] items-center gap-1.5 rounded-t-md border-b border-dashed ${border} ${accent} px-1.5 cursor-grab active:cursor-grabbing`}
         onPointerDown={(e) => {
           e.stopPropagation();
           onMoveStart?.(id, e);
@@ -255,7 +281,7 @@ export function RegionFrame({
         ) : (
           <span
             aria-hidden="true"
-            className={`h-2 w-2 shrink-0 rounded-full ${color === "default" ? "bg-white/40" : ""}`}
+            className={`h-2 w-2 shrink-0 rounded-full ${dotColor}`}
             data-region-color-dot={color}
           />
         )}
@@ -277,10 +303,10 @@ export function RegionFrame({
                 cancel();
               }
             }}
-            className="flex-1 bg-transparent font-mono text-[11px] uppercase tracking-[0.18em] text-foreground outline-none"
+            className="flex-1 bg-transparent font-display text-[13px] font-medium tracking-[-0.008em] text-foreground outline-none"
           />
         ) : (
-          <span className="flex-1 truncate font-mono text-[11px] uppercase tracking-[0.18em]">
+          <span className="flex-1 truncate font-display text-[13px] font-medium tracking-[-0.008em]">
             {displayedTitle}
           </span>
         )}

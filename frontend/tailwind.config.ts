@@ -72,6 +72,17 @@ const config: Config = {
           "0%": { opacity: "0", filter: "blur(2px)" },
           "100%": { opacity: "1", filter: "blur(0)" },
         },
+        // Workbench expand — the compact draft card returns null and a 520px
+        // bloomed workbench mounts at the same top-left anchor. Without a grow,
+        // it pops in at full size ("嘎一下变成大框"). Uses the standalone `scale`
+        // property (NOT transform) so it composes with the inline
+        // transform: translate(x,y) the node already carries instead of
+        // clobbering its position. origin-top-left (set on the element) pivots the
+        // grow from the corner the compact card occupied → reads as a morph.
+        "atelier-workbench-in": {
+          "0%":   { opacity: "0", scale: "0.95", filter: "blur(3px)" },
+          "100%": { opacity: "1", scale: "1", filter: "blur(0)" },
+        },
         // Marching-ants: scrolls the dash-array on processing/pending edges
         // so connections look "alive" while a generation is in flight.
         "atelier-dash": {
@@ -123,6 +134,7 @@ const config: Config = {
       },
       animation: {
         "atelier-node-in": "atelier-node-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "atelier-workbench-in": "atelier-workbench-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both",
         "atelier-dash": "atelier-dash 1.2s linear infinite",
         "atelier-popover-in": "atelier-popover-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both",
         "atelier-modal-overlay-in": "atelier-modal-overlay-in 200ms ease-out both",
