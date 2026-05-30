@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, X } from "lucide-react";
-import { TearLine } from "./ornaments";
+import { TearLine, StatusDot, STATUS_TOKEN } from "./ornaments";
 
 export type DraftNodeStatus = "draft" | "approved" | "running" | "completed";
 
@@ -28,22 +28,9 @@ interface Props {
   onDetachRef?: (url: string) => void;
 }
 
-const STATUS_BORDER: Record<DraftNodeStatus, string> = {
-  draft: "border-amber-300/35",
-  approved: "border-primary/35",
-  running: "border-blue-400/45",
-  completed: "border-glass-border",
-};
-
-// Status-specific accent rail (a 2px line down the left, full bleed). Reads
-// as a "color stripe" that's actually a single hairline — much cleaner than
-// a colored border-box. Hidden when selected (the primary ring takes over).
-const STATUS_RAIL: Record<DraftNodeStatus, string> = {
-  draft: "before:bg-amber-300/70",
-  approved: "before:bg-primary",
-  running: "before:bg-blue-400/80",
-  completed: "before:bg-emerald-400/40",
-};
+// Lifecycle status is NOT painted on the body/border/rail any more — it lives
+// solely in the StatusDot (top-right) + the muted footer caption, so the node
+// reads identically collapsed and expanded. See ornaments.tsx STATUS_TOKEN.
 
 export function DraftNode({
   id,
@@ -61,17 +48,11 @@ export function DraftNode({
   onIntentCommit,
   onDetachRef,
 }: Props) {
+  // Body is neutral-cool in every status; cobalt ring only when selected.
+  // Status is carried by the StatusDot + footer caption, NOT the border.
   const borderClass = selected
     ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/50"
-    : STATUS_BORDER[status];
-
-  // v0.4.5 §10.10 + §11.2: running drafts wear SECONDARY bloom + generating
-  // breath, lifted onto the opaque-base surface treatment. Reads as
-  // "this card is alive — task in flight." Other statuses keep the compact
-  // node chrome.
-  const bloomClass = status === "running"
-    ? "atelier-opaque-base atelier-bloom atelier-bloom-secondary atelier-breath-generating"
-    : "";
+    : "border-glass-border";
 
   const VISIBLE_REFS = 4;
   const visibleRefs = refs ? refs.slice(0, VISIBLE_REFS) : [];
@@ -124,16 +105,7 @@ export function DraftNode({
         backgroundImage:
           "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 32%)",
       }}
-      className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${bloomClass} ${
-        // Status rail (left-edge 2px line). Hidden when selected so the
-        // primary ring owns the chromatic signal. Also hidden when running
-        // (bloom + breath signals 'alive' instead of the static rail).
-        selected || status === "running"
-          ? ""
-          : `before:absolute before:inset-y-2 before:left-0 before:w-[2px] before:rounded-r ${STATUS_RAIL[status]}`
-      } ${
-        status === "completed" && !selected ? "opacity-90" : ""
-      } ${borderClass}`}
+      className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
       <div className="px-3.5 pb-2.5 pt-3">
         {/* Title row — Sparkles 11px primary, intent in display font tighter
@@ -157,7 +129,7 @@ export function DraftNode({
                   setDraft(intent);
                 }
               }}
-              className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 font-display text-[13px] font-medium tracking-[-0.005em] text-foreground outline-none"
+              className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-display text-[13px] font-medium tracking-[-0.005em] text-foreground outline-none"
               aria-label="Rename draft"
             />
           ) : (
@@ -230,7 +202,7 @@ export function DraftNode({
                       e.stopPropagation();
                       onDetachRef(r);
                     }}
-                    className="btn-tip absolute inset-0 grid place-items-center bg-black/65 text-red-200 opacity-0 transition-opacity hover:opacity-100 group-hover/ref:opacity-100"
+                    className="btn-tip absolute inset-0 grid place-items-center bg-black/65 text-atelier-failed opacity-0 transition-opacity hover:opacity-100 group-hover/ref:opacity-100"
                   >
                     <X size={11} aria-hidden="true" />
                   </button>
@@ -250,35 +222,17 @@ export function DraftNode({
         ) : null}
       </div>
 
-      {/* Receipt footer — dashed perforation flanking a status caption,
-          tone-mapped to the node's lifecycle. Reads as the bottom of an
-          atelier-issued ticket. The amber halo dot is preserved on the
-          top-right so the eye finds awaiting-approval cards at zoom-out. */}
-      {(() => {
-        const map: Record<DraftNodeStatus, { label: string; tone: "amber" | "blue" | "primary" | "emerald" }> = {
-          draft:     { label: "Awaiting approval", tone: "amber" },
-          running:   { label: "Generating takes",  tone: "blue" },
-          approved:  { label: "Approved",          tone: "primary" },
-          completed: { label: "Take selected",     tone: "emerald" },
-        };
-        const m = map[status];
-        return (
-          <div className="px-3.5 pb-2.5">
-            <TearLine tone={m.tone} label={m.label} />
-          </div>
-        );
-      })()}
+      {/* Receipt footer — dashed perforation + muted status caption. The hue
+          lives in the StatusDot (top-right), never in the caption text, so the
+          footer reads the same in every status. */}
+      <div className="px-3.5 pb-2.5">
+        <TearLine tone="muted" label={STATUS_TOKEN[status].caption} />
+      </div>
 
-      {status === "draft" ? (
-        <span
-          role="status"
-          aria-label="Awaiting approval"
-          className="btn-tip absolute right-2.5 top-2.5 h-[5px] w-[5px] rounded-full bg-atelier-ochre shadow-[0_0_0_3px_rgba(201,168,126,0.18)]"
-          data-tip="Awaiting approval"
-        >
-          <span className="sr-only">Awaiting approval</span>
-        </span>
-      ) : null}
+      {/* Status dot — one 6px token-colored dot for EVERY status, identical to
+          the expanded workbench's dot, so the object's status reads the same
+          collapsed and expanded. */}
+      <StatusDot status={status} className="absolute right-2.5 top-2.5" />
     </div>
   );
 }

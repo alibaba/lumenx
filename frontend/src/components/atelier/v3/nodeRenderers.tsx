@@ -264,8 +264,8 @@ export function renderNode(
       return (
         <div
           key={node.id}
-          className={`absolute w-[200px] rounded-md border bg-elevated transition-shadow shadow-2xl shadow-black/40 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.18)] ${
-            isSelected ? "ring-2 ring-primary border-primary/50" : "border-glass-border"
+          className={`absolute w-[200px] rounded-md border bg-elevated transition-shadow shadow-2xl shadow-black/40 hover:shadow-[0_0_0_1px_rgba(59,107,255,0.18)] ${
+            isSelected ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/50" : "border-glass-border"
           }`}
           style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
           role="button"

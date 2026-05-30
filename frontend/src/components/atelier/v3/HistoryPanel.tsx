@@ -22,10 +22,12 @@ interface Props {
 }
 
 function statusToneClass(status: AtelierAgentTurn["status"]): string {
-  if (status === "completed") return "border-emerald-300/35 text-emerald-200/95";
-  if (status === "failed") return "border-red-300/35 text-red-200/95";
-  if (status === "waiting_approval") return "border-amber-300/35 text-amber-200/95";
-  return "border-blue-300/35 text-blue-200/95";
+  if (status === "completed") return "border-atelier-completed/35 text-atelier-completed";
+  if (status === "failed") return "border-atelier-failed/35 text-atelier-failed";
+  // waiting_approval = the SAME status as a draft node's "Awaiting approval" →
+  // same hue (brand-300), matching the StatusDot + the mockup approval bubble.
+  if (status === "waiting_approval") return "border-atelier-brand-300/35 text-atelier-brand-300";
+  return "border-atelier-processing/35 text-atelier-processing";
 }
 
 function affectedNodeIds(call: AtelierAgentToolCall): string[] {
@@ -136,9 +138,9 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
                       <span
                         className={`font-mono text-[9px] uppercase tracking-[0.22em] ${
                           call.status === "completed"
-                            ? "text-emerald-200/95"
+                            ? "text-atelier-completed"
                             : call.status === "failed"
-                              ? "text-red-200/95"
+                              ? "text-atelier-failed"
                               : "text-text-muted/85"
                         }`}
                       >
@@ -156,7 +158,7 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
                               e.stopPropagation();
                               onJumpToNode(id);
                             }}
-                            className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-[2px] font-mono text-[9px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:border-primary/40 hover:bg-primary/10 hover:text-primary/95"
+                            className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-[2px] font-mono text-[9px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:border-atelier-brand-400/40 hover:bg-atelier-brand-400/10 hover:text-atelier-brand-400"
                           >
                             <ArrowUpRight size={9} aria-hidden="true" />
                             {id.slice(-8)}

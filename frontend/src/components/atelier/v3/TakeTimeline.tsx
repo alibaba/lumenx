@@ -31,10 +31,10 @@ interface Props {
 }
 
 const STATUS_BG: Record<TakeStatus, string> = {
-  completed: "bg-emerald-400/15 text-emerald-200",
-  processing: "bg-blue-400/15 text-blue-200",
-  pending: "bg-blue-400/15 text-blue-200",
-  failed: "bg-red-400/15 text-red-200",
+  completed: "bg-atelier-completed/15 text-atelier-completed",
+  processing: "bg-atelier-processing/15 text-atelier-processing",
+  pending: "bg-atelier-processing/15 text-atelier-processing",
+  failed: "bg-atelier-failed/15 text-atelier-failed",
   draft: "bg-white/[0.05] text-text-muted",
 };
 
@@ -75,7 +75,7 @@ export function TakeTimeline({ takes, onPickTake }: Props) {
       {ordered.map((take) => {
         const isSelected = take.selected;
         const ringClass = isSelected
-          ? "ring-2 ring-primary border-primary/60"
+          ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/60"
           : "border-white/8 hover:border-white/22";
         return (
           <button
@@ -114,7 +114,7 @@ export function TakeTimeline({ takes, onPickTake }: Props) {
               <span
                 aria-hidden="true"
                 className={`absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full ${
-                  take.status === "failed" ? "bg-red-400" : "bg-blue-400 animate-pulse"
+                  take.status === "failed" ? "bg-atelier-failed" : "bg-atelier-processing animate-pulse"
                 }`}
               />
             ) : null}

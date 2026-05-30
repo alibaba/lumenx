@@ -35,10 +35,10 @@ function ConversationAgentBubble({ children, thinking = false }: { children?: Re
       <div className="flex-1 rounded-[14px] rounded-tl-[6px] border border-white/6 bg-black/25 px-3 py-2 text-[13px] leading-[1.55] text-foreground/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         {thinking ? (
           <span className="inline-flex items-center gap-1.5 text-text-secondary/95">
-            <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-blue-300 shadow-[0_0_0_3px_rgba(96,165,250,0.18)]" />
-            <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-blue-300/85" style={{ animationDelay: "0.15s" }} />
-            <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-blue-300/65" style={{ animationDelay: "0.3s" }} />
-            <span className="ml-1 font-mono text-[10px] uppercase tracking-[0.2em] text-blue-200/85">Planning</span>
+            <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-atelier-processing shadow-[0_0_0_3px_rgba(96,165,250,0.18)]" />
+            <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-atelier-processing/85" style={{ animationDelay: "0.15s" }} />
+            <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-atelier-processing/65" style={{ animationDelay: "0.3s" }} />
+            <span className="ml-1 font-mono text-[10px] uppercase tracking-[0.2em] text-atelier-processing/85">Planning</span>
           </span>
         ) : children}
       </div>
@@ -71,22 +71,22 @@ function statusBadge(status: AtelierAgentTurn["status"]): { tone: string; label:
   switch (status) {
     case "pending":
       return {
-        tone: "border-blue-400/40 bg-blue-400/12 text-blue-200/95",
+        tone: "border-atelier-processing/40 bg-atelier-processing/12 text-atelier-processing",
         label: "Pending",
       };
     case "waiting_approval":
       return {
-        tone: "border-amber-300/40 bg-amber-400/12 text-amber-200/95",
+        tone: "border-atelier-brand-300/40 bg-atelier-brand-300/12 text-atelier-brand-300",
         label: "Waiting",
       };
     case "completed":
       return {
-        tone: "border-emerald-400/40 bg-emerald-400/12 text-emerald-200/95",
+        tone: "border-atelier-completed/40 bg-atelier-completed/12 text-atelier-completed",
         label: "Done",
       };
     case "failed":
       return {
-        tone: "border-red-400/40 bg-red-400/12 text-red-200/95",
+        tone: "border-atelier-failed/40 bg-atelier-failed/12 text-atelier-failed",
         label: "Failed",
       };
     default:
@@ -100,12 +100,12 @@ function statusBadge(status: AtelierAgentTurn["status"]): { tone: string; label:
 function toolCallDot(status: string): string {
   switch (status) {
     case "completed":
-      return "bg-emerald-300 shadow-[0_0_0_2px_rgba(110,231,183,0.18)]";
+      return "bg-atelier-completed shadow-[0_0_0_2px_rgba(52,211,153,0.18)]";
     case "failed":
     case "denied":
-      return "bg-red-300 shadow-[0_0_0_2px_rgba(252,165,165,0.18)]";
+      return "bg-atelier-failed shadow-[0_0_0_2px_rgba(248,113,113,0.18)]";
     case "approval_required":
-      return "bg-amber-300 shadow-[0_0_0_2px_rgba(252,211,77,0.18)]";
+      return "bg-atelier-brand-300 shadow-[0_0_0_2px_rgba(110,143,255,0.18)]";
     default:
       return "bg-text-muted/60";
   }
@@ -425,13 +425,13 @@ export function AgentPanelV3({ pushToast }: Props) {
         {pendingTurn ? (
           <div
             role="alertdialog"
-            className="overflow-hidden rounded-[12px] border border-amber-300/35 bg-amber-400/[0.04] shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(252,211,77,0.08)]"
+            className="overflow-hidden rounded-[12px] border border-atelier-brand-300/35 bg-atelier-brand-300/[0.06] shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(110,143,255,0.08)] motion-safe:animate-atelier-popover-in"
           >
-            <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-amber-300 via-amber-300/45 to-transparent" />
+            <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-300 via-atelier-brand-300/45 to-transparent" />
             <div className="px-3.5 pb-3 pt-3">
               <div className="mb-2 flex items-center gap-1.5">
-                <ShieldCheck size={12} className="text-amber-200" aria-hidden="true" />
-                <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-amber-200/95">
+                <ShieldCheck size={12} className="text-atelier-brand-300" aria-hidden="true" />
+                <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-atelier-brand-300">
                   Action required
                 </span>
               </div>
@@ -440,7 +440,7 @@ export function AgentPanelV3({ pushToast }: Props) {
                   &ldquo;{pendingTurn.user_message}&rdquo;
                 </p>
               ) : null}
-              <ul className="mb-3 space-y-1 border-l border-amber-300/15 pl-2.5 text-[13px] leading-[1.5] text-foreground/95">
+              <ul className="mb-3 space-y-1 border-l border-atelier-brand-300/15 pl-2.5 text-[13px] leading-[1.5] text-foreground/95">
                 {pendingTurn.tool_calls
                   .filter((c) => c.status === "approval_required" || c.status === "proposed")
                   .map((c) => {
@@ -450,7 +450,7 @@ export function AgentPanelV3({ pushToast }: Props) {
                         <Sparkles
                           size={10}
                           className={`mt-[5px] shrink-0 transition-colors ${
-                            rejected ? "text-text-muted/55" : "text-amber-200/85"
+                            rejected ? "text-text-muted/55" : "text-atelier-brand-300/85"
                           }`}
                           aria-hidden="true"
                         />
@@ -470,8 +470,8 @@ export function AgentPanelV3({ pushToast }: Props) {
                           disabled={isLocked}
                           className={`btn-tip mt-[2px] grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
                             rejected
-                              ? "border-amber-300/40 bg-amber-300/10 text-amber-200 hover:bg-amber-300/15"
-                              : "border-white/10 bg-black/25 text-text-muted opacity-0 hover:border-red-300/40 hover:bg-red-400/10 hover:text-red-200 group-hover/call:opacity-100 focus:opacity-100"
+                              ? "border-atelier-brand-300/40 bg-atelier-brand-300/10 text-atelier-brand-300 hover:bg-atelier-brand-300/15"
+                              : "border-white/10 bg-black/25 text-text-muted opacity-0 hover:border-atelier-failed/40 hover:bg-atelier-failed/10 hover:text-atelier-failed group-hover/call:opacity-100 focus:opacity-100"
                           }`}
                         >
                           {rejected ? (
@@ -507,7 +507,7 @@ export function AgentPanelV3({ pushToast }: Props) {
                       onClick={handleApprove}
                       className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-all duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 ${
                         allSkipped
-                          ? "border border-red-300/35 bg-red-400/10 text-red-200 hover:bg-red-400/15"
+                          ? "border border-atelier-failed/35 bg-atelier-failed/10 text-atelier-failed hover:bg-atelier-failed/15"
                           : "bg-atelier-brand-400 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(59,107,255,0.5)] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(59,107,255,0.6)]"
                       }`}
                     >
@@ -564,8 +564,8 @@ export function AgentPanelV3({ pushToast }: Props) {
         ) : null}
 
         {planError ? (
-          <div role="alert" className="rounded-md border border-red-400/35 bg-red-400/[0.06] px-3 py-2 text-[12px] leading-[1.5] text-red-100/95">
-            <div className="mb-1 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-red-200/85">
+          <div role="alert" className="rounded-md border border-atelier-failed/35 bg-atelier-failed/[0.06] px-3 py-2 text-[12px] leading-[1.5] text-foreground/95 motion-safe:animate-atelier-popover-in">
+            <div className="mb-1 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-atelier-failed">
               Planner blocked
             </div>
             {planError}

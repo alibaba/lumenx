@@ -35,7 +35,7 @@ import {
   type ComposerTab,
 } from "./Composer";
 import type { DraftNodeStatus } from "./DraftNode";
-import { TearLine } from "./ornaments";
+import { TearLine, StatusDot, STATUS_TOKEN } from "./ornaments";
 import { TakeTimeline, type TakeTimelineEntry } from "./TakeTimeline";
 
 interface Props {
@@ -150,16 +150,10 @@ export function DraftWorkbench({
     ? "atelier-bloom atelier-bloom-hero atelier-breath-attending ring-2 ring-atelier-brand-400/55"
     : "";
 
-  // Status footer caption — same vocabulary as the compact DraftNode so
-  // the lifecycle reads identically whether the node is collapsed or
-  // expanded.
-  const statusMap: Record<DraftNodeStatus, { label: string; tone: "amber" | "blue" | "primary" | "emerald" }> = {
-    draft:     { label: "Awaiting approval", tone: "amber" },
-    running:   { label: "Generating takes",  tone: "blue" },
-    approved:  { label: "Approved",          tone: "primary" },
-    completed: { label: "Take selected",     tone: "emerald" },
-  };
-  const m = statusMap[status];
+  // Status caption — single source of truth shared with the compact DraftNode
+  // (ornaments STATUS_TOKEN), so the lifecycle reads identically collapsed and
+  // expanded. Hue lives in the StatusDot, the caption stays muted.
+  const caption = STATUS_TOKEN[status].caption;
 
   return (
     <div
@@ -253,7 +247,7 @@ export function DraftWorkbench({
           </span>
         ) : null}
         {status === "running" ? (
-          <Loader2 size={11} className="shrink-0 animate-spin text-atelier-brand-soft" />
+          <Loader2 size={11} className="shrink-0 animate-spin text-atelier-processing" />
         ) : null}
       </div>
 
@@ -311,23 +305,17 @@ export function DraftWorkbench({
           </div>
         ) : null}
 
-        {/* Status footer — same tear-stamp vocabulary as the compact
-            DraftNode so the lifecycle reads identically. */}
+        {/* Status footer — muted caption (hue lives in the StatusDot), same
+            STATUS_TOKEN source as the compact DraftNode → identical wording. */}
         <div className="mt-3">
-          <TearLine tone={m.tone} label={m.label} />
+          <TearLine tone="muted" label={caption} />
         </div>
       </div>
 
-      {status === "draft" ? (
-        <span
-          role="status"
-          aria-label="Awaiting approval"
-          className="btn-tip absolute right-3 top-3 z-10 h-[5px] w-[5px] rounded-full bg-atelier-ochre shadow-[0_0_0_3px_rgba(201,168,126,0.18)]"
-          data-tip="Awaiting approval"
-        >
-          <span className="sr-only">Awaiting approval</span>
-        </span>
-      ) : null}
+      {/* Status dot — same 6px token-colored dot as the collapsed card, for
+          EVERY status. Selection (cobalt ring + hero bloom) is layered on top
+          via selectedClass and is orthogonal to this status signal. */}
+      <StatusDot status={status} className="absolute right-3 top-3 z-10" />
     </div>
   );
 }

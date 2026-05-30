@@ -134,13 +134,13 @@ const STATUS_DOT: Record<RegionStatusBadge, string> = {
   // Subtle but recognizable. Processing gets an animate-pulse so the
   // region's "I have work in flight" reads at a glance.
   idle: "bg-white/35",
-  processing: "bg-blue-400/85 animate-pulse",
-  completed: "bg-emerald-400/85",
-  failed: "bg-red-400/85",
+  processing: "bg-atelier-processing/85 animate-pulse",
+  completed: "bg-atelier-completed/85",
+  failed: "bg-atelier-failed/85",
 };
 
 const HANDLE_BASE =
-  "absolute h-3 w-3 cursor-se-resize rounded-sm border border-white/30 bg-white/15 hover:bg-primary/40 hover:border-primary";
+  "absolute h-3 w-3 cursor-se-resize rounded-sm border border-white/30 bg-white/15 hover:bg-atelier-brand-400/40 hover:border-atelier-brand-400";
 
 const HANDLE_POSITIONS: Record<
   "nw" | "ne" | "sw" | "se",

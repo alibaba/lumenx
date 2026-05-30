@@ -95,7 +95,7 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
                   setDraft(title);
                 }
               }}
-              className="min-w-0 flex-1 rounded border border-primary/60 bg-input-bg px-1 font-display text-[13px] font-medium tracking-[-0.005em] text-foreground outline-none"
+              className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-display text-[13px] font-medium tracking-[-0.005em] text-foreground outline-none"
               aria-label="Rename plan"
             />
           ) : (

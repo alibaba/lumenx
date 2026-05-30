@@ -11,9 +11,9 @@
 //   <StampBadge label="DRAFT" number={3} /> as a corner tag.
 //   <EdgeMark>POSTPOST · ATELIER · NO 204</EdgeMark> for a curved-arc feel.
 //
-// None of these introduce new colors; tones map onto our existing
-// border-/text- color tokens (white/8, text-muted, primary, amber-300,
-// emerald-300, blue-300, red-300).
+// None of these introduce new colors; tones map onto the atelier-* tokens
+// (white/8, text-muted, brand-soft, ochre, and the status tokens
+// completed/processing/failed) — never raw Tailwind defaults or legacy indigo.
 import * as React from "react";
 
 type OrnamentTone =
@@ -24,32 +24,84 @@ type OrnamentTone =
   | "blue"
   | "red";
 
+// Tones map onto atelier-* status/brand tokens (not raw Tailwind, not legacy
+// #646cff). `primary` → muted brand-soft (decorative chrome, never selection);
+// emerald/blue/red → the saturated status tokens (completed/processing/failed);
+// `amber` → muted ochre, reserved for IdeaNode/region CATEGORY use only.
 const TONE_TEXT: Record<OrnamentTone, string> = {
   muted: "text-text-muted/85",
-  primary: "text-primary/95",
+  primary: "text-atelier-brand-soft/95",
   amber: "text-atelier-ochre/90",
-  emerald: "text-emerald-200/95",
-  blue: "text-blue-200/95",
-  red: "text-red-200/95",
+  emerald: "text-atelier-completed/95",
+  blue: "text-atelier-processing/95",
+  red: "text-atelier-failed/95",
 };
 
 const TONE_BORDER: Record<OrnamentTone, string> = {
   muted: "border-white/8",
-  primary: "border-primary/40",
+  primary: "border-atelier-brand-soft/40",
   amber: "border-atelier-ochre/35",
-  emerald: "border-emerald-300/35",
-  blue: "border-blue-300/35",
-  red: "border-red-300/35",
+  emerald: "border-atelier-completed/35",
+  blue: "border-atelier-processing/35",
+  red: "border-atelier-failed/35",
 };
 
 const TONE_DASH_FROM: Record<OrnamentTone, string> = {
   muted: "from-white/12",
-  primary: "from-primary/35",
+  primary: "from-atelier-brand-soft/35",
   amber: "from-atelier-ochre/40",
-  emerald: "from-emerald-300/35",
-  blue: "from-blue-300/35",
-  red: "from-red-300/35",
+  emerald: "from-atelier-completed/35",
+  blue: "from-atelier-processing/35",
+  red: "from-atelier-failed/35",
 };
+
+// ── Status identity (single source of truth) ──────────────────────────────
+//
+// Lifecycle STATUS is expressed ONLY through this map + the StatusDot below +
+// a tone="muted" caption, painted on a neutral-cool node body. A node's body /
+// border / rail / bloom MUST NOT encode status — that was the source of the
+// collapsed(warm)↔expanded(cool) identity break. Cobalt (atelier-brand-400) is
+// RESERVED for selection and must render identically regardless of status.
+// Saturated hues (processing/completed/failed) are hard signals; soft
+// human-gated states (draft/approved) use muted brand-300/sage.
+export type NodeStatus = "draft" | "approved" | "running" | "completed" | "failed";
+
+export const STATUS_TOKEN: Record<
+  NodeStatus,
+  { dot: string; halo: string; caption: string; pulse: boolean }
+> = {
+  draft:     { dot: "bg-atelier-brand-300", halo: "rgba(110,143,255,0.20)", caption: "Awaiting approval", pulse: false },
+  approved:  { dot: "bg-atelier-sage",      halo: "rgba(149,184,158,0.20)", caption: "Approved",          pulse: false },
+  running:   { dot: "bg-atelier-processing",halo: "rgba(96,165,250,0.20)",  caption: "Generating takes",  pulse: true },
+  completed: { dot: "bg-atelier-completed", halo: "rgba(52,211,153,0.20)",  caption: "Take selected",     pulse: false },
+  failed:    { dot: "bg-atelier-failed",    halo: "rgba(248,113,113,0.20)", caption: "Failed",            pulse: false },
+};
+
+// StatusDot — the ONLY way a node paints lifecycle status. 6px dot + a 3px halo
+// ring (token-derived, inline so the map stays the single edit point). Renders
+// identically on the collapsed card and the expanded workbench so the object's
+// status reads the same before and after expanding.
+export function StatusDot({
+  status,
+  className = "",
+}: {
+  status: NodeStatus;
+  className?: string;
+}) {
+  const t = STATUS_TOKEN[status];
+  return (
+    <span
+      role="status"
+      aria-label={t.caption}
+      data-status={status}
+      data-tip={t.caption}
+      className={`btn-tip h-[6px] w-[6px] rounded-full ${t.dot} ${t.pulse ? "motion-safe:animate-pulse" : ""} ${className}`}
+      style={{ boxShadow: `0 0 0 3px ${t.halo}` }}
+    >
+      <span className="sr-only">{t.caption}</span>
+    </span>
+  );
+}
 
 // ── Perforation ─────────────────────────────────────────────────────────
 //

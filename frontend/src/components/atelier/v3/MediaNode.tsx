@@ -57,8 +57,8 @@ function ringClass(
   selectedAsTake: boolean | undefined,
 ): string {
   if (selected || selectedAsTake) return "ring-2 ring-atelier-brand-400";
-  if (status === "processing" || status === "pending") return "ring-1 ring-blue-400/60";
-  if (status === "failed") return "ring-1 ring-red-400/60";
+  if (status === "processing" || status === "pending") return "ring-1 ring-atelier-processing/60";
+  if (status === "failed") return "ring-1 ring-atelier-failed/60";
   return "";
 }
 
@@ -122,7 +122,7 @@ function RetryButton({
             e.stopPropagation();
             onRetry(id);
           }}
-          className="btn-tip mt-0.5 inline-flex items-center gap-1 rounded-full bg-red-400/25 px-2 py-0.5 text-[10px] font-semibold text-red-50 hover:bg-red-400/40"
+          className="btn-tip mt-0.5 inline-flex items-center gap-1 rounded-full bg-atelier-failed/25 px-2 py-0.5 text-[10px] font-semibold text-foreground hover:bg-atelier-failed/40"
           data-tip={errorMessage || "Retry with same model"}
         >
           <RotateCw size={10} aria-hidden="true" /> Retry
@@ -137,7 +137,7 @@ function RetryButton({
             e.stopPropagation();
             setPickerOpen((v) => !v);
           }}
-          className="btn-tip mt-0.5 inline-flex items-center justify-center rounded-full bg-red-400/25 px-1.5 py-[3px] text-red-50 hover:bg-red-400/40"
+          className="btn-tip mt-0.5 inline-flex items-center justify-center rounded-full bg-atelier-failed/25 px-1.5 py-[3px] text-foreground hover:bg-atelier-failed/40"
           data-tip="Pick a different model"
         >
           <ChevronDown size={10} aria-hidden="true" />
@@ -297,7 +297,7 @@ export function MediaNode({
     const cardBorder = selected || selectedAsTake
       ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/50"
       : status === "failed"
-        ? "border-red-400/45"
+        ? "border-atelier-failed/45"
         : "border-glass-border";
     const cardName = filename || "Image";
     // Image's natural aspect ratio is read off the loaded <img> via
@@ -365,19 +365,19 @@ export function MediaNode({
               className="absolute inset-0 h-full w-full object-cover"
             />
             {showProcessing ? (
-              <div className="absolute inset-0 grid place-items-center bg-blue-400/[0.18] backdrop-blur-[1px]">
+              <div className="absolute inset-0 grid place-items-center bg-atelier-processing/[0.18] backdrop-blur-[1px]">
                 <div className="flex flex-col items-center gap-1">
-                  <Loader2 className="animate-spin text-blue-100" size={18} />
+                  <Loader2 className="animate-spin text-atelier-processing" size={18} />
                   {typeof progress === "number" ? (
-                    <span className="font-mono text-[10px] font-semibold text-blue-50">{Math.round(progress)}%</span>
+                    <span className="font-mono text-[10px] font-semibold text-foreground">{Math.round(progress)}%</span>
                   ) : null}
                 </div>
               </div>
             ) : null}
             {showFailed ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-red-400/[0.18] backdrop-blur-[1px]">
-                <AlertTriangle size={16} className="text-red-200" aria-hidden="true" />
-                <span className="font-mono text-[9px] uppercase tracking-wider text-red-100">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-atelier-failed/[0.18] backdrop-blur-[1px]">
+                <AlertTriangle size={16} className="text-atelier-failed" aria-hidden="true" />
+                <span className="font-mono text-[9px] uppercase tracking-wider text-atelier-failed">
                   {errorMessage ? "Failed" : "Generation failed"}
                 </span>
                 <RetryButton
@@ -433,8 +433,8 @@ export function MediaNode({
         // box on its own.
         isEmptyImageActionable
           ? selected
-            ? "border border-primary/45"
-            : "border border-dashed border-primary/22 hover:border-primary/35"
+            ? "border border-atelier-brand-400/45"
+            : "border border-dashed border-atelier-brand-400/22 hover:border-atelier-brand-400/35"
           : !src && (kind === "image" || kind === "video")
           ? "border border-dashed border-white/12"
           : ""
@@ -541,14 +541,14 @@ export function MediaNode({
 
       {showProcessing ? (
         <>
-          <div className="absolute inset-0 grid place-items-center bg-blue-400/[0.18] backdrop-blur-[1px]">
+          <div className="absolute inset-0 grid place-items-center bg-atelier-processing/[0.18] backdrop-blur-[1px]">
             <div className="flex flex-col items-center gap-1">
-              <Loader2 className="animate-spin text-blue-100" size={20} />
+              <Loader2 className="animate-spin text-atelier-processing" size={20} />
               {typeof progress === "number" ? (
-                <span className="font-mono text-[11px] font-semibold text-blue-50">{Math.round(progress)}%</span>
+                <span className="font-mono text-[11px] font-semibold text-foreground">{Math.round(progress)}%</span>
               ) : null}
               {typeof etaSeconds === "number" && etaSeconds > 0 ? (
-                <span className="font-mono text-[9px] text-blue-100/85">~{etaSeconds}s left</span>
+                <span className="font-mono text-[9px] text-text-secondary">~{etaSeconds}s left</span>
               ) : null}
               {showStuckActions ? (
                 <div
@@ -569,7 +569,7 @@ export function MediaNode({
                           setCanceling(false);
                         }
                       }}
-                      className="rounded-[3px] border border-red-300/40 bg-red-400/15 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-red-100 transition-colors hover:bg-red-400/25 disabled:cursor-wait disabled:opacity-60"
+                      className="rounded-[3px] border border-atelier-failed/40 bg-atelier-failed/15 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors hover:bg-atelier-failed/25 disabled:cursor-wait disabled:opacity-60"
                     >
                       {canceling ? "…" : "Cancel"}
                     </button>
@@ -580,7 +580,7 @@ export function MediaNode({
                       e.stopPropagation();
                       setDiagnoseOpen(true);
                     }}
-                    className="rounded-[3px] border border-white/30 bg-black/40 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-blue-50/95 transition-colors hover:border-primary/60"
+                    className="rounded-[3px] border border-white/30 bg-black/40 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-foreground/95 transition-colors hover:border-atelier-brand-400/60"
                   >
                     Diagnose
                   </button>
@@ -591,7 +591,7 @@ export function MediaNode({
           {typeof progress === "number" ? (
             <div className="absolute inset-x-0 bottom-0 h-[3px] bg-black/40">
               <div
-                className="h-full bg-blue-300 transition-[width] duration-300"
+                className="h-full bg-atelier-processing transition-[width] duration-300"
                 style={{ width: `${Math.max(0, Math.min(100, progress))}%` }}
               />
             </div>
@@ -607,9 +607,9 @@ export function MediaNode({
       ) : null}
 
       {showFailed ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-red-400/[0.18] backdrop-blur-[1px]">
-          <AlertTriangle size={18} className="text-red-200" aria-hidden="true" />
-          <span className="font-mono text-[9px] uppercase tracking-wider text-red-100">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-atelier-failed/[0.18] backdrop-blur-[1px]">
+          <AlertTriangle size={18} className="text-atelier-failed" aria-hidden="true" />
+          <span className="font-mono text-[9px] uppercase tracking-wider text-atelier-failed">
             {errorMessage ? "Failed" : "Generation failed"}
           </span>
           <RetryButton
@@ -636,7 +636,7 @@ export function MediaNode({
       {selectedAsTake ? (
         // Selected take = "stamped approved". Dashed inset reinforces the
         // rubber-stamp identity vs. a flat label pill.
-        <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-white/35 bg-primary px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
+        <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-white/35 bg-atelier-brand-400 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
           <Check size={9} aria-hidden="true" /> selected
         </span>
       ) : duration ? (
