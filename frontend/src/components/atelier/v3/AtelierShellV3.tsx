@@ -4470,7 +4470,7 @@ export function AtelierShellV3() {
             return (
               <div
                 key={`connect-target-ring-${connectDragTick}`}
-                className="pointer-events-none absolute z-[36] rounded-lg ring-2 ring-primary shadow-[0_0_0_4px_rgba(100,108,255,0.18),0_0_24px_-2px_rgba(100,108,255,0.45)] motion-safe:animate-atelier-pulse-soft"
+                className="pointer-events-none absolute z-[36] rounded-lg ring-2 ring-atelier-brand-400 shadow-[0_0_0_4px_rgba(59,107,255,0.18),0_0_24px_-2px_rgba(59,107,255,0.45)] motion-safe:animate-atelier-pulse-soft"
                 style={{
                   left: target.x - 6,
                   top: target.y - 6,
@@ -5079,7 +5079,7 @@ export function AtelierShellV3() {
             <path
               d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
               fill="none"
-              stroke={isOverTarget ? "rgba(100,108,255,0.95)" : "rgba(100,108,255,0.7)"}
+              stroke={isOverTarget ? "rgba(59,107,255,0.95)" : "rgba(59,107,255,0.7)"}
               strokeWidth={isOverTarget ? 2.5 : 2}
               strokeDasharray="6 4"
               strokeLinecap="round"
@@ -5089,8 +5089,8 @@ export function AtelierShellV3() {
               cx={x2}
               cy={y2}
               r={isOverTarget ? 5 : 3.5}
-              fill="rgba(100,108,255,0.95)"
-              style={{ filter: isOverTarget ? "drop-shadow(0 0 6px rgba(100,108,255,0.6))" : "drop-shadow(0 0 3px rgba(100,108,255,0.4))" }}
+              fill="rgba(59,107,255,0.95)"
+              style={{ filter: isOverTarget ? "drop-shadow(0 0 6px rgba(59,107,255,0.6))" : "drop-shadow(0 0 3px rgba(59,107,255,0.4))" }}
             />
           </svg>
         );
