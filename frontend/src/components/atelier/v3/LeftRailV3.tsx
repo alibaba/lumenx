@@ -9,8 +9,9 @@
 //   - Add        — open the creation popover (Image / Video / Idea /
 //                  Comment / Upload / From Library)
 //   - Assets     — toggle the project asset library drawer
-//   - Workflows  — placeholder for Sprint C (curated preset templates)
-//   - History    — placeholder for Sprint D (project event log)
+//   - Workflows  — curated preset templates (WorkflowsPanel + workflowTemplates;
+//                  6 defaults + user-saved templates in localStorage)
+//   - History    — project process gallery of agent turns (HistoryPanel)
 //   - Agent      — toggle the right-rail Creative Agent panel
 //   - Sequence   — toggle the bottom Sequence Strip visibility
 //

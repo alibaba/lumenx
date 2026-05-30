@@ -119,7 +119,7 @@ function renderEdges(
     const opacity = dimUnrelated && !related ? 0.12 : 1;
     const eid = refEdgeId(link.from.id, link.to.id, link.url);
     const isSelected = selectedRefEdgeId === eid;
-    const stroke = isSelected ? "rgba(100,108,255,0.85)" : "rgba(156,163,175,0.35)";
+    const stroke = isSelected ? "rgba(59,107,255,0.85)" : "rgba(156,163,175,0.35)";
     const strokeWidth = isSelected ? 2.25 : (related && hoveredNodeId ? 2 : 1.5);
     const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
     edges.push(
@@ -177,8 +177,8 @@ function renderEdges(
       const inflight = c.status === "pending" || c.status === "processing";
       const failed = c.status === "failed";
       const stroke = failed
-        ? "rgba(248,113,113,0.6)"   // red-400
-        : "rgba(100,108,255,0.55)";  // primary
+        ? "rgba(248,113,113,0.6)"      // atelier-failed
+        : "rgba(59,107,255,0.55)";     // atelier-brand-400 cobalt
       const candKey = candidateNodeId(node.id, c.id);
       const related = isRelated(node.id, candKey);
       const opacity = dimUnrelated && !related ? 0.12 : 1;
