@@ -67,6 +67,74 @@ function summarizeToolCall(call: AtelierAgentToolCallPayload | { tool_name: stri
   }
 }
 
+// RHTV pattern: the agent's plan should let the user VERIFY the pre-filled
+// params at a glance before confirming — not just "Create video node X" but the
+// actual prompt + model/count/aspect it will apply. describeToolCallParams pulls
+// the human-relevant args; ToolCallParams renders them as a muted sub-line under
+// the verb (used in both the plan preview and the pending-approval card).
+function describeToolCallParams(
+  call: AtelierAgentToolCallPayload | { tool_name: string; arguments: Record<string, unknown> },
+): { prompt?: string; chips: string[] } {
+  const a = (call.arguments ?? {}) as Record<string, unknown>;
+  const s = (...keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = a[k];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    return undefined;
+  };
+  const n = (...keys: string[]): number | undefined => {
+    for (const k of keys) {
+      const v = a[k];
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+    }
+    return undefined;
+  };
+  const chips: string[] = [];
+  const count = n("batch_size", "count", "candidates");
+  if (count) chips.push(`${count}×`);
+  const model = s("model", "model_label");
+  if (model) chips.push(model);
+  const aspect = s("aspect_ratio", "aspect", "resolution");
+  if (aspect) chips.push(aspect);
+  const duration = s("duration");
+  if (duration) chips.push(/s$/.test(duration) ? duration : `${duration}s`);
+  return { prompt: s("prompt", "intent", "description"), chips };
+}
+
+function ToolCallParams({
+  call,
+}: {
+  call: AtelierAgentToolCallPayload | { tool_name: string; arguments: Record<string, unknown> };
+}) {
+  const { prompt, chips } = describeToolCallParams(call);
+  if (!prompt && chips.length === 0) return null;
+  return (
+    <div className="mt-1 space-y-1">
+      {prompt ? (
+        <p
+          className="line-clamp-2 border-l border-white/8 pl-2 font-sans text-[11.5px] italic leading-[1.45] text-text-secondary/85"
+          title={prompt}
+        >
+          &ldquo;{prompt}&rdquo;
+        </p>
+      ) : null}
+      {chips.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-1">
+          {chips.map((c, i) => (
+            <span
+              key={i}
+              className="rounded-[3px] border border-white/8 bg-white/[0.03] px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-muted/90"
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function statusBadge(status: AtelierAgentTurn["status"]): { tone: string; label: string } {
   switch (status) {
     case "pending":
@@ -454,13 +522,16 @@ export function AgentPanelV3({ pushToast }: Props) {
                           }`}
                           aria-hidden="true"
                         />
-                        <span
-                          className={`flex-1 transition-colors ${
-                            rejected ? "text-text-muted/65 line-through" : "text-foreground/95"
-                          }`}
-                        >
-                          {summarizeToolCall(c)}
-                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span
+                            className={`transition-colors ${
+                              rejected ? "text-text-muted/65 line-through" : "text-foreground/95"
+                            }`}
+                          >
+                            {summarizeToolCall(c)}
+                          </span>
+                          {rejected ? null : <ToolCallParams call={c} />}
+                        </div>
                         <button
                           type="button"
                           aria-label={rejected ? "Restore this action" : "Skip this action"}
@@ -555,7 +626,10 @@ export function AgentPanelV3({ pushToast }: Props) {
                 {plannedCalls.map((c, i) => (
                   <li key={i} className="flex items-start gap-1.5">
                     <span aria-hidden="true" className="mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-brand-soft/85 shadow-[0_0_0_2px_rgba(138,156,196,0.18)]" />
-                    <span className="text-text-secondary/95">{summarizeToolCall(c)}</span>
+                    <div className="min-w-0 flex-1">
+                      <span className="text-text-secondary/95">{summarizeToolCall(c)}</span>
+                      <ToolCallParams call={c} />
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -575,6 +649,24 @@ export function AgentPanelV3({ pushToast }: Props) {
 
       {/* Composer */}
       <div className="border-t border-white/6 px-3 pb-3 pt-2.5">
+        {/* Canvas-context chip — makes the agent visibly "read" the canvas: when
+            a node is selected the agent grounds its plan on it (selected_node_id
+            is already passed to the planner). Shows WHICH node so the resident
+            agent feels connected to the canvas, RHTV-style. */}
+        {(() => {
+          const ctxNode = selectedNodeId ? project?.nodes.find((n) => n.id === selectedNodeId) : undefined;
+          if (!ctxNode) return null;
+          const label =
+            (typeof ctxNode.data?.intent === "string" && ctxNode.data.intent) ||
+            ctxNode.title ||
+            `${ctxNode.type} node`;
+          return (
+            <div className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-atelier-brand-soft/85">
+              <span aria-hidden="true" className="h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-brand-soft/70" />
+              <span className="truncate">Reading · {label}</span>
+            </div>
+          );
+        })()}
         <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/25 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
           <textarea
             rows={2}
