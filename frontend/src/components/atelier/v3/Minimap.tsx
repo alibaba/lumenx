@@ -76,7 +76,7 @@ export function Minimap({
             key={n.id ?? i}
             data-testid="minimap-dot"
             className={`absolute rounded-full ${
-              isSelected ? "h-1.5 w-1.5 bg-primary shadow-[0_0_0_1px_rgba(100,108,255,0.6)]" : "h-1 w-1 bg-primary/70"
+              isSelected ? "h-1.5 w-1.5 bg-atelier-brand-400 shadow-[0_0_0_1px_rgba(59,107,255,0.6)]" : "h-1 w-1 bg-atelier-brand-400/70"
             }`}
             style={{
               left: `${(n.x / worldBounds.width) * 100}%`,
@@ -87,7 +87,7 @@ export function Minimap({
       })}
       <div
         data-testid="minimap-viewport"
-        className="absolute rounded border-2 border-primary/70 bg-primary/[0.06]"
+        className="absolute rounded border-2 border-atelier-brand-400/70 bg-atelier-brand-400/[0.06]"
         style={{
           left: `${(viewport.x / worldBounds.width) * 100}%`,
           top: `${(viewport.y / worldBounds.height) * 100}%`,

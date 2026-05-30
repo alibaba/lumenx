@@ -26,7 +26,7 @@ export function ChipDropdown({ label, value, options, onChange, primary, disable
       <summary
         className={`btn-tip inline-flex h-7 shrink-0 cursor-pointer list-none items-center gap-1 whitespace-nowrap rounded-md border px-2 transition-all duration-150 active:scale-[0.98] ${
           primary
-            ? "border-primary/35 bg-primary/[0.08] text-primary hover:border-primary/55 hover:bg-primary/[0.12] hover:shadow-[0_0_0_1px_rgba(100,108,255,0.2)]"
+            ? "border-atelier-brand-400/35 bg-atelier-brand-400/[0.08] text-atelier-brand-400 hover:border-atelier-brand-400/55 hover:bg-atelier-brand-400/[0.12] hover:shadow-[0_0_0_1px_rgba(59,107,255,0.2)]"
             : disabled
             ? "border-white/8 bg-black/20 text-text-muted/60 cursor-not-allowed"
             : "border-white/8 bg-black/25 text-foreground/95 hover:border-white/14 hover:bg-white/[0.05]"
@@ -48,11 +48,11 @@ export function ChipDropdown({ label, value, options, onChange, primary, disable
               type="button"
               onClick={() => onChange?.(o.value)}
               className={`flex w-full items-center justify-between gap-2 rounded px-2 py-[6px] text-left text-[12px] transition-colors hover:bg-white/[0.05] ${
-                o.value === value ? "text-primary" : "text-text-secondary hover:text-foreground"
+                o.value === value ? "text-atelier-brand-400" : "text-text-secondary hover:text-foreground"
               }`}>
               <span>{o.label}</span>
               {o.value === value ? (
-                <span aria-hidden="true" className="font-mono text-[9px] uppercase tracking-[0.24em] text-primary/85">
+                <span aria-hidden="true" className="font-mono text-[9px] uppercase tracking-[0.24em] text-atelier-brand-400/85">
                   Current
                 </span>
               ) : null}

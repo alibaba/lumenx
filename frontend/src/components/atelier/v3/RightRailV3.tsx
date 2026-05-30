@@ -116,7 +116,7 @@ export function RightRailV3({
           <ChevronsLeft size={14} aria-hidden="true" />
         </button>
         <div className="relative">
-          <span className="grid h-9 w-9 place-items-center rounded-md bg-primary/15 text-primary ring-1 ring-inset ring-primary/25">
+          <span className="grid h-9 w-9 place-items-center rounded-md bg-atelier-brand-400/15 text-atelier-brand-400 ring-1 ring-inset ring-atelier-brand-400/25">
             <Bot size={15} aria-hidden="true" />
           </span>
           <span
@@ -136,7 +136,7 @@ export function RightRailV3({
     >
       {/* Top accent — primary→transparent gradient hairline. Identifies the
           rail as the "agent zone" without shouting. */}
-      <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-primary/85 via-primary/35 to-transparent" />
+      <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-atelier-brand-400/85 via-atelier-brand-400/35 to-transparent" />
 
       {/* Editorial slip: tiny mono caps ribbon above the avatar. Same voice
           as the Composer's "ATELIER · COMPOSER · NO 001" — the rail reads
@@ -153,7 +153,7 @@ export function RightRailV3({
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/6 px-3.5 py-3">
         <div className="flex items-center gap-2.5">
           <div className="relative">
-            <span className="grid h-9 w-9 place-items-center rounded-md bg-primary/15 text-primary ring-1 ring-inset ring-primary/25">
+            <span className="grid h-9 w-9 place-items-center rounded-md bg-atelier-brand-400/15 text-atelier-brand-400 ring-1 ring-inset ring-atelier-brand-400/25">
               <Bot size={15} aria-hidden="true" />
             </span>
             <span

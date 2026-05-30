@@ -3308,7 +3308,7 @@ export function AtelierShellV3() {
               <button
                 type="button"
                 onClick={opt.onPick}
-                className="group flex w-full items-center gap-3 rounded-md border border-white/6 bg-black/20 px-3 py-2 text-left transition-all hover:-translate-y-[1px] hover:border-primary/35 hover:bg-primary/[0.06]"
+                className="group flex w-full items-center gap-3 rounded-md border border-white/6 bg-black/20 px-3 py-2 text-left transition-all hover:-translate-y-[1px] hover:border-atelier-brand-400/35 hover:bg-atelier-brand-400/[0.06]"
               >
                 <div className="min-w-0 flex-1">
                   <div className="font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">
@@ -3318,7 +3318,7 @@ export function AtelierShellV3() {
                     {opt.desc}
                   </div>
                 </div>
-                <kbd className="rounded border border-white/8 bg-black/35 px-1.5 py-[1px] font-mono text-[10px] tracking-tight text-text-muted/85 group-hover:border-primary/35 group-hover:text-primary/85">
+                <kbd className="rounded border border-white/8 bg-black/35 px-1.5 py-[1px] font-mono text-[10px] tracking-tight text-text-muted/85 group-hover:border-atelier-brand-400/35 group-hover:text-atelier-brand-400/85">
                   {opt.shortcut}
                 </kbd>
               </button>
@@ -3456,7 +3456,7 @@ export function AtelierShellV3() {
               tiny rhetorical wink at "this is the Atelier surface, not
               Studio". */}
           <span aria-hidden="true" className="select-none font-mono text-[10px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
-            <span className="text-primary/90">LumenX</span>
+            <span className="text-atelier-brand-400/90">LumenX</span>
             <span className="px-1.5 text-text-muted/55">·</span>
             <span className="text-foreground/85">Atelier</span>
           </span>
@@ -3558,7 +3558,7 @@ export function AtelierShellV3() {
                           }}
                           className={`flex w-full items-center justify-between gap-2 rounded px-2.5 py-2 text-left transition-colors ${
                             isCurrent
-                              ? "bg-primary/[0.08] text-foreground"
+                              ? "bg-atelier-brand-400/[0.08] text-foreground"
                               : "text-text-secondary hover:bg-white/[0.04] hover:text-foreground"
                           }`}
                         >
@@ -3571,7 +3571,7 @@ export function AtelierShellV3() {
                             </div>
                           </div>
                           {isCurrent ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-1.5 py-[2px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-primary/95">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-atelier-brand-400/15 px-1.5 py-[2px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-atelier-brand-400/95">
                               <Check size={9} aria-hidden="true" /> Current
                             </span>
                           ) : null}
@@ -3660,7 +3660,7 @@ export function AtelierShellV3() {
                         },
                       });
                     }}
-                    className="flex w-full items-center gap-1.5 rounded px-2.5 py-2 text-left font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/10"
+                    className="flex w-full items-center gap-1.5 rounded px-2.5 py-2 text-left font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-atelier-brand-400 transition-colors hover:bg-atelier-brand-400/10"
                   >
                     <Plus size={11} aria-hidden="true" />
                     New project
@@ -3712,7 +3712,7 @@ export function AtelierShellV3() {
       {/* Canvas surface — receives pan + zoom + node-drag pointer events */}
       <main
         ref={mainRef}
-        className={`absolute inset-0 cursor-default select-none ${isDraggingFileOver ? "ring-4 ring-inset ring-primary/40" : ""}`}
+        className={`absolute inset-0 cursor-default select-none ${isDraggingFileOver ? "ring-4 ring-inset ring-atelier-brand-400/40" : ""}`}
         style={{ cursor: panDragRef.current ? "grabbing" : "default", touchAction: "none" }}
         onPointerDown={handleMainPointerDown}
         onPointerMove={handleMainPointerMove}
@@ -3743,29 +3743,29 @@ export function AtelierShellV3() {
             <div className="flex items-center gap-6">
               <div
                 aria-hidden="true"
-                className="h-[180px] w-[180px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(100,108,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
+                className="h-[180px] w-[180px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(59,107,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
                 style={{ backgroundColor: "#141416" }}
               />
               <div className="space-y-2">
                 <div
                   aria-hidden="true"
-                  className="h-[110px] w-[240px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(100,108,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
+                  className="h-[110px] w-[240px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(59,107,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
                   style={{ backgroundColor: "#141416", animationDelay: "0.15s" }}
                 />
                 <div
                   aria-hidden="true"
-                  className="h-[68px] w-[200px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(100,108,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
+                  className="h-[68px] w-[200px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(59,107,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
                   style={{ backgroundColor: "#141416", animationDelay: "0.3s" }}
                 />
               </div>
               <div
                 aria-hidden="true"
-                className="h-[180px] w-[180px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(100,108,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
+                className="h-[180px] w-[180px] rounded-md border border-white/8 bg-[linear-gradient(110deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0.05)_45%,rgba(59,107,255,0.06)_50%,rgba(255,255,255,0.05)_55%,rgba(255,255,255,0.02)_100%)] bg-[length:200%_100%] motion-safe:animate-atelier-shimmer motion-reduce:bg-white/[0.03]"
                 style={{ backgroundColor: "#141416", animationDelay: "0.45s" }}
               />
             </div>
             <div className="absolute bottom-12 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/85">
-              <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-primary/80 shadow-[0_0_0_3px_rgba(100,108,255,0.18)] motion-safe:animate-pulse" />
+              <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-atelier-brand-400/80 shadow-[0_0_0_3px_rgba(59,107,255,0.18)] motion-safe:animate-pulse" />
               Loading Atelier
             </div>
           </div>
@@ -3812,17 +3812,17 @@ export function AtelierShellV3() {
                     }}
                     className={`group flex w-[176px] flex-col items-start gap-1.5 overflow-hidden rounded-lg border bg-[#141416] p-3.5 text-left shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-all hover:-translate-y-[1px] ${
                       card.primary
-                        ? "border-primary/35 hover:border-primary/55 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_18px_36px_-18px_rgba(100,108,255,0.4)]"
-                        : "border-white/8 hover:border-primary/35"
+                        ? "border-atelier-brand-400/35 hover:border-atelier-brand-400/55 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_18px_36px_-18px_rgba(59,107,255,0.4)]"
+                        : "border-white/8 hover:border-atelier-brand-400/35"
                     }`}
                   >
                     <div className="flex w-full items-center justify-between">
-                      <span className={`font-mono text-[10px] font-medium uppercase tracking-[0.22em] ${card.primary ? "text-primary" : "text-text-muted/85"}`}>
+                      <span className={`font-mono text-[10px] font-medium uppercase tracking-[0.22em] ${card.primary ? "text-atelier-brand-400" : "text-text-muted/85"}`}>
                         {card.title}
                       </span>
                       <kbd className={`rounded-[3px] border px-1 py-[1px] font-mono text-[10px] tracking-tight ${
                         card.primary
-                          ? "border-primary/30 bg-primary/10 text-primary"
+                          ? "border-atelier-brand-400/30 bg-atelier-brand-400/10 text-atelier-brand-400"
                           : "border-white/8 bg-black/35 text-text-muted/85"
                       }`}>
                         {card.key}
@@ -3838,13 +3838,13 @@ export function AtelierShellV3() {
                   is selected. */}
               <div className="flex flex-col items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/75">
                 <div className="flex items-center gap-2">
-                  <kbd className="rounded-[3px] border border-primary/30 bg-primary/10 px-1.5 py-[1px] text-[10px] tracking-tight text-primary">?</kbd>
+                  <kbd className="rounded-[3px] border border-atelier-brand-400/30 bg-atelier-brand-400/10 px-1.5 py-[1px] text-[10px] tracking-tight text-atelier-brand-400">?</kbd>
                   <span>shortcuts</span>
                   <span aria-hidden="true" className="h-3 w-px bg-white/8" />
                   <span>drop image files anywhere</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-primary/65 shadow-[0_0_0_2px_rgba(100,108,255,0.16)]" />
+                  <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-atelier-brand-400/65 shadow-[0_0_0_2px_rgba(59,107,255,0.16)]" />
                   <span className="text-text-muted/85">
                     Link · select an image, drag the right-edge handle onto a draft
                   </span>
@@ -3924,7 +3924,7 @@ export function AtelierShellV3() {
                 </svg>
                 {labels.map((l) => {
                   const tone =
-                    l.tone === "primary" ? "border-primary/40 bg-primary/15 text-primary" :
+                    l.tone === "primary" ? "border-atelier-brand-400/40 bg-atelier-brand-400/15 text-atelier-brand-400" :
                     l.tone === "success" ? "border-emerald-400/40 bg-emerald-400/15 text-emerald-200" :
                     l.tone === "error"   ? "border-red-400/40 bg-red-400/15 text-red-200" :
                     l.tone === "warning" ? "border-amber-300/40 bg-amber-400/15 text-amber-200" :
@@ -4497,7 +4497,7 @@ export function AtelierShellV3() {
             const surfaceBg = isComment ? "bg-[#15141a]" : "bg-[#1a1611]";
             const ringTone = isComment
               ? "border-violet-300/55 ring-violet-300/40"
-              : "border-primary/55 ring-primary/40";
+              : "border-atelier-brand-400/55 ring-atelier-brand-400/40";
             return (
               <textarea
                 autoFocus
@@ -4752,7 +4752,7 @@ export function AtelierShellV3() {
                   },
                 });
               }}
-              className="rounded-full bg-primary/15 px-2 py-[3px] font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-primary/95 transition-colors hover:bg-primary/25"
+              className="rounded-full bg-atelier-brand-400/15 px-2 py-[3px] font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-atelier-brand-400/95 transition-colors hover:bg-atelier-brand-400/25"
               aria-label="Save selection as workflow"
             >
               Save as workflow
@@ -4955,7 +4955,7 @@ export function AtelierShellV3() {
                 type="button"
                 aria-label={`Resize ${c.key}`}
                 onPointerDown={startResize(c.key)}
-                className="absolute z-40 h-[10px] w-[10px] -translate-x-1/2 -translate-y-1/2 rounded-[2px] border border-white/40 bg-primary shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_0_0_2px_rgba(100,108,255,0.18),0_2px_6px_-2px_rgba(100,108,255,0.55)] transition-all duration-200 hover:scale-[1.4] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),0_0_0_3px_rgba(100,108,255,0.28),0_3px_8px_-2px_rgba(100,108,255,0.7)]"
+                className="absolute z-40 h-[10px] w-[10px] -translate-x-1/2 -translate-y-1/2 rounded-[2px] border border-white/40 bg-atelier-brand-400 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_0_0_2px_rgba(59,107,255,0.18),0_2px_6px_-2px_rgba(59,107,255,0.55)] transition-all duration-200 hover:scale-[1.4] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),0_0_0_3px_rgba(59,107,255,0.28),0_3px_8px_-2px_rgba(59,107,255,0.7)]"
                 style={{ left: c.sx, top: c.sy, cursor: c.cursor }}
               />
             ))}
@@ -5010,9 +5010,9 @@ export function AtelierShellV3() {
         const idleTone =
           "border-white/22 bg-[#141416]/95 text-text-muted/80 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06),0_2px_6px_-2px_rgba(0,0,0,0.45)]";
         const activeTone =
-          "border-primary/60 bg-primary/15 text-primary shadow-[0_0_0_3px_rgba(100,108,255,0.18),0_3px_10px_-2px_rgba(100,108,255,0.4)]";
+          "border-atelier-brand-400/60 bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[0_0_0_3px_rgba(59,107,255,0.18),0_3px_10px_-2px_rgba(59,107,255,0.4)]";
         const dropTargetTone =
-          "border-primary bg-primary text-white shadow-[0_0_0_4px_rgba(100,108,255,0.32),0_4px_12px_-2px_rgba(100,108,255,0.5)] motion-safe:animate-atelier-pulse-soft";
+          "border-atelier-brand-400 bg-atelier-brand-400 text-white shadow-[0_0_0_4px_rgba(59,107,255,0.32),0_4px_12px_-2px_rgba(59,107,255,0.5)] motion-safe:animate-atelier-pulse-soft";
         return (
           <>
             <span
@@ -5030,7 +5030,7 @@ export function AtelierShellV3() {
               aria-label="Connection output — drag onto a node or empty canvas"
               data-tip="Drag onto a draft, or to empty canvas to spawn a connected draft"
               onPointerDown={(e) => handlePortDragOut(e, candidate, rightX, cy)}
-              className={`btn-tip cursor-grab active:cursor-grabbing hover:scale-[1.18] hover:border-primary/60 hover:bg-primary/30 hover:text-white ${baseShape} ${
+              className={`btn-tip cursor-grab active:cursor-grabbing hover:scale-[1.18] hover:border-atelier-brand-400/60 hover:bg-atelier-brand-400/30 hover:text-white ${baseShape} ${
                 isDropTarget ? dropTargetTone : activeTone
               }`}
               style={{ left: rightX, top: cy }}
@@ -5052,7 +5052,7 @@ export function AtelierShellV3() {
           <div
             key={`marquee-${marqueeTick}`}
             aria-hidden="true"
-            className="pointer-events-none fixed z-[44] rounded-[3px] border border-primary/55 bg-primary/[0.06] shadow-[0_0_0_1px_rgba(100,108,255,0.18),inset_0_0_24px_-8px_rgba(100,108,255,0.35)]"
+            className="pointer-events-none fixed z-[44] rounded-[3px] border border-atelier-brand-400/55 bg-atelier-brand-400/[0.06] shadow-[0_0_0_1px_rgba(59,107,255,0.18),inset_0_0_24px_-8px_rgba(59,107,255,0.35)]"
             style={{ left: x, top: y, width: w, height: h }}
           />
         );
@@ -5268,7 +5268,7 @@ export function AtelierShellV3() {
             dot becomes part of the rhythm, not a status indicator. */}
         <div className="mb-2 flex items-center justify-between gap-2 border-b border-dashed border-white/8 px-1 pb-1.5 font-mono text-[9px] uppercase tracking-[0.28em] text-text-muted/85">
           <div className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-primary/70 shadow-[0_0_0_2px_rgba(100,108,255,0.16)]" />
+            <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-atelier-brand-400/70 shadow-[0_0_0_2px_rgba(59,107,255,0.16)]" />
             <span className="font-medium">Cut · Sequence · No 001</span>
           </div>
           <div className="flex items-center gap-1.5">
@@ -5324,7 +5324,7 @@ export function AtelierShellV3() {
                       .finally(() => setExportingSequence(false));
                   }}
                   disabled={exportingSequence}
-                  className="ml-1 rounded bg-primary/15 px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.24em] text-primary/95 transition-colors hover:bg-primary/25 disabled:cursor-wait disabled:opacity-60"
+                  className="ml-1 rounded bg-atelier-brand-400/15 px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.24em] text-atelier-brand-400/95 transition-colors hover:bg-atelier-brand-400/25 disabled:cursor-wait disabled:opacity-60"
                 >
                   {exportingSequence ? "Exporting…" : "Export"}
                 </button>
@@ -5398,11 +5398,11 @@ export function AtelierShellV3() {
                   v.pause();
                   try { v.currentTime = 0; } catch { /* ignore */ }
                 }}
-                className={`group relative h-[68px] w-[124px] shrink-0 cursor-grab overflow-hidden rounded-[5px] border transition-shadow hover:border-primary/45 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.22)] active:cursor-grabbing ${
+                className={`group relative h-[68px] w-[124px] shrink-0 cursor-grab overflow-hidden rounded-[5px] border transition-shadow hover:border-atelier-brand-400/45 hover:shadow-[0_0_0_1px_rgba(59,107,255,0.22)] active:cursor-grabbing ${
                   seqDragFromIndex === i
-                    ? "opacity-45 border-primary/55"
+                    ? "opacity-45 border-atelier-brand-400/55"
                     : seqDragOverIndex === i && seqDragFromIndex !== null && seqDragFromIndex !== i
-                    ? "border-primary ring-2 ring-primary/35"
+                    ? "border-atelier-brand-400 ring-2 ring-atelier-brand-400/35"
                     : "border-white/8 bg-[#141416]"
                 }`}
                 aria-label={`Play ${parent.title}, clip ${i + 1}`}
@@ -5520,7 +5520,7 @@ export function AtelierShellV3() {
                           const v = parseFloat(e.target.value);
                           setSequence((prev) => prev.map((s, idx) => idx === i ? { ...s, trimStart: Number.isFinite(v) ? v : undefined } : s));
                         }}
-                        className="mt-0.5 w-full rounded border border-white/10 bg-black/40 px-1.5 py-1 font-mono text-[11px] text-foreground outline-none focus:border-primary/60"
+                        className="mt-0.5 w-full rounded border border-white/10 bg-black/40 px-1.5 py-1 font-mono text-[11px] text-foreground outline-none focus:border-atelier-brand-400/60"
                       />
                     </label>
                     <label className="mb-1 block text-[10px] text-text-secondary">
@@ -5536,7 +5536,7 @@ export function AtelierShellV3() {
                           const v = parseFloat(raw);
                           setSequence((prev) => prev.map((s, idx) => idx === i ? { ...s, trimEnd: raw === "" || !Number.isFinite(v) ? undefined : v } : s));
                         }}
-                        className="mt-0.5 w-full rounded border border-white/10 bg-black/40 px-1.5 py-1 font-mono text-[11px] text-foreground outline-none focus:border-primary/60"
+                        className="mt-0.5 w-full rounded border border-white/10 bg-black/40 px-1.5 py-1 font-mono text-[11px] text-foreground outline-none focus:border-atelier-brand-400/60"
                       />
                     </label>
                     <div className="mt-1.5 flex items-center justify-between gap-1">
@@ -5552,7 +5552,7 @@ export function AtelierShellV3() {
                       <button
                         type="button"
                         onClick={() => setTrimEditingIndex(null)}
-                        className="rounded-full bg-primary/15 px-2 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/25"
+                        className="rounded-full bg-atelier-brand-400/15 px-2 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-atelier-brand-400 transition-colors hover:bg-atelier-brand-400/25"
                       >
                         Done
                       </button>
@@ -5792,11 +5792,11 @@ export function AtelierShellV3() {
               className="w-[440px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_32px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] animate-atelier-modal-content-in motion-reduce:animate-none"
               onClick={(e) => e.stopPropagation()}
             >
-              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
+              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400 via-atelier-brand-400/45 to-transparent" />
               <div className="px-4 pb-3 pt-3.5">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-baseline gap-2.5">
-                    <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-primary/85">Reference</span>
+                    <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-atelier-brand-400/85">Reference</span>
                     <span className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">Attach to a draft</span>
                   </div>
                   <button onClick={() => setUseAsRefSourceId(null)} className="inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground" aria-label="Close">
@@ -5832,13 +5832,13 @@ export function AtelierShellV3() {
                                 .then(() => pushToast("success", `Attached to ${intent}`))
                                 .catch((err: unknown) => pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`));
                             }}
-                            className="group flex w-full items-center justify-between gap-2 rounded-md border border-white/6 bg-black/20 px-3 py-2 text-left transition-colors hover:border-primary/35 hover:bg-primary/[0.04]"
+                            className="group flex w-full items-center justify-between gap-2 rounded-md border border-white/6 bg-black/20 px-3 py-2 text-left transition-colors hover:border-atelier-brand-400/35 hover:bg-atelier-brand-400/[0.04]"
                           >
                             <div className="min-w-0">
                               <div className="truncate font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">{intent}</div>
                               <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-text-muted/85">{model}</div>
                             </div>
-                            <span className="rounded-full bg-primary/12 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-primary/95 transition-colors group-hover:bg-primary/20">
+                            <span className="rounded-full bg-atelier-brand-400/12 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-atelier-brand-400/95 transition-colors group-hover:bg-atelier-brand-400/20">
                               Attach
                             </span>
                         </button>
@@ -5888,7 +5888,7 @@ export function AtelierShellV3() {
                       {parent.title}
                     </div>
                     <div className="mt-[2px] flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em]">
-                      <span className="text-primary/85">{cand.model}</span>
+                      <span className="text-atelier-brand-400/85">{cand.model}</span>
                       <span aria-hidden="true" className="text-text-muted/50">·</span>
                       <span className="text-text-muted/85">{cand.label || cand.id.slice(0, 8)}</span>
                     </div>
@@ -5903,7 +5903,7 @@ export function AtelierShellV3() {
                             .catch((err: unknown) => pushToast("error", `Select failed: ${err instanceof Error ? err.message : String(err)}`));
                           close();
                         }}
-                        className="rounded-full bg-primary px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_12px_-4px_rgba(100,108,255,0.5)] transition-colors hover:bg-primary/92"
+                        className="rounded-full bg-atelier-brand-400 px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_12px_-4px_rgba(59,107,255,0.5)] transition-colors hover:bg-atelier-brand-400/92"
                       >
                         Select as take
                       </button>
@@ -6008,11 +6008,11 @@ export function AtelierShellV3() {
             body: (
               <>
                 Click a draft → Composer pops up below. Press{" "}
-                <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">⌘ Enter</kbd>{" "}
+                <kbd className="rounded border border-atelier-brand-400/40 bg-atelier-brand-400/10 px-1 font-mono text-[10px] text-atelier-brand-400">⌘ Enter</kbd>{" "}
                 to generate. Type{" "}
                 <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">@</kbd>{" "}
                 to mention nodes (auto-attaches matching images). Drag completed takes into the bottom Sequence Strip to stitch your cut. Press{" "}
-                <kbd className="rounded border border-primary/40 bg-primary/10 px-1 font-mono text-[10px] text-primary">?</kbd>{" "}
+                <kbd className="rounded border border-atelier-brand-400/40 bg-atelier-brand-400/10 px-1 font-mono text-[10px] text-atelier-brand-400">?</kbd>{" "}
                 for the full shortcut list.
               </>
             ),
@@ -6028,10 +6028,10 @@ export function AtelierShellV3() {
           >
             {/* Top accent rule — primary hairline gradient signs the card as
                 'instructional', not generic info card */}
-            <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
+            <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400 via-atelier-brand-400/45 to-transparent" />
             <div className="px-4 pb-3 pt-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-primary/85">
+                <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-atelier-brand-400/85">
                   {step.tag.replace(/Step (\d+) of (\d+)/, "Step $1 / $2")}
                 </span>
                 <button
@@ -6054,7 +6054,7 @@ export function AtelierShellV3() {
                       key={i}
                       aria-hidden="true"
                       className={`h-[3px] rounded-full transition-all ${
-                        i === tourStep ? "w-5 bg-primary" : i < tourStep ? "w-1.5 bg-primary/40" : "w-1.5 bg-white/12"
+                        i === tourStep ? "w-5 bg-atelier-brand-400" : i < tourStep ? "w-1.5 bg-atelier-brand-400/40" : "w-1.5 bg-white/12"
                       }`}
                     />
                   ))}
@@ -6077,7 +6077,7 @@ export function AtelierShellV3() {
                         advanceOnboarding();
                       }
                     }}
-                    className="rounded-full bg-primary px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_10px_-3px_rgba(100,108,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-primary/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_14px_-3px_rgba(100,108,255,0.6)] active:scale-[0.96]"
+                    className="rounded-full bg-atelier-brand-400 px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_10px_-3px_rgba(59,107,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_14px_-3px_rgba(59,107,255,0.6)] active:scale-[0.96]"
                   >
                     {isLast ? "Shortcuts" : "Next"}
                   </button>
@@ -6168,7 +6168,7 @@ export function AtelierShellV3() {
               aria-label="Command palette"
               className="fixed left-1/2 top-[18vh] z-[61] w-[min(560px,90vw)] -translate-x-1/2 overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_24px_48px_-22px_rgba(0,0,0,0.85),0_4px_14px_-4px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
             >
-              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary/85 via-primary/35 to-transparent" />
+              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400/85 via-atelier-brand-400/35 to-transparent" />
               <input
                 autoFocus
                 value={commandPaletteQuery}
@@ -6215,7 +6215,7 @@ export function AtelierShellV3() {
                         onClick={() => jumpTo(m.node)}
                         onMouseEnter={() => setCommandPaletteHighlight(i)}
                         className={`flex w-full items-center gap-3 px-3.5 py-2 text-left transition-colors ${
-                          active ? "bg-primary/15" : "hover:bg-white/[0.04]"
+                          active ? "bg-atelier-brand-400/15" : "hover:bg-white/[0.04]"
                         }`}
                       >
                         <span
@@ -6347,11 +6347,11 @@ export function AtelierShellV3() {
               className="w-[640px] max-w-[92vw] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_36px_70px_-30px_rgba(0,0,0,0.95),0_10px_22px_-8px_rgba(0,0,0,0.65),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-modal-content-in motion-reduce:animate-none"
               onClick={(e) => e.stopPropagation()}
             >
-              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
+              <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400 via-atelier-brand-400/45 to-transparent" />
               <div className="px-5 pb-4 pt-4">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-baseline gap-3">
-                    <span className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-primary/85">
+                    <span className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-atelier-brand-400/85">
                       Atelier
                     </span>
                     <span className="font-display text-[15px] font-medium tracking-[-0.005em] text-foreground">
@@ -6464,7 +6464,7 @@ export function AtelierShellV3() {
                 ? "bg-red-300 shadow-[0_0_0_3px_rgba(252,165,165,0.18)]"
                 : t.kind === "success"
                 ? "bg-emerald-300 shadow-[0_0_0_3px_rgba(110,231,183,0.18)]"
-                : "bg-primary shadow-[0_0_0_3px_rgba(100,108,255,0.18)]";
+                : "bg-atelier-brand-400 shadow-[0_0_0_3px_rgba(59,107,255,0.18)]";
             const textTone =
               t.kind === "error" ? "text-red-100/95" :
               t.kind === "success" ? "text-emerald-100/95" :
@@ -6489,7 +6489,7 @@ export function AtelierShellV3() {
       {selectedNode && selectedNode.type === "video" && !isDraftVideo(selectedNode) && selectedNode.media_urls?.[0] ? (
         <button
           onClick={() => setPreviewVideoUrl(selectedNode.media_urls[0])}
-          className="absolute z-30 grid h-9 w-9 place-items-center rounded-full bg-primary text-white shadow-2xl shadow-black/40 hover:bg-primary/90"
+          className="absolute z-30 grid h-9 w-9 place-items-center rounded-full bg-atelier-brand-400 text-white shadow-2xl shadow-black/40 hover:bg-atelier-brand-400/90"
           style={{ left: selectedNode.x + (selectedNode.width || 200) / 2 - 18, top: selectedNode.y + (selectedNode.height || 113) / 2 - 18 }}
           aria-label="Play preview"
         >

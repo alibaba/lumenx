@@ -102,10 +102,10 @@ export function ConfirmDialog({
   const isDanger = tone === "danger";
   const accentRail = isDanger
     ? "from-red-400 via-red-400/45 to-transparent"
-    : "from-primary via-primary/45 to-transparent";
+    : "from-atelier-brand-400 via-atelier-brand-400/45 to-transparent";
   const confirmClass = isDanger
     ? "bg-red-500/85 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(248,113,113,0.55)] hover:bg-red-500/95"
-    : "bg-primary text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(100,108,255,0.55)] hover:bg-primary/92";
+    : "bg-atelier-brand-400 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(59,107,255,0.55)] hover:bg-atelier-brand-400/92";
 
   return (
     <div
@@ -239,7 +239,7 @@ export function PromptDialog({
         className="w-[420px] overflow-hidden rounded-[14px] border border-white/8 bg-[#141416] shadow-[0_32px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] animate-atelier-modal-content-in motion-reduce:animate-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
+        <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400 via-atelier-brand-400/45 to-transparent" />
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -271,7 +271,7 @@ export function PromptDialog({
               onChange={(e) => setValue(e.target.value)}
               placeholder={placeholder}
               rows={4}
-              className="mb-3.5 w-full resize-none rounded-md border border-white/8 bg-black/35 px-3 py-2 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
+              className="mb-3.5 w-full resize-none rounded-md border border-white/8 bg-black/35 px-3 py-2 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-atelier-brand-400/55 focus:bg-black/45"
             />
           ) : (
             <input
@@ -279,14 +279,14 @@ export function PromptDialog({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               placeholder={placeholder}
-              className="mb-3.5 w-full rounded-md border border-white/8 bg-black/35 px-3 py-2 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
+              className="mb-3.5 w-full rounded-md border border-white/8 bg-black/35 px-3 py-2 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-atelier-brand-400/55 focus:bg-black/45"
             />
           )}
           <div className="grid grid-cols-2 gap-2">
             <button
               type="submit"
               disabled={!allowEmpty && !trimmed}
-              className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(100,108,255,0.55)] transition-all duration-200 hover:scale-[1.02] hover:bg-primary/92 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:scale-100"
+              className="inline-flex items-center justify-center rounded-md bg-atelier-brand-400 px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_14px_-4px_rgba(59,107,255,0.55)] transition-all duration-200 hover:scale-[1.02] hover:bg-atelier-brand-400/92 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:scale-100"
             >
               {submitLabel}
             </button>

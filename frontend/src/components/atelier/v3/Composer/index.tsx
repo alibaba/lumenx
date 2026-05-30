@@ -306,7 +306,7 @@ export function Composer({
               onKeyDown={(e) => handleTabKeyDown(e, t)}
               className={`rounded-md px-2 py-[5px] font-mono text-[10px] font-medium uppercase tracking-[0.22em] transition-colors ${
                 t === activeTab
-                  ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(100,108,255,0.3)]"
+                  ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                   : "text-text-muted hover:bg-white/[0.04] hover:text-foreground/90"
               }`}>
               {t}
@@ -373,7 +373,7 @@ export function Composer({
           data-tip="Add reference"
           onClick={onAddRef}
           disabled={!onAddRef}
-          className="btn-tip grid h-9 w-9 place-items-center rounded-[5px] border border-dashed border-white/12 text-text-muted transition-colors hover:border-primary/55 hover:text-primary disabled:cursor-not-allowed disabled:opacity-45"
+          className="btn-tip grid h-9 w-9 place-items-center rounded-[5px] border border-dashed border-white/12 text-text-muted transition-colors hover:border-atelier-brand-400/55 hover:text-atelier-brand-400 disabled:cursor-not-allowed disabled:opacity-45"
         >
           <Plus size={13} aria-hidden="true" />
         </button>
@@ -447,7 +447,7 @@ export function Composer({
           }}
           autoFocus
           placeholder="Describe the shot. Use @ to mention a canvas node."
-          className="w-full resize-none rounded-md border border-white/6 bg-black/35 px-3 py-2.5 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
+          className="w-full resize-none rounded-md border border-white/6 bg-black/35 px-3 py-2.5 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-atelier-brand-400/55 focus:bg-black/45"
         />
         {mention && filteredMentionables.length > 0 ? (
           <ul
@@ -545,7 +545,7 @@ export function Composer({
               // so the user can see at a glance that the run will pick
               // up custom params.
               advanced.negativePrompt || typeof advanced.seed === "number" || typeof advanced.cfgScale === "number" || advanced.mode || advanced.movementAmplitude || advanced.sound
-                ? "border-primary/55 text-primary"
+                ? "border-atelier-brand-400/55 text-atelier-brand-400"
                 : "border-white/8"
             }`}>
             <Settings size={12} aria-hidden="true" />

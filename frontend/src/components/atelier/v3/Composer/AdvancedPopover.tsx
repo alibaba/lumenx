@@ -100,7 +100,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
       className="fixed z-[55] w-[320px] overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-24px_rgba(0,0,0,0.85),0_8px_20px_-6px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
       style={style}
     >
-      <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-primary via-primary/45 to-transparent" />
+      <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400 via-atelier-brand-400/45 to-transparent" />
       <div className="flex items-center justify-between gap-2 border-b border-dashed border-white/8 px-3 py-1.5">
         <span aria-hidden="true" className="font-mono text-[8.5px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
           Atelier · Advanced · {modelLabel}
@@ -131,7 +131,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
                 onChange={(e) => onChange({ ...value, negativePrompt: e.target.value })}
                 rows={2}
                 placeholder="extra fingers, deformed hands, blurry…"
-                className="w-full resize-none rounded-md border border-white/8 bg-black/35 px-2.5 py-1.5 text-[12px] leading-[1.45] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
+                className="w-full resize-none rounded-md border border-white/8 bg-black/35 px-2.5 py-1.5 text-[12px] leading-[1.45] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-atelier-brand-400/55 focus:bg-black/45"
               />
             </div>
           ) : null}
@@ -168,7 +168,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
                   }}
                   placeholder="random"
                   disabled={!seedLocked}
-                  className="flex-1 rounded-md border border-white/8 bg-black/35 px-2 py-[5px] font-mono text-[12px] text-foreground outline-none placeholder:text-text-muted/85 transition-colors focus:border-primary/55 focus:bg-black/45 disabled:cursor-not-allowed disabled:opacity-55"
+                  className="flex-1 rounded-md border border-white/8 bg-black/35 px-2 py-[5px] font-mono text-[12px] text-foreground outline-none placeholder:text-text-muted/85 transition-colors focus:border-atelier-brand-400/55 focus:bg-black/45 disabled:cursor-not-allowed disabled:opacity-55"
                 />
                 <button
                   type="button"
@@ -201,7 +201,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
                 step={cfgScale.step}
                 value={value.cfgScale ?? cfgScale.default}
                 onChange={(e) => onChange({ ...value, cfgScale: Number(e.target.value) })}
-                className="h-1 w-full cursor-pointer appearance-none rounded-full bg-white/8 accent-primary"
+                className="h-1 w-full cursor-pointer appearance-none rounded-full bg-white/8 accent-atelier-brand-400"
               />
             </div>
           ) : null}
@@ -221,7 +221,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
                       onClick={() => onChange({ ...value, mode: opt })}
                       className={`flex-1 rounded-md px-2 py-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
                         active
-                          ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(100,108,255,0.3)]"
+                          ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                           : "border border-white/8 text-text-muted hover:bg-white/[0.04] hover:text-foreground"
                       }`}
                     >
@@ -250,7 +250,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
                       onClick={() => onChange({ ...value, movementAmplitude: opt })}
                       className={`rounded-md px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
                         active
-                          ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(100,108,255,0.3)]"
+                          ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                           : "border border-white/8 text-text-muted hover:bg-white/[0.04] hover:text-foreground"
                       }`}
                     >
@@ -269,7 +269,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
                 type="checkbox"
                 checked={!!value.sound}
                 onChange={(e) => onChange({ ...value, sound: e.target.checked })}
-                className="h-3.5 w-3.5 cursor-pointer accent-primary"
+                className="h-3.5 w-3.5 cursor-pointer accent-atelier-brand-400"
               />
             </label>
           ) : null}

@@ -31,7 +31,7 @@ export function RailPanel({ open, title, tag, onClose, children }: Props) {
       aria-label={title}
       className="absolute left-[56px] top-4 bottom-4 z-30 flex w-[320px] flex-col overflow-hidden rounded-2xl border border-white/8 atelier-chrome-opaque shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] animate-atelier-popover-in motion-reduce:animate-none"
     >
-      <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-primary/85 via-primary/35 to-transparent" />
+      <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-atelier-brand-400/85 via-atelier-brand-400/35 to-transparent" />
 
       {tag ? (
         <div className="flex shrink-0 items-center justify-between gap-2 border-b border-dashed border-white/8 px-3.5 py-1.5">

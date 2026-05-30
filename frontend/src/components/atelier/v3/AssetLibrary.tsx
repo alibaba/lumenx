@@ -220,7 +220,7 @@ export function AssetLibrary({
       style={{ left: leftOffsetPx }}
       className="absolute top-4 bottom-4 z-30 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-white/8 atelier-chrome-opaque shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)]"
     >
-      <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-primary/85 via-primary/35 to-transparent" />
+      <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-atelier-brand-400/85 via-atelier-brand-400/35 to-transparent" />
 
       {/* Editorial slip + collapse */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-dashed border-white/8 px-3.5 py-1.5">
@@ -255,7 +255,7 @@ export function AssetLibrary({
             data-tip={selectMode ? "Cancel selection" : "Multi-select"}
             className={`btn-tip rounded-full border px-2 py-[3px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] transition-colors ${
               selectMode
-                ? "border-primary/45 bg-primary/15 text-primary"
+                ? "border-atelier-brand-400/45 bg-atelier-brand-400/15 text-atelier-brand-400"
                 : "border-dashed border-white/15 text-text-muted/85 hover:border-white/25 hover:text-foreground"
             }`}
           >
@@ -273,7 +273,7 @@ export function AssetLibrary({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by title…"
-            className="w-full rounded-md border border-white/8 bg-black/35 py-1.5 pl-7 pr-7 text-[12px] leading-[1.4] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-primary/55 focus:bg-black/45"
+            className="w-full rounded-md border border-white/8 bg-black/35 py-1.5 pl-7 pr-7 text-[12px] leading-[1.4] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-atelier-brand-400/55 focus:bg-black/45"
           />
           {search ? (
             <button
@@ -304,7 +304,7 @@ export function AssetLibrary({
                 onClick={() => setKindFilter(k)}
                 className={`inline-flex items-center gap-1 rounded-md px-2 py-[5px] font-mono text-[9.5px] font-medium uppercase tracking-[0.22em] transition-colors ${
                   isActive
-                    ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(100,108,255,0.3)]"
+                    ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                     : "text-text-muted hover:bg-white/[0.04] hover:text-foreground/90"
                 }`}
               >
@@ -343,7 +343,7 @@ export function AssetLibrary({
                   onClick={() => setImageCategoryFilter(cat)}
                   className={`rounded-full border px-2 py-[3px] font-mono text-[8.5px] font-medium uppercase tracking-[0.24em] transition-colors ${
                     isActive
-                      ? "border-primary/45 bg-primary/15 text-primary"
+                      ? "border-atelier-brand-400/45 bg-atelier-brand-400/15 text-atelier-brand-400"
                       : "border-dashed border-white/15 text-text-muted/85 hover:border-white/25 hover:text-foreground"
                   }`}
                 >
@@ -403,8 +403,8 @@ export function AssetLibrary({
                         : "cursor-grab active:cursor-grabbing"
                   } ${
                     checked
-                      ? "border-primary/65 shadow-[0_0_0_2px_rgba(100,108,255,0.35)]"
-                      : "border-white/8 hover:border-primary/45 hover:shadow-[0_0_0_1px_rgba(100,108,255,0.22)]"
+                      ? "border-atelier-brand-400/65 shadow-[0_0_0_2px_rgba(59,107,255,0.35)]"
+                      : "border-white/8 hover:border-atelier-brand-400/45 hover:shadow-[0_0_0_1px_rgba(59,107,255,0.22)]"
                   }`}
                 >
                   <div className="relative aspect-[4/3] bg-black/40">
@@ -447,7 +447,7 @@ export function AssetLibrary({
                         onDragStart={(e) => e.preventDefault()}
                         className={`btn-tip absolute right-1 top-1 rounded-[3px] border px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.2em] transition-colors ${
                           card.category
-                            ? "border-primary/55 bg-primary/20 text-primary"
+                            ? "border-atelier-brand-400/55 bg-atelier-brand-400/20 text-atelier-brand-400"
                             : "border-dashed border-white/22 bg-black/55 text-text-muted/85 opacity-0 group-hover:opacity-100"
                         }`}
                       >
@@ -480,7 +480,7 @@ export function AssetLibrary({
                       aria-hidden="true"
                       className={`pointer-events-none absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-[4px] border ${
                         checked
-                          ? "border-primary/70 bg-primary/30 text-primary"
+                          ? "border-atelier-brand-400/70 bg-atelier-brand-400/30 text-atelier-brand-400"
                           : "border-white/30 bg-black/55 text-white/70"
                       }`}
                     >
@@ -506,7 +506,7 @@ export function AssetLibrary({
               onBulkAttach(ids);
               exitSelectMode();
             }}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(100,108,255,0.5)] transition-all hover:bg-primary/92 active:scale-[0.97]"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-atelier-brand-400 px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(59,107,255,0.5)] transition-all hover:bg-atelier-brand-400/92 active:scale-[0.97]"
           >
             <Link2 size={11} aria-hidden="true" />
             Attach {selectedIds.size} ref{selectedIds.size === 1 ? "" : "s"}

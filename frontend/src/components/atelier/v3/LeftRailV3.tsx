@@ -100,7 +100,7 @@ export function LeftRailV3({
             to the canvas root (deselect). */}
         <span
           aria-hidden="true"
-          className="mb-1 grid h-9 w-9 place-items-center rounded-md bg-primary/15 text-primary ring-1 ring-inset ring-primary/25"
+          className="mb-1 grid h-9 w-9 place-items-center rounded-md bg-atelier-brand-400/15 text-atelier-brand-400 ring-1 ring-inset ring-atelier-brand-400/25"
         >
           <Sparkles size={14} aria-hidden="true" />
         </span>
@@ -119,7 +119,7 @@ export function LeftRailV3({
               onClick={() => onModeToggle(m.key)}
               className={`btn-tip group/mode relative grid h-10 w-10 place-items-center rounded-md transition-all duration-150 active:scale-[0.94] ${
                 active
-                  ? "bg-primary/15 text-primary shadow-[inset_0_0_0_1px_rgba(100,108,255,0.3)]"
+                  ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                   : "text-text-muted hover:bg-white/[0.05] hover:text-foreground"
               }`}
             >
@@ -128,7 +128,7 @@ export function LeftRailV3({
               {active ? (
                 <span
                   aria-hidden="true"
-                  className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-primary"
+                  className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-atelier-brand-400"
                 />
               ) : null}
               <Icon size={15} aria-hidden="true" />

@@ -130,7 +130,7 @@ function renderTokens(tokens: InlineToken[]): React.ReactNode[] {
           href={t.href}
           target="_blank"
           rel="noreferrer noopener"
-          className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary/80"
+          className="text-atelier-brand-400 underline decoration-atelier-brand-400/40 underline-offset-2 hover:decoration-atelier-brand-400/80"
         >
           {t.body}
         </a>

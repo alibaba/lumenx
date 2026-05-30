@@ -129,13 +129,13 @@ export function WorkflowsPanel({ onInsert }: Props) {
                 onClick={() => setFilter(cat)}
                 className={`rounded-full border px-2 py-[3px] font-mono text-[8.5px] font-medium uppercase tracking-[0.24em] transition-colors ${
                   isActive
-                    ? "border-primary/45 bg-primary/15 text-primary"
+                    ? "border-atelier-brand-400/45 bg-atelier-brand-400/15 text-atelier-brand-400"
                     : "border-dashed border-white/15 text-text-muted/85 hover:border-white/25 hover:text-foreground"
                 }`}
               >
                 {labelFor(cat)}
                 {cat === "mine" && userTemplates.length > 0 ? (
-                  <span className="ml-1 rounded-full bg-primary/20 px-1 font-display text-[8.5px] text-primary/95">
+                  <span className="ml-1 rounded-full bg-atelier-brand-400/20 px-1 font-display text-[8.5px] text-atelier-brand-400/95">
                     {userTemplates.length}
                   </span>
                 ) : null}
@@ -166,7 +166,7 @@ export function WorkflowsPanel({ onInsert }: Props) {
                 <button
                   type="button"
                   onClick={() => onInsert(t)}
-                  className="group flex w-full flex-col gap-1.5 rounded-md border border-white/8 bg-black/25 p-3 text-left transition-all hover:-translate-y-[1px] hover:border-primary/40 hover:bg-primary/[0.05]"
+                  className="group flex w-full flex-col gap-1.5 rounded-md border border-white/8 bg-black/25 p-3 text-left transition-all hover:-translate-y-[1px] hover:border-atelier-brand-400/40 hover:bg-atelier-brand-400/[0.05]"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">
@@ -191,7 +191,7 @@ export function WorkflowsPanel({ onInsert }: Props) {
                         {tag}
                       </span>
                     ))}
-                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-primary/12 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-primary/95 transition-colors group-hover:bg-primary/22">
+                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-atelier-brand-400/12 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-atelier-brand-400/95 transition-colors group-hover:bg-atelier-brand-400/22">
                       <Sparkles size={9} aria-hidden="true" />
                       Insert
                     </span>
