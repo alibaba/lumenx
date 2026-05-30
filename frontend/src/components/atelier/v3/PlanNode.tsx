@@ -68,7 +68,7 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
         backgroundImage:
           "linear-gradient(to bottom, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0) 35%)",
       }}
-      className={`group absolute w-[268px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[box-shadow,border-color] duration-200 ${borderClass}`}
+      className={`group absolute w-[268px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
       <div className="px-4 pb-3 pt-3.5">
         {/* Header — Bot avatar in primary tint, display-font title with

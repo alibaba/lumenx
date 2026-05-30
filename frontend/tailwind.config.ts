@@ -80,8 +80,18 @@ const config: Config = {
         // clobbering its position. origin-top-left (set on the element) pivots the
         // grow from the corner the compact card occupied → reads as a morph.
         "atelier-workbench-in": {
-          "0%":   { opacity: "0", scale: "0.95", filter: "blur(3px)" },
+          "0%":   { opacity: "0", scale: "0.85", filter: "blur(3px)" },
           "100%": { opacity: "1", scale: "1", filter: "blur(0)" },
+        },
+        // Staggered operating-area body: the shell frame grows first (workbench-in),
+        // then the dense inner card (meta + Composer + take strip) settles ~140ms
+        // later — reads as "a drawer opens, then contents drop in" instead of the
+        // whole thing exploding at full size at once. translateY on the child
+        // composes fine with the parent's standalone `scale`. The 140ms delay +
+        // `both` fill keeps it invisible during the frame's first ~40% (no flash).
+        "atelier-workbench-content-in": {
+          "0%":   { opacity: "0", transform: "translateY(4px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
         },
         // Marching-ants: scrolls the dash-array on processing/pending edges
         // so connections look "alive" while a generation is in flight.
@@ -134,8 +144,9 @@ const config: Config = {
       },
       animation: {
         "atelier-node-in": "atelier-node-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both",
-        "atelier-workbench-in": "atelier-workbench-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both",
-        "atelier-dash": "atelier-dash 1.2s linear infinite",
+        "atelier-workbench-in": "atelier-workbench-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both",
+        "atelier-workbench-content-in": "atelier-workbench-content-in 240ms cubic-bezier(0.22, 1, 0.36, 1) 140ms both",
+        "atelier-dash": "atelier-dash 1.6s linear infinite",
         "atelier-popover-in": "atelier-popover-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both",
         "atelier-modal-overlay-in": "atelier-modal-overlay-in 200ms ease-out both",
         "atelier-modal-content-in": "atelier-modal-content-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both",

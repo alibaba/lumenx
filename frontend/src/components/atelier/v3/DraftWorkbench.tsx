@@ -258,8 +258,12 @@ export function DraftWorkbench({
       </div>
 
       {/* Inner content card — the operating area. Meta + Composer +
-          TakeTimeline + TearLine all live in here. */}
-      <div className="atelier-opaque-inner">
+          TakeTimeline + TearLine all live in here. Staggered ~140ms behind the
+          shell frame's grow-in so the body "drops in" after the drawer opens,
+          instead of the whole 520px workbench appearing at once. The header
+          (above) rides the frame's own ramp — it existed in the compact card,
+          so animating it with the frame preserves identity continuity. */}
+      <div className="atelier-opaque-inner motion-safe:animate-atelier-workbench-content-in">
         {/* Meta row — model + config. v0.4.5 §13.4: model name uses
             --brand-soft (muted slate) not saturated cobalt. */}
         <div className="mb-3 flex items-center gap-1.5 text-[11px] leading-none text-text-secondary">

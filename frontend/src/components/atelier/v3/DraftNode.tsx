@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Sparkles, X } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { TearLine } from "./ornaments";
 
 export type DraftNodeStatus = "draft" | "approved" | "running" | "completed";
@@ -62,7 +62,7 @@ export function DraftNode({
   onDetachRef,
 }: Props) {
   const borderClass = selected
-    ? "ring-2 ring-primary border-primary/50"
+    ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/50"
     : STATUS_BORDER[status];
 
   // v0.4.5 §10.10 + §11.2: running drafts wear SECONDARY bloom + generating
@@ -124,7 +124,7 @@ export function DraftNode({
         backgroundImage:
           "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 32%)",
       }}
-      className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-shadow duration-200 ${bloomClass} ${
+      className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${bloomClass} ${
         // Status rail (left-edge 2px line). Hidden when selected so the
         // primary ring owns the chromatic signal. Also hidden when running
         // (bloom + breath signals 'alive' instead of the static rail).
@@ -201,9 +201,9 @@ export function DraftNode({
           <span className="truncate font-mono text-[10px] tracking-[0.04em] text-text-secondary/85">
             {configSummary}
           </span>
-          {status === "running" ? (
-            <Loader2 size={11} className="ml-auto shrink-0 animate-spin text-atelier-brand-soft" />
-          ) : null}
+          {/* No spinner here: a running draft already carries the breath-generating
+              bloom + the "Generating takes" footer. One calm signal per state —
+              breath + spin on the same small card was redundant motion. */}
         </div>
 
         {refs && refs.length > 0 ? (

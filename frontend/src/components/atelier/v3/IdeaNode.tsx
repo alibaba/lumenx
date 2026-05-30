@@ -46,7 +46,7 @@ export function IdeaNode({ id, body, selected, x, y, onSelect, editing }: Props)
         backgroundImage:
           "linear-gradient(155deg, rgba(201,168,126,0.06) 0%, rgba(201,168,126,0.02) 60%, rgba(0,0,0,0) 100%)",
       }}
-      className={`group absolute w-[224px] overflow-hidden rounded-[10px] border bg-[#1a1611] shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(201,168,126,0.06)] transition-[box-shadow,border-color] duration-200 ${borderClass}`}
+      className={`group absolute w-[224px] overflow-hidden rounded-[10px] border bg-[#1a1611] shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(201,168,126,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
       {editing ? (
         // Editing mode: keep the chrome (size + border + bg) but skip the

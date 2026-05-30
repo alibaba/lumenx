@@ -336,6 +336,19 @@ html.dark {
   animation: atelier-breath-attending 4.5s ease-in-out infinite;
 }
 
+/* Reduced-motion guard for the raw-CSS breath loops. JSX animations are gated
+   via motion-safe/reduce utilities, but these pseudo-element loops live in plain
+   CSS and would otherwise keep pulsing for users who asked for no motion. Scoped
+   to the loops only — NOT a global transition reset, which would clobber the
+   deliberately-tuned hover/selection transitions. */
+@media (prefers-reduced-motion: reduce) {
+  .atelier-breath-generating::before,
+  .atelier-breath-generating::after,
+  .atelier-breath-attending::after {
+    animation: none;
+  }
+}
+
 /* ── §12.3 editorial button system ── */
 
 /* btn-editorial — replaces saturated cobalt-pill action buttons.
@@ -472,13 +485,10 @@ html.dark {
     drop-shadow(0 0 10px rgba(180, 255, 220, 0.14));
 }
 
-@keyframes atelier-endpoint-attending {
-  0%, 100% { opacity: 0.85; }
-  50%      { opacity: 1.0; }
-}
-.atelier-endpoint-breath {
-  animation: atelier-endpoint-attending 4.5s ease-in-out infinite;
-}
+/* (removed dead atelier-endpoint-attending keyframe + .atelier-endpoint-breath
+   class — referenced nowhere; it inflated the apparent loop count. The static
+   .atelier-endpoint-{cobalt,amber,violet} drop-shadows above are kept for the
+   planned Pattern-B edge-endpoint bloom.) */
 
 /* ── §11.8 atelier canvas — uniform dark + dotted grid only ──
    The .atelier-canvas-bg utility replaces any prior atmospheric wash. */

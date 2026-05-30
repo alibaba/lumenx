@@ -43,7 +43,7 @@ export function CommentNode({ id, body, author, selected, x, y, onSelect, editin
         backgroundImage:
           "linear-gradient(155deg, rgba(181,154,190,0.06) 0%, rgba(181,154,190,0.02) 60%, rgba(0,0,0,0) 100%)",
       }}
-      className={`group absolute w-[224px] overflow-hidden rounded-[10px] border bg-[#15141a] shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(181,154,190,0.07)] transition-[box-shadow,border-color] duration-200 ${borderClass}`}
+      className={`group absolute w-[224px] overflow-hidden rounded-[10px] border bg-[#15141a] shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(181,154,190,0.07)] transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
       {editing ? (
         <div aria-hidden="true" className="min-h-[140px]" />

@@ -223,7 +223,7 @@ export function RegionFrame({
       data-region-id={id}
       data-region-color={color}
       data-region-collapsed={collapsed ? "true" : "false"}
-      className={`absolute select-none rounded-md border border-dashed ${border} ${bodyBg} backdrop-blur-[1px] transition-[box-shadow,border-color] duration-150 ease-out ${ringClass}`}
+      className={`absolute select-none rounded-md border border-dashed ${border} ${bodyBg} backdrop-blur-[1px] transition-[box-shadow,border-color] duration-200 ease-out ${ringClass}`}
       style={{
         transform: `translate(${x}px, ${y}px)`,
         width: `${renderW}px`,

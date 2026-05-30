@@ -327,7 +327,7 @@ export function MediaNode({
           backgroundImage:
             "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 32%)",
         }}
-        className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-shadow duration-200 ${cardBorder}`}
+        className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${cardBorder}`}
       >
         {/* Header row — same vocabulary as DraftNode (sparkles + display
             font title). 'IMG' caption sits at the trailing edge so the
@@ -421,7 +421,7 @@ export function MediaNode({
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`group absolute overflow-hidden rounded-md bg-black/40 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.55)] transition-shadow duration-200 ${
+      className={`group absolute overflow-hidden rounded-md bg-black/40 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.55)] transition-[box-shadow,border-color] duration-200 ease-out ${
         // Three chrome modes:
         //   1. Actionable empty image draft → primary-tinted hairline that
         //      reads as 'this is editable, drop something here'
