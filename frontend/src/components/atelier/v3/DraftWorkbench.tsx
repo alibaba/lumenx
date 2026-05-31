@@ -36,7 +36,7 @@ import {
 } from "./Composer";
 import type { DraftNodeStatus } from "./DraftNode";
 import { NodePort } from "./NodePort";
-import { TearLine, StatusDot, STATUS_TOKEN } from "./ornaments";
+import { StatusDot, STATUS_TOKEN } from "./ornaments";
 import { TakeTimeline, type TakeTimelineEntry } from "./TakeTimeline";
 
 interface Props {
@@ -197,16 +197,17 @@ export function DraftWorkbench({
         kind="output"
         side="right"
         label="image"
+        size={7}
         className="absolute -right-[14px] top-[18px] z-20"
       />
 
       {/* §2 INPUT PORTS — amber model / green positive / red negative, stacked
           on the left edge near the top of the body. -left-[14px] straddles the
           left border so beams plug in; labels sit just inside. Decorative. */}
-      <div className="absolute -left-[14px] top-[58px] z-20 flex flex-col gap-1.5">
-        <NodePort kind="model" side="left" label="model" />
-        <NodePort kind="positive" side="left" label="positive" />
-        <NodePort kind="negative" side="left" label="negative" />
+      <div className="absolute -left-[14px] top-[58px] z-20 flex flex-col gap-2">
+        <NodePort kind="model" side="left" label="model" size={7} />
+        <NodePort kind="positive" side="left" label="positive" size={7} />
+        <NodePort kind="negative" side="left" label="negative" size={7} />
       </div>
 
       {/* Header zone — sparkle + intent (rename on dblclick) + take pill.
@@ -256,7 +257,7 @@ export function DraftWorkbench({
             role="status"
             aria-label={`${staleRefCount} reference${staleRefCount === 1 ? "" : "s"} updated since last run`}
             data-tip="Reference updated since last run"
-            className="btn-tip ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed border-atelier-ochre/45 bg-atelier-ochre/10 px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-atelier-ochre"
+            className="btn-tip ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-atelier-ochre/30 bg-atelier-ochre/10 px-1.5 py-[2px] text-[10px] font-medium text-atelier-ochre/90"
           >
             <AlertTriangle size={9} aria-hidden="true" />
             Stale ref · {staleRefCount}
@@ -264,18 +265,14 @@ export function DraftWorkbench({
         ) : null}
         {typeof candidatesTotal === "number" && candidatesTotal > 0 ? (
           <span
-            className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-[2px] text-[10px] font-medium ${
-              (candidatesReady ?? 0) >= candidatesTotal
-                ? "border-atelier-sage/35 bg-atelier-sage/8 text-atelier-sage"
-                : "border-atelier-brand-soft/35 bg-atelier-brand-soft/8 text-atelier-brand-soft"
-            }`}
+            className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-[2px] text-[10px] font-medium text-white/55"
             aria-label={`${candidatesReady ?? 0} of ${candidatesTotal} candidates ready`}
           >
-            <span className="font-display tracking-tight">
+            <span className="font-display tracking-tight text-white/75">
               {candidatesReady ?? 0}
             </span>
-            <span className="opacity-60">of</span>
-            <span className="font-display tracking-tight">{candidatesTotal}</span>
+            <span className="opacity-50">of</span>
+            <span className="font-display tracking-tight text-white/75">{candidatesTotal}</span>
           </span>
         ) : null}
         {status === "running" ? (
@@ -284,7 +281,7 @@ export function DraftWorkbench({
       </div>
 
       {/* Inner content card — the operating area. Meta + Composer +
-          TakeTimeline + TearLine all live in here. Staggered ~140ms behind the
+          TakeTimeline + status footer all live in here. Staggered ~140ms behind the
           shell frame's grow-in so the body "drops in" after the drawer opens,
           instead of the whole 520px workbench appearing at once. The header
           (above) rides the frame's own ramp — it existed in the compact card,
@@ -293,26 +290,27 @@ export function DraftWorkbench({
         // v0.5 §2: neutralize the inner card's opaque fill + border so the
         // frosted outer shell is the single visible surface (no double-frame).
         style={{ background: "transparent", borderColor: "transparent" }}
-        className="atelier-opaque-inner motion-safe:animate-atelier-workbench-content-in"
+        className="atelier-opaque-inner p-5 motion-safe:animate-atelier-workbench-content-in"
       >
-        {/* Meta as RON "setting rows" — muted lowercase label left, value in a
-            dark pill right. pl clears the left-edge input port column. The model
-            + config controls themselves live in the embedded Composer (left as
-            is); this is only the workbench's own meta strip. */}
-        <div className="mb-3 flex flex-col gap-1.5 pl-[58px]">
+        {/* Meta as RON "setting rows" — muted sentence-case label left (Inter,
+            no mono-caps), value in a clean dark pill right. pl clears the
+            left-edge input port column. The model + config controls themselves
+            live in the embedded Composer (left as is); this is only the
+            workbench's own meta strip. */}
+        <div className="mb-4 flex flex-col gap-2 pl-[58px]">
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[11px] lowercase tracking-[0.04em] text-white/50">
-              model
+            <span className="text-[11px] leading-[1.5] text-white/45">
+              Model
             </span>
-            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2 py-[3px] font-mono text-[11px] tracking-[0.04em] text-text-secondary/90">
+            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2.5 py-[3px] text-[11px] text-text-secondary/90">
               {modelLabel}
             </span>
           </div>
           <div className="flex items-center justify-between gap-3">
-            <span className="font-mono text-[11px] lowercase tracking-[0.04em] text-white/50">
-              config
+            <span className="text-[11px] leading-[1.5] text-white/45">
+              Config
             </span>
-            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2 py-[3px] font-mono text-[11px] tracking-[0.04em] text-text-secondary/90">
+            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2.5 py-[3px] text-[11px] text-text-secondary/90">
               {configSummary}
             </span>
           </div>
@@ -353,10 +351,15 @@ export function DraftWorkbench({
           </div>
         ) : null}
 
-        {/* Status footer — muted caption (hue lives in the StatusDot), same
-            STATUS_TOKEN source as the compact DraftNode → identical wording. */}
-        <div className="mt-3">
-          <TearLine tone="muted" label={caption} />
+        {/* Status footer — a quiet sentence-case caption + tiny neutral dot
+            (NOT a mono-caps colored tearline). Hue lives in the corner StatusDot;
+            same STATUS_TOKEN source as the compact DraftNode → identical wording. */}
+        <div className="mt-4 flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="h-[5px] w-[5px] shrink-0 rounded-full bg-white/25"
+          />
+          <span className="text-[11px] leading-[1.5] text-white/45">{caption}</span>
         </div>
       </div>
 

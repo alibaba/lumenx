@@ -138,3 +138,64 @@ Each edge is a layered SVG `<g>`:
 Build a surface → run dev → screenshot → compare against the reference image →
 refine until pixel-close. Screenshots are the gate (subagents can't see; I do the
 visual diff).
+
+---
+
+## 9. PREMIUM CRAFT deltas (v0.5.1) — why it currently reads "cheap", and the exact fixes
+
+The elements are present but the CRAFT is amateur. The reference looks premium
+because of restraint + glass depth + subtle light + refined type + air. Apply ALL:
+
+### 9.1 KILL mono-caps (the #1 cheap tell)
+- Node meta/footer/labels currently use `font-mono uppercase tracking-[0.2em]`
+  ("WAN 2.7 · 1280×720", "AWAITING APPROVAL", "IDEA · NO 818"). This reads
+  "terminal / dev tool", the OPPOSITE of premium.
+- FIX: node body text → **Inter, sentence case**, normal tracking. Meta line:
+  `text-[11px] text-white/45` sentence case ("Wan 2.7 · 1280×720 · 5s"). Footer
+  status → a small sentence-case label, NOT mono-caps. Reserve mono ONLY for a
+  single tiny build-label if any. Titles → Inter/Space-Grotesk 14–15px, weight
+  500, sentence case (already mostly OK).
+
+### 9.2 Frosted shell — real glass DEPTH (not a flat tint)
+- Current `.atelier-node-shell` = flat rgba(22,22,28,0.66). Reads flat.
+- FIX: add a subtle top→bottom gradient fill
+  `linear-gradient(180deg, rgba(40,42,52,0.72) 0%, rgba(18,19,26,0.66) 100%)`,
+  a brighter hairline top border (`inset 0 1px 0 rgba(255,255,255,0.10)`), and a
+  deeper softer shadow `0 30px 80px -30px rgba(0,0,0,0.85), 0 8px 24px -12px rgba(0,0,0,0.6)`.
+  Border `rgba(255,255,255,0.08)`. Radius 18. backdrop blur 24 + saturate(1.3).
+
+### 9.3 Bloom — a WHISPER, not a rainbow
+- Current alphas (0.42/0.36/0.28) at strength 1.5 = garish saturated smear.
+- FIX: cut alphas ~half (0.22/0.18/0.13/0.08), widen blur (+8px), desaturate the
+  ramp toward pastel (pink→violet→sky→mint but softer). It should read as faint
+  ambient light bleeding from behind the focal node, barely perceptible — luxe,
+  not a sticker. HERO strength 1.0 (was 1.5).
+
+### 9.4 Ports — small, clean, subtle
+- Dots 7px, halo softer (`0 0 0 2px rgba(hue,0.14), 0 0 5px rgba(hue,0.35)`).
+  Labels Inter lowercase `text-[10px] text-white/45` (NOT mono-caps). On the
+  collapsed node, show only the output dot (no label).
+
+### 9.5 Air — generous spacing
+- Node inner padding ↑ (collapsed `px-4 py-3.5`, workbench inner `p-5`).
+- Line-height ↑ on body text (1.5). Row rhythm in settings ↑ to ~34px.
+- Bigger gap between title and meta.
+
+### 9.6 Restraint — fewer competing colors
+- Default state nodes ≈ grayscale glass. Color appears ONLY as: the small port
+  dots, the green Generate, the cobalt selection ring, and the focal bloom.
+  Mute everything else (status footer → neutral grey text + a tiny status dot,
+  not a colored tearline). The take-count/badge chrome → neutral.
+
+### 9.7 Beam — gorgeous soft light
+- Glow path width 8–10, opacity 0.20, blur stdDeviation 4.5 (softer/wider).
+  Core 1.5 white 0.9. Endpoint flares brighter (r 8, the radial already exists).
+  Ambient (non-focal) edges: 1px rgba(255,255,255,0.10) (whisper), not grey.
+
+### 9.8 Composition (a) — bigger, fewer, airier
+- Collapsed draft node width 244 → **280**; idea/comment 224 → **260**. More
+  internal padding (9.5). Bigger title. This alone shifts density toward RON.
+
+### 9.9 Surfaces to add (b)
+- Preview result card (spec §2c). Top toolbar cluster (spec §4). Multiplayer
+  cursor pills (Kate blue / Mario pink, world-pinned, subtle).

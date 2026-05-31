@@ -1,6 +1,5 @@
 "use client";
 import * as React from "react";
-import { TearLine } from "./ornaments";
 
 interface Props {
   id: string;
@@ -11,20 +10,20 @@ interface Props {
   onSelect?: (id: string) => void;
   /** When true, the shell is overlaying an inline textarea editor — render
    *  only the chrome shell so the editor sits cleanly on top. Skipping the
-   *  body + tear footer prevents the duplicated text the user reported. */
+   *  body + footer prevents the duplicated text the user reported. */
   editing?: boolean;
 }
 
-// Idea node — read as a torn slip of paper from a notebook. The body sits
-// in the upper register in a near-handwritten italic display tone, then a
-// dashed perforation + "IDEA · NO" tear stamp anchors the bottom edge so
-// the wall of ideas in a brainstorm session feels tactile, not like a
-// stack of UI cards.
+// Idea node — a calm editorial slip pinned to the wall of ideas. The frosted
+// glass shell (.atelier-node-shell) supplies the depth, hairline highlight and
+// float shadow; we lay only a whisper-soft warm-ochre CATEGORY wash over it so
+// the slip reads premium and quiet, never garish. The body sits in a gentle
+// near-handwritten italic, signed off by a single muted sentence-case line.
 export function IdeaNode({ id, body, selected, x, y, onSelect, editing }: Props) {
   const borderClass = selected
     ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/45"
     : "border-atelier-ochre/15";
-  // Take the first 3 chars of the node id and display them as a stamped
+  // Take the last 3 chars of the node id and display them as a stamped
   // index — keeps the slip identifiable without piping a real index in.
   const stampNum = id.slice(-3).toUpperCase();
   return (
@@ -41,36 +40,48 @@ export function IdeaNode({ id, body, selected, x, y, onSelect, editing }: Props)
           onSelect?.(id);
         }
       }}
-      style={{
-        transform: `translate(${x}px, ${y}px)`,
-        backgroundImage:
-          "linear-gradient(155deg, rgba(201,168,126,0.06) 0%, rgba(201,168,126,0.02) 60%, rgba(0,0,0,0) 100%)",
-      }}
-      className={`group absolute w-[224px] overflow-hidden rounded-[10px] border bg-[#1a1611] shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(201,168,126,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
+      style={{ transform: `translate(${x}px, ${y}px)` }}
+      className={`group absolute w-[260px] overflow-hidden atelier-node-shell transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
+      {/* Warm-ochre category wash — a soft frosted tint laid over the glass
+          shell (never replacing its depth gradient). Whisper alpha so it reads
+          luxe, not a sticker. pointer-events-none so it never eats clicks. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(155deg, rgba(201,168,126,0.055) 0%, rgba(201,168,126,0.015) 55%, rgba(0,0,0,0) 100%)",
+        }}
+      />
       {editing ? (
-        // Editing mode: keep the chrome (size + border + bg) but skip the
-        // body + tear-stamp so the shell's inline textarea sits cleanly
-        // on top. Min height matches a body of ~5 lines so the card doesn't
-        // collapse while the user types.
-        <div aria-hidden="true" className="min-h-[140px]" />
+        // Editing mode: keep the chrome (size + border + glass) but skip the
+        // body + footer so the shell's inline textarea sits cleanly on top.
+        // Min height matches a body of ~5 lines so the card doesn't collapse
+        // while the user types.
+        <div aria-hidden="true" className="relative min-h-[150px]" />
       ) : (
-        <>
-          <div className="px-3.5 pb-2 pt-3">
+        <div className="relative">
+          <div className="px-4 pb-2.5 pt-3.5">
             <p className="line-clamp-5 whitespace-pre-wrap text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95">
               {body || (
-                <span className="not-italic font-mono text-[10.5px] uppercase tracking-[0.22em] text-atelier-ochre/70">
-                  empty · double-click
+                <span className="not-italic text-[11px] tracking-tight text-white/35">
+                  Empty · double-click to write
                 </span>
               )}
             </p>
           </div>
-          {/* Tear-stamp footer: dashed perforation flanking a "IDEA · NO XXX"
-              centered cap. Reads as the bottom of a torn-off receipt slip. */}
-          <div className="px-3 pb-2.5">
-            <TearLine tone="amber" label={`Idea · No ${stampNum}`} />
+          {/* Quiet signature line — a tiny soft-ochre category dot + a
+              sentence-case Inter label. Replaces the old mono-caps colored
+              tear stamp that read "cheap". */}
+          <div className="flex items-center gap-1.5 px-4 pb-3.5 pt-0.5">
+            <span
+              aria-hidden="true"
+              className="h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-ochre/45"
+            />
+            <span className="text-[10px] text-white/45">Idea · No {stampNum}</span>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

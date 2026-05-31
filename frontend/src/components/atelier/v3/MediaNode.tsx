@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Check, ChevronDown, ImageIcon, Loader2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
+import { AlertTriangle, Bookmark, Check, ChevronDown, Copy, Download, ImageIcon, Loader2, Maximize2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
-import { TearLine } from "./ornaments";
 import { PortDot } from "./NodePort";
 import { DiagnoseModal } from "@/components/shared/PendingTaskAffordance";
 
@@ -65,12 +64,12 @@ function ringClass(
 
 function TypeChip({ kind }: { kind: MediaKind }) {
   const Icon = kind === "video" ? Video : kind === "audio" ? Volume2 : ImageIcon;
-  // Stamped feel: dashed inset border on a darkened pill, matches the
-  // atelier "stamped from a rubber" badge vocabulary used elsewhere.
-  const label = kind === "image" ? "img" : kind === "video" ? "vid" : "aud";
+  // Quiet frosted caption — sentence-case Inter on a soft glass pill, no
+  // mono-caps (§9.1). Reads as a gentle hint, not a terminal stamp.
+  const label = kind === "image" ? "image" : kind === "video" ? "video" : "audio";
   return (
-    <span className="pointer-events-none absolute left-1.5 top-1.5 hidden items-center gap-1 rounded-[3px] border border-dashed border-white/22 bg-black/70 px-1.5 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white/90 backdrop-blur-sm group-hover:inline-flex">
-      <Icon size={9} aria-hidden="true" className="text-atelier-brand-soft" />
+    <span className="pointer-events-none absolute left-2 top-2 hidden items-center gap-1 rounded-md border border-white/8 bg-black/45 px-1.5 py-1 text-[10px] text-white/55 backdrop-blur-md group-hover:inline-flex">
+      <Icon size={10} aria-hidden="true" className="text-white/40" />
       {label}
     </span>
   );
@@ -150,7 +149,7 @@ function RetryButton({
           aria-label="Retry with model"
           className="absolute right-0 top-full z-30 mt-1 w-[180px] origin-top overflow-hidden rounded-md border border-white/8 bg-[#141416]/96 p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
         >
-          <div className="border-b border-dashed border-white/8 px-2 py-1 font-mono text-[8.5px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
+          <div className="border-b border-white/8 px-2 py-1.5 text-[11px] text-white/45">
             Retry with
           </div>
           <div className="max-h-[180px] overflow-y-auto p-1">
@@ -287,6 +286,139 @@ export function MediaNode({
     }
   };
 
+  // ── Preview result card (spec §2c) ─────────────────────────────────
+  // Completed visual media (image / video) renders as a tall "Final
+  // result" card: the media fills a clipped glass shell, an iridescent
+  // bloom blooms BEHIND it (the outer is overflow-visible so the glow
+  // leaks past the card edges), a bottom gradient scrim carries the
+  // title + a description line, and a quiet action row sits at the foot.
+  if (status === "completed" && src && (kind === "image" || kind === "video")) {
+    const previewAspect =
+      kind === "video"
+        ? 16 / 9
+        : imageAspect && imageAspect > 0
+          ? Math.max(0.6, Math.min(2.4, imageAspect))
+          : 4 / 3;
+    const resultDescription =
+      filename ||
+      [kind === "video" ? "Video" : "Image", duration].filter(Boolean).join(" · ");
+    const previewRing = selected || selectedAsTake ? "ring-2 ring-atelier-brand-400" : "";
+    const resultActions = [
+      { key: "expand", Icon: Maximize2, label: "Expand" },
+      { key: "bookmark", Icon: Bookmark, label: "Bookmark" },
+      { key: "copy", Icon: Copy, label: "Copy" },
+      { key: "refresh", Icon: RotateCw, label: "Refresh" },
+    ];
+    return (
+      <div
+        style={{ transform: `translate(${x}px, ${y}px)` }}
+        className="atelier-bloom atelier-bloom-secondary absolute w-[260px] overflow-visible rounded-[20px]"
+      >
+        <div
+          role="button"
+          tabIndex={0}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            onSelect?.(id);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onSelect?.(id);
+            }
+          }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          className={`group atelier-node-shell relative overflow-hidden transition-[box-shadow,border-color] duration-200 ease-out ${previewRing}`}
+        >
+          {/* Media fills the card */}
+          <div className="relative w-full overflow-hidden" style={{ aspectRatio: `${previewAspect}` }}>
+            {kind === "image" ? (
+              <img
+                src={src}
+                alt={filename ?? ""}
+                loading="lazy"
+                decoding="async"
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    setImageAspect(img.naturalWidth / img.naturalHeight);
+                  }
+                }}
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+            ) : (
+              <>
+                <video
+                  ref={videoRef}
+                  src={src}
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  aria-label={filename ?? "video preview"}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-1/2 top-1/2 grid h-9 w-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-black/45 text-white/95 backdrop-blur-sm transition-opacity duration-200 group-hover:opacity-0"
+                >
+                  <Play size={16} />
+                </span>
+              </>
+            )}
+            {/* Bottom gradient scrim — title + description sit on the media */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3.5 pb-3 pt-12">
+              <span className="text-[13px] font-medium leading-tight text-white">Final result</span>
+              {resultDescription ? (
+                <span className="truncate text-[11px] leading-snug text-white/85">{resultDescription}</span>
+              ) : null}
+            </div>
+            {selectedAsTake ? (
+              <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-atelier-brand-400 px-2 py-[3px] text-[10px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.6)]">
+                <Check size={9} aria-hidden="true" /> selected
+              </span>
+            ) : null}
+          </div>
+          {/* Action row — small dark icon pills + a download (visual chrome) */}
+          <div
+            className="flex items-center justify-between gap-1 px-3 py-2.5"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-0.5">
+              {resultActions.map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  aria-label={a.label}
+                  data-tip={a.label}
+                  onClick={(e) => e.stopPropagation()}
+                  className="btn-tip grid h-7 w-7 place-items-center rounded-md text-white/55 transition-colors hover:bg-white/[0.07] hover:text-white/90"
+                >
+                  <a.Icon size={13} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              aria-label="Download"
+              data-tip="Download"
+              onClick={(e) => e.stopPropagation()}
+              className="btn-tip inline-flex h-7 items-center gap-1.5 rounded-md bg-white/[0.06] px-2.5 text-[11px] text-white/80 transition-colors hover:bg-white/[0.11] hover:text-white"
+            >
+              <Download size={13} aria-hidden="true" />
+              Download
+            </button>
+          </div>
+          {/* Output port — completed media exposes a blue port on the right
+              edge so beams plug in. Card is overflow-hidden, so the dot sits
+              just inside at right-1. */}
+          <PortDot kind="output" className="absolute right-1 top-1/2 -translate-y-1/2 z-10" />
+        </div>
+      </div>
+    );
+  }
+
   // ── Image card mode ────────────────────────────────────────────────
   // When an image node has uploaded media, render the same card chrome
   // as DraftNode (244 wide, header row + thumb + tear footer) so the
@@ -326,26 +458,26 @@ export function MediaNode({
         style={{
           transform: `translate(${x}px, ${y}px)`,
         }}
-        className={`group atelier-node-shell absolute w-[244px] overflow-hidden transition-[box-shadow,border-color] duration-200 ease-out ${cardBorder}`}
+        className={`group atelier-node-shell absolute w-[260px] overflow-hidden transition-[box-shadow,border-color] duration-200 ease-out ${cardBorder}`}
       >
         {/* Header row — same vocabulary as DraftNode (sparkles + display
             font title). 'IMG' caption sits at the trailing edge so the
             card is identifiable at a glance even when the thumbnail is
             similar across siblings. */}
-        <div className="flex items-center gap-1.5 px-3.5 pb-1.5 pt-3 text-foreground">
-          <ImageIcon size={11} className="shrink-0 text-atelier-brand-soft" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate font-display text-[13px] font-medium tracking-[-0.005em]">
+        <div className="flex items-center gap-2 px-4 pb-2 pt-3.5 text-foreground">
+          <ImageIcon size={12} className="shrink-0 text-white/40" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate font-display text-[14px] font-medium tracking-[-0.005em]">
             {cardName}
           </span>
-          <span className="shrink-0 rounded-[3px] border border-dashed border-white/22 px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-text-muted/85">
-            Img
+          <span className="shrink-0 rounded-md border border-white/8 px-1.5 py-[2px] text-[10px] text-white/45">
+            image
           </span>
         </div>
         {/* Thumbnail body — adapts to the source's natural aspect (read
             once on load), clamped to [0.6, 2.4] so portraits and panos
             stay readable on a 244-wide card. Fallback 4:3 while loading
             keeps the card height stable. */}
-        <div className="px-3 pb-1.5">
+        <div className="px-4 pb-2">
           <div
             className="relative overflow-hidden rounded-md border border-white/8 bg-black/40"
             style={{ aspectRatio: `${naturalAspect}` }}
@@ -368,7 +500,7 @@ export function MediaNode({
                 <div className="flex flex-col items-center gap-1">
                   <Loader2 className="animate-spin text-atelier-processing" size={18} />
                   {typeof progress === "number" ? (
-                    <span className="font-mono text-[10px] font-semibold text-foreground">{Math.round(progress)}%</span>
+                    <span className="text-[10px] font-semibold text-white/90">{Math.round(progress)}%</span>
                   ) : null}
                 </div>
               </div>
@@ -376,7 +508,7 @@ export function MediaNode({
             {showFailed ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-atelier-failed/[0.18] backdrop-blur-[1px]">
                 <AlertTriangle size={16} className="text-atelier-failed" aria-hidden="true" />
-                <span className="font-mono text-[9px] uppercase tracking-wider text-atelier-failed">
+                <span className="text-[10px] text-atelier-failed">
                   {errorMessage ? "Failed" : "Generation failed"}
                 </span>
                 <RetryButton
@@ -389,16 +521,18 @@ export function MediaNode({
               </div>
             ) : null}
             {selectedAsTake ? (
-              <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-white/35 bg-atelier-brand-400 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
+              <span className="pointer-events-none absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-atelier-brand-400 px-2 py-[3px] text-[10px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.6)]">
                 <Check size={9} aria-hidden="true" /> selected
               </span>
             ) : null}
           </div>
         </div>
-        {/* Tear-stamp footer — receipt-style index, matches IdeaNode and
-            DraftNode footers. */}
-        <div className="px-3 pb-2.5">
-          <TearLine label={`Image · No ${stampNum}`} />
+        {/* Quiet footer — sentence-case label + a tiny neutral dot (§9.6),
+            no mono-caps tearline. The id stamp trails as a muted reference. */}
+        <div className="flex items-center gap-2 px-4 pb-3 pt-0.5">
+          <span aria-hidden="true" className="h-[5px] w-[5px] shrink-0 rounded-full bg-white/30" />
+          <span className="text-[11px] text-white/45">Image</span>
+          <span className="ml-auto text-[11px] text-white/30">{stampNum}</span>
         </div>
         {/* Output port — completed image cards expose a blue port on the
             right edge so beams plug in. Card is overflow-hidden, so the dot
@@ -486,12 +620,12 @@ export function MediaNode({
              is empty but no actions wired (read-only contexts).
           Audio + video have their own empty-state branches. */}
       {isEmptyImageActionable ? (
-        <div className="flex h-full w-full flex-col gap-2.5 px-3.5 py-3.5">
-          {/* Heading row: small mono caps + ImageIcon, anchored top */}
-          <div className="flex items-center gap-1.5">
-            <ImageIcon size={11} aria-hidden="true" className={selected ? "text-atelier-brand-400" : "text-atelier-brand-soft"} />
-            <span className={`font-mono text-[9px] uppercase tracking-[0.22em] ${
-              selected ? "text-atelier-brand-400" : "text-atelier-brand-soft"
+        <div className="flex h-full w-full flex-col gap-3 px-4 py-3.5">
+          {/* Heading row: sentence-case Inter label + ImageIcon, anchored top */}
+          <div className="flex items-center gap-2">
+            <ImageIcon size={12} aria-hidden="true" className={selected ? "text-atelier-brand-400" : "text-white/45"} />
+            <span className={`text-[11px] ${
+              selected ? "text-atelier-brand-400" : "text-white/55"
             }`}>
               Image draft
             </span>
@@ -527,19 +661,19 @@ export function MediaNode({
         </div>
       ) : !src && kind === "image" && status !== "processing" && status !== "pending" && status !== "failed" ? (
         <div className="grid h-full w-full place-items-center text-center">
-          <div className="space-y-1 px-3 text-text-muted">
-            <ImageIcon className="mx-auto" size={20} />
-            <div className="font-mono text-[10px] uppercase tracking-wider">image</div>
-            <div className="text-[10px] leading-tight">{filename || "no media yet"}</div>
+          <div className="space-y-1.5 px-3 text-white/45">
+            <ImageIcon className="mx-auto text-white/40" size={20} />
+            <div className="text-[11px]">Image</div>
+            <div className="text-[10px] leading-snug text-white/35">{filename || "No media yet"}</div>
           </div>
         </div>
       ) : null}
       {!src && kind === "video" && status !== "processing" && status !== "pending" && status !== "failed" ? (
         <div className="grid h-full w-full place-items-center text-center">
-          <div className="space-y-1 px-3 text-text-muted">
-            <Video className="mx-auto" size={20} />
-            <div className="font-mono text-[10px] uppercase tracking-wider">video</div>
-            <div className="text-[10px] leading-tight">{filename || "no take yet"}</div>
+          <div className="space-y-1.5 px-3 text-white/45">
+            <Video className="mx-auto text-white/40" size={20} />
+            <div className="text-[11px]">Video</div>
+            <div className="text-[10px] leading-snug text-white/35">{filename || "No take yet"}</div>
           </div>
         </div>
       ) : null}
@@ -550,10 +684,10 @@ export function MediaNode({
             <div className="flex flex-col items-center gap-1">
               <Loader2 className="animate-spin text-atelier-processing" size={20} />
               {typeof progress === "number" ? (
-                <span className="font-mono text-[11px] font-semibold text-foreground">{Math.round(progress)}%</span>
+                <span className="text-[11px] font-semibold text-white/90">{Math.round(progress)}%</span>
               ) : null}
               {typeof etaSeconds === "number" && etaSeconds > 0 ? (
-                <span className="font-mono text-[9px] text-text-secondary">~{etaSeconds}s left</span>
+                <span className="text-[10px] text-white/55">~{etaSeconds}s left</span>
               ) : null}
               {showStuckActions ? (
                 <div
@@ -574,7 +708,7 @@ export function MediaNode({
                           setCanceling(false);
                         }
                       }}
-                      className="rounded-[3px] border border-atelier-failed/40 bg-atelier-failed/15 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-foreground transition-colors hover:bg-atelier-failed/25 disabled:cursor-wait disabled:opacity-60"
+                      className="rounded-md border border-atelier-failed/40 bg-atelier-failed/15 px-2 py-[2px] text-[10px] font-medium text-foreground transition-colors hover:bg-atelier-failed/25 disabled:cursor-wait disabled:opacity-60"
                     >
                       {canceling ? "…" : "Cancel"}
                     </button>
@@ -585,7 +719,7 @@ export function MediaNode({
                       e.stopPropagation();
                       setDiagnoseOpen(true);
                     }}
-                    className="rounded-[3px] border border-white/30 bg-black/40 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.18em] text-foreground/95 transition-colors hover:border-atelier-brand-400/60"
+                    className="rounded-md border border-white/20 bg-black/40 px-2 py-[2px] text-[10px] font-medium text-foreground/90 transition-colors hover:border-atelier-brand-400/60"
                   >
                     Diagnose
                   </button>
@@ -614,7 +748,7 @@ export function MediaNode({
       {showFailed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-atelier-failed/[0.18] backdrop-blur-[1px]">
           <AlertTriangle size={18} className="text-atelier-failed" aria-hidden="true" />
-          <span className="font-mono text-[9px] uppercase tracking-wider text-atelier-failed">
+          <span className="text-[10px] text-atelier-failed">
             {errorMessage ? "Failed" : "Generation failed"}
           </span>
           <RetryButton
@@ -633,19 +767,19 @@ export function MediaNode({
       {!isEmptyImageActionable ? <TypeChip kind={kind} /> : null}
 
       {filename && !isEmptyImageActionable ? (
-        <span className="pointer-events-none absolute right-1.5 bottom-1.5 hidden max-w-[70%] truncate rounded-[3px] bg-black/70 px-1.5 py-[3px] font-mono text-[9px] tracking-tight text-white/80 backdrop-blur-sm group-hover:inline-block">
+        <span className="pointer-events-none absolute right-2 bottom-2 hidden max-w-[70%] truncate rounded-md bg-black/55 px-1.5 py-1 text-[10px] text-white/70 backdrop-blur-md group-hover:inline-block">
           {filename}
         </span>
       ) : null}
 
       {selectedAsTake ? (
-        // Selected take = "stamped approved". Dashed inset reinforces the
-        // rubber-stamp identity vs. a flat label pill.
-        <span className="pointer-events-none absolute left-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full border border-dashed border-white/35 bg-atelier-brand-400 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-white shadow-[0_0_0_2px_rgba(0,0,0,0.45)]">
+        // Selected take = the chosen output. A clean cobalt pill (selection
+        // is the one place cobalt is allowed), sentence-case, no mono-caps.
+        <span className="pointer-events-none absolute left-2 bottom-2 inline-flex items-center gap-1 rounded-full bg-atelier-brand-400 px-2 py-[3px] text-[10px] font-medium text-white shadow-[0_2px_8px_-2px_rgba(0,0,0,0.6)]">
           <Check size={9} aria-hidden="true" /> selected
         </span>
       ) : duration ? (
-        <span className="pointer-events-none absolute left-1.5 bottom-1.5 hidden max-w-[70%] truncate rounded-[3px] bg-black/70 px-1.5 py-[3px] font-mono text-[9px] tracking-tight text-white/80 backdrop-blur-sm group-hover:inline-block">
+        <span className="pointer-events-none absolute left-2 bottom-2 hidden max-w-[70%] truncate rounded-md bg-black/55 px-1.5 py-1 text-[10px] text-white/70 backdrop-blur-md group-hover:inline-block">
           {duration}
         </span>
       ) : null}

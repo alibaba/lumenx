@@ -153,7 +153,7 @@ export function TearLine({
       />
       {label ? (
         <span
-          className={`shrink-0 font-mono text-[8.5px] font-medium uppercase tracking-[0.26em] ${TONE_TEXT[tone]}`}
+          className={`shrink-0 text-[10px] font-medium tracking-[0.08em] ${TONE_TEXT[tone]}`}
         >
           {label}
         </span>
@@ -206,13 +206,13 @@ export function StampBadge({
       >
         <span
           aria-hidden="true"
-          className={`absolute inset-0 border border-dashed ${border}`}
+          className={`absolute inset-0 border ${border}`}
           style={{
             clipPath: "polygon(50% 6%, 96% 92%, 4% 92%)",
           }}
         />
         <span
-          className={`relative pt-3 text-center font-mono text-[8px] font-medium uppercase leading-[1.15] tracking-[0.18em] ${text}`}
+          className={`relative pt-3 text-center text-[9px] font-medium leading-[1.15] tracking-[0.06em] ${text}`}
         >
           <span className="block">{label}</span>
           {number != null ? (
@@ -227,7 +227,7 @@ export function StampBadge({
   if (shape === "round") {
     return (
       <span
-        className={`inline-grid h-[42px] w-[42px] place-items-center rounded-full border border-dashed ${border} text-center font-mono text-[7.5px] font-medium uppercase leading-[1.05] tracking-[0.18em] ${text} ${className}`}
+        className={`inline-grid h-[42px] w-[42px] place-items-center rounded-full border ${border} text-center text-[8.5px] font-medium leading-[1.1] tracking-[0.06em] ${text} ${className}`}
       >
         <span>
           <span className="block">{label}</span>
@@ -242,7 +242,7 @@ export function StampBadge({
   }
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[3px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${border} ${text} ${className}`}
+      className={`inline-flex items-center gap-1 rounded-[4px] border px-2 py-[3px] text-[9px] font-medium tracking-[0.06em] ${border} ${text} ${className}`}
     >
       <span>{label}</span>
       {number != null ? (
@@ -280,7 +280,7 @@ export function EdgeMark({
   return (
     <span
       aria-hidden="true"
-      className={`pointer-events-none absolute flex items-center justify-center font-mono text-[8.5px] font-medium uppercase tracking-[0.32em] ${TONE_TEXT[tone]} ${positionClass} ${className}`}
+      className={`pointer-events-none absolute flex items-center justify-center text-[9px] font-medium tracking-[0.1em] ${TONE_TEXT[tone]} ${positionClass} ${className}`}
       style={{
         ...writingMode,
         width: 14,

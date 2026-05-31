@@ -35,7 +35,7 @@ interface Props {
 }
 
 /** The bare dot (no label) — for placing exactly on an edge. */
-export function PortDot({ kind, size = 8, className = "" }: { kind: PortKind; size?: number; className?: string }) {
+export function PortDot({ kind, size = 7, className = "" }: { kind: PortKind; size?: number; className?: string }) {
   const rgb = PORT_RGB[kind];
   return (
     <span
@@ -46,7 +46,8 @@ export function PortDot({ kind, size = 8, className = "" }: { kind: PortKind; si
         width: size,
         height: size,
         background: PORT_VAR[kind],
-        boxShadow: `0 0 0 3px rgba(${rgb},0.16), 0 0 7px 1px rgba(${rgb},0.5)`,
+        // v0.5.1 premium: softer, more restrained halo (was a loud glow).
+        boxShadow: `0 0 0 2px rgba(${rgb},0.13), 0 0 5px rgba(${rgb},0.35)`,
       }}
     />
   );
@@ -60,7 +61,7 @@ export function NodePort({ kind, side, label, size = 8, className = "" }: Props)
     >
       <PortDot kind={kind} size={size} />
       {label ? (
-        <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-white/55">{label}</span>
+        <span className="text-[10px] tracking-[0.01em] text-white/45">{label}</span>
       ) : null}
     </span>
   );

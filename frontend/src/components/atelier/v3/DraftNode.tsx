@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, X } from "lucide-react";
-import { TearLine, StatusDot, STATUS_TOKEN } from "./ornaments";
+import { StatusDot, STATUS_TOKEN } from "./ornaments";
 import { PortDot } from "./NodePort";
 
 export type DraftNodeStatus = "draft" | "approved" | "running" | "completed";
@@ -104,15 +104,15 @@ export function DraftNode({
       style={{ transform: `translate(${x}px, ${y}px)` }}
       // v0.5 Flova: frosted glass node body (target spec §2) — the dotted grid
       // shows through faintly; replaces the flat #141416 card.
-      className={`group absolute w-[244px] atelier-node-shell transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
+      className={`group absolute w-[280px] atelier-node-shell transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
       {/* output port — blue dot on the right edge so connection beams plug in */}
       <PortDot kind="output" className="absolute right-[-4px] top-1/2 -translate-y-1/2 z-10" />
-      <div className="px-3.5 pb-2.5 pt-3">
-        {/* Title row — Sparkles 11px primary, intent in display font tighter
-            tracking, ready badge mono caps */}
+      <div className="px-4 pb-3 pt-3.5">
+        {/* Title row — muted Sparkles glyph + sentence-case intent title.
+            The take counter sits right-aligned as a quiet neutral chip. */}
         <div className="flex items-center gap-1.5 text-foreground">
-          <Sparkles size={11} className="shrink-0 text-atelier-brand-soft" aria-hidden="true" />
+          <Sparkles size={11} className="shrink-0 text-white/40" aria-hidden="true" />
           {editing ? (
             <input
               ref={inputRef}
@@ -130,12 +130,12 @@ export function DraftNode({
                   setDraft(intent);
                 }
               }}
-              className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-display text-[13px] font-medium tracking-[-0.005em] text-foreground outline-none"
+              className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-display text-[14px] font-medium tracking-[-0.005em] text-foreground outline-none"
               aria-label="Rename draft"
             />
           ) : (
             <span
-              className={`truncate font-display text-[13px] font-medium tracking-[-0.005em] ${onIntentCommit ? "cursor-text" : ""}`}
+              className={`truncate font-display text-[14px] font-medium tracking-[-0.005em] ${onIntentCommit ? "cursor-text" : ""}`}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 startEditing();
@@ -146,37 +146,27 @@ export function DraftNode({
             </span>
           )}
           {typeof candidatesTotal === "number" && candidatesTotal > 0 ? (
-            // Take counter — stamped feel via dashed inset border, e.g.
-            // "TAKE · 02/04". Tone shifts to emerald when fully ready.
+            // Take counter — muted neutral chip (no saturated border/hue), e.g.
+            // "Take 2/4". Reads as quiet metadata, not a status signal.
             <span
-              className={`ml-auto inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[2px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${
-                (candidatesReady ?? 0) >= candidatesTotal
-                  ? "border-atelier-sage/45 text-atelier-sage"
-                  : "border-atelier-brand-soft/45 text-atelier-brand-soft"
-              }`}
+              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-[4px] border border-white/10 bg-white/[0.03] px-1.5 py-[2px] text-[10px] leading-none text-white/45"
               aria-label={`${candidatesReady ?? 0} of ${candidatesTotal} candidates ready`}
             >
               <span>Take</span>
-              <span className="font-display text-[10px] tracking-tight">
+              <span className="tabular-nums text-white/60">
                 {candidatesReady ?? 0}/{candidatesTotal}
               </span>
             </span>
           ) : null}
         </div>
 
-        {/* Meta row — model name in mono caps (signature detail), thin
-            divider dot, config summary in muted secondary, optional spinner */}
-        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] leading-none text-text-secondary">
-          <span className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-atelier-brand-soft">
-            {modelLabel}
-          </span>
-          <span aria-hidden="true" className="text-text-muted/60">·</span>
-          <span className="truncate font-mono text-[10px] tracking-[0.04em] text-text-secondary/85">
-            {configSummary}
-          </span>
-          {/* No spinner here: a running draft already carries the breath-generating
-              bloom + the "Generating takes" footer. One calm signal per state —
-              breath + spin on the same small card was redundant motion. */}
+        {/* Meta row — sentence-case Inter (model · config), grayscale-calm.
+            No mono-caps, no spinner: a running draft already carries the
+            bloom + the footer caption. One calm signal per state. */}
+        <div className="mt-2 flex items-center gap-1.5 text-[11px] leading-none text-white/45">
+          <span className="font-medium text-white/55">{modelLabel}</span>
+          <span aria-hidden="true" className="text-white/25">·</span>
+          <span className="truncate text-white/45">{configSummary}</span>
         </div>
 
         {refs && refs.length > 0 ? (
@@ -211,11 +201,11 @@ export function DraftNode({
               </div>
             ))}
             {overflowCount > 0 ? (
-              <span className="grid h-[22px] min-w-[22px] place-items-center rounded-[3px] border border-white/8 bg-white/[0.03] px-1 font-mono text-[9px] tracking-tight text-text-muted">
+              <span className="grid h-[22px] min-w-[22px] place-items-center rounded-[4px] border border-white/8 bg-white/[0.03] px-1 text-[10px] tabular-nums text-white/45">
                 +{overflowCount}
               </span>
             ) : (
-              <span className="ml-1 font-mono text-[9px] uppercase tracking-[0.16em] text-text-muted">
+              <span className="ml-1 text-[10px] text-white/45">
                 {refs.length} ref
               </span>
             )}
@@ -223,11 +213,15 @@ export function DraftNode({
         ) : null}
       </div>
 
-      {/* Receipt footer — dashed perforation + muted status caption. The hue
-          lives in the StatusDot (top-right), never in the caption text, so the
-          footer reads the same in every status. */}
-      <div className="px-3.5 pb-2.5">
-        <TearLine tone="muted" label={STATUS_TOKEN[status].caption} />
+      {/* Footer — a quiet sentence-case status caption with a tiny neutral
+          dot, under a hairline divider. The lifecycle hue lives only in the
+          top-right StatusDot, so the footer stays grayscale-calm (spec §9.6). */}
+      <div className="mx-4 h-px bg-white/[0.07]" />
+      <div className="flex items-center gap-1.5 px-4 pb-3.5 pt-2.5">
+        <span aria-hidden="true" className="h-[4px] w-[4px] rounded-full bg-white/30" />
+        <span className="text-[11px] leading-none text-white/40">
+          {STATUS_TOKEN[status].caption}
+        </span>
       </div>
 
       {/* Status dot — one 6px token-colored dot for EVERY status, identical to

@@ -14,9 +14,10 @@ interface Props {
   editing?: boolean;
 }
 
-// CommentNode — annotation pinned to the canvas. Reads as a tipped-in
-// review slip: italic display body sits above a dashed perforation that
-// optionally carries the author's mono-caps signature.
+// CommentNode — a calm editorial review slip pinned to the canvas. Shares the
+// frosted glass shell (.atelier-node-shell) with the Idea slip; here the soft
+// CATEGORY wash is mauve instead of ochre. The italic body sits above a single
+// muted sentence-case signature line carrying the author + index.
 export function CommentNode({ id, body, author, selected, x, y, onSelect, editing }: Props) {
   const borderClass = selected
     ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/45"
@@ -38,39 +39,45 @@ export function CommentNode({ id, body, author, selected, x, y, onSelect, editin
           onSelect?.(id);
         }
       }}
-      style={{
-        transform: `translate(${x}px, ${y}px)`,
-        backgroundImage:
-          "linear-gradient(155deg, rgba(181,154,190,0.06) 0%, rgba(181,154,190,0.02) 60%, rgba(0,0,0,0) 100%)",
-      }}
-      className={`group absolute w-[224px] overflow-hidden rounded-[10px] border bg-[#15141a] shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(181,154,190,0.07)] transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
+      style={{ transform: `translate(${x}px, ${y}px)` }}
+      className={`group absolute w-[260px] overflow-hidden atelier-node-shell transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
+      {/* Mauve category wash — a soft frosted tint over the glass shell (never
+          replacing its depth gradient). Whisper alpha, pointer-events-none. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "linear-gradient(155deg, rgba(181,154,190,0.055) 0%, rgba(181,154,190,0.015) 55%, rgba(0,0,0,0) 100%)",
+        }}
+      />
       {editing ? (
-        <div aria-hidden="true" className="min-h-[140px]" />
+        <div aria-hidden="true" className="relative min-h-[150px]" />
       ) : (
-        <>
-          <div className="px-3.5 pb-2 pt-3">
+        <div className="relative">
+          <div className="px-4 pb-2.5 pt-3.5">
             <p className="line-clamp-5 whitespace-pre-wrap text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95">
               {body || (
-                <span className="not-italic font-mono text-[10.5px] uppercase tracking-[0.22em] text-atelier-mauve/70">
-                  empty · double-click
+                <span className="not-italic text-[11px] tracking-tight text-white/35">
+                  Empty · double-click to write
                 </span>
               )}
             </p>
           </div>
-          {/* Tear-stamp footer: dashed perforation flanking the author + index.
-              When no author, just shows "NOTE · NO XXX". */}
-          <div
-            className="flex items-center gap-2 px-3 pb-2.5"
-            aria-hidden="true"
-          >
-            <div className="flex-1 border-t border-dashed border-atelier-mauve/35" />
-            <span className="shrink-0 font-mono text-[8.5px] font-medium uppercase tracking-[0.26em] text-atelier-mauve/90">
+          {/* Quiet signature line — a tiny soft-mauve category dot + a
+              sentence-case Inter label (author + index, or "Note"). Replaces
+              the old mono-caps dashed signature. */}
+          <div className="flex items-center gap-1.5 px-4 pb-3.5 pt-0.5" aria-hidden="true">
+            <span
+              aria-hidden="true"
+              className="h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-mauve/45"
+            />
+            <span className="text-[10px] text-white/45">
               {author ? `${author} · No ${stampNum}` : `Note · No ${stampNum}`}
             </span>
-            <div className="flex-1 border-t border-dashed border-atelier-mauve/35" />
           </div>
-        </>
+        </div>
       )}
     </div>
   );

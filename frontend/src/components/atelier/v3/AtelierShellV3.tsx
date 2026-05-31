@@ -147,8 +147,8 @@ function renderEdges(
             <circle cx={x2} cy={y2} r={isSelected ? 9 : 6.5} fill="url(#beam-flare)" />
           </>
         ) : (
-          // ambient — thin grey hairline
-          <path d={d} fill="none" stroke="rgba(170,176,190,0.30)" strokeWidth={1.25} strokeLinecap="round" style={{ transition: "stroke 180ms ease-out" }} />
+          // ambient — barely-there white whisper (Flova calm)
+          <path d={d} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth={1} strokeLinecap="round" style={{ transition: "stroke 180ms ease-out" }} />
         )}
       </g>,
     );
@@ -3933,8 +3933,8 @@ export function AtelierShellV3() {
                   {/* v0.5 beam defs (target spec §3): soft blur for the glow
                       halo + a white radial flare for endpoint bursts. */}
                   <defs>
-                    <filter id="beam-glow" x="-50%" y="-50%" width="200%" height="200%">
-                      <feGaussianBlur stdDeviation="3.5" />
+                    <filter id="beam-glow" x="-80%" y="-80%" width="260%" height="260%">
+                      <feGaussianBlur stdDeviation="4.5" />
                     </filter>
                     <radialGradient id="beam-flare">
                       <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
