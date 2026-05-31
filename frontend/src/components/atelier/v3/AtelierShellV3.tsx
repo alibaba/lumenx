@@ -29,6 +29,7 @@ import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
 import { HistoryPanel } from "@/components/atelier/v3/HistoryPanel";
 import { RightControlStack } from "@/components/atelier/v3/RightControlStack";
+import { MultiplayerCursors } from "@/components/atelier/v3/MultiplayerCursors";
 import {
   RegionFrame,
   REGION_COLLAPSED_WIDTH,
@@ -3869,6 +3870,18 @@ export function AtelierShellV3() {
           className="absolute left-0 top-0 origin-top-left"
           style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoomFactor})` }}
         >
+          {/* v0.5 Flova: collaborative-presence cursor pills (world-pinned,
+              decorative — spec §4). Anchored near real nodes when present. */}
+          {project && project.nodes.length > 0 ? (
+            <MultiplayerCursors
+              items={[
+                { name: "Kate", color: "#5b9dff", x: (project.nodes[1] ?? project.nodes[0]).x + 196, y: (project.nodes[1] ?? project.nodes[0]).y - 18 },
+                ...(project.nodes.length > 3
+                  ? [{ name: "Mario", color: "#f06fb0", x: project.nodes[3].x - 30, y: project.nodes[3].y + 150 }]
+                  : []),
+              ]}
+            />
+          ) : null}
           {/* edges layer (in world coords). Labels are collected during the
               same pass so the geometry math doesn't have to be duplicated;
               we render the path SVG and the chip overlay separately.
