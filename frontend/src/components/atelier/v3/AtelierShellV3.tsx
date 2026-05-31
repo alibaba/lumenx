@@ -116,32 +116,39 @@ function renderEdges(
     const y2 = link.to.y + (link.to.height || 110) / 2;
     const dx = Math.max(40, Math.abs(x2 - x1) * 0.3);
     const related = isRelated(link.from.id, link.to.id);
-    const opacity = dimUnrelated && !related ? 0.12 : 1;
     const eid = refEdgeId(link.from.id, link.to.id, link.url);
     const isSelected = selectedRefEdgeId === eid;
-    const stroke = isSelected ? "rgba(59,107,255,0.85)" : "rgba(156,163,175,0.35)";
-    const strokeWidth = isSelected ? 2.25 : (related && hoveredNodeId ? 2 : 1.5);
     const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+    // v0.5 (target spec §3): focal/active relations render as a white glowing
+    // light-beam (glow + bright core + endpoint flares); ambient relations are
+    // a quiet thin grey hairline. Beam state = selected OR (related on hover).
+    const beam = isSelected || (related && !!hoveredNodeId);
+    const dimmed = dimUnrelated && !related && !isSelected;
     edges.push(
       <g
         key={`ref-${eid}`}
-        style={{ pointerEvents: "stroke", cursor: "pointer", opacity, transition: "opacity 180ms ease-out" }}
+        style={{ pointerEvents: "stroke", cursor: "pointer", opacity: dimmed ? 0.1 : 1, transition: "opacity 180ms ease-out" }}
         onPointerDown={(event) => {
           event.stopPropagation();
           onClickRefEdge(eid);
         }}
       >
-        {/* Invisible fat hit-area — stroke 12px so the click target is
-            generous even at zoom=25%. */}
-        <path d={d} fill="none" stroke="rgba(0,0,0,0)" strokeWidth={12} />
-        <path
-          d={d}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={strokeWidth}
-          strokeDasharray={isSelected ? undefined : "2 4"}
-          style={{ transition: "stroke 180ms ease-out, stroke-width 180ms" }}
-        />
+        {/* fat invisible hit-area */}
+        <path d={d} fill="none" stroke="rgba(0,0,0,0)" strokeWidth={14} />
+        {beam ? (
+          <>
+            {/* glow halo */}
+            <path d={d} fill="none" stroke="var(--atelier-beam)" strokeWidth={isSelected ? 9 : 7} strokeOpacity={isSelected ? 0.3 : 0.16} strokeLinecap="round" filter="url(#beam-glow)" />
+            {/* bright filament core */}
+            <path d={d} fill="none" stroke="var(--atelier-beam)" strokeWidth={isSelected ? 2 : 1.4} strokeOpacity={isSelected ? 1 : 0.85} strokeLinecap="round" style={{ transition: "stroke-width 180ms" }} />
+            {/* endpoint flares — beam plugs bright into the ports */}
+            <circle cx={x1} cy={y1} r={isSelected ? 9 : 6.5} fill="url(#beam-flare)" />
+            <circle cx={x2} cy={y2} r={isSelected ? 9 : 6.5} fill="url(#beam-flare)" />
+          </>
+        ) : (
+          // ambient — thin grey hairline
+          <path d={d} fill="none" stroke="rgba(170,176,190,0.30)" strokeWidth={1.25} strokeLinecap="round" style={{ transition: "stroke 180ms ease-out" }} />
+        )}
       </g>,
     );
     if (refEdgeMidpointsOut && (isSelected || (related && hoveredNodeId))) {
@@ -176,9 +183,11 @@ function renderEdges(
       const dx = Math.max(40, Math.abs(x2 - x1) * 0.3);
       const inflight = c.status === "pending" || c.status === "processing";
       const failed = c.status === "failed";
+      // v0.5: candidate spokes are quiet white beams (no glow — the ref edges
+      // carry the focal glow); failed = red, in-flight = dashed marching white.
       const stroke = failed
-        ? "rgba(248,113,113,0.6)"      // atelier-failed
-        : "rgba(59,107,255,0.55)";     // atelier-brand-400 cobalt
+        ? "rgba(240,97,109,0.6)"        // atelier-port-negative red
+        : "rgba(255,255,255,0.55)";     // white filament
       const candKey = candidateNodeId(node.id, c.id);
       const related = isRelated(node.id, candKey);
       const opacity = dimUnrelated && !related ? 0.12 : 1;
@@ -3920,6 +3929,18 @@ export function AtelierShellV3() {
                   }}
                   viewBox={`${svgX} ${svgY} ${svgW} ${svgH}`}
                 >
+                  {/* v0.5 beam defs (target spec §3): soft blur for the glow
+                      halo + a white radial flare for endpoint bursts. */}
+                  <defs>
+                    <filter id="beam-glow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="3.5" />
+                    </filter>
+                    <radialGradient id="beam-flare">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
+                      <stop offset="35%" stopColor="#ffffff" stopOpacity="0.45" />
+                      <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+                    </radialGradient>
+                  </defs>
                   {paths}
                 </svg>
                 {labels.map((l) => {

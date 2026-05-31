@@ -53,6 +53,15 @@ const config: Config = {
         "atelier-completed":  "#34d399",
         "atelier-processing": "#60a5fa",
         "atelier-failed":     "#f87171",
+
+        // ── v0.5 Flova-grade target (see docs/design/atelier-flova-target-spec.md) ──
+        // Node I/O port color code (multi-color allowed ON PORTS only).
+        "atelier-port-model":    "#e0b94e", // amber — model input
+        "atelier-port-positive": "#3ddc84", // green — positive input + Generate CTA
+        "atelier-port-negative": "#f0616d", // red — negative input
+        "atelier-port-output":   "#5b9dff", // blue — output
+        // Frosted node + black vitrine canvas.
+        "atelier-canvas-flova":  "#08080a",
       },
       fontFamily: {
         sans: ["var(--font-inter)", "sans-serif"],

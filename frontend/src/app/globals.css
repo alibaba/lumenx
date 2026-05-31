@@ -114,9 +114,24 @@ body {
 
 :root,
 html.dark {
-  /* canvas — neutral dark, no atmospheric wash (round-2 §11.8 removed it) */
-  --atelier-canvas-base: #0c0c0e;
-  --atelier-canvas-dot:  rgba(255, 255, 255, 0.06);
+  /* canvas — Flova-grade black vitrine (v0.5 target spec §1/§6). The stage is
+     near-black; nodes + glowing edges are the only light. */
+  --atelier-canvas-base: #08080a;
+  --atelier-canvas-dot:  rgba(255, 255, 255, 0.05);
+
+  /* §v0.5 Flova node + port + beam system (docs/design/atelier-flova-target-spec.md) */
+  --atelier-node-fill:   rgba(22, 22, 28, 0.66);  /* frosted node body */
+  --atelier-node-border: rgba(255, 255, 255, 0.09);
+  --atelier-port-model:    #e0b94e;  /* amber  — model input  */
+  --atelier-port-positive: #3ddc84;  /* green  — positive + Generate CTA */
+  --atelier-port-negative: #f0616d;  /* red    — negative input */
+  --atelier-port-output:   #5b9dff;  /* blue   — output */
+  --atelier-beam:          #ffffff;  /* connection light-beam */
+  /* iridescent bloom 4-stop ramp: pink → violet → blue → cyan */
+  --atelier-bloom-1: 255, 140, 200;
+  --atelier-bloom-2: 180, 140, 255;
+  --atelier-bloom-3: 130, 170, 255;
+  --atelier-bloom-4: 130, 230, 220;
 
   /* text */
   --atelier-text-fg:    rgba(255, 255, 255, 0.95);
@@ -248,10 +263,11 @@ html.dark {
   height: 55%;
   background:
     radial-gradient(ellipse 90% 100% at 62% 0%,
-      rgba(255, 140, 200, calc(0.42 * var(--bloom-strength, 1.5))) 0%,
-      rgba(180, 140, 255, calc(0.36 * var(--bloom-strength, 1.5))) 28%,
-      rgba(140, 200, 255, calc(0.22 * var(--bloom-strength, 1.5))) 60%,
-      transparent 88%);
+      rgba(var(--atelier-bloom-1), calc(0.42 * var(--bloom-strength, 1.5))) 0%,
+      rgba(var(--atelier-bloom-2), calc(0.36 * var(--bloom-strength, 1.5))) 24%,
+      rgba(var(--atelier-bloom-3), calc(0.26 * var(--bloom-strength, 1.5))) 48%,
+      rgba(var(--atelier-bloom-4), calc(0.18 * var(--bloom-strength, 1.5))) 70%,
+      transparent 90%);
   filter: blur(calc(18px + 6px * var(--bloom-strength, 1.5)));
   pointer-events: none;
   mix-blend-mode: screen;
@@ -302,10 +318,11 @@ html.dark {
   border-radius: inherit;
   background:
     radial-gradient(ellipse 92% 38% at 50% 0%,
-      rgba(255, 140, 200, calc(0.45 * var(--bloom-strength))) 0%,
-      rgba(180, 140, 255, calc(0.38 * var(--bloom-strength))) 22%,
-      rgba(140, 200, 255, calc(0.28 * var(--bloom-strength))) 50%,
-      transparent 78%);
+      rgba(var(--atelier-bloom-1), calc(0.45 * var(--bloom-strength))) 0%,
+      rgba(var(--atelier-bloom-2), calc(0.38 * var(--bloom-strength))) 20%,
+      rgba(var(--atelier-bloom-3), calc(0.28 * var(--bloom-strength))) 42%,
+      rgba(var(--atelier-bloom-4), calc(0.18 * var(--bloom-strength))) 64%,
+      transparent 82%);
   filter: blur(calc(16px + 6px * var(--bloom-strength)));
   pointer-events: none;
   z-index: -3;
@@ -490,14 +507,28 @@ html.dark {
    .atelier-endpoint-{cobalt,amber,violet} drop-shadows above are kept for the
    planned Pattern-B edge-endpoint bloom.) */
 
-/* ── §11.8 atelier canvas — uniform dark + dotted grid only ──
-   The .atelier-canvas-bg utility replaces any prior atmospheric wash. */
+/* ── v0.5 Flova canvas — black vitrine + 30px dotted grid (target spec §1) ── */
 .atelier-canvas-bg {
   background:
     radial-gradient(circle, var(--atelier-canvas-dot) 1px, transparent 1px),
     var(--atelier-canvas-base);
-  background-size: 28px 28px, auto;
-  background-position: -14px -14px, 0 0;
+  background-size: 30px 30px, auto;
+  background-position: -15px -15px, 0 0;
+}
+
+/* ── v0.5 frosted node shell — the single source of truth for the Flova node
+   body (target spec §2). Replaces per-node bg-[#141416]/rounded-lg literals.
+   Translucent so the dotted grid shows through faintly; blur lifts it off the
+   vitrine; 1px light border + inset top highlight read it as real glass. */
+.atelier-node-shell {
+  background: var(--atelier-node-fill);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--atelier-node-border);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 60px -24px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* ── §11.8 chrome panels — opaque rgba(14,16,26,0.92) ── */
