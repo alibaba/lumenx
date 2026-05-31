@@ -91,7 +91,6 @@ export function DraftWorkbench({
   status,
   intent,
   modelLabel,
-  configSummary,
   candidatesReady,
   candidatesTotal,
   selected,
@@ -188,7 +187,7 @@ export function DraftWorkbench({
       // v0.5 §2: outer shell is the single frosted card; the inner card's
       // opaque fill is neutralized below so it reads as one surface. Width
       // 520 keeps the prompt + ref content roomy.
-      className={`group absolute w-[520px] origin-top-left atelier-opaque-shell transition-shadow duration-200 motion-safe:animate-atelier-workbench-in ${selectedClass}`}
+      className={`group absolute w-[560px] origin-top-left atelier-opaque-shell transition-shadow duration-200 motion-safe:animate-atelier-workbench-in ${selectedClass}`}
     >
       {/* §2 OUTPUT PORT — blue dot half-outside the right border, on the title
           row. Connection beams plug in here. -right-[14px] = 10px shell padding
@@ -200,15 +199,6 @@ export function DraftWorkbench({
         size={7}
         className="absolute -right-[14px] top-[18px] z-20"
       />
-
-      {/* §2 INPUT PORTS — amber model / green positive / red negative, stacked
-          on the left edge near the top of the body. -left-[14px] straddles the
-          left border so beams plug in; labels sit just inside. Decorative. */}
-      <div className="absolute -left-[14px] top-[58px] z-20 flex flex-col gap-2.5">
-        <NodePort kind="model" side="left" label="model" size={7} />
-        <NodePort kind="positive" side="left" label="positive" size={7} />
-        <NodePort kind="negative" side="left" label="negative" size={7} />
-      </div>
 
       {/* Header zone — sparkle + intent (rename on dblclick) + take pill.
           Sits in the outer shell's top band (above the inner card), like
@@ -290,76 +280,62 @@ export function DraftWorkbench({
         // v0.5 §2: neutralize the inner card's opaque fill + border so the
         // frosted outer shell is the single visible surface (no double-frame).
         style={{ background: "transparent", borderColor: "transparent" }}
-        className="atelier-opaque-inner p-6 motion-safe:animate-atelier-workbench-content-in"
+        className="atelier-opaque-inner p-5 motion-safe:animate-atelier-workbench-content-in"
       >
-        {/* Meta as RON "setting rows" — muted sentence-case label left (Inter,
-            no mono-caps), value in a clean dark pill right. pl clears the
-            left-edge input port column. The model + config controls themselves
-            live in the embedded Composer (left as is); this is only the
-            workbench's own meta strip. */}
-        <div className="mb-5 flex flex-col gap-y-2.5 pl-[58px]">
-          <div className="flex min-h-[32px] items-center justify-between gap-3">
-            <span className="text-[11px] lowercase text-white/45">
-              Model
-            </span>
-            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2.5 py-1 text-[12px] tabular-nums text-white/75">
-              {modelLabel}
-            </span>
+        {/* v0.5.4 — two columns: a clean LEFT INPUT-PORT RAIL (model / positive
+            / negative, RON I/O), and the BODY (Composer + takes + footer). The
+            old absolute-overlapping ports + redundant Model/Config rows (which
+            duplicated the Composer's own model/aspect chips) are gone — that
+            collision was the "排版乱" the user hit. The rail dots straddle the
+            card's left border (-ml) so connection beams plug in. */}
+        <div className="flex gap-4">
+          <div className="flex shrink-0 flex-col gap-3 pt-1 -ml-[14px]">
+            <NodePort kind="model" side="left" label="model" size={7} />
+            <NodePort kind="positive" side="left" label="positive" size={7} />
+            <NodePort kind="negative" side="left" label="negative" size={7} />
           </div>
-          <div className="flex min-h-[32px] items-center justify-between gap-3">
-            <span className="text-[11px] lowercase text-white/45">
-              Config
-            </span>
-            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2.5 py-1 text-[12px] tabular-nums text-white/75">
-              {configSummary}
-            </span>
+
+          <div className="min-w-0 flex-1">
+            {/* Inline Composer — the generation body. mode="inline": no
+                absolute positioning / fixed width / floating shadow. All
+                Composer features intact. */}
+            <Composer
+              inline
+              activeTab={activeTab}
+              onTabChange={onTabChange}
+              prompt={prompt}
+              modelLabel={modelLabel}
+              aspect={aspect}
+              duration={duration}
+              count={count}
+              modelOptions={modelOptions}
+              aspectOptions={aspectOptions}
+              durationOptions={durationOptions}
+              countOptions={countOptions}
+              refs={refs}
+              onSubmit={onSubmit}
+              onAddRef={onAddRef}
+              onRemoveRef={onRemoveRef}
+              onPromptCommit={onPromptCommit}
+              mentionables={mentionables}
+            />
+
+            {/* Take version timeline — renders only when ≥1 take. */}
+            {takes && takes.length > 0 && onPickTake ? (
+              <div className="mt-3">
+                <TakeTimeline takes={takes} onPickTake={onPickTake} />
+              </div>
+            ) : null}
+
+            {/* Status footer — quiet sentence-case caption + tiny neutral dot. */}
+            <div className="mt-3 flex items-center gap-2 border-t border-white/8 pt-3">
+              <span
+                aria-hidden="true"
+                className="h-[5px] w-[5px] shrink-0 rounded-full bg-white/25"
+              />
+              <span className="text-[11px] text-white/40">{caption}</span>
+            </div>
           </div>
-        </div>
-
-        {/* Inline Composer — workbench body. Uses mode="inline" so it
-            renders in-place (no absolute positioning, no fixed width, no
-            floating shadow). All Composer features (mention picker,
-            mismatch banner, advanced popover, chip dropdowns, generate)
-            stay intact. */}
-        <Composer
-          inline
-          activeTab={activeTab}
-          onTabChange={onTabChange}
-          prompt={prompt}
-          modelLabel={modelLabel}
-          aspect={aspect}
-          duration={duration}
-          count={count}
-          modelOptions={modelOptions}
-          aspectOptions={aspectOptions}
-          durationOptions={durationOptions}
-          countOptions={countOptions}
-          refs={refs}
-          onSubmit={onSubmit}
-          onAddRef={onAddRef}
-          onRemoveRef={onRemoveRef}
-          onPromptCommit={onPromptCommit}
-          mentionables={mentionables}
-        />
-
-        {/* I (Take version timeline) — horizontal strip of every take
-            this draft has generated. Renders only when there is at least
-            one take so empty drafts stay quiet. */}
-        {takes && takes.length > 0 && onPickTake ? (
-          <div className="mt-3">
-            <TakeTimeline takes={takes} onPickTake={onPickTake} />
-          </div>
-        ) : null}
-
-        {/* Status footer — a quiet sentence-case caption + tiny neutral dot
-            (NOT a mono-caps colored tearline). Hue lives in the corner StatusDot;
-            same STATUS_TOKEN source as the compact DraftNode → identical wording. */}
-        <div className="mt-3 flex items-center gap-2 border-t border-white/8 pt-3">
-          <span
-            aria-hidden="true"
-            className="h-[5px] w-[5px] shrink-0 rounded-full bg-white/25"
-          />
-          <span className="text-[11px] text-white/40">{caption}</span>
         </div>
       </div>
 
