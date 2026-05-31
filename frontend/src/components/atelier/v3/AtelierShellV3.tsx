@@ -28,6 +28,7 @@ import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
 import { HistoryPanel } from "@/components/atelier/v3/HistoryPanel";
+import { RightControlStack } from "@/components/atelier/v3/RightControlStack";
 import {
   RegionFrame,
   REGION_COLLAPSED_WIDTH,
@@ -5146,6 +5147,17 @@ export function AtelierShellV3() {
         gridSnap={gridSnap}
         onToggleGridSnap={toggleGridSnap}
         onAutoArrange={handleAutoArrange}
+      />
+
+      {/* v0.5 Flova: right-edge vertical zoom/control stack (target spec §4),
+          docked just left of the agent rail. */}
+      <RightControlStack
+        zoom={zoom}
+        onZoomChange={handleZoomChange}
+        onFit={handleFitView}
+        onToggleMinimap={() => setMinimapOpen((o) => !o)}
+        minimapOpen={minimapOpen}
+        rightOffset={agentCollapsed ? 96 : 420}
       />
 
       {/* minimap floating widget — viewport rect is the actual visible
