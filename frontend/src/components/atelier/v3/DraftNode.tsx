@@ -108,7 +108,7 @@ export function DraftNode({
     >
       {/* output port — blue dot on the right edge so connection beams plug in */}
       <PortDot kind="output" className="absolute right-[-4px] top-1/2 -translate-y-1/2 z-10" />
-      <div className="px-4 pb-3 pt-3.5">
+      <div className="px-[18px] pt-4 pb-3.5">
         {/* Title row — muted Sparkles glyph + sentence-case intent title.
             The take counter sits right-aligned as a quiet neutral chip. */}
         <div className="flex items-center gap-1.5 text-foreground">
@@ -130,12 +130,12 @@ export function DraftNode({
                   setDraft(intent);
                 }
               }}
-              className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-display text-[14px] font-medium tracking-[-0.005em] text-foreground outline-none"
+              className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-sans text-[15px] font-medium tracking-[-0.01em] text-white/90 outline-none"
               aria-label="Rename draft"
             />
           ) : (
             <span
-              className={`truncate font-display text-[14px] font-medium tracking-[-0.005em] ${onIntentCommit ? "cursor-text" : ""}`}
+              className={`truncate font-sans text-[15px] font-medium tracking-[-0.01em] text-white/90 ${onIntentCommit ? "cursor-text" : ""}`}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 startEditing();
@@ -163,18 +163,18 @@ export function DraftNode({
         {/* Meta row — sentence-case Inter (model · config), grayscale-calm.
             No mono-caps, no spinner: a running draft already carries the
             bloom + the footer caption. One calm signal per state. */}
-        <div className="mt-2 flex items-center gap-1.5 text-[11px] leading-none text-white/45">
-          <span className="font-medium text-white/55">{modelLabel}</span>
+        <div className="mt-2.5 flex items-center gap-1.5 text-[11.5px] font-normal leading-[1.4] text-white/45">
+          <span className="font-medium text-white/60">{modelLabel}</span>
           <span aria-hidden="true" className="text-white/25">·</span>
           <span className="truncate text-white/45">{configSummary}</span>
         </div>
 
         {refs && refs.length > 0 ? (
-          <div className="mt-2 flex items-center gap-1">
+          <div className="mt-3 flex items-center gap-1.5">
             {visibleRefs.map((r, i) => (
               <div
                 key={i}
-                className="group/ref relative h-[22px] w-[22px] overflow-hidden rounded-[3px] border border-white/8"
+                className="group/ref relative h-6 w-6 overflow-hidden rounded-[3px] border border-white/8"
               >
                 <img
                   src={r}
@@ -201,7 +201,7 @@ export function DraftNode({
               </div>
             ))}
             {overflowCount > 0 ? (
-              <span className="grid h-[22px] min-w-[22px] place-items-center rounded-[4px] border border-white/8 bg-white/[0.03] px-1 text-[10px] tabular-nums text-white/45">
+              <span className="grid h-6 min-w-6 place-items-center rounded-[4px] border border-white/8 bg-white/[0.03] px-1 text-[10px] tabular-nums text-white/45">
                 +{overflowCount}
               </span>
             ) : (
@@ -216,8 +216,8 @@ export function DraftNode({
       {/* Footer — a quiet sentence-case status caption with a tiny neutral
           dot, under a hairline divider. The lifecycle hue lives only in the
           top-right StatusDot, so the footer stays grayscale-calm (spec §9.6). */}
-      <div className="mx-4 h-px bg-white/[0.07]" />
-      <div className="flex items-center gap-1.5 px-4 pb-3.5 pt-2.5">
+      <div className="mx-[18px] h-px bg-white/[0.08]" />
+      <div className="flex items-center gap-1.5 px-[18px] pb-3.5 pt-3">
         <span aria-hidden="true" className="h-[4px] w-[4px] rounded-full bg-white/30" />
         <span className="text-[11px] leading-none text-white/40">
           {STATUS_TOKEN[status].caption}

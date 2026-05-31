@@ -17,8 +17,8 @@ interface Props {
 // Idea node — a calm editorial slip pinned to the wall of ideas. The frosted
 // glass shell (.atelier-node-shell) supplies the depth, hairline highlight and
 // float shadow; we lay only a whisper-soft warm-ochre CATEGORY wash over it so
-// the slip reads premium and quiet, never garish. The body sits in a gentle
-// near-handwritten italic, signed off by a single muted sentence-case line.
+// the slip reads premium and quiet, never garish. The body sits in calm Inter
+// body text, signed off by a single muted sentence-case line.
 export function IdeaNode({ id, body, selected, x, y, onSelect, editing }: Props) {
   const borderClass = selected
     ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/45"
@@ -62,10 +62,10 @@ export function IdeaNode({ id, body, selected, x, y, onSelect, editing }: Props)
         <div aria-hidden="true" className="relative min-h-[150px]" />
       ) : (
         <div className="relative">
-          <div className="px-4 pb-2.5 pt-3.5">
-            <p className="line-clamp-5 whitespace-pre-wrap text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95">
+          <div className="px-[18px] pb-3.5 pt-4">
+            <p className="line-clamp-5 whitespace-pre-wrap text-[13px] leading-[1.6] text-white/80">
               {body || (
-                <span className="not-italic text-[11px] tracking-tight text-white/35">
+                <span className="text-[12px] italic text-white/35">
                   Empty · double-click to write
                 </span>
               )}
@@ -74,12 +74,12 @@ export function IdeaNode({ id, body, selected, x, y, onSelect, editing }: Props)
           {/* Quiet signature line — a tiny soft-ochre category dot + a
               sentence-case Inter label. Replaces the old mono-caps colored
               tear stamp that read "cheap". */}
-          <div className="flex items-center gap-1.5 px-4 pb-3.5 pt-0.5">
+          <div className="flex items-center gap-1.5 px-[18px] pb-3.5 pt-0.5">
             <span
               aria-hidden="true"
               className="h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-ochre/45"
             />
-            <span className="text-[10px] text-white/45">Idea · No {stampNum}</span>
+            <span className="text-[11px] text-white/40">Idea · No {stampNum}</span>
           </div>
         </div>
       )}

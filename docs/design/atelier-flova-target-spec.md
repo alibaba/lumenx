@@ -199,3 +199,44 @@ because of restraint + glass depth + subtle light + refined type + air. Apply AL
 ### 9.9 Surfaces to add (b)
 - Preview result card (spec §2c). Top toolbar cluster (spec §4). Multiplayer
   cursor pills (Kate blue / Mario pink, world-pinned, subtle).
+
+---
+
+## 10. TYPE + SPACING system (v0.5.2) — exact classes (user: "字体和间距" are the weakest)
+
+Premium reads from a tight TYPE LADDER + generous SPACING RHYTHM, applied
+CONSISTENTLY. Use these EXACT Tailwind class strings per element type so every
+node matches. All sans = Inter (font-sans) — humanist-neutral reads more premium
+than Space-Grotesk at these sizes; the hero node title MAY keep font-display but
+at the size/weight below.
+
+### Type ladder (apply verbatim)
+- Node TITLE:        `font-sans text-[15px] font-medium tracking-[-0.01em] text-white/90`
+  (hero workbench title may use font-display, same size/weight/tracking)
+- META line:         `text-[11.5px] font-normal text-white/45 leading-[1.4]`
+  (model · config etc., sentence case; the model name token `text-white/60`)
+- BODY / prompt:     `text-[13px] leading-[1.6] text-white/80`
+- LABEL (settings/port): `text-[11px] text-white/45`  (lowercase, no tracking)
+- VALUE (numbers):   `text-[12px] tabular-nums text-white/75`
+- FOOTER caption:    `text-[11px] text-white/40`
+- Placeholder/empty: `text-[12px] italic text-white/35`
+- NO `font-mono` + `uppercase` anywhere except ONE optional build-label.
+- Title→subtitle line-height tight; everything else airy (≥1.4).
+
+### Spacing rhythm (apply verbatim)
+- Collapsed node body: `px-[18px] pt-4 pb-3.5`  (was px-4 pb-3 pt-3.5 — more air)
+- Title → meta gap:    `mt-2.5`
+- Meta → body/refs gap:`mt-3`
+- Workbench inner card: `p-6` (was p-5)
+- Workbench section gaps: `mb-5` between meta / composer / takes / footer
+- Settings/port row: min height 32px, vertical gap `gap-y-2.5`, label-value `gap-3`
+- Port column (inputs): `gap-2.5`
+- Footer: `mt-3 pt-3` above a `border-white/8` hairline
+- Ref thumbnails row: `gap-1.5`, thumbs `h-6 w-6` (was 22px — slightly bigger)
+- Value pills: `px-2.5 py-1` (was px-2)
+
+### Rationale
+Cramped + uneven type = "dev tool". One ladder + one rhythm = "premium product".
+The single biggest wins: (1) bump body line-height to 1.5-1.6, (2) generous node
+padding (≥16px), (3) consistent 11-15px scale with a clear weight/opacity step,
+(4) zero mono-caps.

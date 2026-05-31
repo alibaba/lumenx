@@ -68,7 +68,7 @@ function TypeChip({ kind }: { kind: MediaKind }) {
   // mono-caps (§9.1). Reads as a gentle hint, not a terminal stamp.
   const label = kind === "image" ? "image" : kind === "video" ? "video" : "audio";
   return (
-    <span className="pointer-events-none absolute left-2 top-2 hidden items-center gap-1 rounded-md border border-white/8 bg-black/45 px-1.5 py-1 text-[10px] text-white/55 backdrop-blur-md group-hover:inline-flex">
+    <span className="pointer-events-none absolute left-2 top-2 hidden items-center gap-1 rounded-md border border-white/8 bg-black/45 px-1.5 py-1 text-[11px] text-white/45 lowercase backdrop-blur-md group-hover:inline-flex">
       <Icon size={10} aria-hidden="true" className="text-white/40" />
       {label}
     </span>
@@ -368,10 +368,10 @@ export function MediaNode({
               </>
             )}
             {/* Bottom gradient scrim — title + description sit on the media */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-0.5 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-3.5 pb-3 pt-12">
-              <span className="text-[13px] font-medium leading-tight text-white">Final result</span>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col gap-1 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-4 pb-3.5 pt-12">
+              <span className="font-sans text-[15px] font-medium tracking-[-0.01em] leading-tight text-white">Final result</span>
               {resultDescription ? (
-                <span className="truncate text-[11px] leading-snug text-white/85">{resultDescription}</span>
+                <span className="truncate text-[13px] leading-[1.6] text-white/80">{resultDescription}</span>
               ) : null}
             </div>
             {selectedAsTake ? (
@@ -382,10 +382,10 @@ export function MediaNode({
           </div>
           {/* Action row — small dark icon pills + a download (visual chrome) */}
           <div
-            className="flex items-center justify-between gap-1 px-3 py-2.5"
+            className="flex items-center justify-between gap-1.5 px-4 py-3"
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center gap-1">
               {resultActions.map((a) => (
                 <button
                   key={a.key}
@@ -464,12 +464,12 @@ export function MediaNode({
             font title). 'IMG' caption sits at the trailing edge so the
             card is identifiable at a glance even when the thumbnail is
             similar across siblings. */}
-        <div className="flex items-center gap-2 px-4 pb-2 pt-3.5 text-foreground">
+        <div className="flex items-center gap-2 px-[18px] pb-2.5 pt-4 text-foreground">
           <ImageIcon size={12} className="shrink-0 text-white/40" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate font-display text-[14px] font-medium tracking-[-0.005em]">
+          <span className="min-w-0 flex-1 truncate font-sans text-[15px] font-medium tracking-[-0.01em] text-white/90">
             {cardName}
           </span>
-          <span className="shrink-0 rounded-md border border-white/8 px-1.5 py-[2px] text-[10px] text-white/45">
+          <span className="shrink-0 rounded-md border border-white/8 px-1.5 py-0.5 text-[11px] text-white/45">
             image
           </span>
         </div>
@@ -477,7 +477,7 @@ export function MediaNode({
             once on load), clamped to [0.6, 2.4] so portraits and panos
             stay readable on a 244-wide card. Fallback 4:3 while loading
             keeps the card height stable. */}
-        <div className="px-4 pb-2">
+        <div className="px-[18px] pb-3">
           <div
             className="relative overflow-hidden rounded-md border border-white/8 bg-black/40"
             style={{ aspectRatio: `${naturalAspect}` }}
@@ -500,7 +500,7 @@ export function MediaNode({
                 <div className="flex flex-col items-center gap-1">
                   <Loader2 className="animate-spin text-atelier-processing" size={18} />
                   {typeof progress === "number" ? (
-                    <span className="text-[10px] font-semibold text-white/90">{Math.round(progress)}%</span>
+                    <span className="text-[11px] font-semibold tabular-nums text-white/90">{Math.round(progress)}%</span>
                   ) : null}
                 </div>
               </div>
@@ -508,7 +508,7 @@ export function MediaNode({
             {showFailed ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-atelier-failed/[0.18] backdrop-blur-[1px]">
                 <AlertTriangle size={16} className="text-atelier-failed" aria-hidden="true" />
-                <span className="text-[10px] text-atelier-failed">
+                <span className="text-[11px] text-atelier-failed">
                   {errorMessage ? "Failed" : "Generation failed"}
                 </span>
                 <RetryButton
@@ -529,10 +529,10 @@ export function MediaNode({
         </div>
         {/* Quiet footer — sentence-case label + a tiny neutral dot (§9.6),
             no mono-caps tearline. The id stamp trails as a muted reference. */}
-        <div className="flex items-center gap-2 px-4 pb-3 pt-0.5">
+        <div className="mt-3 flex items-center gap-2 border-t border-white/8 px-[18px] pb-3.5 pt-3">
           <span aria-hidden="true" className="h-[5px] w-[5px] shrink-0 rounded-full bg-white/30" />
           <span className="text-[11px] text-white/45">Image</span>
-          <span className="ml-auto text-[11px] text-white/30">{stampNum}</span>
+          <span className="ml-auto text-[11px] tabular-nums text-white/40">{stampNum}</span>
         </div>
         {/* Output port — completed image cards expose a blue port on the
             right edge so beams plug in. Card is overflow-hidden, so the dot
@@ -620,12 +620,12 @@ export function MediaNode({
              is empty but no actions wired (read-only contexts).
           Audio + video have their own empty-state branches. */}
       {isEmptyImageActionable ? (
-        <div className="flex h-full w-full flex-col gap-3 px-4 py-3.5">
+        <div className="flex h-full w-full flex-col gap-3 px-[18px] pt-4 pb-3.5">
           {/* Heading row: sentence-case Inter label + ImageIcon, anchored top */}
           <div className="flex items-center gap-2">
             <ImageIcon size={12} aria-hidden="true" className={selected ? "text-atelier-brand-400" : "text-white/45"} />
             <span className={`text-[11px] ${
-              selected ? "text-atelier-brand-400" : "text-white/55"
+              selected ? "text-atelier-brand-400" : "text-white/45"
             }`}>
               Image draft
             </span>
@@ -664,7 +664,7 @@ export function MediaNode({
           <div className="space-y-1.5 px-3 text-white/45">
             <ImageIcon className="mx-auto text-white/40" size={20} />
             <div className="text-[11px]">Image</div>
-            <div className="text-[10px] leading-snug text-white/35">{filename || "No media yet"}</div>
+            <div className="text-[12px] italic leading-snug text-white/35">{filename || "No media yet"}</div>
           </div>
         </div>
       ) : null}
@@ -673,7 +673,7 @@ export function MediaNode({
           <div className="space-y-1.5 px-3 text-white/45">
             <Video className="mx-auto text-white/40" size={20} />
             <div className="text-[11px]">Video</div>
-            <div className="text-[10px] leading-snug text-white/35">{filename || "No take yet"}</div>
+            <div className="text-[12px] italic leading-snug text-white/35">{filename || "No take yet"}</div>
           </div>
         </div>
       ) : null}
@@ -684,10 +684,10 @@ export function MediaNode({
             <div className="flex flex-col items-center gap-1">
               <Loader2 className="animate-spin text-atelier-processing" size={20} />
               {typeof progress === "number" ? (
-                <span className="text-[11px] font-semibold text-white/90">{Math.round(progress)}%</span>
+                <span className="text-[11px] font-semibold tabular-nums text-white/90">{Math.round(progress)}%</span>
               ) : null}
               {typeof etaSeconds === "number" && etaSeconds > 0 ? (
-                <span className="text-[10px] text-white/55">~{etaSeconds}s left</span>
+                <span className="text-[11px] tabular-nums text-white/55">~{etaSeconds}s left</span>
               ) : null}
               {showStuckActions ? (
                 <div
@@ -748,7 +748,7 @@ export function MediaNode({
       {showFailed ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-atelier-failed/[0.18] backdrop-blur-[1px]">
           <AlertTriangle size={18} className="text-atelier-failed" aria-hidden="true" />
-          <span className="text-[10px] text-atelier-failed">
+          <span className="text-[11px] text-atelier-failed">
             {errorMessage ? "Failed" : "Generation failed"}
           </span>
           <RetryButton
@@ -767,7 +767,7 @@ export function MediaNode({
       {!isEmptyImageActionable ? <TypeChip kind={kind} /> : null}
 
       {filename && !isEmptyImageActionable ? (
-        <span className="pointer-events-none absolute right-2 bottom-2 hidden max-w-[70%] truncate rounded-md bg-black/55 px-1.5 py-1 text-[10px] text-white/70 backdrop-blur-md group-hover:inline-block">
+        <span className="pointer-events-none absolute right-2 bottom-2 hidden max-w-[70%] truncate rounded-md bg-black/55 px-1.5 py-1 text-[11px] text-white/70 backdrop-blur-md group-hover:inline-block">
           {filename}
         </span>
       ) : null}
@@ -779,7 +779,7 @@ export function MediaNode({
           <Check size={9} aria-hidden="true" /> selected
         </span>
       ) : duration ? (
-        <span className="pointer-events-none absolute left-2 bottom-2 hidden max-w-[70%] truncate rounded-md bg-black/55 px-1.5 py-1 text-[10px] text-white/70 backdrop-blur-md group-hover:inline-block">
+        <span className="pointer-events-none absolute left-2 bottom-2 hidden max-w-[70%] truncate rounded-md bg-black/55 px-1.5 py-1 text-[11px] text-white/70 backdrop-blur-md group-hover:inline-block">
           {duration}
         </span>
       ) : null}

@@ -278,22 +278,22 @@ export function Composer({
       className={sectionClass}
       style={inline ? undefined : computedStyle}
     >
-      {/* Editorial slip header — a faint top strip with mono-caps "OFFICIAL ·
-          COMPOSER · NO. 001" that anchors the panel as an issued ticket. The
-          number is fixed-style 001 just for that "rubber-stamped serial"
+      {/* Editorial slip header — a faint top strip ("Atelier · Composer · No
+          001", sentence-case Inter per spec §10) anchoring the panel as an
+          issued ticket. The serial is fixed-style 001 just for that "stamped"
           reading; it isn't a real id. */}
-      <div className="flex items-center justify-between gap-2 border-b border-dashed border-white/8 px-3 py-1.5">
-        <span aria-hidden="true" className="font-mono text-[8.5px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
+      <div className="flex items-center justify-between gap-2 border-b border-white/8 px-5 py-2.5">
+        <span aria-hidden="true" className="text-[11px] text-white/40">
           Atelier · Composer · No 001
         </span>
-        <span aria-hidden="true" className="font-mono text-[8.5px] uppercase tracking-[0.28em] text-text-muted/55">
+        <span aria-hidden="true" className="text-[11px] text-white/45">
           {activeTab}
         </span>
       </div>
 
-      {/* Tabs — mono caps with spaced tracking gives the row a "transport
-          control" feel; active tab earns a primary tint pill. */}
-      <div className="flex items-center justify-between gap-1 border-b border-white/6 px-2 py-2">
+      {/* Tabs — sentence-case Inter pills (spec §10, no mono-caps); active tab
+          earns a primary tint pill. */}
+      <div className="flex items-center justify-between gap-1 border-b border-white/8 px-4 py-2.5">
         <div role="tablist" aria-label="Generation type" className="flex items-center gap-px">
           {TABS.map(t => (
             <button
@@ -304,10 +304,10 @@ export function Composer({
               tabIndex={t === activeTab ? 0 : -1}
               onClick={() => onTabChange?.(t)}
               onKeyDown={(e) => handleTabKeyDown(e, t)}
-              className={`rounded-md px-2 py-[5px] font-mono text-[10px] font-medium uppercase tracking-[0.22em] transition-colors ${
+              className={`rounded-md px-2.5 py-[5px] text-[11px] font-medium tracking-[-0.005em] transition-colors ${
                 t === activeTab
                   ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
-                  : "text-text-muted hover:bg-white/[0.04] hover:text-foreground/90"
+                  : "text-white/45 hover:bg-white/[0.04] hover:text-white/80"
               }`}>
               {t}
             </button>
@@ -321,22 +321,22 @@ export function Composer({
 
       {/* Capability mismatch banner — shows the real catalog-derived reason
           (e.g., "doesn't accept video references"), not a generic blurb.
-          Dashed border + tracked mono caps continues the receipt voice. */}
+          Sentence-case label per spec §10. */}
       {mismatchActive && (
-        <div role="alert" className="mx-3 mt-3 rounded-md border border-dashed border-amber-300/35 bg-amber-400/[0.05] px-2.5 py-2 text-[11.5px] leading-relaxed text-amber-100/95">
-          <span className="font-mono text-[9.5px] font-medium uppercase tracking-[0.28em] text-amber-200/85">Mismatch · Notice</span>
-          <div className="mt-0.5">
+        <div role="alert" className="mx-5 mt-4 rounded-md border border-amber-300/30 bg-amber-400/[0.05] px-3 py-2.5 text-[11.5px] leading-[1.5] text-amber-100/95">
+          <span className="text-[11px] font-medium text-amber-200/85">Mismatch · Notice</span>
+          <div className="mt-1">
             <strong className="font-medium text-amber-100">{m}</strong>{" "}
             {mismatchReason ?? "doesn’t accept some of the attached references"}.
           </div>
         </div>
       )}
 
-      {/* Reference row — tighter 36×52 thumbs, hairline border, 'N REF'
-          mono caps tag at the end matches the chrome metadata voice. */}
-      <div className="flex items-center gap-1.5 px-3 pt-3">
+      {/* Reference row — small square thumbs (spec §10 h-6 w-6), hairline
+          border, sentence-case 'N refs' tag at the end. */}
+      <div className="flex items-center gap-1.5 px-5 pt-4">
         {refs.map((r, i) => (
-          <div key={i} className="group/ref relative h-9 w-[52px] overflow-hidden rounded-[5px] border border-white/8 bg-black/30">
+          <div key={i} className="group/ref relative h-6 w-6 overflow-hidden rounded-[5px] border border-white/8 bg-black/30">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={r.src} alt={`Reference ${i + 1}`} loading="lazy" decoding="async" className="h-full w-full object-cover" />
             {/* Slot index badge — bottom-left so it doesn't fight with the
@@ -346,12 +346,12 @@ export function Composer({
                 being told. */}
             <span
               aria-hidden="true"
-              className="absolute bottom-0 left-0 rounded-tr-[3px] border-r border-t border-dashed border-white/35 bg-black/75 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.18em] text-white/95"
+              className="absolute bottom-0 left-0 rounded-tr-[3px] bg-black/75 px-1 py-[1px] text-[8px] font-medium text-white/95"
             >
               图{i + 1}
             </span>
             {r.role && (
-              <span aria-hidden="true" className="absolute right-0 top-0 rounded-bl-[3px] border border-dashed border-white/35 bg-black/70 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.24em] text-white/90">
+              <span aria-hidden="true" className="absolute right-0 top-0 rounded-bl-[3px] bg-black/70 px-1 py-[1px] text-[8px] font-medium lowercase text-white/90">
                 {r.role}
               </span>
             )}
@@ -373,19 +373,19 @@ export function Composer({
           data-tip="Add reference"
           onClick={onAddRef}
           disabled={!onAddRef}
-          className="btn-tip grid h-9 w-9 place-items-center rounded-[5px] border border-dashed border-white/12 text-text-muted transition-colors hover:border-atelier-brand-400/55 hover:text-atelier-brand-400 disabled:cursor-not-allowed disabled:opacity-45"
+          className="btn-tip grid h-6 w-6 place-items-center rounded-[5px] border border-dashed border-white/12 text-text-muted transition-colors hover:border-atelier-brand-400/55 hover:text-atelier-brand-400 disabled:cursor-not-allowed disabled:opacity-45"
         >
           <Plus size={13} aria-hidden="true" />
         </button>
         {refs.length > 0 && (
-          <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted">
+          <span className="ml-auto text-[11px] tabular-nums lowercase text-white/45">
             {refs.length} ref{refs.length === 1 ? "" : "s"}
           </span>
         )}
       </div>
 
       {/* Prompt */}
-      <div className="relative px-3 pt-2">
+      <div className="relative px-5 pt-3">
         <textarea
           ref={textareaRef}
           aria-label="Prompt"
@@ -447,20 +447,20 @@ export function Composer({
           }}
           autoFocus
           placeholder="Describe the shot. Use @ to mention a canvas node."
-          className="w-full resize-none rounded-md border border-white/6 bg-black/35 px-3 py-2.5 text-[13px] leading-[1.55] text-foreground placeholder:text-text-muted/85 outline-none transition-colors focus:border-atelier-brand-400/55 focus:bg-black/45"
+          className="w-full resize-none rounded-md border border-white/8 bg-black/35 px-3.5 py-3 text-[13px] leading-[1.6] text-white/80 placeholder:text-[12px] placeholder:italic placeholder:text-white/35 outline-none transition-colors focus:border-atelier-brand-400/55 focus:bg-black/45"
         />
         {mention && filteredMentionables.length > 0 ? (
           <ul
             role="listbox"
             aria-label="Mention picker"
-            className="absolute left-3 right-3 top-full z-10 mt-1 max-h-[200px] origin-top overflow-y-auto rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
+            className="absolute left-5 right-5 top-full z-10 mt-1 max-h-[200px] origin-top overflow-y-auto rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
           >
-            <div className="px-2 pb-1 pt-1 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-text-muted/80">
+            <div className="px-2 pb-1 pt-1 text-[11px] lowercase text-white/45">
               Mention
               {mention.query ? (
                 <>
-                  {" "}<span aria-hidden="true" className="text-text-muted/45">·</span>{" "}
-                  <span className="text-foreground/95">@{mention.query}</span>
+                  {" "}<span aria-hidden="true" className="text-white/30">·</span>{" "}
+                  <span className="text-white/75">@{mention.query}</span>
                 </>
               ) : null}
             </div>
@@ -497,7 +497,7 @@ export function Composer({
                   >
                     <span className="truncate">{m.label}</span>
                     {m.kind ? (
-                      <span className={`shrink-0 font-mono text-[9px] uppercase tracking-[0.2em] ${kindIconColor}`}>
+                      <span className={`shrink-0 text-[10px] lowercase ${kindIconColor}`}>
                         {m.kind}
                       </span>
                     ) : null}
@@ -513,11 +513,11 @@ export function Composer({
           "TEAR HERE TO GENERATE", carrying the receipt metaphor through.
           The Generate button on the right gets its own visual weight
           (primary halo shadow) so the eye lands there at submit time. */}
-      <div className="px-3 pt-2.5">
+      <div className="px-5 pt-3">
         <TearLine label="Tear here to generate" />
       </div>
-      <div className="flex items-center justify-between gap-1.5 px-3 pb-3 pt-2.5">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-between gap-2 px-5 pb-4 pt-3">
+        <div className="flex items-center gap-2">
           <ChipDropdown label="Model"    value={m} primary
             options={modelOptions.map((v) => ({ value: v, label: v }))}
             onChange={(v) => setM(v)} />

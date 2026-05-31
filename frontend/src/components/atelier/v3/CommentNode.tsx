@@ -16,7 +16,7 @@ interface Props {
 
 // CommentNode — a calm editorial review slip pinned to the canvas. Shares the
 // frosted glass shell (.atelier-node-shell) with the Idea slip; here the soft
-// CATEGORY wash is mauve instead of ochre. The italic body sits above a single
+// CATEGORY wash is mauve instead of ochre. The body sits above a single
 // muted sentence-case signature line carrying the author + index.
 export function CommentNode({ id, body, author, selected, x, y, onSelect, editing }: Props) {
   const borderClass = selected
@@ -56,10 +56,10 @@ export function CommentNode({ id, body, author, selected, x, y, onSelect, editin
         <div aria-hidden="true" className="relative min-h-[150px]" />
       ) : (
         <div className="relative">
-          <div className="px-4 pb-2.5 pt-3.5">
-            <p className="line-clamp-5 whitespace-pre-wrap text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95">
+          <div className="px-[18px] pb-3.5 pt-4">
+            <p className="line-clamp-5 whitespace-pre-wrap text-[13px] leading-[1.6] text-white/80">
               {body || (
-                <span className="not-italic text-[11px] tracking-tight text-white/35">
+                <span className="text-[12px] italic text-white/35">
                   Empty · double-click to write
                 </span>
               )}
@@ -68,12 +68,12 @@ export function CommentNode({ id, body, author, selected, x, y, onSelect, editin
           {/* Quiet signature line — a tiny soft-mauve category dot + a
               sentence-case Inter label (author + index, or "Note"). Replaces
               the old mono-caps dashed signature. */}
-          <div className="flex items-center gap-1.5 px-4 pb-3.5 pt-0.5" aria-hidden="true">
+          <div className="flex items-center gap-1.5 px-[18px] pb-3.5 pt-0.5" aria-hidden="true">
             <span
               aria-hidden="true"
               className="h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-mauve/45"
             />
-            <span className="text-[10px] text-white/45">
+            <span className="text-[11px] text-white/40">
               {author ? `${author} · No ${stampNum}` : `Note · No ${stampNum}`}
             </span>
           </div>

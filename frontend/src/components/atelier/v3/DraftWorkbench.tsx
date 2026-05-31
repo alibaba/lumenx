@@ -204,7 +204,7 @@ export function DraftWorkbench({
       {/* §2 INPUT PORTS — amber model / green positive / red negative, stacked
           on the left edge near the top of the body. -left-[14px] straddles the
           left border so beams plug in; labels sit just inside. Decorative. */}
-      <div className="absolute -left-[14px] top-[58px] z-20 flex flex-col gap-2">
+      <div className="absolute -left-[14px] top-[58px] z-20 flex flex-col gap-2.5">
         <NodePort kind="model" side="left" label="model" size={7} />
         <NodePort kind="positive" side="left" label="positive" size={7} />
         <NodePort kind="negative" side="left" label="negative" size={7} />
@@ -237,12 +237,12 @@ export function DraftWorkbench({
                 setDraft(intent);
               }
             }}
-            className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-display text-[15px] font-medium tracking-[-0.005em] text-foreground outline-none"
+            className="min-w-0 flex-1 rounded border border-atelier-brand-400/55 bg-input-bg px-1 font-display text-[15px] font-medium tracking-[-0.01em] text-foreground outline-none"
             aria-label="Rename draft"
           />
         ) : (
           <span
-            className={`min-w-0 flex-1 truncate font-display text-[15px] font-medium tracking-[-0.005em] ${onIntentCommit ? "cursor-text" : ""}`}
+            className={`min-w-0 flex-1 truncate font-display text-[15px] font-medium tracking-[-0.01em] text-white/90 ${onIntentCommit ? "cursor-text" : ""}`}
             onDoubleClick={(e) => {
               e.stopPropagation();
               startEditing();
@@ -290,27 +290,27 @@ export function DraftWorkbench({
         // v0.5 §2: neutralize the inner card's opaque fill + border so the
         // frosted outer shell is the single visible surface (no double-frame).
         style={{ background: "transparent", borderColor: "transparent" }}
-        className="atelier-opaque-inner p-5 motion-safe:animate-atelier-workbench-content-in"
+        className="atelier-opaque-inner p-6 motion-safe:animate-atelier-workbench-content-in"
       >
         {/* Meta as RON "setting rows" — muted sentence-case label left (Inter,
             no mono-caps), value in a clean dark pill right. pl clears the
             left-edge input port column. The model + config controls themselves
             live in the embedded Composer (left as is); this is only the
             workbench's own meta strip. */}
-        <div className="mb-4 flex flex-col gap-2 pl-[58px]">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[11px] leading-[1.5] text-white/45">
+        <div className="mb-5 flex flex-col gap-y-2.5 pl-[58px]">
+          <div className="flex min-h-[32px] items-center justify-between gap-3">
+            <span className="text-[11px] lowercase text-white/45">
               Model
             </span>
-            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2.5 py-[3px] text-[11px] text-text-secondary/90">
+            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2.5 py-1 text-[12px] tabular-nums text-white/75">
               {modelLabel}
             </span>
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[11px] leading-[1.5] text-white/45">
+          <div className="flex min-h-[32px] items-center justify-between gap-3">
+            <span className="text-[11px] lowercase text-white/45">
               Config
             </span>
-            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2.5 py-[3px] text-[11px] text-text-secondary/90">
+            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2.5 py-1 text-[12px] tabular-nums text-white/75">
               {configSummary}
             </span>
           </div>
@@ -354,12 +354,12 @@ export function DraftWorkbench({
         {/* Status footer — a quiet sentence-case caption + tiny neutral dot
             (NOT a mono-caps colored tearline). Hue lives in the corner StatusDot;
             same STATUS_TOKEN source as the compact DraftNode → identical wording. */}
-        <div className="mt-4 flex items-center gap-2">
+        <div className="mt-3 flex items-center gap-2 border-t border-white/8 pt-3">
           <span
             aria-hidden="true"
             className="h-[5px] w-[5px] shrink-0 rounded-full bg-white/25"
           />
-          <span className="text-[11px] leading-[1.5] text-white/45">{caption}</span>
+          <span className="text-[11px] text-white/40">{caption}</span>
         </div>
       </div>
 
