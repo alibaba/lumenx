@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Check, ChevronDown, ImageIcon, Loader2, Play, RotateCw, Sparkles, Upload, Video, Volume2 } from "lucide-react";
 import type { MediaKind } from "@/components/atelier/v3/types";
 import { TearLine } from "./ornaments";
+import { PortDot } from "./NodePort";
 import { DiagnoseModal } from "@/components/shared/PendingTaskAffordance";
 
 interface Props {
@@ -324,10 +325,8 @@ export function MediaNode({
         }}
         style={{
           transform: `translate(${x}px, ${y}px)`,
-          backgroundImage:
-            "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 32%)",
         }}
-        className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${cardBorder}`}
+        className={`group atelier-node-shell absolute w-[244px] overflow-hidden transition-[box-shadow,border-color] duration-200 ease-out ${cardBorder}`}
       >
         {/* Header row — same vocabulary as DraftNode (sparkles + display
             font title). 'IMG' caption sits at the trailing edge so the
@@ -401,6 +400,12 @@ export function MediaNode({
         <div className="px-3 pb-2.5">
           <TearLine label={`Image · No ${stampNum}`} />
         </div>
+        {/* Output port — completed image cards expose a blue port on the
+            right edge so beams plug in. Card is overflow-hidden, so the dot
+            sits just inside at right-1 rather than half-outside. */}
+        {status === "completed" ? (
+          <PortDot kind="output" className="absolute right-1 top-1/2 -translate-y-1/2 z-10" />
+        ) : null}
       </div>
     );
   }
@@ -421,7 +426,7 @@ export function MediaNode({
       }}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`group absolute overflow-hidden rounded-md bg-black/40 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.55)] transition-[box-shadow,border-color] duration-200 ease-out ${
+      className={`group atelier-node-shell absolute overflow-hidden transition-[box-shadow,border-color] duration-200 ease-out ${
         // Three chrome modes:
         //   1. Actionable empty image draft → primary-tinted hairline that
         //      reads as 'this is editable, drop something here'
@@ -512,7 +517,7 @@ export function MediaNode({
                 aria-label="Generate image from prompt"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); onGenerate(id); }}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-text-secondary transition-all duration-200 hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground active:scale-[0.97]"
+                className="inline-flex items-center justify-center gap-1.5 rounded-full bg-atelier-port-positive px-2.5 py-1.5 text-[12px] font-medium text-black shadow-[0_4px_12px_-3px_rgba(61,220,132,0.55)] transition-all duration-200 hover:brightness-110 active:scale-[0.97]"
               >
                 <Sparkles size={11} aria-hidden="true" />
                 Generate
@@ -643,6 +648,13 @@ export function MediaNode({
         <span className="pointer-events-none absolute left-1.5 bottom-1.5 hidden max-w-[70%] truncate rounded-[3px] bg-black/70 px-1.5 py-[3px] font-mono text-[9px] tracking-tight text-white/80 backdrop-blur-sm group-hover:inline-block">
           {duration}
         </span>
+      ) : null}
+
+      {/* Output port — completed media (video / audio) exposes a blue port
+          on the right edge so beams plug in. Box is overflow-hidden, so the
+          dot sits just inside at right-1 rather than half-outside. */}
+      {src && status === "completed" ? (
+        <PortDot kind="output" className="absolute right-1 top-1/2 -translate-y-1/2 z-10" />
       ) : null}
     </div>
   );

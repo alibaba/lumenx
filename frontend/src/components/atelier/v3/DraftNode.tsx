@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, X } from "lucide-react";
 import { TearLine, StatusDot, STATUS_TOKEN } from "./ornaments";
+import { PortDot } from "./NodePort";
 
 export type DraftNodeStatus = "draft" | "approved" | "running" | "completed";
 
@@ -100,13 +101,13 @@ export function DraftNode({
           onSelect?.(id);
         }
       }}
-      style={{
-        transform: `translate(${x}px, ${y}px)`,
-        backgroundImage:
-          "linear-gradient(to bottom, rgba(255,255,255,0.018) 0%, rgba(255,255,255,0) 32%)",
-      }}
-      className={`group absolute w-[244px] overflow-hidden rounded-lg border bg-[#141416] shadow-[0_18px_40px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.6),inset_0_1px_0_0_rgba(255,255,255,0.06)] transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
+      style={{ transform: `translate(${x}px, ${y}px)` }}
+      // v0.5 Flova: frosted glass node body (target spec §2) — the dotted grid
+      // shows through faintly; replaces the flat #141416 card.
+      className={`group absolute w-[244px] atelier-node-shell transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
+      {/* output port — blue dot on the right edge so connection beams plug in */}
+      <PortDot kind="output" className="absolute right-[-4px] top-1/2 -translate-y-1/2 z-10" />
       <div className="px-3.5 pb-2.5 pt-3">
         {/* Title row — Sparkles 11px primary, intent in display font tighter
             tracking, ready badge mono caps */}

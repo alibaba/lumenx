@@ -35,6 +35,7 @@ import {
   type ComposerTab,
 } from "./Composer";
 import type { DraftNodeStatus } from "./DraftNode";
+import { NodePort } from "./NodePort";
 import { TearLine, StatusDot, STATUS_TOKEN } from "./ornaments";
 import { TakeTimeline, type TakeTimelineEntry } from "./TakeTimeline";
 
@@ -170,13 +171,44 @@ export function DraftWorkbench({
           onSelect?.(id);
         }
       }}
-      style={{ transform: `translate(${x}px, ${y}px)` }}
-      // v0.4.5 §12.2 + §12.7.4: outer shell is the atmospheric frame
-      // (carries bloom + visible border); inner card is the operating
-      // area. Width bumped 480 → 520 to absorb the double-frame padding
-      // overhead without shrinking the content area.
+      style={{
+        transform: `translate(${x}px, ${y}px)`,
+        // v0.5 §2 — read the shell as ONE frosted glass card. opaque-shell's
+        // base fill is near-solid rgba(28,32,52,0.94); override it with the
+        // translucent node-fill so the dotted grid shows through faintly, and
+        // bump the blur to 20px. overflow:visible lets the I/O port dots sit
+        // half-outside the border (opaque-shell defaults to overflow:hidden,
+        // which would clip them). The opaque-shell class is kept so the
+        // internal bloom (::before), header layout, and grow-in are intact.
+        background: "var(--atelier-node-fill)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        overflow: "visible",
+      }}
+      // v0.5 §2: outer shell is the single frosted card; the inner card's
+      // opaque fill is neutralized below so it reads as one surface. Width
+      // 520 keeps the prompt + ref content roomy.
       className={`group absolute w-[520px] origin-top-left atelier-opaque-shell transition-shadow duration-200 motion-safe:animate-atelier-workbench-in ${selectedClass}`}
     >
+      {/* §2 OUTPUT PORT — blue dot half-outside the right border, on the title
+          row. Connection beams plug in here. -right-[14px] = 10px shell padding
+          + 4px half-dot so the dot straddles the card border. Decorative. */}
+      <NodePort
+        kind="output"
+        side="right"
+        label="image"
+        className="absolute -right-[14px] top-[18px] z-20"
+      />
+
+      {/* §2 INPUT PORTS — amber model / green positive / red negative, stacked
+          on the left edge near the top of the body. -left-[14px] straddles the
+          left border so beams plug in; labels sit just inside. Decorative. */}
+      <div className="absolute -left-[14px] top-[58px] z-20 flex flex-col gap-1.5">
+        <NodePort kind="model" side="left" label="model" />
+        <NodePort kind="positive" side="left" label="positive" />
+        <NodePort kind="negative" side="left" label="negative" />
+      </div>
+
       {/* Header zone — sparkle + intent (rename on dblclick) + take pill.
           Sits in the outer shell's top band (above the inner card), like
           the "Image Generator" title in the reference. Bloom paints
@@ -257,17 +289,33 @@ export function DraftWorkbench({
           instead of the whole 520px workbench appearing at once. The header
           (above) rides the frame's own ramp — it existed in the compact card,
           so animating it with the frame preserves identity continuity. */}
-      <div className="atelier-opaque-inner motion-safe:animate-atelier-workbench-content-in">
-        {/* Meta row — model + config. v0.4.5 §13.4: model name uses
-            --brand-soft (muted slate) not saturated cobalt. */}
-        <div className="mb-3 flex items-center gap-1.5 text-[11px] leading-none text-text-secondary">
-          <span className="font-mono text-[10px] font-medium uppercase tracking-[0.14em] text-atelier-brand-soft">
-            {modelLabel}
-          </span>
-          <span aria-hidden="true" className="text-text-muted/60">·</span>
-          <span className="truncate font-mono text-[10px] tracking-[0.04em] text-text-secondary/85">
-            {configSummary}
-          </span>
+      <div
+        // v0.5 §2: neutralize the inner card's opaque fill + border so the
+        // frosted outer shell is the single visible surface (no double-frame).
+        style={{ background: "transparent", borderColor: "transparent" }}
+        className="atelier-opaque-inner motion-safe:animate-atelier-workbench-content-in"
+      >
+        {/* Meta as RON "setting rows" — muted lowercase label left, value in a
+            dark pill right. pl clears the left-edge input port column. The model
+            + config controls themselves live in the embedded Composer (left as
+            is); this is only the workbench's own meta strip. */}
+        <div className="mb-3 flex flex-col gap-1.5 pl-[58px]">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[11px] lowercase tracking-[0.04em] text-white/50">
+              model
+            </span>
+            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2 py-[3px] font-mono text-[11px] tracking-[0.04em] text-text-secondary/90">
+              {modelLabel}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[11px] lowercase tracking-[0.04em] text-white/50">
+              config
+            </span>
+            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-white/[0.08] bg-black/35 px-2 py-[3px] font-mono text-[11px] tracking-[0.04em] text-text-secondary/90">
+              {configSummary}
+            </span>
+          </div>
         </div>
 
         {/* Inline Composer — workbench body. Uses mode="inline" so it

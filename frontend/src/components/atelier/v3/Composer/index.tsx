@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Settings, X, Plus, Trash2 } from "lucide-react";
+import { Settings, X, Plus, Trash2, Sparkles } from "lucide-react";
 import { ChipDropdown } from "./ChipDropdown";
 import { composerPlacement, type ComposerAnchor, type ComposerViewport } from "./positioning";
 import { validateAtelierRefs, type AtelierRefKind } from "@/lib/modelCatalog";
@@ -554,19 +554,19 @@ export function Composer({
             options={countOptions.map((v) => ({ value: v, label: v }))}
             onChange={(v) => setC(v)} />
         </div>
-        {/* v0.4.5 §12.3: editorial primary button — Inter italic verb + →
-            arrow. Replaces the saturated cobalt icon-only circular submit.
-            Reads as a magazine "Read more →" action, not a SaaS submit. */}
+        {/* v0.5 Flova: Generate = spring-green pill + sparkle (target spec §4).
+            Green is the signature action color of the reference node board. */}
         <button
           type="button"
           aria-label="Submit"
           data-tip="Generate (⌘⏎)"
           disabled={mismatchActive}
           onClick={submit}
-          className={`atelier-btn-editorial primary btn-tip ${
+          className={`btn-tip inline-flex items-center gap-1.5 rounded-full bg-atelier-port-positive px-3.5 py-1.5 font-display text-[12px] font-semibold tracking-[-0.005em] text-black shadow-[0_2px_10px_-2px_rgba(61,220,132,0.5)] transition-all duration-150 hover:brightness-110 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-45 ${
             mismatchActive ? "" : draft.trim().length > 0 ? "motion-safe:animate-atelier-pulse-soft" : ""
           }`}
         >
+          <Sparkles size={12} aria-hidden="true" />
           Generate
         </button>
       </div>
