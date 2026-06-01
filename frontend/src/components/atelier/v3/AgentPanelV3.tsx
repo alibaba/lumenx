@@ -1,6 +1,23 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Loader2, Paperclip, ShieldCheck, Sparkles, Wand2, X } from "lucide-react";
+import {
+  AtSign,
+  Bot,
+  Clapperboard,
+  ImagePlus,
+  Loader2,
+  Mic2,
+  Music,
+  Palette,
+  Paperclip,
+  ScrollText,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
+  Workflow,
+  X,
+  Zap,
+} from "lucide-react";
 import { useAtelierStore } from "@/store/atelierStore";
 import type {
   AtelierAgentTurn,
@@ -9,8 +26,85 @@ import type {
 
 interface Toast { kind: "info" | "success" | "error"; text: string }
 
+// v0.7 §B — empty-state skill catalog. 8 cards arranged 2×4 below the orb
+// greeting, each a soft prompt onto the agent's intended capabilities. Keep
+// this list synced with the planner-side seed-graph registry; titles double
+// as toast copy until the corresponding planner intents land.
+export type SkillCardId =
+  | "compose_shortfilm"
+  | "storyboard_script"
+  | "generate_hero_shot"
+  | "animate_still"
+  | "stylize_footage"
+  | "replace_voice"
+  | "mix_soundtrack"
+  | "try_workflow";
+
+interface SkillCardSpec {
+  id: SkillCardId;
+  title: string;
+  subtitle: string;
+  Icon: typeof Clapperboard;
+}
+
+const SKILL_CARDS: SkillCardSpec[] = [
+  {
+    id: "compose_shortfilm",
+    title: "Compose a short film",
+    subtitle: "Plan, board, and cut a full piece with the director agent.",
+    Icon: Clapperboard,
+  },
+  {
+    id: "storyboard_script",
+    title: "Storyboard a script",
+    subtitle: "Turn a script into shot-by-shot panels.",
+    Icon: ScrollText,
+  },
+  {
+    id: "generate_hero_shot",
+    title: "Generate hero shot",
+    subtitle: "Make a single keyframe from a prompt or reference.",
+    Icon: ImagePlus,
+  },
+  {
+    id: "animate_still",
+    title: "Animate a still",
+    subtitle: "Bring an image to life as a short clip.",
+    Icon: Sparkles,
+  },
+  {
+    id: "stylize_footage",
+    title: "Stylize footage",
+    subtitle: "Restyle existing clips with a look reference.",
+    Icon: Palette,
+  },
+  {
+    id: "replace_voice",
+    title: "Replace a voice",
+    subtitle: "Swap dialogue with a new voice and keep timing.",
+    Icon: Mic2,
+  },
+  {
+    id: "mix_soundtrack",
+    title: "Mix a soundtrack",
+    subtitle: "Generate score and SFX layered to your cut.",
+    Icon: Music,
+  },
+  {
+    id: "try_workflow",
+    title: "Try a workflow",
+    subtitle: "Browse saved templates and recipes to start from.",
+    Icon: Workflow,
+  },
+];
+
 interface Props {
   pushToast?: (kind: Toast["kind"], text: string) => void;
+  // v0.7 §B — shell wires this to its rail-mode dispatcher / seed-graph
+  // helper. If omitted the panel falls back to a "<title> coming soon"
+  // toast so the catalog still feels alive in storybook / standalone
+  // contexts (and so this patch stays presentational).
+  onSkillCardClick?: (skillId: SkillCardId) => void;
 }
 
 // v0.4.5 §13.4: user bubble shifts from saturated cobalt (primary/0.1
@@ -150,11 +244,16 @@ function turnStatusCaption(status: AtelierAgentTurn["status"]): string {
   }
 }
 
-function turnResponseText(status: AtelierAgentTurn["status"], toolCount: number): string {
-  // v0.5.9 §agent-message-rendering: backend AtelierAgentTurn has no
-  // free-text response field — only tool_calls + status. Render a quiet
-  // human-readable summary instead of the prior green "Done" pill.
-  switch (status) {
+function turnResponseText(turn: AtelierAgentTurn): string {
+  // Prefer the backend-derived `response` summary when present (populated
+  // by AtelierAgentHarness._build_turn_response at every terminal site).
+  // Fall back to the legacy status-derived caption for persisted pre-v0.7
+  // turns and the brief pre-save window where response is still null.
+  if (turn.response && turn.response.trim()) {
+    return turn.response.trim();
+  }
+  const toolCount = turn.tool_calls.length;
+  switch (turn.status) {
     case "completed":
       return toolCount > 0
         ? `Turn complete · ${toolCount} action${toolCount === 1 ? "" : "s"} ran.`
@@ -178,7 +277,7 @@ function AgentTurnRow({ turn }: { turn: AtelierAgentTurn }) {
     minute: "2-digit",
   });
   const statusCaption = turnStatusCaption(turn.status);
-  const responseText = turnResponseText(turn.status, toolCount);
+  const responseText = turnResponseText(turn);
   return (
     <div className="space-y-2">
       {turn.user_message ? (
@@ -243,7 +342,7 @@ function toolCallDot(status: string): string {
   }
 }
 
-export function AgentPanelV3({ pushToast }: Props) {
+export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
   const project        = useAtelierStore((s) => s.currentProject);
   const selectedNodeId = useAtelierStore((s) => s.selectedNodeId);
   const agentTurns     = useAtelierStore((s) => s.agentTurns);
@@ -314,7 +413,9 @@ export function AgentPanelV3({ pushToast }: Props) {
     });
   };
 
-  const policy = project?.agent_policy;
+  // v0.7 §D: approval-mode pill moved out of the composer; the Permission
+  // segmented control in RightRailV3 is now the single source of truth, so
+  // `policy` is no longer read here. (Was `const policy = project?.agent_policy;`.)
   const recentTurns = useMemo<AtelierAgentTurn[]>(
     () => (agentTurns ?? []).slice(-6),
     [agentTurns],
@@ -508,43 +609,46 @@ export function AgentPanelV3({ pushToast }: Props) {
               </div>
             </div>
 
-            {/* Editorial 'try asking' card. Reads as a thumbed-down menu of
-                possible openings — italic display body for each line, mono
-                caps tear-stamp footer caption. */}
-            <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
-              <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-atelier-brand-soft/40 via-atelier-brand-soft/12 to-transparent" />
-              <div className="px-3.5 py-3">
-                <div className="mb-2 flex items-center gap-1.5 text-[11px] text-atelier-brand-soft/85">
-                  <Sparkles size={10} aria-hidden="true" />
-                  Try asking
-                </div>
-                <ul className="space-y-1.5 border-l border-white/6 pl-3 font-sans text-[13px] italic leading-[1.5] tracking-tight text-foreground/92">
-                  {plannerMode === "director" ? (
-                    <>
-                      <li>3-shot story about a rooftop chase.</li>
-                      <li>4 variants from this reference.</li>
-                      <li>Motion study (select an image first).</li>
-                      <li>Character ref → video.</li>
-                    </>
-                  ) : (
-                    <>
-                      <li>Create three drafts for a rainy rooftop chase.</li>
-                      <li>Generate 4 candidates for the selected draft.</li>
-                      <li>Add the neon alley reference to the cinematic draft.</li>
-                    </>
-                  )}
-                </ul>
-                <div
-                  aria-hidden="true"
-                  className="mt-3 flex items-center gap-2"
-                >
-                  <div className="flex-1 border-t border-dashed border-white/10" />
-                  <span className="text-[11px] text-text-muted/75">
-                    Prompt library
-                  </span>
-                  <div className="flex-1 border-t border-dashed border-white/10" />
-                </div>
-              </div>
+            {/* v0.7 §B — empty-state skill catalog. 2×4 grid of ghost buttons,
+                each a soft entry point onto the agent's intended capabilities
+                (matches the RHTV agent panel skill grid, scoped to video
+                creation rather than RHTV's e-commerce slots). Cards are
+                presentational; click dispatches through onSkillCardClick so
+                seed-graph logic stays at the shell. */}
+            <div
+              role="list"
+              aria-label="Agent skill catalog"
+              className="grid grid-cols-2 gap-2"
+            >
+              {SKILL_CARDS.map((card) => {
+                const Icon = card.Icon;
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    role="listitem"
+                    onClick={() => {
+                      if (onSkillCardClick) onSkillCardClick(card.id);
+                      else pushToast?.("info", `${card.title} coming soon`);
+                    }}
+                    className="group flex flex-col items-start gap-1.5 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-atelier-brand-400/45"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Icon
+                        size={14}
+                        aria-hidden="true"
+                        className="text-atelier-port-positive/65 transition-colors group-hover:text-atelier-port-positive/85"
+                      />
+                      <span className="text-[12.5px] font-medium tracking-[-0.005em] text-foreground">
+                        {card.title}
+                      </span>
+                    </div>
+                    <span className="line-clamp-2 text-[11px] leading-[1.4] text-white/45">
+                      {card.subtitle}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </>
         ) : null}
@@ -756,84 +860,102 @@ export function AgentPanelV3({ pushToast }: Props) {
             }}
             className="block w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-[13px] leading-[1.55] text-foreground/95 outline-none placeholder:text-text-muted/85 disabled:cursor-not-allowed"
           />
+          {/* v0.7 §D — composer toolbar cleanup. Internal-feeling chip row
+              replaced with a polished cluster: + (attach) / @ (mention)
+              ghost icon buttons on the left; AUTO/PLAN toggle + Preview +
+              green Run pill on the right. The approval-mode status pill
+              moved out — it's already visible in the Permission segmented
+              control at the top of the rail, so duplicating it here read
+              as receipt-vocabulary. */}
           <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <button
-                className="btn-tip inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                className="btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 data-tip="Attach context"
+                aria-label="Attach context"
                 disabled
               >
-                <Paperclip size={11} aria-hidden="true" />
+                <Paperclip size={12} aria-hidden="true" />
               </button>
-              {/* Planner mode toggle. Free = deterministic single-action
-                  plans (existing). Director = structure planner: maps
-                  "3-shot story" / "N variants" / "motion study" intents
-                  into multi-step canvas plans.
-                  v0.4.5 §12.3 + §12.7.1: editorial-toggle style — Space
-                  Grotesk upright + weight 600 + cobalt underline on
-                  active (no italic — Space Grotesk has no italic glyph,
-                  so synthesized italic made Free vs Director read as
-                  two fonts). */}
-              <div role="tablist" aria-label="Planner mode" className="atelier-editorial-toggle">
-                <button
-                  role="tab"
-                  type="button"
-                  aria-selected={plannerMode === "free"}
-                  data-tip="Free intent → single action"
-                  onClick={() => setPlannerModePersist("free")}
-                  disabled={isLocked}
-                  className={`opt btn-tip disabled:cursor-not-allowed disabled:opacity-60 ${
-                    plannerMode === "free" ? "on" : ""
-                  }`}
-                >
-                  Free
-                </button>
-                <button
-                  role="tab"
-                  type="button"
-                  aria-selected={plannerMode === "director"}
-                  data-tip="Director · structured multi-step plans"
-                  onClick={() => setPlannerModePersist("director")}
-                  disabled={isLocked}
-                  className={`opt btn-tip inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60 ${
-                    plannerMode === "director" ? "on" : ""
-                  }`}
-                >
-                  <Wand2 size={10} aria-hidden="true" />
-                  Director
-                </button>
-              </div>
-              {policy?.approval_mode ? (
-                <span className="text-[11px] text-text-muted/80">
-                  <span aria-hidden="true" className="text-text-muted/50">·</span>{" "}
-                  <span className="text-text-secondary/95">{policy.approval_mode.replace("_", " ")}</span>
-                </span>
-              ) : null}
+              <button
+                type="button"
+                className="btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                data-tip="Mention a node"
+                aria-label="Mention a node"
+                disabled
+              >
+                <AtSign size={12} aria-hidden="true" />
+              </button>
             </div>
             <div className="flex items-center gap-1.5">
+              {/* AUTO / PLAN toggle. Single button cycles between the
+                  existing planner modes — Free (= Auto, deterministic
+                  single-action) and Director (= Plan, structured
+                  multi-step). LeftRail's Director chip and this control
+                  stay synced through the existing `atelier-v3-planner-
+                  mode-changed` custom event + localStorage. */}
               <button
+                type="button"
+                aria-pressed={plannerMode === "director"}
+                aria-label={
+                  plannerMode === "director"
+                    ? "Plan mode — structured multi-step. Click to switch to Auto."
+                    : "Auto mode — single deterministic action. Click to switch to Plan."
+                }
+                data-tip={
+                  plannerMode === "director"
+                    ? "Plan · structured multi-step"
+                    : "Auto · single action"
+                }
+                onClick={() =>
+                  setPlannerModePersist(plannerMode === "director" ? "free" : "director")
+                }
+                disabled={isLocked}
+                className={`btn-tip inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10.5px] font-medium uppercase tracking-[0.06em] transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  plannerMode === "director"
+                    ? "bg-atelier-brand-400/15 text-[#6e8fff] hover:bg-atelier-brand-400/22"
+                    : "text-text-muted hover:bg-white/[0.05] hover:text-foreground"
+                }`}
+              >
+                {plannerMode === "director" ? (
+                  <Wand2 size={10} aria-hidden="true" />
+                ) : (
+                  <Zap size={10} aria-hidden="true" />
+                )}
+                {plannerMode === "director" ? "Plan" : "Auto"}
+              </button>
+              <button
+                type="button"
                 disabled={isLocked || previewing || !hasDraft}
                 onClick={handlePreview}
-                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-black/25 px-2.5 py-1 text-[11px] font-medium tracking-tight text-text-secondary/95 transition-all duration-150 hover:border-white/15 hover:bg-white/[0.05] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-7 items-center gap-1 rounded-md px-2.5 text-[11px] font-medium tracking-tight text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {previewing ? (
                   <Loader2 size={11} className="animate-spin" aria-hidden="true" />
                 ) : null}
                 Preview
               </button>
-              {/* v0.4.5 §12.3: editorial primary — Inter italic verb + →.
-                  Replaces the cobalt-pill submit. Same affordance, new register. */}
+              {/* Primary green Run pill (was "Execute" with the editorial
+                  italic + → recipe). v0.7 §D pivots the affordance to the
+                  Flova Generate-CTA green so primary action carries the
+                  same chroma as the canvas's primary-port + generate
+                  buttons — one green for "commit & spend" across the
+                  product. */}
               <button
+                type="button"
                 disabled={isLocked || (!hasDraft && plannedCalls.length === 0)}
                 onClick={() => handleExecute(false)}
-                className={`atelier-btn-editorial primary ${
-                  hasDraft && !isLocked && !executing ? "motion-safe:animate-atelier-pulse-soft" : ""
+                className={`inline-flex h-7 items-center gap-1.5 rounded-full bg-atelier-port-positive/95 px-3.5 text-[11.5px] font-medium text-[#0c1a10] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_4px_14px_-6px_rgba(61,220,132,0.55)] transition-all duration-150 hover:bg-atelier-port-positive hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.30),0_6px_18px_-6px_rgba(61,220,132,0.7)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 ${
+                  hasDraft && !isLocked && !executing
+                    ? "motion-safe:animate-atelier-pulse-soft"
+                    : ""
                 }`}
               >
                 {executing ? (
                   <Loader2 size={11} className="animate-spin" aria-hidden="true" />
                 ) : null}
-                Execute
+                Run
               </button>
             </div>
           </div>

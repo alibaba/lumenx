@@ -444,6 +444,15 @@ class AtelierAgentTurn(BaseModel):
     tool_calls: List[AtelierAgentToolCall] = Field(default_factory=list)
     created_at: float = Field(default_factory=time.time)
     completed_at: Optional[float] = None
+    response: Optional[str] = Field(
+        default=None,
+        description=(
+            "Derived human-readable English summary of the turn's outcome. "
+            "Populated by AtelierAgentHarness when the turn reaches a terminal "
+            "status (completed/failed/waiting_approval). Optional so historical "
+            "persisted turns load cleanly."
+        ),
+    )
 
 
 class AtelierNode(BaseModel):

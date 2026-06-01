@@ -144,6 +144,7 @@ export interface AtelierAgentTurn {
     tool_calls: AtelierAgentToolCall[];
     created_at: number;
     completed_at?: number | null;
+    response?: string | null;
 }
 
 export interface AtelierAgentToolSpec {

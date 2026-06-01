@@ -1402,3 +1402,82 @@ def test_atelier_structure_planner_explicit_intent_kind_overrides_message(pipeli
 
     assert plan.status == "ready"
     assert len(plan.tool_calls) == 5
+
+
+def test_atelier_agent_turn_response_summarizes_completed_actions(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [
+            {"tool_name": "canvas.createVideoNode", "arguments": {"title": "A", "prompt": "A"}},
+            {"tool_name": "canvas.createVideoNode", "arguments": {"title": "B", "prompt": "B"}},
+        ],
+    )
+
+    assert turn.status == "completed"
+    assert turn.response is not None
+    assert turn.response == "Created 2 video drafts."
+
+
+def test_atelier_agent_turn_response_uses_singular_for_one_action(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [{"tool_name": "canvas.createVideoNode", "arguments": {"title": "Solo", "prompt": "Solo"}}],
+    )
+
+    assert turn.response == "Created 1 video draft."
+
+
+def test_atelier_agent_turn_response_signals_awaiting_approval(pipeline):
+    project = pipeline.create_atelier_project("Board")
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [{"tool_name": "canvas.createVideoNode", "arguments": {"title": "Shot", "prompt": "A chase"}}],
+    )
+
+    assert turn.status == "waiting_approval"
+    assert turn.response is not None
+    assert "Awaiting your approval" in turn.response
+
+
+def test_atelier_agent_turn_response_marks_denied_actions(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pending = pipeline.run_atelier_agent_turn(
+        project.id,
+        [{"tool_name": "canvas.createVideoNode", "arguments": {"title": "Shot", "prompt": "A chase"}}],
+    )
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [],
+        deny=True,
+        turn_id=pending.id,
+    )
+
+    assert turn.status == "failed"
+    assert turn.response is not None
+    assert "Denied" in turn.response
+
+
+def test_atelier_agent_turn_response_reports_failed_first_error(pipeline):
+    project = pipeline.create_atelier_project("Board")
+    pipeline.update_atelier_agent_policy(
+        project.id,
+        {"approval_mode": "never", "allowed_tools": ["canvas.readProject"]},
+    )
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [{"tool_name": "canvas.createVideoNode", "arguments": {"title": "X", "prompt": "X"}}],
+    )
+
+    # createVideoNode is denied (not in allowed_tools), so the turn completes with denied calls.
+    assert turn.status == "completed"
+    assert turn.response is not None
+    assert "Denied" in turn.response

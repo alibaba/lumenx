@@ -1,8 +1,7 @@
 "use client";
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   Play,
-  Settings,
   Link2,
   GitBranch,
   Check,
@@ -15,12 +14,33 @@ import {
   Camera,
   RefreshCw,
   ChevronDown,
+  Sparkles,
+  Wand2,
+  Dice5,
+  Bookmark,
+  Lightbulb,
+  Plus,
+  Volume2,
+  Film,
+  LayoutGrid,
+  Upload,
+  Square,
+  RotateCw,
+  X,
 } from "lucide-react";
 
-// Per Codex doc §4.6 / §7.6 — completed-take nodes need a richer action
-// vocabulary than draft/idea nodes. New entries are framed as "judgment
-// after generation" affordances: save out / view full / hand to agent.
+// v0.7 contextual action toolbar — replaces the v0.5/v0.6 icon-only pill
+// with a chip row (icon + sentence-case label) that mirrors the RHTV
+// reference. Chips are borderless ghost buttons inside a frosted shell
+// (no border per v0.6.2 chrome pivot — divider lives in the inset shadow
+// ring). A trailing "More" chip opens an overflow menu where every kind's
+// destructive Delete (and any low-priority actions) live.
+//
+// Anchoring + position math (getBoundingClientRect + ResizeObserver) is
+// unchanged from v0.6 — see the useLayoutEffect block below.
 export type ActionKey =
+  // Legacy keys — preserved so existing handleActionBar handlers keep
+  // dispatching without churn.
   | "play"
   | "edit"
   | "regenerate"
@@ -33,10 +53,41 @@ export type ActionKey =
   | "addToAgent"
   | "frameCapture"
   | "replace"
-  | "delete";
+  | "delete"
+  // v0.7 new — image
+  | "variations"
+  | "editSubject"
+  | "crop"
+  | "upscale"
+  | "styleTransfer"
+  | "upload"
+  // v0.7 new — draft video
+  | "generate"
+  | "editPrompt"
+  | "rerollSeed"
+  | "pickModel"
+  | "aspect"
+  | "duration"
+  | "negativePrompt"
+  | "convertToIdea"
+  // v0.7 new — completed take
+  | "compareTakes"
+  // v0.7 new — idea / comment slip
+  | "convertToDraft"
+  | "pin"
+  // v0.7 new — audio
+  | "preview"
+  | "replaceVoice"
+  | "trim"
+  | "useInSequence";
 
 interface Props {
   kind: "image" | "video" | "audio" | "draft" | "idea" | "comment";
+  // When kind === "image", determines which layout we render: media-bearing
+  // images get the full v0.7 chip row; empty images collapse to the legacy
+  // [Upload, useAsRef, More→Delete] row so the bar never promises actions
+  // the card can't perform.
+  hasMedia?: boolean;
   // nodeId is the canonical selected node id (real node id OR virtual
   // candidate key — both are mirrored as `data-atelier-node` attributes
   // on the rendered card). When provided, the bar reads that element's
@@ -62,72 +113,189 @@ interface ActionDef {
   variant?: "default" | "danger" | "select";
 }
 
+// ── Action catalog ─────────────────────────────────────────────────────
+// Labels are sentence-case Inter per v0.5.6/7/8 ladder. Variants:
+//   default = neutral text-secondary
+//   select  = emerald (used for the Generate CTA + Pick this take)
+//   danger  = red on hover (Delete; always lives in overflow)
 const ACTIONS: Record<ActionKey, ActionDef> = {
+  // Legacy — labels updated to sentence case per v0.7 spec.
   play: { key: "play", label: "Play", Icon: Play },
   edit: { key: "edit", label: "Edit", Icon: Pencil },
-  regenerate: { key: "regenerate", label: "Re-generate", Icon: Settings },
-  useAsRef: { key: "useAsRef", label: "Use as reference", Icon: Link2 },
+  regenerate: { key: "regenerate", label: "Reroll", Icon: RotateCw },
+  useAsRef: { key: "useAsRef", label: "Use as ref", Icon: Link2 },
   branch: { key: "branch", label: "Branch", Icon: GitBranch },
-  selectTake: { key: "selectTake", label: "Select as take", Icon: Check, variant: "select" },
-  addToSequence: { key: "addToSequence", label: "Add to Sequence", Icon: Scissors },
+  selectTake: { key: "selectTake", label: "Pick this take", Icon: Check, variant: "select" },
+  addToSequence: { key: "addToSequence", label: "Add to sequence", Icon: Scissors },
   download: { key: "download", label: "Download", Icon: Download },
-  fullscreen: { key: "fullscreen", label: "Fullscreen preview", Icon: Maximize2 },
-  addToAgent: { key: "addToAgent", label: "Send to Agent", Icon: Bot },
+  fullscreen: { key: "fullscreen", label: "Fullscreen", Icon: Maximize2 },
+  addToAgent: { key: "addToAgent", label: "Send to agent", Icon: Bot },
   frameCapture: { key: "frameCapture", label: "Capture frame", Icon: Camera },
   replace: { key: "replace", label: "Replace media", Icon: RefreshCw },
   delete: { key: "delete", label: "Delete", Icon: Trash2, variant: "danger" },
+  // Image — v0.7 new.
+  variations: { key: "variations", label: "Variations", Icon: Dice5 },
+  editSubject: { key: "editSubject", label: "Edit subject", Icon: Pencil },
+  crop: { key: "crop", label: "Crop", Icon: Scissors },
+  upscale: { key: "upscale", label: "Upscale", Icon: Maximize2 },
+  styleTransfer: { key: "styleTransfer", label: "Style transfer", Icon: Wand2 },
+  upload: { key: "upload", label: "Upload", Icon: Upload },
+  // Draft — v0.7 new. Generate borrows the emerald CTA tone from v0.5.7.
+  generate: { key: "generate", label: "Generate", Icon: Play, variant: "select" },
+  editPrompt: { key: "editPrompt", label: "Edit prompt", Icon: Pencil },
+  rerollSeed: { key: "rerollSeed", label: "Reroll seed", Icon: Dice5 },
+  pickModel: { key: "pickModel", label: "Pick model", Icon: Sparkles },
+  aspect: { key: "aspect", label: "Aspect", Icon: Square },
+  duration: { key: "duration", label: "Duration", Icon: Film },
+  negativePrompt: { key: "negativePrompt", label: "Negative prompt", Icon: X },
+  convertToIdea: { key: "convertToIdea", label: "Convert to idea", Icon: Lightbulb },
+  // Video take — v0.7 new.
+  compareTakes: { key: "compareTakes", label: "Compare takes", Icon: LayoutGrid },
+  // Idea / comment — v0.7 new.
+  convertToDraft: { key: "convertToDraft", label: "Convert to draft", Icon: Wand2 },
+  pin: { key: "pin", label: "Pin", Icon: Bookmark },
+  // Audio — v0.7 new.
+  preview: { key: "preview", label: "Preview", Icon: Play },
+  replaceVoice: { key: "replaceVoice", label: "Replace voice", Icon: Volume2 },
+  trim: { key: "trim", label: "Trim", Icon: Scissors },
+  useInSequence: { key: "useInSequence", label: "Use in sequence", Icon: Plus },
 };
 
-type LayoutItem = ActionKey | "divider";
+// "__more__" is a sentinel; the overflow trigger isn't a real ActionKey
+// because clicking it opens the popover instead of dispatching through
+// onAct.
+type LayoutMain = ReadonlyArray<ActionKey | "__more__">;
+type LayoutOverflow = ReadonlyArray<ActionKey | "__divider__">;
 
-const LAYOUTS: Record<Props["kind"], LayoutItem[]> = {
-  // Layout for completed takes (RHTV §4.6 reference): play / iterate /
-  // attach / branch / select / sequence go first because they're flow
-  // actions; download / fullscreen / agent are post-judgment actions
-  // grouped after a divider; delete sits at the far right.
-  video: [
-    "play",
-    "regenerate",
-    "useAsRef",
-    "branch",
-    "selectTake",
-    "addToSequence",
-    "divider",
-    "fullscreen",
-    "download",
-    "frameCapture",
-    "addToAgent",
-    "divider",
-    "delete",
-  ],
-  audio: ["play", "useAsRef", "addToSequence", "divider", "download", "addToAgent", "divider", "delete"],
-  // Branch is meaningless on a static image (you branch FROM a take, not
-  // from a reference). Image action bar: attach + replace + post-judgment
-  // (full / download / agent) + delete.
-  image: ["useAsRef", "replace", "divider", "fullscreen", "download", "addToAgent", "divider", "delete"],
-  // Drafts use the floating Composer as their editor — no "regenerate"
-  // (would silently 400 without payload). Branch is meaningless on an
-  // intent (you branch FROM a take). Just Delete.
-  draft: ["delete"],
-  idea: ["delete"],
-  // Comments are sticky-note annotations — Delete only (body is edited
-  // inline on the canvas).
-  comment: ["delete"],
-};
-
-function buttonClass(variant: ActionDef["variant"]): string {
-  const base = "btn-tip group/act inline-flex h-7 w-7 items-center justify-center rounded-full transition-all duration-150 active:scale-[0.92]";
-  if (variant === "danger") {
-    return `${base} text-text-secondary hover:scale-[1.08] hover:bg-red-400/15 hover:text-red-200`;
-  }
-  if (variant === "select") {
-    return `${base} text-emerald-200/95 hover:scale-[1.08] hover:bg-emerald-400/12`;
-  }
-  return `${base} text-text-secondary hover:scale-[1.08] hover:bg-white/[0.06] hover:text-foreground`;
+interface KindLayout {
+  main: LayoutMain;
+  overflow: LayoutOverflow;
 }
 
-export function SelectionActionBar({ kind, nodeId, x, y, width, onAct }: Props) {
-  const items = LAYOUTS[kind];
+// Per-kind layout. Spec rules:
+//   - Delete ALWAYS lives in the overflow menu (sole destructive action,
+//     never promoted to the main row even for short layouts).
+//   - Main rows stay around 5–6 chips + the trailing More chip so the
+//     toolbar holds the ~420–460px width budget at 1× zoom.
+const LAYOUTS: Record<Props["kind"] | "image-empty", KindLayout> = {
+  // Completed take / candidate: take-judgment chips first, post-judgment
+  // (fullscreen / send / capture / branch) in overflow.
+  video: {
+    main: [
+      "selectTake",
+      "regenerate",
+      "addToSequence",
+      "compareTakes",
+      "useAsRef",
+      "download",
+      "__more__",
+    ],
+    overflow: [
+      "fullscreen",
+      "addToAgent",
+      "frameCapture",
+      "branch",
+      "__divider__",
+      "delete",
+    ],
+  },
+  // Draft video: Generate is the emerald CTA, then prompt/seed/model
+  // settings. Aspect/Duration/Pick-model are intended as chip-as-popover
+  // triggers in Phase 2 — the chips render now, popovers wire later.
+  draft: {
+    main: [
+      "generate",
+      "editPrompt",
+      "rerollSeed",
+      "pickModel",
+      "aspect",
+      "duration",
+      "__more__",
+    ],
+    overflow: ["negativePrompt", "convertToIdea", "__divider__", "delete"],
+  },
+  // Image with media: image-shaping chips first (variations / subject /
+  // crop / upscale / style) then attach. Manage actions in overflow.
+  image: {
+    main: [
+      "variations",
+      "editSubject",
+      "crop",
+      "upscale",
+      "styleTransfer",
+      "useAsRef",
+      "__more__",
+    ],
+    overflow: [
+      "fullscreen",
+      "download",
+      "addToAgent",
+      "replace",
+      "__divider__",
+      "delete",
+    ],
+  },
+  // Empty image card collapse — the card has nothing to operate on, so
+  // the bar offers Upload + (later) attach via "Use as reference", with
+  // Delete tucked in the overflow.
+  "image-empty": {
+    main: ["upload", "useAsRef", "__more__"],
+    overflow: ["delete"],
+  },
+  // Audio: playback / replace / trim / sequence. Send / download in
+  // overflow alongside Delete.
+  audio: {
+    main: ["preview", "replaceVoice", "trim", "useInSequence", "__more__"],
+    overflow: [
+      "useAsRef",
+      "download",
+      "addToAgent",
+      "__divider__",
+      "delete",
+    ],
+  },
+  // Idea / comment: convert / pin. Body still edits inline on the card.
+  idea: {
+    main: ["convertToDraft", "pin", "__more__"],
+    overflow: ["delete"],
+  },
+  comment: {
+    main: ["convertToDraft", "pin", "__more__"],
+    overflow: ["delete"],
+  },
+};
+
+function chipClass(variant: ActionDef["variant"]): string {
+  // v0.7 chip primitive — borderless ghost button, sentence-case label.
+  // Sticks to the v0.5.6/7/8 type ladder: 11px / font-medium / tight
+  // tracking. Hover lifts only the chip plate (not the toolbar shell)
+  // so the bar feels like a row of independent affordances.
+  const base =
+    "group/act inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-[11px] font-medium tracking-tight transition-colors duration-150 active:scale-[0.97]";
+  if (variant === "select") {
+    return `${base} text-emerald-200/95 hover:bg-emerald-400/12 hover:text-emerald-100`;
+  }
+  if (variant === "danger") {
+    return `${base} text-text-secondary hover:bg-red-400/15 hover:text-red-200`;
+  }
+  return `${base} text-text-secondary hover:bg-white/[0.05] hover:text-foreground`;
+}
+
+function menuItemClass(variant: ActionDef["variant"]): string {
+  const base =
+    "flex items-center gap-2 w-full rounded px-2.5 py-[6px] text-[12px] transition-colors";
+  if (variant === "danger") {
+    return `${base} text-text-secondary hover:bg-red-400/15 hover:text-red-200`;
+  }
+  return `${base} text-text-secondary hover:bg-white/[0.05] hover:text-foreground`;
+}
+
+export function SelectionActionBar({ kind, hasMedia, nodeId, x, y, width, onAct }: Props) {
+  // Resolve the active layout. Image kind branches on hasMedia so empty
+  // image cards collapse to the lighter Upload row.
+  const layoutKey: Props["kind"] | "image-empty" =
+    kind === "image" && hasMedia === false ? "image-empty" : kind;
+  const layout = LAYOUTS[layoutKey];
 
   // Anchor to the selected node's live DOM rect rather than reconstruct
   // its screen position from world coords. Bug v0.5.8: when a node sat
@@ -194,21 +362,88 @@ export function SelectionActionBar({ kind, nodeId, x, y, width, onAct }: Props) 
     return () => ro.disconnect();
   }, [nodeId, x, y, width]);
 
+  // Overflow popover state. Scrim closes on outside-click — same idiom
+  // as the align menu at AtelierShellV3.tsx L4881.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
+
   return (
     <div
       role="toolbar"
       aria-label="Selection actions"
-      className="absolute z-40 inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/8 bg-[#141416]/96 px-1 py-1 shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
+      // v0.6.2 chrome pivot: NO border. The 1px divider lives entirely in
+      // the existing shadow stack (`inset 0 1px 0 rgba(255,255,255,0.06)`)
+      // so the bar reads as a single quiet glass plate against the canvas.
+      className="absolute z-40 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-[#141416]/96 px-2 h-9 shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
       style={{ left: pos.left, top: pos.top }}
     >
-      {items.map((item, idx) => {
-        if (item === "divider") {
+      {layout.main.map((item, idx) => {
+        if (item === "__more__") {
           return (
-            <span
-              key={`divider-${idx}`}
-              aria-hidden="true"
-              className="mx-1 h-4 w-px bg-white/8"
-            />
+            <div key={`more-${idx}`} ref={moreRef} className="relative">
+              <button
+                type="button"
+                aria-label="More"
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+                data-tip="More actions"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setMoreOpen((v) => !v);
+                }}
+                className={chipClass("default")}
+              >
+                <ChevronDown size={13} aria-hidden="true" />
+                <span>More</span>
+              </button>
+              {moreOpen ? (
+                <>
+                  <div
+                    aria-hidden="true"
+                    className="fixed inset-0 z-[41]"
+                    onClick={() => setMoreOpen(false)}
+                  />
+                  <ul
+                    role="menu"
+                    aria-label="More actions"
+                    // No border — matches the v0.6.2 align-menu pattern.
+                    className="absolute right-0 top-9 z-[42] min-w-[180px] origin-top-right rounded-md bg-[#141416]/96 p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
+                  >
+                    {layout.overflow.map((entry, oIdx) => {
+                      if (entry === "__divider__") {
+                        return (
+                          <li
+                            key={`d-${oIdx}`}
+                            role="none"
+                            className="my-1 mx-2 h-px bg-white/6"
+                          />
+                        );
+                      }
+                      const def = ACTIONS[entry];
+                      const Icon = def.Icon;
+                      return (
+                        <li key={def.key} role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            aria-label={def.label}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setMoreOpen(false);
+                              onAct(def.key);
+                            }}
+                            className={menuItemClass(def.variant)}
+                          >
+                            <Icon size={13} aria-hidden="true" />
+                            <span className="text-left">{def.label}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              ) : null}
+            </div>
           );
         }
         const def = ACTIONS[item];
@@ -223,9 +458,10 @@ export function SelectionActionBar({ kind, nodeId, x, y, width, onAct }: Props) 
               event.stopPropagation();
               onAct(def.key);
             }}
-            className={buttonClass(def.variant)}
+            className={chipClass(def.variant)}
           >
-            <Icon size={14} aria-hidden="true" />
+            <Icon size={13} aria-hidden="true" />
+            <span>{def.label}</span>
           </button>
         );
       })}

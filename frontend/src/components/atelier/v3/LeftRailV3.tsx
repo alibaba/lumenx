@@ -32,10 +32,10 @@ import {
   Layers,
   Plus,
   Redo2,
-  Sparkles,
   Undo2,
   Workflow,
 } from "lucide-react";
+import BrandMark from "@/components/atelier/v3/BrandMark";
 
 export type LeftRailMode =
   | "add"
@@ -103,13 +103,15 @@ export function LeftRailV3({
     >
       {/* Top — brand mark + mode buttons */}
       <div className="flex flex-col items-center gap-0.5">
-        {/* Brand: a tiny sparkle so the rail isn't faceless. Click jumps
-            to the canvas root (deselect). */}
+        {/* Brand: v0.7 item C — iridescent orb mark replaces the old
+            Sparkles glyph so the rail head matches the top-left wordmark
+            and the RHTV brand presence. The chip plate is kept as a
+            quiet container so the rail isn't faceless. */}
         <span
           aria-hidden="true"
-          className="mb-1 grid h-9 w-9 place-items-center rounded-md bg-atelier-brand-400/15 text-atelier-brand-400 ring-1 ring-inset ring-atelier-brand-400/25"
+          className="mb-1 grid h-9 w-9 place-items-center rounded-md bg-atelier-brand-400/15 ring-1 ring-inset ring-atelier-brand-400/25"
         >
-          <Sparkles size={14} aria-hidden="true" />
+          <BrandMark size={16} />
         </span>
 
         {MODES.map((m) => {

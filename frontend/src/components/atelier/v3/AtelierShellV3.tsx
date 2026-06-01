@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, CreditCard, FolderOpen, Pencil, Play, Plus, Scissors, Share2, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Clock, CreditCard, FolderOpen, Pencil, Play, Plus, Scissors, Share2, Trash2, X } from "lucide-react";
 import {
   SelectionActionBar,
   BottomNavRail,
@@ -29,6 +29,7 @@ import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
 import { HistoryPanel } from "@/components/atelier/v3/HistoryPanel";
 import { RightControlStack } from "@/components/atelier/v3/RightControlStack";
+import BrandMark from "@/components/atelier/v3/BrandMark";
 import {
   RegionFrame,
   REGION_COLLAPSED_WIDTH,
@@ -150,11 +151,14 @@ function renderEdges(
             <circle cx={x2} cy={y2} r={isSelected ? 9 : 6.5} fill="url(#beam-flare)" />
           </>
         ) : (
-          // v0.6.1 ambient — calm directional light beam (Flova restraint).
-          // Bumped from a 1px 0.10 alpha whisper to a 1.5px gradient that
-          // fades source→dest so users can *read* node connections at rest
-          // without lighting up the canvas. Endpoint dots mark wired ports
-          // even when the edge isn't hovered.
+          // v0.7 ambient — calm directional light beam (Flova restraint).
+          // v0.6.1 bumped from a 1px 0.10 whisper to a 1.5px gradient;
+          // v0.7 nudges the static state up again (alpha 0.45→0.18,
+          // stroke 1.75px, endpoint dots 3px @ 0.45) so users can read
+          // connections at rest without losing the Flova quiet — RHTV
+          // reference (image #8) reads its splines at this density.
+          // Endpoint dots mark wired ports even when the edge isn't
+          // hovered.
           <>
             <defs>
               <linearGradient
@@ -165,20 +169,20 @@ function renderEdges(
                 x2={x2}
                 y2={y2}
               >
-                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.32" />
-                <stop offset="100%" stopColor="#ffffff" stopOpacity="0.12" />
+                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
+                <stop offset="100%" stopColor="#ffffff" stopOpacity="0.18" />
               </linearGradient>
             </defs>
             <path
               d={d}
               fill="none"
               stroke={`url(#amb-ref-${safeEid})`}
-              strokeWidth={1.5}
+              strokeWidth={1.75}
               strokeLinecap="round"
               style={{ transition: "stroke 180ms ease-out" }}
             />
-            <circle cx={x1} cy={y1} r={2.5} fill="rgba(255,255,255,0.30)" />
-            <circle cx={x2} cy={y2} r={2.5} fill="rgba(255,255,255,0.30)" />
+            <circle cx={x1} cy={y1} r={3} fill="rgba(255,255,255,0.45)" />
+            <circle cx={x2} cy={y2} r={3} fill="rgba(255,255,255,0.45)" />
           </>
         )}
       </g>,
@@ -259,11 +263,13 @@ function renderEdges(
           />
           {/* endpoint dots — small white markers so users can see exactly
               which ports are wired without hovering. Suppressed on failed
-              edges where the red stroke already carries the status. */}
+              edges where the red stroke already carries the status.
+              v0.7 bump: 2.5px @ 0.30 → 3px @ 0.45 so spokes read at the
+              RHTV reference density without disturbing the focal beam. */}
           {!failed && (
             <>
-              <circle cx={x1} cy={y1} r={2.5} fill="rgba(255,255,255,0.30)" />
-              <circle cx={x2} cy={y2} r={2.5} fill="rgba(255,255,255,0.30)" />
+              <circle cx={x1} cy={y1} r={3} fill="rgba(255,255,255,0.45)" />
+              <circle cx={x2} cy={y2} r={3} fill="rgba(255,255,255,0.45)" />
             </>
           )}
         </g>,
@@ -2743,6 +2749,79 @@ export function AtelierShellV3() {
         .catch((err: unknown) => pushToast("error", `Failed: ${err instanceof Error ? err.message : String(err)}`));
       return;
     }
+
+    // v0.7 contextual action toolbar — new chip keys. Per the "ship
+    // visual chrome first, plumb later" pattern from v0.6.3, these are
+    // stubbed to toasts so the bar lights up before the backend wiring
+    // lands. Real handlers will replace each branch in a follow-up.
+    //
+    // Two exceptions:
+    //   • generate / preview — "preview" is the audio alias for the
+    //     existing Play preview, and "generate" on a draft is the same
+    //     as clicking the draft Composer's Generate CTA. We surface a
+    //     toast pointing the user at the in-place Composer rather than
+    //     silently 400 a no-payload generation call.
+    //   • useInSequence — audio alias of addToSequence; route through
+    //     the same handler so audio nodes appear in the sequence strip.
+    if (action === "useInSequence") {
+      // Treat same as addToSequence for top-level audio nodes. Audio is
+      // not parented under a video node, so we use the node id directly.
+      setSequence((prev) => {
+        if (prev.some((s) => s.parentId === node.id && s.candidateId === "audio")) return prev;
+        return [...prev, { parentId: node.id, candidateId: "audio" }];
+      });
+      pushToast("success", "Added to Sequence");
+      return;
+    }
+
+    if (action === "preview") {
+      // Audio preview: reuse the same media_urls[0] path as play.
+      const url = node.media_urls?.[0];
+      if (url) {
+        setPreviewVideoUrl(url);
+        return;
+      }
+      pushToast("info", "Nothing to preview yet.");
+      return;
+    }
+
+    if (action === "generate") {
+      // The DraftWorkbench's Composer is the canonical Generate surface.
+      // Selecting a draft already pops the workbench open inline, so we
+      // just nudge users there until the toolbar chip wires straight
+      // into store.createVideoCandidates.
+      selectNode(node.id);
+      pushToast("info", "Generate from the Composer in the open draft.");
+      return;
+    }
+
+    // Stub-only chips. Each pushes an info toast carrying the human
+    // label so the affordance feels alive even before plumbing.
+    const stubLabels: Record<string, string> = {
+      variations: "Variations",
+      editSubject: "Edit subject",
+      crop: "Crop",
+      upscale: "Upscale",
+      styleTransfer: "Style transfer",
+      upload: "Upload",
+      editPrompt: "Edit prompt",
+      rerollSeed: "Reroll seed",
+      pickModel: "Pick model",
+      aspect: "Aspect",
+      duration: "Duration",
+      negativePrompt: "Negative prompt",
+      convertToIdea: "Convert to idea",
+      compareTakes: "Compare takes",
+      convertToDraft: "Convert to draft",
+      pin: "Pin",
+      replaceVoice: "Replace voice",
+      trim: "Trim",
+    };
+    const stubLabel = stubLabels[action];
+    if (stubLabel) {
+      pushToast("info", `${stubLabel} — coming soon`);
+      return;
+    }
   };
 
   // Track which image node is choosing a target for "Use as reference".
@@ -3593,11 +3672,16 @@ export function AtelierShellV3() {
           {/* LumenX wordmark — v0.5.5 sentence-case Inter, matches Flova
               header restraint (no mono-caps tracking). The tinted "LumenX"
               still signals brand without shouting; the dot separator is
-              the only ornament. */}
-          <span aria-hidden="true" className="select-none font-display text-[12px] font-medium tracking-[-0.005em] text-foreground/85">
-            <span className="text-atelier-brand-400/95">LumenX</span>
-            <span className="px-1.5 text-white/30">·</span>
-            <span className="text-white/70">Atelier</span>
+              the only ornament. v0.7 item C: iridescent orb mark precedes
+              the wordmark to match RHTV's brand presence — replaces the
+              old generic Sparkles glyph. */}
+          <span className="inline-flex select-none items-center gap-2">
+            <BrandMark size={18} />
+            <span aria-hidden="true" className="font-display text-[12px] font-medium tracking-[-0.005em] text-foreground/85">
+              <span className="text-atelier-brand-400/95">LumenX</span>
+              <span className="px-1.5 text-white/30">·</span>
+              <span className="text-white/70">Atelier</span>
+            </span>
           </span>
           <div className="relative">
           <button
@@ -3815,6 +3899,25 @@ export function AtelierShellV3() {
               save-state chip folds in here (v0.5.8 polish) so it anchors
               to a real toolbar instead of floating beside the canvas. */}
           <div className="ml-auto flex items-center gap-0.5">
+            {/* v0.7 item F — History clock that toggles the left-rail
+                History panel. Sits BEFORE the Saved chip so the right
+                cluster reads as a save→share→runtime band. Wired through
+                setActiveRailMode("history") so the existing RailPanel +
+                HistoryPanel surface lights up immediately. */}
+            <button
+              type="button"
+              aria-label="History"
+              aria-pressed={activeRailMode === "history"}
+              data-tip="History"
+              onClick={() =>
+                setActiveRailMode((cur) => (cur === "history" ? null : "history"))
+              }
+              className={`btn-tip grid h-8 w-8 place-items-center rounded-full transition-colors hover:bg-white/[0.05] ${
+                activeRailMode === "history" ? "text-foreground" : "text-text-muted"
+              } hover:text-foreground`}
+            >
+              <Clock size={13} aria-hidden="true" />
+            </button>
             {(() => {
               const { inflight, savedAt, failedAt } = saveState;
               if (inflight === 0 && savedAt === null && failedAt === null) return null;
@@ -4810,6 +4913,22 @@ export function AtelierShellV3() {
       {selectedNode && !isMultiSelect ? (
         <SelectionActionBar
           kind={selectionKindOf(selectedNode)}
+          // v0.7: image kind branches on hasMedia — empty image cards
+          // collapse the bar to the lighter Upload row so we don't promise
+          // actions (variations / crop / upscale …) that can't run yet.
+          // Candidate tiles ride the parent's media list, so we resolve
+          // the parent here when the selected id is a virtual candidate.
+          hasMedia={(() => {
+            const parsed = parseCandidateNodeId(selectedNode.id);
+            if (parsed) {
+              const parent = project?.nodes.find((n) => n.id === parsed.parentId);
+              const cand = parent
+                ? readCandidates(parent).find((c) => c.id === parsed.candidateId)
+                : undefined;
+              return !!cand?.video_url;
+            }
+            return (selectedNode.media_urls?.length ?? 0) > 0;
+          })()}
           nodeId={selectedNode.id}
           x={panX + selectedNode.x * zoomFactor}
           y={panY + selectedNode.y * zoomFactor}

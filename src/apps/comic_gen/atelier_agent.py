@@ -135,6 +135,115 @@ def _tool_call_payloads_match(left: List[Dict[str, Any]], right: List[Dict[str, 
     ]
 
 
+def _pluralize(noun: str, count: int) -> str:
+    return noun if count == 1 else f"{noun}s"
+
+
+def _build_turn_response(
+    tool_calls: List[AtelierAgentToolCall],
+    status: str,
+    preview: bool,
+) -> str:
+    """Render a deterministic, sentence-case English summary of a turn.
+
+    Tallies tool calls by (tool_name, status) and emits one short clause per
+    category. The result is stable: same `tool_calls` list → same string.
+    LLM-backed conversational responses are out of scope here (see Phase 1
+    spec); this function is the v1 baseline so the UI can drop the static
+    "Turn complete · N actions ran" derivation.
+    """
+    if not tool_calls:
+        return "Reviewed canvas. No actions taken."
+
+    completed: Dict[str, int] = {}
+    approval_required: Dict[str, int] = {}
+    failed_count = 0
+    first_failed_error: Optional[str] = None
+    denied_count = 0
+    candidate_total = 0
+    candidate_pending_total = 0
+
+    for call in tool_calls:
+        name = call.tool_name
+        if call.status == AtelierAgentToolStatus.COMPLETED:
+            completed[name] = completed.get(name, 0) + 1
+            if name == "generation.createVideoCandidates":
+                snapshot = call.result_snapshot or {}
+                ids = snapshot.get("candidate_ids")
+                if isinstance(ids, list):
+                    candidate_total += len(ids)
+        elif call.status == AtelierAgentToolStatus.APPROVAL_REQUIRED:
+            approval_required[name] = approval_required.get(name, 0) + 1
+            if name == "generation.createVideoCandidates":
+                args = call.arguments or {}
+                count = args.get("count")
+                candidate_pending_total += int(count) if isinstance(count, int) and count > 0 else 1
+        elif call.status == AtelierAgentToolStatus.FAILED:
+            failed_count += 1
+            if first_failed_error is None and call.error:
+                first_failed_error = call.error
+        elif call.status == AtelierAgentToolStatus.DENIED:
+            denied_count += 1
+
+    clauses: List[str] = []
+
+    def add_completed(name: str, template: str) -> None:
+        count = completed.get(name, 0)
+        if count:
+            clauses.append(template.format(count=count, noun_draft=_pluralize("draft", count)))
+
+    add_completed("canvas.createVideoNode", "Created {count} video {noun_draft}.")
+    n_update = completed.get("canvas.updateNodePrompt", 0)
+    if n_update:
+        clauses.append(f"Updated {n_update} node {_pluralize('prompt', n_update)}.")
+    n_attach = completed.get("canvas.attachReferenceNode", 0)
+    if n_attach:
+        clauses.append(f"Attached {n_attach} reference {_pluralize('image', n_attach)}.")
+    n_ref = completed.get("canvas.createReferenceImageNode", 0)
+    if n_ref:
+        clauses.append(f"Added {n_ref} reference image {_pluralize('node', n_ref)}.")
+    n_region = completed.get("canvas.createRegion", 0)
+    if n_region:
+        clauses.append(f"Created {n_region} {_pluralize('region', n_region)}.")
+    n_region_attach = completed.get("canvas.attachToRegion", 0)
+    if n_region_attach:
+        clauses.append(f"Attached {n_region_attach} {_pluralize('node', n_region_attach)} to a region.")
+    n_region_detach = completed.get("canvas.detachFromRegion", 0)
+    if n_region_detach:
+        clauses.append(f"Detached {n_region_detach} {_pluralize('node', n_region_detach)} from a region.")
+    if candidate_total:
+        clauses.append(
+            f"Generated {candidate_total} video {_pluralize('candidate', candidate_total)}."
+        )
+
+    if approval_required:
+        pending_total = candidate_pending_total or sum(approval_required.values())
+        clauses.append(
+            f"Awaiting your approval to generate {pending_total} "
+            f"{_pluralize('batch', pending_total)}."
+        )
+
+    if failed_count:
+        action_word = _pluralize("action", failed_count)
+        if first_failed_error:
+            clauses.append(f"{failed_count} {action_word} failed: {first_failed_error.rstrip('.')}.")
+        else:
+            clauses.append(f"{failed_count} {action_word} failed.")
+
+    if denied_count:
+        clauses.append(
+            f"Denied {denied_count} pending {_pluralize('action', denied_count)}."
+        )
+
+    if not clauses:
+        if preview:
+            count = len(tool_calls)
+            return f"Previewed {count} {_pluralize('action', count)}."
+        return "No actions ran."
+
+    return " ".join(clauses)
+
+
 def _compact_intent_title(intent: str) -> str:
     trimmed = " ".join(intent.strip().split())
     if not trimmed:
@@ -1090,6 +1199,7 @@ class AtelierAgentHarness:
             turn.preview = False
             turn.status = "failed"
             turn.completed_at = time.time()
+            turn.response = _build_turn_response(turn.tool_calls, turn.status, preview=False)
             project.updated_at = time.time()
             self.pipeline._save_atelier_data()
             return turn
@@ -1232,6 +1342,7 @@ class AtelierAgentHarness:
             turn.status = "completed"
             turn.completed_at = time.time()
 
+        turn.response = _build_turn_response(turn.tool_calls, turn.status, turn.preview)
         if appending_new_turn:
             project.agent_turns.append(turn)
         project.updated_at = time.time()

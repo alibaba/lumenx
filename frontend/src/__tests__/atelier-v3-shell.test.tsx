@@ -234,10 +234,15 @@ describe("AtelierShellV3", () => {
       "@/components/atelier/v3/AtelierShellV3"
     );
     render(<AtelierShellV3 />);
-    // draft layout (v0.3.1+): only Delete — Composer is the editor for drafts.
-    expect(screen.getByLabelText("Delete")).toBeInTheDocument();
+    // v0.7 draft layout: Generate (emerald CTA) + prompt/seed/model
+    // settings + More overflow. Branch / Re-generate / Pick-this-take are
+    // intentionally absent on drafts (take-judgment lives on candidates).
+    expect(screen.getByLabelText("Generate")).toBeInTheDocument();
+    expect(screen.getByLabelText("Edit prompt")).toBeInTheDocument();
+    expect(screen.getByLabelText("More")).toBeInTheDocument();
     expect(screen.queryByLabelText("Branch")).toBeNull();
     expect(screen.queryByLabelText("Re-generate")).toBeNull();
+    expect(screen.queryByLabelText("Reroll")).toBeNull();
   });
 
   it("renders inline DraftWorkbench when a draft is selected (no floating Composer)", async () => {
@@ -327,7 +332,7 @@ describe("AtelierShellV3", () => {
     });
   });
 
-  it("clicking a virtual candidate brings up SelectionActionBar with Select as take", async () => {
+  it("clicking a virtual candidate brings up SelectionActionBar with Pick this take", async () => {
     const candidate: AtelierVideoCandidate = {
       id: "c1",
       status: "completed",
@@ -346,6 +351,7 @@ describe("AtelierShellV3", () => {
       "@/components/atelier/v3/AtelierShellV3"
     );
     render(<AtelierShellV3 />);
-    expect(screen.getByLabelText("Select as take")).toBeInTheDocument();
+    // v0.7: sentence-case relabeled — "Select as take" → "Pick this take".
+    expect(screen.getByLabelText("Pick this take")).toBeInTheDocument();
   });
 });
