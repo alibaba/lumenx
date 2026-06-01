@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAtelierStore } from "@/store/atelierStore";
 import { buildReferenceLinks } from "@/lib/atelierCanvas";
 import { getAssetUrl } from "@/lib/utils";
-import { Check, ChevronDown, Clock, CreditCard, FolderOpen, Pencil, Play, Plus, Scissors, Share2, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Clock, CreditCard, FolderOpen, Pencil, Play, Plus, Share2, Trash2, X } from "lucide-react";
 import {
   SelectionActionBar,
   BottomNavRail,
@@ -17,6 +17,9 @@ import {
   RailPanel,
   WorkflowsPanel,
   appendUserWorkflow,
+  readUserWorkflows,
+  WORKFLOW_TEMPLATE_DRAG_MIME,
+  WORKFLOW_TEMPLATES,
   type LeftRailMode,
   type ComposerSubmitPayload,
   type WorkflowTemplate,
@@ -25,6 +28,7 @@ import {
   type TemplateCategory,
 } from "@/components/atelier/v3";
 import { ConfirmDialog, PromptDialog } from "@/components/atelier/v3/Dialogs";
+import { SequenceStrip } from "@/components/atelier/v3/SequenceStrip";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
 import { HistoryPanel } from "@/components/atelier/v3/HistoryPanel";
@@ -2960,11 +2964,12 @@ export function AtelierShellV3() {
   const [sequence, setSequence] = useState<SequenceEntry[]>([]);
   // Which clip in the strip is showing the trim popover. null = closed.
   const [trimEditingIndex, setTrimEditingIndex] = useState<number | null>(null);
-  // T1.4: in-flight flag for the sequence export call. Disables the
-  // Export button while ffmpeg is running on the backend so the user
-  // can't double-fire (each export takes seconds-to-minutes depending
-  // on clip count).
-  const [exportingSequence, setExportingSequence] = useState(false);
+  // (T1.4 lift: the in-flight `exportingSequence` flag + AbortController +
+  // persistent file-ready/error chip now live inside <SequenceStrip/>
+  // — see frontend/src/components/atelier/v3/SequenceStrip.tsx. The
+  // Shell no longer mediates export state because the strip is the
+  // only consumer; lifting it kept the strip's chip alive across
+  // remounts and let us add cancel/retry without threading more props.)
   // Hydrate from the project's server-stored sequence when the project
   // changes (T2.5 — was localStorage-only). LocalStorage is kept as a
   // soft fallback for transient offline / pre-T2.5 leftovers.
@@ -3214,15 +3219,79 @@ export function AtelierShellV3() {
     }
   };
 
+  // Shared template-insert routine — called both by the WorkflowsPanel
+  // `onInsert` click handler (anchored at viewport center) and the
+  // canvas drop handler (anchored at the cursor's world position).
+  // Returns a promise so callers can await + chain toast/close logic.
+  const insertWorkflowTemplate = async (
+    template: WorkflowTemplate,
+    anchor: { x: number; y: number },
+  ): Promise<void> => {
+    const projectId = project?.id;
+    if (!projectId) {
+      pushToast("error", "No project loaded.");
+      return;
+    }
+    const localToReal = new Map<string, string>();
+    try {
+      for (const tn of template.nodes) {
+        const created = await api.createAtelierNode(projectId, {
+          type: tn.type,
+          title: tn.title ?? template.name,
+          prompt:
+            typeof tn.data?.prompt === "string"
+              ? (tn.data.prompt as string)
+              : "",
+          x: Math.round(anchor.x + tn.x),
+          y: Math.round(anchor.y + tn.y),
+          width: tn.type === "image" ? 244 : tn.type === "video" ? 240 : 224,
+          height: tn.type === "image" ? 224 : tn.type === "video" ? 110 : 120,
+          data: tn.data ?? {},
+        } as AtelierNodePayload);
+        localToReal.set(tn.localId, created.id);
+      }
+      for (const edge of template.edges) {
+        if (edge.kind !== "reference") continue;
+        const fromId = localToReal.get(edge.from);
+        const toId = localToReal.get(edge.to);
+        if (!fromId || !toId) continue;
+        await useAtelierStore.getState().attachReferenceNode(toId, fromId);
+      }
+      await refreshCurrentProject();
+      pushToast(
+        "success",
+        `Inserted ${template.name} · ${template.nodes.length} node${template.nodes.length === 1 ? "" : "s"}`,
+      );
+    } catch (err: unknown) {
+      pushToast(
+        "error",
+        `Insert failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  };
+
   // Drag-and-drop image files onto the canvas → quick reference upload.
   // Drop on a draft → attach as ref to that draft (future: needs hit-test).
   // For v1: every drop creates a new image node at drop position.
   const [isDraggingFileOver, setIsDraggingFileOver] = useState(false);
   const handleDragOver = (event: React.DragEvent) => {
-    // Accept either OS file drops OR atelier-asset drags from the library.
+    // Accept OS file drops, asset drags from the library (project
+    // nodes), Browse-seed drags (v0.8 (M); synthesize a new MediaNode
+    // at drop point), or workflow template card drags.
     const types = Array.from(event.dataTransfer.types);
-    if (!types.includes("Files") && !types.includes("application/x-atelier-asset")) return;
+    if (
+      !types.includes("Files") &&
+      !types.includes("application/x-atelier-asset") &&
+      !types.includes("application/x-atelier-asset-seed") &&
+      !types.includes(WORKFLOW_TEMPLATE_DRAG_MIME)
+    ) return;
     event.preventDefault();
+    if (types.includes(WORKFLOW_TEMPLATE_DRAG_MIME)) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    if (types.includes("application/x-atelier-asset-seed")) {
+      event.dataTransfer.dropEffect = "copy";
+    }
     if (types.includes("Files") && !isDraggingFileOver) setIsDraggingFileOver(true);
   };
   const handleDragLeave = (event: React.DragEvent) => {
@@ -3230,6 +3299,32 @@ export function AtelierShellV3() {
   };
   const handleDrop = async (event: React.DragEvent) => {
     const types = Array.from(event.dataTransfer.types);
+
+    // ── Workflow template drop ──────────────────────────────────────
+    // WorkflowsPanel cards are draggable; the payload is the template
+    // id. Look it up in the built-in registry first, then fall back to
+    // user-saved templates in localStorage. Anchor the cluster's local
+    // (0,0) at the cursor's world position so the template lands
+    // exactly where the user dropped it.
+    if (types.includes(WORKFLOW_TEMPLATE_DRAG_MIME)) {
+      event.preventDefault();
+      const templateId = event.dataTransfer.getData(WORKFLOW_TEMPLATE_DRAG_MIME);
+      if (!templateId) return;
+      const template =
+        WORKFLOW_TEMPLATES.find((t) => t.id === templateId) ??
+        readUserWorkflows().find((t) => t.id === templateId);
+      if (!template) {
+        pushToast("error", "Template not found.");
+        return;
+      }
+      const rect = mainRef.current?.getBoundingClientRect();
+      const cursorX = rect ? event.clientX - rect.left : event.clientX;
+      const cursorY = rect ? event.clientY - rect.top : event.clientY;
+      const worldX = (cursorX - panX) / zoomFactor;
+      const worldY = (cursorY - panY) / zoomFactor;
+      await insertWorkflowTemplate(template, { x: worldX, y: worldY });
+      return;
+    }
 
     // ── Library asset drop ──────────────────────────────────────────
     // When the user drags an image asset from the AssetLibrary onto a
@@ -3265,6 +3360,62 @@ export function AtelierShellV3() {
         pushToast("success", "Reference attached");
       } catch (err: unknown) {
         pushToast("error", `Attach failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    // ── Library Browse seed drop ────────────────────────────────────
+    // v0.8 (M): the AssetLibrary's Browse tab serves curated demo
+    // assets that have no AtelierNode yet. The drag payload carries
+    // the seed url + kind; we persist a new MediaNode at the drop
+    // point's world coords. On an image seed dropped over a draft
+    // video, also chain attachReferenceNode so the new asset wires up
+    // as a reference in one motion (mirroring the project-asset path).
+    if (types.includes("application/x-atelier-asset-seed")) {
+      event.preventDefault();
+      const data = event.dataTransfer.getData("application/x-atelier-asset-seed");
+      if (!data) return;
+      let seed: { id: string; kind: "image" | "video" | "audio"; title: string; url: string; category?: string; audioRole?: string };
+      try {
+        seed = JSON.parse(data) as typeof seed;
+      } catch {
+        return;
+      }
+      if (!seed?.url || !seed.kind) return;
+      const rect = mainRef.current?.getBoundingClientRect();
+      const cursorX = rect ? event.clientX - rect.left : event.clientX;
+      const cursorY = rect ? event.clientY - rect.top : event.clientY;
+      const worldX = (cursorX - panX) / zoomFactor;
+      const worldY = (cursorY - panY) / zoomFactor;
+      // Hit-test draft for image-seed attach. Non-image seeds and
+      // non-draft drops just spawn a free-standing node at the cursor.
+      const el = event.target as HTMLElement | null;
+      const targetEl = el?.closest("[data-atelier-node]") as HTMLElement | null;
+      const targetId = targetEl?.dataset.atelierNode ?? null;
+      const targetNode = targetId
+        ? useAtelierStore.getState().currentProject?.nodes.find((n) => n.id === targetId)
+        : null;
+      try {
+        const newNode = await useAtelierStore.getState().createMediaNodeFromSeed(seed, { x: worldX, y: worldY });
+        if (seed.kind === "image" && targetNode && isDraftVideo(targetNode)) {
+          try {
+            await useAtelierStore.getState().attachReferenceNode(targetNode.id, newNode.id);
+            pushToast("success", `Attached "${seed.title}" to draft`);
+            return;
+          } catch (err: unknown) {
+            // The node is created even if the attach fails — surface
+            // the partial success so the user can re-attach manually
+            // rather than silently swallowing the error.
+            pushToast(
+              "error",
+              `Added but attach failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            return;
+          }
+        }
+        pushToast("success", `Added "${seed.title}" to canvas`);
+      } catch (err: unknown) {
+        pushToast("error", `Add failed: ${err instanceof Error ? err.message : String(err)}`);
       }
       return;
     }
@@ -3578,65 +3729,17 @@ export function AtelierShellV3() {
       >
         <WorkflowsPanel
           onInsert={(template) => {
-            // Compute drop offset: viewport center → world coords. The
-            // template's local (0,0) lands here; everything else is
-            // offset relative to that anchor.
+            // Click-to-insert: anchor at viewport center. Drag-to-drop
+            // goes through the canvas root drop handler (handleDrop)
+            // which anchors at the cursor — same insertWorkflowTemplate
+            // helper, different anchor source.
             const rect = mainRef.current?.getBoundingClientRect();
             const screenCenterX = (rect?.width ?? 1440) / 2;
             const screenCenterY = (rect?.height ?? 900) / 2;
             const dropWorldX = (screenCenterX - panX) / zoomFactor;
             const dropWorldY = (screenCenterY - panY) / zoomFactor;
-
-            // Recipe: create every template node, then attach references
-            // by mapping localId → real node id. We sequence the create
-            // calls so the api gets stable order, but the .then chain
-            // collects ids before firing attach.
-            const localToReal = new Map<string, string>();
-            const projectId = project?.id;
-            if (!projectId) {
-              pushToast("error", "No project loaded.");
-              return;
-            }
-
-            (async () => {
-              try {
-                for (const tn of template.nodes) {
-                  const created = await api.createAtelierNode(projectId, {
-                    type: tn.type,
-                    title: tn.title ?? template.name,
-                    prompt:
-                      typeof tn.data?.prompt === "string"
-                        ? (tn.data.prompt as string)
-                        : "",
-                    x: Math.round(dropWorldX + tn.x),
-                    y: Math.round(dropWorldY + tn.y),
-                    width: tn.type === "image" ? 244 : tn.type === "video" ? 240 : 224,
-                    height: tn.type === "image" ? 224 : tn.type === "video" ? 110 : 120,
-                    data: tn.data ?? {},
-                  } as AtelierNodePayload);
-                  localToReal.set(tn.localId, created.id);
-                }
-                for (const edge of template.edges) {
-                  if (edge.kind !== "reference") continue;
-                  const fromId = localToReal.get(edge.from);
-                  const toId = localToReal.get(edge.to);
-                  if (!fromId || !toId) continue;
-                  await useAtelierStore.getState().attachReferenceNode(toId, fromId);
-                }
-                // Refresh the project so all nodes+edges land in the UI.
-                await refreshCurrentProject();
-                pushToast(
-                  "success",
-                  `Inserted ${template.name} · ${template.nodes.length} node${template.nodes.length === 1 ? "" : "s"}`,
-                );
-                setActiveRailMode(null);
-              } catch (err: unknown) {
-                pushToast(
-                  "error",
-                  `Insert failed: ${err instanceof Error ? err.message : String(err)}`,
-                );
-              }
-            })();
+            void insertWorkflowTemplate(template, { x: dropWorldX, y: dropWorldY })
+              .then(() => setActiveRailMode(null));
           }}
         />
       </RailPanel>
@@ -5635,390 +5738,33 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Sequence Strip — bottom rail. v0.6.2: stripped the floating
-          card chrome (atelier-chrome-opaque + border + shadow + rounded-2xl)
-          per RHTV-style: thumbnails sit directly on the canvas, the outer
-          rail is invisible until a drop is in flight. Active drop-target
-          state still highlights via ring-atelier-brand-400 — the only time
-          this surface visibly announces itself. Drop target: HTML5-draggable
-          completed takes from the canvas can be dropped here to append to
-          the sequence (handler reads the custom application/x-atelier-take
-          mime). Visibility toggled via the LeftRailV3 Sequence mode button
-          (Sprint D). */}
-      {sequenceVisible ? (
-      <div
-        className={`absolute bottom-16 left-[280px] z-20 p-2.5 transition-colors animate-atelier-popover-in motion-reduce:animate-none ${
-          seqDropActive ? "rounded-2xl ring-2 ring-atelier-brand-400/35" : ""
-        }`}
-        style={{ right: agentCollapsed ? 88 : 412 }}
-        onDragEnter={(e) => {
-          if (!Array.from(e.dataTransfer.types).includes("application/x-atelier-take")) return;
-          e.preventDefault();
-          setSeqDropActive(true);
-        }}
-        onDragOver={(e) => {
-          if (!Array.from(e.dataTransfer.types).includes("application/x-atelier-take")) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = "copy";
-        }}
-        onDragLeave={(e) => {
-          // Only clear when leaving for somewhere outside the strip.
-          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-          setSeqDropActive(false);
-        }}
-        onDrop={(e) => {
-          const data = e.dataTransfer.getData("application/x-atelier-take");
-          setSeqDropActive(false);
-          if (!data) return;
-          e.preventDefault();
-          try {
-            // Payload is always an array — single take is a 1-element
-            // array. Multi-selected takes share order from the parent's
-            // candidate list (see buildBatchPayload in nodeRenderers).
-            const parsed = JSON.parse(data);
-            const batch: Array<{ parentId: string; candidateId: string }> =
-              Array.isArray(parsed)
-                ? parsed
-                : parsed && typeof parsed === "object"
-                  ? [parsed]
-                  : [];
-            if (batch.length === 0) return;
-            let added = 0;
-            let skipped = 0;
-            setSequence((prev) => {
-              const next = [...prev];
-              for (const item of batch) {
-                if (!item || typeof item.parentId !== "string" || typeof item.candidateId !== "string") {
-                  continue;
-                }
-                if (next.some((s) => s.parentId === item.parentId && s.candidateId === item.candidateId)) {
-                  skipped += 1;
-                  continue;
-                }
-                next.push({ parentId: item.parentId, candidateId: item.candidateId });
-                added += 1;
-              }
-              return next;
-            });
-            if (added === 0 && skipped > 0) {
-              pushToast("info", "Already in sequence");
-            } else if (added > 0 && skipped > 0) {
-              pushToast("success", `Added ${added} · skipped ${skipped} duplicate${skipped === 1 ? "" : "s"}`);
-            } else if (added === 1) {
-              pushToast("success", "Added to sequence");
-            } else if (added > 1) {
-              pushToast("success", `Added ${added} clips`);
-            }
-          } catch {
-            // Malformed payload — silently ignore. Should never happen
-            // since we serialize ourselves, but defensive parsing means
-            // a foreign drop won't crash the strip.
-          }
-        }}
-      >
-        {/* v0.5.5 — receipt-stamp ("CUT · SEQUENCE · NO 001") replaced with
-            quiet sentence-case Inter. Sequence is a tool, not a document
-            issued to the user. The clip count keeps tabular alignment. */}
-        <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/8 px-1 pb-1.5 text-[11px] text-white/45">
-          <div className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-atelier-brand-400/70" />
-            <span>Sequence</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="text-white/35">{sequenceEntries.length === 1 ? "clip" : "clips"}</span>
-            <span className="font-display text-[11px] tabular-nums tracking-tight text-foreground/95">
-              {String(sequenceEntries.length).padStart(2, "0")}
-            </span>
-            {sequenceEntries.length > 0 ? (
-              <>
-                <button
-                  onClick={() => setSequence([])}
-                  className="ml-1 rounded px-1.5 py-0.5 tracking-[0.24em] text-text-muted/70 transition-colors hover:bg-white/[0.06] hover:text-foreground"
-                >
-                  Clear
-                </button>
-                <button
-                  onClick={() => {
-                    if (!project) return;
-                    if (exportingSequence) return;
-                    const payload = sequence.map((s) => ({
-                      parentId: s.parentId,
-                      candidateId: s.candidateId,
-                      ...(typeof s.trimStart === "number" ? { trimStart: s.trimStart } : {}),
-                      ...(typeof s.trimEnd === "number" ? { trimEnd: s.trimEnd } : {}),
-                    }));
-                    setExportingSequence(true);
-                    void api
-                      .exportAtelierSequence(project.id, payload)
-                      .then((res) => {
-                        pushToast(
-                          "success",
-                          `Exported ${res.clip_count} clip${res.clip_count === 1 ? "" : "s"} · ${res.size_mb} MB`,
-                        );
-                        // Trigger browser download. video_url is relative
-                        // to /files/; assume the static mount serves it.
-                        try {
-                          const a = document.createElement("a");
-                          a.href = getAssetUrl(res.video_url);
-                          a.download = res.filename;
-                          a.target = "_blank";
-                          a.rel = "noopener";
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                        } catch {
-                          /* download is best-effort; URL still surfaced via toast */
-                        }
-                      })
-                      .catch((err: unknown) => {
-                        const detail = err instanceof Error ? err.message : String(err);
-                        pushToast("error", `Export failed: ${detail}`);
-                      })
-                      .finally(() => setExportingSequence(false));
-                  }}
-                  disabled={exportingSequence}
-                  className="ml-1 rounded bg-atelier-brand-400/15 px-2 py-0.5 text-[11px] font-medium text-atelier-brand-400/95 transition-colors hover:bg-atelier-brand-400/25 disabled:cursor-wait disabled:opacity-60"
-                >
-                  {exportingSequence ? "Exporting…" : "Export"}
-                </button>
-              </>
-            ) : null}
-          </div>
-        </div>
-        {sequenceEntries.length === 0 ? (
-          <div className="px-2 py-2 text-[11px] text-text-muted/85">
-            Drag a completed take here, or use{" "}
-            <span className="text-[11px] text-white/50">Add to sequence</span>{" "}
-            from its action bar.
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 overflow-x-auto">
-            {sequenceEntries.map(({ entry, parent, cand }, i) => (
-              <button
-                key={`${entry.parentId}-${entry.candidateId}`}
-                type="button"
-                draggable
-                onDragStart={(e) => {
-                  setSeqDragFromIndex(i);
-                  e.dataTransfer.effectAllowed = "move";
-                  // Required by Firefox to actually start the drag.
-                  e.dataTransfer.setData("text/plain", String(i));
-                }}
-                onDragOver={(e) => {
-                  if (seqDragFromIndex === null) return;
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "move";
-                  if (seqDragOverIndex !== i) setSeqDragOverIndex(i);
-                }}
-                onDragLeave={(e) => {
-                  // Only clear if leaving for somewhere outside this clip.
-                  if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                  setSeqDragOverIndex((prev) => (prev === i ? null : prev));
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const from = seqDragFromIndex;
-                  const to = i;
-                  setSeqDragFromIndex(null);
-                  setSeqDragOverIndex(null);
-                  if (from === null || from === to) return;
-                  setSequence((prev) => {
-                    const next = prev.slice();
-                    const [moved] = next.splice(from, 1);
-                    next.splice(to, 0, moved);
-                    return next;
-                  });
-                }}
-                onDragEnd={() => {
-                  setSeqDragFromIndex(null);
-                  setSeqDragOverIndex(null);
-                }}
-                onClick={() => cand.video_url && setPreviewVideoUrl(cand.video_url)}
-                onMouseEnter={(e) => {
-                  // Hover-to-preview, same vibe as the canvas take cards:
-                  // the inner <video> autoplays muted+loop on a 250 ms
-                  // dwell so a quick scrub through the strip doesn't
-                  // trigger flicker.
-                  const v = e.currentTarget.querySelector("video");
-                  if (!v) return;
-                  window.setTimeout(() => {
-                    v.play().catch(() => {/* autoplay may be blocked */});
-                  }, 250);
-                }}
-                onMouseLeave={(e) => {
-                  const v = e.currentTarget.querySelector("video");
-                  if (!v) return;
-                  v.pause();
-                  try { v.currentTime = 0; } catch { /* ignore */ }
-                }}
-                className={`group relative h-[68px] w-[124px] shrink-0 cursor-grab overflow-hidden rounded-[5px] border transition-shadow hover:border-atelier-brand-400/45 hover:shadow-[0_0_0_1px_rgba(59,107,255,0.22)] active:cursor-grabbing ${
-                  seqDragFromIndex === i
-                    ? "opacity-45 border-atelier-brand-400/55"
-                    : seqDragOverIndex === i && seqDragFromIndex !== null && seqDragFromIndex !== i
-                    ? "border-atelier-brand-400 ring-2 ring-atelier-brand-400/35"
-                    : "border-white/8 bg-[#141416]"
-                }`}
-                aria-label={`Play ${parent.title}, clip ${i + 1}`}
-              >
-                {cand.video_url ? (
-                  <video
-                    src={getAssetUrl(cand.video_url)}
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"
-                    aria-label={`${parent.title} thumbnail`}
-                    className="h-full w-full object-cover"
-                  />
-                ) : null}
-                <span className="pointer-events-none absolute inset-0 m-auto grid h-7 w-7 place-items-center rounded-full bg-black/65 text-white/95 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100">
-                  <Play size={11} aria-hidden="true" />
-                </span>
-                <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-gradient-to-t from-black/85 via-black/55 to-transparent px-1.5 pb-1 pt-2.5">
-                  <span className="truncate text-[10px] text-foreground/95">{parent.title}</span>
-                  {(typeof entry.trimStart === "number" || typeof entry.trimEnd === "number") ? (
-                    <span
-                      aria-label="Trim applied"
-                      className="font-mono text-[8.5px] tracking-tight text-amber-200/95"
-                      data-tip={`Trim ${entry.trimStart ?? 0}s–${entry.trimEnd ?? "end"}s`}
-                    >
-                      ✁ {Number.isFinite(entry.trimStart ?? NaN) ? (entry.trimStart as number).toFixed(1) : "0.0"}-
-                      {Number.isFinite(entry.trimEnd ?? NaN) ? (entry.trimEnd as number).toFixed(1) : "end"}
-                    </span>
-                  ) : (
-                    <span className="font-mono text-[9px] tracking-tight text-text-muted">{String(i + 1).padStart(2, "0")}</span>
-                  )}
-                </div>
-                {/* Trim handles indicator — thin amber bar bottom of the
-                    thumb when trim is set. We don't know the clip's true
-                    duration without metadata, so we approximate: assume
-                    5s default, scale handle positions accordingly. The
-                    bar reads the same regardless: it shows where the
-                    kept slice sits inside the clip. */}
-                {(typeof entry.trimStart === "number" || typeof entry.trimEnd === "number") ? (() => {
-                  const dur = 5;
-                  const a = Math.max(0, Math.min(dur, entry.trimStart ?? 0));
-                  const b = Math.max(a, Math.min(dur, entry.trimEnd ?? dur));
-                  const leftPct = (a / dur) * 100;
-                  const widthPct = ((b - a) / dur) * 100;
-                  return (
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute bottom-0 left-0 right-0 h-[3px] bg-black/35"
-                    >
-                      <span
-                        className="block h-full bg-amber-300/85"
-                        style={{ marginLeft: `${leftPct}%`, width: `${widthPct}%` }}
-                      />
-                    </span>
-                  );
-                })() : null}
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTrimEditingIndex((cur) => (cur === i ? null : i));
-                  }}
-                  className={`btn-tip absolute left-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-black/65 transition-colors ${
-                    trimEditingIndex === i
-                      ? "text-amber-200 opacity-100"
-                      : (typeof entry.trimStart === "number" || typeof entry.trimEnd === "number")
-                      ? "text-amber-200/95 opacity-100"
-                      : "text-white/85 opacity-0 hover:bg-amber-400/45 group-hover:opacity-100"
-                  }`}
-                  aria-label={`Trim clip ${i + 1}`}
-                  data-tip="Trim · in / out"
-                >
-                  <Scissors size={9} aria-hidden="true" />
-                </span>
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSequence((prev) => prev.filter((s) => !(s.parentId === entry.parentId && s.candidateId === entry.candidateId)));
-                  }}
-                  className="absolute right-1 top-1 grid h-4 w-4 place-items-center rounded-full bg-black/65 text-white/85 opacity-0 transition-colors hover:bg-red-500/75 group-hover:opacity-100"
-                  aria-label={`Remove ${parent.title} from sequence`}
-                >
-                  <X size={9} aria-hidden="true" />
-                </span>
-                {trimEditingIndex === i ? (
-                  <div
-                    role="dialog"
-                    aria-label="Trim clip"
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute -top-[120px] left-1/2 z-30 w-[200px] -translate-x-1/2 rounded-md border border-white/8 bg-[#141416]/96 p-2 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
-                  >
-                    <div className="mb-1.5 flex items-center justify-between text-[11px] text-white/55">
-                      <span>Trim · clip {i + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => setTrimEditingIndex(null)}
-                        className="rounded px-1 hover:bg-hover-bg hover:text-foreground"
-                        aria-label="Close trim editor"
-                      >
-                        <X size={10} aria-hidden="true" />
-                      </button>
-                    </div>
-                    <label className="mb-1 block text-[10px] text-text-secondary">
-                      In <span className="font-mono text-text-muted/85">(sec)</span>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min={0}
-                        defaultValue={entry.trimStart ?? 0}
-                        onChange={(e) => {
-                          const v = parseFloat(e.target.value);
-                          setSequence((prev) => prev.map((s, idx) => idx === i ? { ...s, trimStart: Number.isFinite(v) ? v : undefined } : s));
-                        }}
-                        className="mt-0.5 w-full rounded border border-white/10 bg-black/40 px-1.5 py-1 font-mono text-[11px] text-foreground outline-none focus:border-atelier-brand-400/60"
-                      />
-                    </label>
-                    <label className="mb-1 block text-[10px] text-text-secondary">
-                      Out <span className="font-mono text-text-muted/85">(sec)</span>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min={0}
-                        defaultValue={entry.trimEnd ?? ""}
-                        placeholder="end"
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          const v = parseFloat(raw);
-                          setSequence((prev) => prev.map((s, idx) => idx === i ? { ...s, trimEnd: raw === "" || !Number.isFinite(v) ? undefined : v } : s));
-                        }}
-                        className="mt-0.5 w-full rounded border border-white/10 bg-black/40 px-1.5 py-1 font-mono text-[11px] text-foreground outline-none focus:border-atelier-brand-400/60"
-                      />
-                    </label>
-                    <div className="mt-1.5 flex items-center justify-between gap-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSequence((prev) => prev.map((s, idx) => idx === i ? { parentId: s.parentId, candidateId: s.candidateId } : s));
-                        }}
-                        className="rounded-full px-2 py-[3px] text-[11px] text-white/55 transition-colors hover:bg-hover-bg hover:text-foreground"
-                      >
-                        Reset
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setTrimEditingIndex(null)}
-                        className="rounded-full bg-atelier-brand-400/15 px-2.5 py-[3px] text-[11px] font-medium text-atelier-brand-400 transition-colors hover:bg-atelier-brand-400/25"
-                      >
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      ) : null}
-
+      {/* Sequence Strip — bottom rail. v0.8 / track K: lifted the ~430-line
+          inline JSX into <SequenceStrip/> so the Shell doesn't carry a
+          dedicated subcomponent inside its render tree. The Shell still
+          owns the underlying `sequence` state and the persistence
+          effects above; the strip is a thin presentation+export wrapper
+          driven entirely by props. Visibility still toggled via the
+          LeftRailV3 Sequence mode button (Sprint D). */}
+      <SequenceStrip
+        projectId={project?.id ?? null}
+        visible={sequenceVisible}
+        agentCollapsed={agentCollapsed}
+        sequenceEntries={sequenceEntries}
+        sequence={sequence}
+        seqDragFromIndex={seqDragFromIndex}
+        seqDragOverIndex={seqDragOverIndex}
+        setSeqDragFromIndex={setSeqDragFromIndex}
+        setSeqDragOverIndex={setSeqDragOverIndex}
+        seqDropActive={seqDropActive}
+        setSeqDropActive={setSeqDropActive}
+        trimEditingIndex={trimEditingIndex}
+        setTrimEditingIndex={setTrimEditingIndex}
+        onSequenceChange={setSequence}
+        onPreview={(url, parentId, candidateId) =>
+          setPreview({ url, parentId, candidateId })
+        }
+        pushToast={pushToast}
+      />
       {/* Right-click context menu — closes on outside click + Esc. */}
       {contextMenu ? (() => {
         const node = contextMenu.node;

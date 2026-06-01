@@ -3024,6 +3024,7 @@ class ComicGenPipeline:
         approve: bool = False,
         deny: bool = False,
         turn_id: Optional[str] = None,
+        assistant_response: Optional[str] = None,
     ) -> AtelierAgentTurn:
         return AtelierAgentHarness(self).run_turn(
             project_id=project_id,
@@ -3033,6 +3034,7 @@ class ComicGenPipeline:
             approve=approve,
             deny=deny,
             turn_id=turn_id,
+            assistant_response=assistant_response,
         )
 
     def create_atelier_node(self, project_id: str, payload: Dict[str, Any]) -> AtelierNode:

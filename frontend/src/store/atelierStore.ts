@@ -46,6 +46,14 @@ interface AtelierStore {
     runAgentTurn: (payload: RunAtelierAgentTurnPayload) => Promise<AtelierAgentTurn>;
     createVideoNode: () => Promise<AtelierNode>;
     createImageNode: (file: File) => Promise<AtelierNode>;
+    /** v0.8 (M): persist a curated Browse seed as a real Atelier node.
+     *  Skips api.uploadFile because the seed url already points at a
+     *  static file under output/. Returns the created node so callers
+     *  (shell drop handler) can chain attachReferenceNode on a draft. */
+    createMediaNodeFromSeed: (
+        seed: { id: string; kind: "image" | "video" | "audio"; title: string; url: string; category?: string; audioRole?: string },
+        opts?: { x?: number; y?: number },
+    ) => Promise<AtelierNode>;
     createIdeaNode: (body?: string) => Promise<AtelierNode>;
     createCommentNode: (body?: string) => Promise<AtelierNode>;
     deleteAtelierNode: (nodeId: string) => Promise<void>;
@@ -350,6 +358,48 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             height: 220,
             media_urls: [url],
             data: { filename: file.name },
+        });
+        set((state) => ({
+            currentProject: state.currentProject?.id === node.project_id
+                ? { ...state.currentProject, nodes: [...state.currentProject.nodes, node] }
+                : state.currentProject,
+            selectedNodeId: node.id,
+        }));
+        return node;
+    },
+
+    createMediaNodeFromSeed: async (seed, opts) => {
+        const project = await get().ensureProject();
+        const offset = project.nodes.length * 24;
+        const x = opts?.x ?? 80 + offset;
+        const y = opts?.y ?? 200 + offset;
+        // Per-kind default footprint mirrors the per-type sizing the
+        // shell already uses when other entry points create media nodes
+        // (image references 220 sq, audio strips ~260×80, video plates
+        // ~320×240). Keeping each kind's default ratio means a fresh
+        // seed drop reads as the same shape as a hand-uploaded asset.
+        const size = seed.kind === "video"
+            ? { width: 320, height: 240 }
+            : seed.kind === "audio"
+                ? { width: 260, height: 80 }
+                : { width: 240, height: 240 };
+        const data: Record<string, unknown> = { seed: true, seed_id: seed.id };
+        if (seed.kind === "image" && seed.category) {
+            data.category = seed.category;
+        }
+        if (seed.kind === "audio" && seed.audioRole) {
+            data.audio_role = seed.audioRole;
+        }
+        const node = await api.createAtelierNode(project.id, {
+            type: seed.kind,
+            title: seed.title,
+            status: "completed",
+            x,
+            y,
+            width: size.width,
+            height: size.height,
+            media_urls: [seed.url],
+            data,
         });
         set((state) => ({
             currentProject: state.currentProject?.id === node.project_id

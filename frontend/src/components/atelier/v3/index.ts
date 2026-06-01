@@ -43,7 +43,13 @@ export {
 export { AssetLibrary, type AssetKind, type AssetCategory } from "./AssetLibrary";
 
 // Wave E — workflow library
-export { WorkflowsPanel, appendUserWorkflow } from "./WorkflowsPanel";
+export {
+  WorkflowsPanel,
+  appendUserWorkflow,
+  readUserWorkflows,
+  WORKFLOW_TEMPLATE_DRAG_MIME,
+} from "./WorkflowsPanel";
+export { TemplateThumbnail } from "./TemplateThumbnail";
 export {
   WORKFLOW_TEMPLATES,
   TEMPLATE_CATEGORY_LABELS,
@@ -53,3 +59,12 @@ export {
   type TemplateNode,
   type TemplateEdge,
 } from "./workflowTemplates";
+
+// v0.8 / track K — sequence strip extracted from AtelierShellV3 so the
+// shell's bottom-rail block isn't an inline ~430-line JSX expression.
+export {
+  SequenceStrip,
+  type SequenceEntry as SequenceStripEntry,
+  type SequenceEntryView,
+  type SequenceStripProps,
+} from "./SequenceStrip";

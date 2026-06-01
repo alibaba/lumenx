@@ -957,6 +957,188 @@ def test_atelier_agent_model_adapter_planner_blocks_unknown_tools(pipeline):
     assert project.nodes == []
 
 
+def test_atelier_agent_model_adapter_planner_calls_llm_when_no_draft_calls(
+    pipeline, monkeypatch
+):
+    """v0.8 item L: with no pre-validated tool_calls, the model_adapter
+    planner builds a planner_package + dispatches to the LLM. We monkeypatch
+    the LLM seam so the test stays offline / deterministic."""
+    project = pipeline.create_atelier_project("Board")
+
+    captured: Dict[str, Any] = {}
+
+    def fake_call(package, user_message, model=None):
+        captured["package"] = package
+        captured["user_message"] = user_message
+        captured["model"] = model
+        return {
+            "ok": True,
+            "response": "Sure — I'll draft a moonlit chase shot for you.",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {
+                        "title": "Moonlit chase",
+                        "prompt": "A moonlit chase across rooftops",
+                    },
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.call_atelier_llm_planner", fake_call
+    )
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "Draft a moonlit chase shot",
+        planner="model_adapter",
+    )
+
+    assert plan.status == "ready"
+    assert plan.planner == "model_adapter"
+    assert plan.response == "Sure — I'll draft a moonlit chase shot for you."
+    assert plan.tool_calls == [
+        {
+            "tool_name": "canvas.createVideoNode",
+            "arguments": {
+                "title": "Moonlit chase",
+                "prompt": "A moonlit chase across rooftops",
+            },
+        }
+    ]
+    # Planner package was built and passed to the LLM seam.
+    assert captured["user_message"] == "Draft a moonlit chase shot"
+    assert captured["package"].project_id == project.id
+    assert any(
+        tool["name"] == "canvas.createVideoNode"
+        for tool in captured["package"].tool_schemas
+    )
+
+    # End-to-end: forwarding assistant_response into run_turn overrides the
+    # deterministic English summary on the resulting AtelierAgentTurn.
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        plan.tool_calls,
+        user_message=plan.user_message,
+        assistant_response=plan.response,
+    )
+    assert turn.response == "Sure — I'll draft a moonlit chase shot for you."
+
+
+def test_atelier_agent_model_adapter_planner_blocks_when_llm_fails(
+    pipeline, monkeypatch
+):
+    project = pipeline.create_atelier_project("Board")
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.call_atelier_llm_planner",
+        lambda package, user_message, model=None: {
+            "ok": False,
+            "response": None,
+            "tool_calls": [],
+            "error": "LLM call failed: simulated provider 429",
+        },
+    )
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "Render the next beat",
+        planner="model_adapter",
+    )
+
+    assert plan.status == "blocked"
+    assert plan.planner == "model_adapter"
+    assert plan.tool_calls == []
+    assert "simulated provider 429" in plan.reason
+    assert project.nodes == []
+
+
+def test_atelier_agent_model_adapter_planner_blocks_when_llm_returns_no_actions(
+    pipeline, monkeypatch
+):
+    project = pipeline.create_atelier_project("Board")
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.call_atelier_llm_planner",
+        lambda package, user_message, model=None: {
+            "ok": True,
+            "response": "I need more context — which node should I update?",
+            "tool_calls": [],
+            "error": None,
+        },
+    )
+
+    plan = pipeline.plan_atelier_agent_turn(
+        project.id,
+        "Just change it",
+        planner="model_adapter",
+    )
+
+    assert plan.status == "blocked"
+    assert plan.tool_calls == []
+    # The LLM's own explanation should ride on the plan so the UI can show it.
+    assert plan.response == "I need more context — which node should I update?"
+    assert plan.reason == "I need more context — which node should I update?"
+
+
+def test_atelier_agent_harness_uses_assistant_response_over_summary(pipeline):
+    """run_turn prefers caller-supplied assistant_response over _build_turn_response."""
+    project = pipeline.create_atelier_project("Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [
+            {
+                "tool_name": "canvas.createVideoNode",
+                "arguments": {"title": "Test", "prompt": "hello"},
+            }
+        ],
+        user_message="Make a shot",
+        assistant_response="Spinning up your hero shot now.",
+    )
+
+    assert turn.status == "completed"
+    assert turn.response == "Spinning up your hero shot now."
+
+    # Without assistant_response, falls back to the deterministic summary.
+    turn2 = pipeline.run_atelier_agent_turn(
+        project.id,
+        [
+            {
+                "tool_name": "canvas.createVideoNode",
+                "arguments": {"title": "Test 2", "prompt": "hello"},
+            }
+        ],
+        user_message="Make another",
+    )
+    assert turn2.status == "completed"
+    assert turn2.response is not None
+    # Deterministic summary uses the "Created N video draft" phrasing.
+    assert "Created" in turn2.response
+
+
+def test_atelier_agent_model_adapter_llm_path_blocked_without_planner_package(pipeline):
+    """If the model_adapter planner is invoked WITHOUT pre-supplied tool_calls
+    AND without _planner_package (e.g. direct call to the planner bypassing
+    the harness), it returns a blocked plan rather than calling the LLM with
+    empty context."""
+    from src.apps.comic_gen.atelier_agent import (
+        ModelAdapterPlanner,
+        build_default_atelier_tool_registry,
+    )
+
+    project = pipeline.create_atelier_project("Board")
+    planner = ModelAdapterPlanner(build_default_atelier_tool_registry())
+    plan = planner.plan(
+        project=project,
+        user_message="hi",
+        planner_input={},
+    )
+    assert plan.status == "blocked"
+    assert "planner_package" in plan.reason or "tool_calls" in plan.reason
+
+
 def test_atelier_agent_planner_updates_selected_video_prompt(pipeline):
     project = pipeline.create_atelier_project("Board")
     video = pipeline.create_atelier_node(

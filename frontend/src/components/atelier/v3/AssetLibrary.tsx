@@ -25,6 +25,7 @@ import { useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Link2, Music, Search, Square, Video, X } from "lucide-react";
 import type { AtelierNode } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { ATELIER_ASSET_SEEDS, type AssetSeed } from "./assetSeeds";
 
 export type AssetKind = "all" | "image" | "video" | "audio";
 // P2 (D'): added "style" so a creator can stamp a reference as
@@ -60,12 +61,40 @@ const AUDIO_ROLE_LABELS: Record<Exclude<AudioRole, null>, string> = {
 };
 
 interface AssetCard {
+  /** For project cards this is the AtelierNode.id (used for selection,
+   *  drag payload, bulk attach). For Browse seed cards this is the
+   *  AssetSeed.id — purely a React key + selection identity. */
   nodeId: string;
   kind: "image" | "video" | "audio";
   title: string;
   thumbUrl?: string;
   category?: AssetCategory;
   audioRole?: AudioRole;
+  /** v0.8 (M): one-line affordance hint rendered under the title.
+   *  Project cards leave this undefined. Seed cards carry it from the
+   *  AssetSeed roster so each curated entry can justify itself. */
+  subtitle?: string;
+  /** v0.8 (M): when set, this card represents a Browse seed (no
+   *  AtelierNode exists yet). Drag flow uses a separate mime so the
+   *  shell drop handler can branch (create + persist vs attach). */
+  seed?: AssetSeed;
+}
+
+function seedToCard(seed: AssetSeed): AssetCard {
+  return {
+    nodeId: seed.id,
+    kind: seed.kind,
+    title: seed.title,
+    subtitle: seed.subtitle,
+    // Audio seeds intentionally leave thumbUrl undefined — the card
+    // falls back to a Music icon. Image / video resolve through the
+    // same getAssetUrl prefix path that project cards use, so a seed
+    // file under output/ resolves to ${API_URL}/files/<url>.
+    thumbUrl: seed.kind === "audio" ? undefined : getAssetUrl(seed.url),
+    category: seed.kind === "image" ? (seed.category ?? null) : null,
+    audioRole: seed.kind === "audio" ? (seed.audioRole ?? null) : null,
+    seed,
+  };
 }
 
 function readCategory(node: AtelierNode): AssetCategory {
@@ -143,6 +172,12 @@ export function AssetLibrary({
   const [kindFilter, setKindFilter] = useState<AssetKind>("all");
   const [imageCategoryFilter, setImageCategoryFilter] = useState<"all" | Exclude<AssetCategory, null>>("all");
   const [search, setSearch] = useState("");
+  // v0.8 (M): Project vs Browse view-mode. Project = the existing
+  // projection over `nodes`. Browse = the curated seed roster. The two
+  // share kind filter + image-secondary filter + search wiring; what
+  // differs is the cards source (allCards), drag mime, and that seed
+  // cards skip multi-select + the category-cycle pill.
+  const [viewMode, setViewMode] = useState<"project" | "browse">("project");
   // Multi-select mode: when on, image cards become click-to-toggle
   // checkboxes and the bottom of the panel surfaces an "Attach N" CTA.
   // Off-mode click still drag-and-drop / opens (existing behavior).
@@ -161,10 +196,14 @@ export function AssetLibrary({
     setSelectedIds(new Set());
   };
 
-  const allCards = useMemo(
+  const projectCards = useMemo(
     () => nodes.map(nodeToCard).filter((c): c is AssetCard => c !== null),
     [nodes],
   );
+  // Seeds are static — memoise once. Browse switching is just a card-
+  // source swap; filters stay live.
+  const seedCards = useMemo(() => ATELIER_ASSET_SEEDS.map(seedToCard), []);
+  const allCards = viewMode === "browse" ? seedCards : projectCards;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -242,13 +281,20 @@ export function AssetLibrary({
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/6 px-3.5 py-2.5">
         <div className="leading-tight">
           <div className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">
-            Project <span className="italic">assets</span>
+            {viewMode === "browse" ? (
+              <>Browse <span className="italic">samples</span></>
+            ) : (
+              <>Project <span className="italic">assets</span></>
+            )}
           </div>
           <div className="mt-[2px] text-[11px] text-white/45">
             {counts.all} item{counts.all === 1 ? "" : "s"}
           </div>
         </div>
-        {onBulkAttach ? (
+        {/* Multi-select only makes sense when each card has a real
+            AtelierNode the shell can bulk-attach to a draft. Browse
+            seeds don't have nodes yet, so the toggle hides in that mode. */}
+        {onBulkAttach && viewMode === "project" ? (
           <button
             type="button"
             onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
@@ -263,6 +309,45 @@ export function AssetLibrary({
           </button>
         ) : null}
       </header>
+
+      {/* v0.8 (M): Project | Browse view-mode toggle. Underlined
+          segmented control sits just under the editorial header so it
+          reads as a primary-axis switch (what's the source?) rather
+          than a filter (which keeps the kind row beneath). Switching
+          to Browse always exits multi-select so the panel state stays
+          coherent. */}
+      <div className="shrink-0 border-b border-white/6 px-3.5 pt-2">
+        <div role="tablist" aria-label="Asset source" className="flex items-center gap-4">
+          {(["project", "browse"] as const).map((mode) => {
+            const isActive = viewMode === mode;
+            const label = mode === "project" ? "Project" : "Browse";
+            return (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => {
+                  if (mode === viewMode) return;
+                  exitSelectMode();
+                  setViewMode(mode);
+                }}
+                className={`relative pb-1.5 text-[11px] tracking-[0.01em] transition-colors ${
+                  isActive ? "text-foreground" : "text-text-muted hover:text-foreground/85"
+                }`}
+              >
+                {label}
+                <span
+                  aria-hidden="true"
+                  className={`absolute inset-x-0 -bottom-px h-[1.5px] rounded-full transition-opacity ${
+                    isActive ? "bg-atelier-brand-400/85 opacity-100" : "opacity-0"
+                  }`}
+                />
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Search */}
       <div className="shrink-0 border-b border-white/6 px-3 py-2">
@@ -364,31 +449,72 @@ export function AssetLibrary({
                 {allCards.length === 0 ? "No assets yet" : "No matches"}
               </div>
               <div className="text-[11px] leading-[1.45]">
-                {allCards.length === 0
-                  ? "Drop image / video files anywhere on the canvas to add them."
-                  : "Try clearing the search or kind filter."}
+                {allCards.length === 0 ? (
+                  <>
+                    Drop image / video files anywhere on the canvas to add them.
+                    {viewMode === "project" ? (
+                      <>
+                        {" "}or{" "}
+                        <button
+                          type="button"
+                          onClick={() => setViewMode("browse")}
+                          className="text-atelier-brand-400 underline-offset-2 hover:underline"
+                        >
+                          switch to Browse
+                        </button>
+                        {" "}for sample assets.
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  "Try clearing the search or kind filter."
+                )}
               </div>
             </div>
           </div>
         ) : (
           <ul className="grid grid-cols-2 gap-2">
             {filtered.map((card) => {
+              const isSeed = !!card.seed;
               const checked = selectedIds.has(card.nodeId);
-              const selectableInThisMode = selectMode && card.kind === "image";
+              // Browse seed cards are never selectable — no AtelierNode
+              // exists yet for bulk-attach to target.
+              const selectableInThisMode = selectMode && card.kind === "image" && !isSeed;
               return (
               <li key={card.nodeId}>
                 <div
                   draggable={!selectMode}
                   onDragStart={(e) => {
                     if (selectMode) return;
-                    // Carry a custom mime so canvas drop targets (drafts /
-                    // composer ref slots) can recognize a library drag and
-                    // distinguish it from take drags or external file drops.
                     e.dataTransfer.effectAllowed = "copyLink";
-                    e.dataTransfer.setData(
-                      "application/x-atelier-asset",
-                      JSON.stringify({ nodeId: card.nodeId, kind: card.kind }),
-                    );
+                    if (isSeed && card.seed) {
+                      // v0.8 (M): seeds use a separate mime because the
+                      // shell drop handler must CREATE a new node from
+                      // a static url (and optionally chain attach) — not
+                      // attach an existing node. Splitting the mime
+                      // keeps the existing project-attach branch a clean
+                      // single-purpose path.
+                      e.dataTransfer.setData(
+                        "application/x-atelier-asset-seed",
+                        JSON.stringify({
+                          id: card.seed.id,
+                          kind: card.seed.kind,
+                          title: card.seed.title,
+                          url: card.seed.url,
+                          category: card.seed.category,
+                          audioRole: card.seed.audioRole,
+                        }),
+                      );
+                    } else {
+                      // Carry a custom mime so canvas drop targets
+                      // (drafts / composer ref slots) can recognize a
+                      // library drag and distinguish it from take drags
+                      // or external file drops.
+                      e.dataTransfer.setData(
+                        "application/x-atelier-asset",
+                        JSON.stringify({ nodeId: card.nodeId, kind: card.kind }),
+                      );
+                    }
                     e.dataTransfer.setData("text/plain", `@${card.title}`);
                   }}
                   onClick={() => {
@@ -433,8 +559,13 @@ export function AssetLibrary({
                     <span aria-hidden="true" className="absolute left-1 top-1 rounded-[3px] border border-dashed border-white/22 bg-black/70 px-1 py-[1px] text-[10px] tracking-[0.01em] text-white/85">
                       {card.kind}
                     </span>
-                    {/* Category pill — image only, click to cycle */}
-                    {card.kind === "image" && onCycleCategory ? (
+                    {/* Category pill — image only.
+                        Project cards: click-to-cycle (writes back via
+                          onCycleCategory).
+                        Browse seed cards: read-only badge — only renders
+                          when the seed carries a category, since seeds
+                          have no node to write back to. */}
+                    {card.kind === "image" && !isSeed && onCycleCategory ? (
                       <button
                         type="button"
                         aria-label={`Set category — current ${card.category ?? "none"}`}
@@ -453,6 +584,13 @@ export function AssetLibrary({
                       >
                         {card.category ? CATEGORY_LABELS[card.category] : "Tag"}
                       </button>
+                    ) : card.kind === "image" && isSeed && card.category ? (
+                      <span
+                        aria-label={`Category: ${CATEGORY_LABELS[card.category]}`}
+                        className="absolute right-1 top-1 rounded-[3px] border border-atelier-brand-400/45 bg-atelier-brand-400/15 px-1 py-[1px] text-[10px] tracking-[0.01em] text-atelier-brand-400"
+                      >
+                        {CATEGORY_LABELS[card.category]}
+                      </span>
                     ) : null}
                     {/* P2 (D'): audio-role badge — read-only in v1.
                         Lit only when an audio asset has data.audio_role
@@ -472,6 +610,11 @@ export function AssetLibrary({
                     <div className="truncate text-[11px] leading-[1.3] text-foreground/95">
                       {card.title}
                     </div>
+                    {card.subtitle ? (
+                      <div className="mt-[1px] truncate text-[10px] leading-[1.3] text-text-muted/85">
+                        {card.subtitle}
+                      </div>
+                    ) : null}
                   </div>
                   {/* Multi-select corner checkbox — image cards only,
                       visible only in select mode. */}

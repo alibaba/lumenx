@@ -403,6 +403,11 @@ class RunAtelierAgentTurnRequest(BaseModel):
     approve: bool = False
     deny: bool = False
     turn_id: Optional[str] = None
+    # v0.8 item L: forwards the LLM-emitted `response` string from an upstream
+    # AtelierAgentPlan (model_adapter planner). When present and non-empty,
+    # the harness uses it verbatim as AtelierAgentTurn.response instead of
+    # the deterministic English summary.
+    assistant_response: Optional[str] = None
 
 
 class PlanAtelierAgentTurnRequest(BaseModel):
@@ -573,6 +578,7 @@ async def run_atelier_agent_turn(
             approve=request.approve,
             deny=request.deny,
             turn_id=request.turn_id,
+            assistant_response=request.assistant_response,
         )
         if not request.preview:
             for call in turn.tool_calls:

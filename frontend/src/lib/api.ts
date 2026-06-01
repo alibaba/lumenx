@@ -133,6 +133,14 @@ export interface AtelierAgentPlan {
     tool_calls: AtelierAgentToolCallPayload[];
     context: AtelierAgentPlanContext;
     created_at: number;
+    /**
+     * v0.8 item L — LLM-emitted human-readable assistant text returned
+     * alongside tool_calls by a model-backed planner (e.g. ModelAdapterPlanner).
+     * Forward this back to runAtelierAgentTurn as `assistant_response` so the
+     * resulting turn's `response` reads as the model's own reply rather than
+     * the deterministic English summary.
+     */
+    response?: string | null;
 }
 
 export interface AtelierAgentTurn {
@@ -169,6 +177,13 @@ export interface RunAtelierAgentTurnPayload {
     approve?: boolean;
     deny?: boolean;
     turn_id?: string;
+    /**
+     * v0.8 item L — forwards the LLM-emitted `response` from an upstream
+     * AtelierAgentPlan so the harness can use it verbatim as the resulting
+     * AtelierAgentTurn.response. Omit when running a deterministic plan;
+     * the harness falls back to the English summary.
+     */
+    assistant_response?: string | null;
 }
 
 export interface PlanAtelierAgentTurnPayload {
@@ -1007,10 +1022,12 @@ export const api = {
     exportAtelierSequence: async (
         projectId: string,
         entries: Array<{ parentId: string; candidateId: string; trimStart?: number; trimEnd?: number }>,
+        options?: { signal?: AbortSignal },
     ): Promise<{ video_url: string; filename: string; size_mb: number; clip_count: number }> => {
         const response = await axios.post(
             `${API_URL}/atelier/projects/${projectId}/sequence/export`,
             { entries },
+            { signal: options?.signal },
         );
         return response.data;
     },

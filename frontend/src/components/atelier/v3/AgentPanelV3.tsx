@@ -353,6 +353,12 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
 
   const [draft, setDraft] = useState("");
   const [plannedCalls, setPlannedCalls] = useState<AtelierAgentToolCallPayload[]>([]);
+  // v0.8 item L — when the LLM-backed planner emits a `response` string we
+  // park it alongside plannedCalls so handleExecute can forward it to the
+  // backend as `assistant_response` (the harness uses it verbatim for
+  // turn.response, replacing the deterministic English summary).
+  const [plannedResponse, setPlannedResponse] = useState<string | null>(null);
+  const [plannedPlannerName, setPlannedPlannerName] = useState<string | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -375,7 +381,18 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
     // Stale plan from a previous mode would mismatch the new vocabulary,
     // so flush it whenever the mode flips.
     if (plannedCalls.length > 0) setPlannedCalls([]);
+    setPlannedResponse(null);
+    setPlannedPlannerName(null);
     setPlanError(null);
+  };
+
+  // v0.8 item L — which planner name to send for a given mode. "free" routes
+  // to the LLM-backed model_adapter so the agent actually reasons over the
+  // canvas instead of replaying deterministic single-action plans; "director"
+  // stays on the deterministic structure planner for replayable multi-step
+  // patterns (3-shot story / motion study / etc).
+  const resolvePlannerName = (): string => {
+    return plannerMode === "director" ? "structure" : "model_adapter";
   };
 
   // G: react to LeftRail's Director toggle. The shell flips
@@ -432,13 +449,20 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
       const plan = await planAgentTurn({
         user_message: draft,
         selected_node_id: selectedNodeId ?? null,
-        planner: plannerMode === "director" ? "structure" : null,
+        planner: resolvePlannerName(),
       });
       if (plan.status === "blocked") {
         setPlanError(plan.reason || "Agent planner refused this request.");
         setPlannedCalls([]);
+        // Carry the model's own explanation forward even on a blocked plan
+        // so the chat surface can show it; deterministic planners leave
+        // this null and the UI just shows the reason banner.
+        setPlannedResponse(plan.response ?? null);
+        setPlannedPlannerName(plan.planner ?? null);
       } else {
         setPlannedCalls(plan.tool_calls as AtelierAgentToolCallPayload[]);
+        setPlannedResponse(plan.response ?? null);
+        setPlannedPlannerName(plan.planner ?? null);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Agent planning failed";
@@ -455,16 +479,49 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
       return;
     }
     setExecuting(true);
+    setPlanError(null);
     try {
+      let toolCallsToRun: AtelierAgentToolCallPayload[] = plannedCalls;
+      let assistantResponse: string | null = plannedResponse;
+      // v0.8 item L — plan-and-run shortcut. If the user typed and hit Run
+      // without previewing, fire the planner now so we capture both the
+      // tool_calls and (for the LLM-backed planner) the assistant response.
+      // For preview-mode we skip this: preview turns are meant to render
+      // the plan as a static row, not execute it.
+      if (toolCallsToRun.length === 0 && draft.trim()) {
+        const plan = await planAgentTurn({
+          user_message: draft,
+          selected_node_id: selectedNodeId ?? null,
+          planner: resolvePlannerName(),
+        });
+        if (plan.status === "blocked") {
+          const reason = plan.reason || "Agent planner refused this request.";
+          setPlanError(reason);
+          // Surface the LLM's own explanation in chat even when blocked,
+          // so the user sees what the model said.
+          if (plan.response && plan.response.trim()) {
+            setPlannedResponse(plan.response);
+            setPlannedPlannerName(plan.planner ?? null);
+          }
+          pushToast?.("error", reason);
+          return;
+        }
+        toolCallsToRun = plan.tool_calls as AtelierAgentToolCallPayload[];
+        assistantResponse = plan.response ?? null;
+        setPlannedPlannerName(plan.planner ?? null);
+      }
       const turn = await runAgentTurn({
         user_message: draft,
         preview,
-        tool_calls: plannedCalls,
+        tool_calls: toolCallsToRun,
+        assistant_response: assistantResponse ?? undefined,
       });
       if (!preview) {
         pushToast?.("success", "Agent turn executed.");
         setDraft("");
         setPlannedCalls([]);
+        setPlannedResponse(null);
+        setPlannedPlannerName(null);
         setPlanError(null);
         // G: trusted-policy direct execute path — wrap if director run
         // produced 2+ nodes.
@@ -474,6 +531,7 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Agent run failed";
+      setPlanError(msg);
       pushToast?.("error", msg);
     } finally {
       setExecuting(false);
@@ -773,8 +831,11 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
           </div>
         ) : null}
 
-        {/* Currently planning — show a thinking bubble */}
-        {previewing ? (
+        {/* Currently planning — show a thinking bubble. v0.8 item L expands
+            this from "preview-only" to also cover the plan-and-run shortcut
+            so the user sees an "agent is thinking" bubble while the LLM
+            call is in-flight (Qwen typically 5-15s). */}
+        {previewing || (executing && plannedCalls.length === 0 && draft.trim()) ? (
           <ConversationAgentBubble thinking />
         ) : null}
 
@@ -786,10 +847,22 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
               <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]">
                 <span className="flex items-center gap-1.5 text-atelier-brand-soft/85">
                   <Sparkles size={10} aria-hidden="true" />
-                  Plan preview
+                  {plannedPlannerName === "model_adapter" ? "Agent plan" : "Plan preview"}
                 </span>
                 <span className="text-text-muted/85">{plannedCalls.length} step{plannedCalls.length === 1 ? "" : "s"}</span>
               </div>
+              {/* v0.8 item L — when the LLM-backed planner emits a `response`
+                  string, render it above the tool-call list so the user
+                  sees the assistant's own framing before the action chips.
+                  Empty / deterministic plans render the chips alone. */}
+              {plannedResponse && plannedResponse.trim() ? (
+                <p
+                  className="mb-1.5 border-l border-atelier-brand-soft/25 pl-2 text-[12px] leading-[1.5] text-foreground/85"
+                  style={{ fontFamily: "'Inter', sans-serif" }}
+                >
+                  {plannedResponse.trim()}
+                </p>
+              ) : null}
               <ul className="space-y-1 border-l border-white/6 pl-2.5 text-[12px] leading-[1.5]">
                 {plannedCalls.map((c, i) => (
                   <li key={i} className="flex items-start gap-1.5">
@@ -805,10 +878,33 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
           </div>
         ) : null}
 
+        {/* v0.8 item L — when the LLM-backed planner returned a `response`
+            but no tool_calls (model declined or asked for more context),
+            show its explanation as a standalone agent bubble so the user
+            isn't left staring at an empty inline planner banner. */}
+        {plannedResponse && plannedCalls.length === 0 && !pendingTurn && !previewing ? (
+          <ConversationAgentBubble>
+            <span style={{ fontFamily: "'Inter', sans-serif" }}>{plannedResponse.trim()}</span>
+          </ConversationAgentBubble>
+        ) : null}
+
         {planError ? (
           <div role="alert" className="rounded-md border border-atelier-failed/35 bg-atelier-failed/[0.06] px-3 py-2 text-[12px] leading-[1.5] text-foreground/95 motion-safe:animate-atelier-popover-in">
-            <div className="mb-1 text-[11px] text-atelier-failed">
-              Planner blocked
+            <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-atelier-failed">
+              <span>Agent blocked</span>
+              {/* v0.8 item L — retry chip when the LLM failed (network /
+                  rate-limit / parse error). Re-runs the same draft against
+                  the current planner mode so the user doesn't have to
+                  retype. Hidden when no draft remains. */}
+              {draft.trim() && !isLocked && !executing && !previewing ? (
+                <button
+                  type="button"
+                  onClick={() => void handleExecute(false)}
+                  className="rounded border border-atelier-failed/35 bg-atelier-failed/[0.08] px-1.5 py-[1px] text-[10.5px] font-medium text-atelier-failed/95 transition-colors hover:bg-atelier-failed/15"
+                >
+                  Retry
+                </button>
+              ) : null}
             </div>
             {planError}
           </div>
@@ -849,6 +945,8 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
             onChange={(e) => {
               setDraft(e.target.value);
               if (plannedCalls.length > 0) setPlannedCalls([]);
+              if (plannedResponse) setPlannedResponse(null);
+              if (plannedPlannerName) setPlannedPlannerName(null);
             }}
             placeholder={selectedNodeId ? "Ask Agent about the selected node…" : "Ask Agent…"}
             disabled={isLocked}
@@ -900,13 +998,13 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
                 aria-pressed={plannerMode === "director"}
                 aria-label={
                   plannerMode === "director"
-                    ? "Plan mode — structured multi-step. Click to switch to Auto."
-                    : "Auto mode — single deterministic action. Click to switch to Plan."
+                    ? "Plan mode — deterministic structured templates. Click to switch to Auto (LLM)."
+                    : "Auto mode — model-backed agent reasoning. Click to switch to Plan (structured templates)."
                 }
                 data-tip={
                   plannerMode === "director"
-                    ? "Plan · structured multi-step"
-                    : "Auto · single action"
+                    ? "Plan · structured templates"
+                    : "Auto · model-backed agent"
                 }
                 onClick={() =>
                   setPlannerModePersist(plannerMode === "director" ? "free" : "director")

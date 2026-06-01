@@ -433,6 +433,17 @@ class AtelierAgentPlan(BaseModel):
     tool_calls: List[Dict[str, Any]] = Field(default_factory=list)
     context: AtelierAgentPlanContext = Field(default_factory=AtelierAgentPlanContext)
     created_at: float = Field(default_factory=time.time)
+    response: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional LLM-emitted human-readable assistant text returned alongside "
+            "tool_calls by an LLM-backed planner (e.g. ModelAdapterPlanner). When the "
+            "frontend executes the plan it forwards this string back as "
+            "RunAtelierAgentTurnRequest.assistant_response, and the harness uses it "
+            "verbatim for AtelierAgentTurn.response (preferred over the deterministic "
+            "summary). Null for deterministic planners."
+        ),
+    )
 
 
 class AtelierAgentTurn(BaseModel):

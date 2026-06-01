@@ -150,6 +150,15 @@ const config: Config = {
           "0%":   { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
         },
+        // Indeterminate progress — a 1/3-width pill that slides from the
+        // left edge to the right edge of its track. Used under the
+        // Sequence strip header while ffmpeg export is in flight (the
+        // backend route is synchronous and reports no progress, so the
+        // shimmer is the most honest signal we can give the user).
+        "atelier-progress-indeterminate": {
+          "0%":   { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
       },
       animation: {
         "atelier-node-in": "atelier-node-in 220ms cubic-bezier(0.22, 1, 0.36, 1) both",
@@ -163,6 +172,8 @@ const config: Config = {
         "atelier-composer-in": "atelier-composer-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both",
         "atelier-pulse-soft": "atelier-pulse-soft 1.6s ease-in-out infinite",
         "atelier-shimmer": "atelier-shimmer 2.4s linear infinite",
+        "atelier-progress-indeterminate":
+          "atelier-progress-indeterminate 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite",
       },
     },
   },

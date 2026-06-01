@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import logging
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -17,6 +20,8 @@ from .models import (
     AtelierProject,
 )
 from ...utils.model_catalog import get_default_model_settings, resolve_r2v_route_model_id, validate_r2v_reference_inputs
+
+logger = logging.getLogger(__name__)
 
 
 READ_PERMISSION = "read"
@@ -447,8 +452,211 @@ class DeterministicCorePlanner:
         )
 
 
+# --- LLM-backed planning helper -------------------------------------------
+#
+# v0.8 item L: route the model_adapter planner through llm_adapter.LLMAdapter
+# (DashScope qwen / OpenAI-compat) so the agent actually reasons over the
+# canvas instead of replaying pre-validated tool_calls. The helper is module-
+# level so tests can monkeypatch a single seam.
+#
+# Contract (matches PLANNER_OUTPUT_CONTRACT + the explicit JSON shape we ask
+# the LLM to emit):
+#   { "response": "<short assistant text>", "tool_calls": [ ... ] }
+#
+# Returns a dict — never raises — so the planner can map errors into a
+# `blocked` plan with a helpful reason.
+
+_AGENT_LLM_MODEL_ENV = "DASHSCOPE_AGENT_MODEL"
+
+
+def _build_atelier_llm_system_prompt(package: AtelierAgentPlannerPackage) -> str:
+    """Compose the system prompt fed to the LLM.
+
+    Embeds the registered tools (names + schemas), the project snapshot, the
+    selected node (if any), the policy, and the planner output contract. Kept
+    deterministic so identical packages produce identical prompts (useful
+    for caching / replay in the future).
+    """
+    schema_overview = [
+        {
+            "name": t.get("name"),
+            "description": t.get("description"),
+            "input_schema": t.get("input_schema"),
+            "mutates_canvas": t.get("mutates_canvas"),
+            "requires_approval": t.get("requires_approval"),
+        }
+        for t in (package.tool_schemas or [])
+    ]
+    project_snapshot = package.project_snapshot or {}
+    sections: List[str] = [
+        "You are the Atelier canvas agent. You help users compose, plan, and generate "
+        "video shots on an infinite canvas. Be concise and concrete.",
+        "",
+        "OUTPUT FORMAT — respond ONLY with a single JSON object:",
+        '  { "response": "<short assistant text, 1-2 sentences>", '
+        '"tool_calls": [{ "tool_name": "...", "arguments": { ... } }] }',
+        "",
+        "Hard rules:",
+        "- tool_name MUST be one of the registered Atelier tools.",
+        "- arguments MUST match each tool's input_schema; omit unknown keys.",
+        "- Never invent node IDs — only use IDs present in the canvas snapshot.",
+        "- Respect policy.max_nodes_per_action — do not exceed it.",
+        "- If the request is unclear, unsafe, or needs more context, return "
+        "tool_calls: [] and explain why in `response`.",
+        "- The user-visible `response` is what they read in chat — write it for them, "
+        "not for a logger. Skip restating tool names.",
+        "",
+        "Planner output contract:",
+        json.dumps(package.output_contract or {}, ensure_ascii=False),
+        "",
+        "Registered tools:",
+        json.dumps(schema_overview, ensure_ascii=False),
+        "",
+        f"Canvas snapshot (scope={project_snapshot.get('scope', 'full')}, "
+        f"node_count={project_snapshot.get('node_count', 0)}):",
+        json.dumps(project_snapshot, ensure_ascii=False),
+    ]
+    if package.selected_node_snapshot:
+        sections.extend([
+            "",
+            "Currently selected node:",
+            json.dumps(package.selected_node_snapshot, ensure_ascii=False),
+        ])
+    sections.extend([
+        "",
+        "Project policy:",
+        json.dumps(package.policy_snapshot or {}, ensure_ascii=False),
+    ])
+    return "\n".join(sections)
+
+
+def call_atelier_llm_planner(
+    package: AtelierAgentPlannerPackage,
+    user_message: str,
+    model: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Run the LLM call for the model-backed planner.
+
+    Returns a dict shaped:
+      {
+        "ok": bool,
+        "response": Optional[str],     # LLM-generated assistant text
+        "tool_calls": List[Dict],      # parsed (unvalidated) tool calls
+        "error": Optional[str],        # human-readable failure reason if !ok
+      }
+    Never raises — failures are reported via the `error` field so the planner
+    can translate them into a `blocked` plan.
+    """
+    try:
+        from .llm_adapter import LLMAdapter
+    except Exception as exc:  # pragma: no cover — defensive import guard
+        return {"ok": False, "response": None, "tool_calls": [], "error": f"LLM adapter unavailable: {exc}"}
+
+    adapter = LLMAdapter()
+    if not adapter.is_configured:
+        key_name = "OPENAI_API_KEY" if adapter.provider == "openai" else "DASHSCOPE_API_KEY"
+        return {
+            "ok": False,
+            "response": None,
+            "tool_calls": [],
+            "error": f"LLM not configured — set {key_name} to use the model-backed agent.",
+        }
+
+    system_prompt = _build_atelier_llm_system_prompt(package)
+    payload_message = user_message.strip() or "(no message — propose a sensible next step)"
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": payload_message},
+    ]
+    model_id = model or os.getenv(_AGENT_LLM_MODEL_ENV) or None
+    try:
+        raw = adapter.chat(messages, model=model_id, response_format={"type": "json_object"})
+    except Exception as exc:
+        return {"ok": False, "response": None, "tool_calls": [], "error": f"LLM call failed: {exc}"}
+
+    if not raw or not isinstance(raw, str):
+        return {"ok": False, "response": None, "tool_calls": [], "error": "LLM returned empty content."}
+
+    parsed_payload: Any
+    try:
+        parsed_payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        # Some models wrap JSON in ```json fences even with response_format
+        # set; try to recover before giving up.
+        recovered = _extract_first_json_object(raw)
+        if recovered is None:
+            return {
+                "ok": False,
+                "response": None,
+                "tool_calls": [],
+                "error": f"LLM response was not valid JSON: {exc}",
+            }
+        parsed_payload = recovered
+
+    if not isinstance(parsed_payload, dict):
+        return {
+            "ok": False,
+            "response": None,
+            "tool_calls": [],
+            "error": "LLM response must be a JSON object with response + tool_calls.",
+        }
+
+    response_value = parsed_payload.get("response")
+    if response_value is not None and not isinstance(response_value, str):
+        response_value = str(response_value)
+
+    raw_calls = parsed_payload.get("tool_calls")
+    if raw_calls is None:
+        raw_calls = []
+    if not isinstance(raw_calls, list):
+        return {
+            "ok": False,
+            "response": response_value,
+            "tool_calls": [],
+            "error": "LLM response 'tool_calls' must be an array.",
+        }
+
+    return {
+        "ok": True,
+        "response": response_value,
+        "tool_calls": raw_calls,
+        "error": None,
+    }
+
+
+def _extract_first_json_object(text: str) -> Optional[Any]:
+    """Best-effort recovery of a JSON object embedded in fenced output.
+
+    Some chat models will return ```json\n{...}\n``` despite a JSON-only
+    response_format hint. We scan for a balanced `{ ... }` block and try to
+    parse it.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                snippet = text[start : i + 1]
+                try:
+                    return json.loads(snippet)
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
 class ModelAdapterPlanner:
     name = "model_adapter"
+
+    # Keys injected by AtelierAgentHarness.plan_turn that the planner needs
+    # internally but should not surface in the persisted planner_input
+    # context. Stripped from the redacted context payload below.
+    _INTERNAL_INPUT_KEYS = {"_planner_package"}
 
     def __init__(self, tool_registry: AtelierToolRegistry):
         self.tool_registry = tool_registry
@@ -462,6 +670,11 @@ class ModelAdapterPlanner:
         planner_input: Optional[Dict[str, Any]] = None,
     ) -> AtelierAgentPlan:
         planner_input_payload = dict(planner_input or {})
+        # Strip internal harness-injected fields before context redaction so
+        # the persisted plan never carries the full planner_package payload.
+        package: Optional[AtelierAgentPlannerPackage] = planner_input_payload.pop(
+            "_planner_package", None
+        ) if "_planner_package" in planner_input_payload else None
         context = AtelierAgentPlanContext(
             selected_node_id=selected_node_id,
             planner_input=_redact_planner_context_input(planner_input_payload),
@@ -471,16 +684,62 @@ class ModelAdapterPlanner:
             model_trace_id=self._optional_string(planner_input_payload.get("model_trace_id")),
         )
         draft_calls = list(planner_input_payload.get("tool_calls") or [])
+        llm_response_text: Optional[str] = None
         if not draft_calls:
-            return AtelierAgentPlan(
-                project_id=project.id,
-                user_message=user_message,
-                planner=self.name,
-                skill_name=skill_name,
-                status="blocked",
-                reason="Model planner requires validated draft tool calls from a model adapter.",
-                context=context,
+            # No pre-validated tool_calls → fall through to the LLM call.
+            # The harness injects `_planner_package`; without it we can't
+            # build the prompt, so return blocked rather than calling the
+            # LLM with empty context.
+            if package is None:
+                return AtelierAgentPlan(
+                    project_id=project.id,
+                    user_message=user_message,
+                    planner=self.name,
+                    skill_name=skill_name,
+                    status="blocked",
+                    reason=(
+                        "Model planner requires either pre-validated tool_calls "
+                        "or a planner_package — neither was provided."
+                    ),
+                    context=context,
+                )
+            llm_result = call_atelier_llm_planner(
+                package,
+                user_message,
+                model=self._optional_string(planner_input_payload.get("model")),
             )
+            if not llm_result.get("ok"):
+                error_reason = llm_result.get("error") or "LLM planner produced no usable output."
+                # Surface the LLM text even on failure so the UI can show
+                # the model's own explanation when it refused to act.
+                fallback_response = llm_result.get("response")
+                logger.warning("Atelier LLM planner failed: %s", error_reason)
+                return AtelierAgentPlan(
+                    project_id=project.id,
+                    user_message=user_message,
+                    planner=self.name,
+                    skill_name=skill_name or "model-planner",
+                    status="blocked",
+                    reason=error_reason,
+                    context=context,
+                    response=(fallback_response or None),
+                )
+            draft_calls = list(llm_result.get("tool_calls") or [])
+            llm_response_text = llm_result.get("response") or None
+            if not draft_calls:
+                # LLM intentionally declined to act (tool_calls: []). Treat
+                # as a blocked turn but carry the LLM's response so the UI
+                # can show the explanation in chat.
+                return AtelierAgentPlan(
+                    project_id=project.id,
+                    user_message=user_message,
+                    planner=self.name,
+                    skill_name=skill_name or "model-planner",
+                    status="blocked",
+                    reason=(llm_response_text or "Model planner returned no actions."),
+                    context=context,
+                    response=llm_response_text,
+                )
 
         if context.planner_schema_version != PLANNER_SCHEMA_VERSION:
             return self._blocked(
@@ -537,9 +796,13 @@ class ModelAdapterPlanner:
             planner=self.name,
             skill_name=skill_name or str(planner_input_payload.get("skill_name") or "model-planner"),
             status="ready",
-            reason="Model planner produced a validated Atelier tool-call plan.",
+            reason=(
+                llm_response_text
+                or "Model planner produced a validated Atelier tool-call plan."
+            ),
             tool_calls=sanitized_calls,
             context=context,
+            response=llm_response_text,
         )
 
     @staticmethod
@@ -1145,12 +1408,32 @@ class AtelierAgentHarness:
                     planner_input=_redact_planner_context_input(dict(planner_input or {})),
                 ),
             )
+        planner_input_payload = dict(planner_input or {})
+        # v0.8 item L: when the LLM-backed planner is selected and the
+        # caller didn't pre-supply tool_calls, build the planner_package
+        # here and thread it through `_planner_package` so the planner can
+        # construct the LLM prompt without re-fetching state. The key is
+        # consumed inside ModelAdapterPlanner and never persisted.
+        is_llm_planner = (planner_name == ModelAdapterPlanner.name)
+        has_predigested_calls = bool(planner_input_payload.get("tool_calls"))
+        if is_llm_planner and not has_predigested_calls and "_planner_package" not in planner_input_payload:
+            try:
+                planner_input_payload["_planner_package"] = self.build_planner_package(
+                    project_id=project_id,
+                    user_message=user_message,
+                    selected_node_id=selected_node_id,
+                    skill_name=skill_name,
+                )
+            except ValueError:
+                # Re-raise so the API surface returns 4xx; build failure
+                # means the project / selected node doesn't exist.
+                raise
         return planner.plan(
             project=project,
             user_message=user_message,
             selected_node_id=selected_node_id,
             skill_name=skill_name,
-            planner_input=planner_input,
+            planner_input=planner_input_payload,
         )
 
     def run_turn(
@@ -1162,6 +1445,7 @@ class AtelierAgentHarness:
         approve: bool = False,
         deny: bool = False,
         turn_id: Optional[str] = None,
+        assistant_response: Optional[str] = None,
     ) -> AtelierAgentTurn:
         project = self.pipeline.get_atelier_project(project_id)
         if not project:
@@ -1199,6 +1483,8 @@ class AtelierAgentHarness:
             turn.preview = False
             turn.status = "failed"
             turn.completed_at = time.time()
+            # Denial branch: deterministic summary always — LLM didn't
+            # author this terminal state, the user did.
             turn.response = _build_turn_response(turn.tool_calls, turn.status, preview=False)
             project.updated_at = time.time()
             self.pipeline._save_atelier_data()
@@ -1342,7 +1628,16 @@ class AtelierAgentHarness:
             turn.status = "completed"
             turn.completed_at = time.time()
 
-        turn.response = _build_turn_response(turn.tool_calls, turn.status, turn.preview)
+        # v0.8 item L: when the caller forwarded the LLM's own assistant_response
+        # (the `response` field from a ModelAdapterPlanner plan), prefer it
+        # over the deterministic English summary so the chat surface reads
+        # like an actual reply. Fall back to the deterministic summary when
+        # absent, empty, or the turn failed before any LLM-authored text
+        # was produced.
+        if assistant_response and assistant_response.strip():
+            turn.response = assistant_response.strip()
+        else:
+            turn.response = _build_turn_response(turn.tool_calls, turn.status, turn.preview)
         if appending_new_turn:
             project.agent_turns.append(turn)
         project.updated_at = time.time()

@@ -9,7 +9,8 @@
 // no remote catalog, no auth. Defaults ship in workflowTemplates.ts.
 // User templates (saved from canvas selection) live in localStorage —
 // see useUserWorkflows below.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { Sparkles, Trash2 } from "lucide-react";
 import {
   TEMPLATE_CATEGORY_LABELS,
@@ -17,9 +18,22 @@ import {
   type TemplateCategory,
   type WorkflowTemplate,
 } from "./workflowTemplates";
+import { TemplateThumbnail } from "./TemplateThumbnail";
+
+/** Mime type the card emits on drag — shell-side drop handler reads
+ *  this and inserts the template at the cursor position. Kept in this
+ *  file (not workflowTemplates.ts) because it's a UI contract between
+ *  this panel and the canvas, not a property of the template schema. */
+export const WORKFLOW_TEMPLATE_DRAG_MIME = "application/x-atelier-template";
 
 interface Props {
   onInsert: (template: WorkflowTemplate) => void;
+  /** Optional escape hatch for the shell to receive an explicit drop
+   *  anchor (cursor world coords). Track N exposes the prop so the
+   *  shell owner can wire it later; the panel itself never calls this
+   *  — the drag payload is a mime + id, the shell decides where to
+   *  drop. Present here purely for API symmetry / future use. */
+  onInsertAt?: (template: WorkflowTemplate, anchor: { x: number; y: number }) => void;
 }
 
 const ALL_CATEGORIES: Array<TemplateCategory | "all" | "mine"> = [
@@ -35,7 +49,7 @@ const ALL_CATEGORIES: Array<TemplateCategory | "all" | "mine"> = [
 
 const USER_WORKFLOWS_KEY = "atelier-v3-user-workflows";
 
-function readUserWorkflows(): WorkflowTemplate[] {
+export function readUserWorkflows(): WorkflowTemplate[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = window.localStorage.getItem(USER_WORKFLOWS_KEY);
@@ -77,9 +91,55 @@ export function appendUserWorkflow(t: WorkflowTemplate): void {
   writeUserWorkflows(list);
 }
 
-export function WorkflowsPanel({ onInsert }: Props) {
+export function WorkflowsPanel({ onInsert, onInsertAt: _onInsertAt }: Props) {
+  // `_onInsertAt` is intentionally unused inside the panel — it exists
+  // so the shell can adopt a typed prop hook later without breaking the
+  // public API. Drop-target ownership lives on the canvas root.
+  void _onInsertAt;
+
   const [filter, setFilter] = useState<TemplateCategory | "all" | "mine">("all");
   const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => readUserWorkflows());
+  // Which card is currently being dragged — drives the visual feedback
+  // (opacity/scale) without needing a per-card useState.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  // Hidden off-screen mount node that we render TemplateThumbnail into
+  // and hand to setDragImage. Browsers screenshot the live DOM node at
+  // dragstart, then we tear it down on dragend so it doesn't pile up.
+  const dragImageHostRef = useRef<HTMLDivElement | null>(null);
+  const dragImageRootRef = useRef<Root | null>(null);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const host = document.createElement("div");
+    // Pin off-screen so the screenshot picks up real pixels (browsers
+    // refuse `display:none`) but the user never sees it.
+    host.style.position = "fixed";
+    host.style.top = "-9999px";
+    host.style.left = "-9999px";
+    host.style.pointerEvents = "none";
+    host.setAttribute("data-atelier-template-drag-image", "true");
+    document.body.appendChild(host);
+    dragImageHostRef.current = host;
+    dragImageRootRef.current = createRoot(host);
+    return () => {
+      // Defer the unmount/remove a tick — React 18 strict-mode dev
+      // doubles invoke this effect and unmount-during-render of a
+      // sibling root warns otherwise.
+      const root = dragImageRootRef.current;
+      const node = dragImageHostRef.current;
+      dragImageRootRef.current = null;
+      dragImageHostRef.current = null;
+      queueMicrotask(() => {
+        try {
+          root?.unmount();
+        } catch {
+          /* ignore */
+        }
+        if (node?.parentNode) node.parentNode.removeChild(node);
+      });
+    };
+  }, []);
 
   // Re-read on append events. localStorage doesn't fire for the writer
   // tab, so we use a custom event from the writer.
@@ -165,8 +225,44 @@ export function WorkflowsPanel({ onInsert }: Props) {
               <li key={t.id} className="relative">
                 <button
                   type="button"
+                  draggable
+                  data-dragging={draggingId === t.id || undefined}
+                  onDragStart={(e) => {
+                    // Payload mime is consumed by the canvas root drop
+                    // handler (see AtelierShellV3 handleDrop). We only
+                    // pass the template id — the shell looks it up in
+                    // WORKFLOW_TEMPLATES + user templates. Keeps the
+                    // payload small and avoids stuffing structured data
+                    // through dataTransfer (which only stringifies).
+                    e.dataTransfer.setData(WORKFLOW_TEMPLATE_DRAG_MIME, t.id);
+                    e.dataTransfer.effectAllowed = "copy";
+
+                    // Custom drag image: render a larger thumbnail into
+                    // the off-screen host and hand it to the browser.
+                    // If anything in this chain fails (no DOM, no
+                    // root, setDragImage unsupported) we silently fall
+                    // back to the browser's default card screenshot.
+                    const root = dragImageRootRef.current;
+                    const host = dragImageHostRef.current;
+                    if (root && host) {
+                      try {
+                        root.render(<TemplateThumbnail template={t} size="lg" />);
+                        // Browsers screenshot synchronously from
+                        // dragstart; the SVG is small enough that the
+                        // current frame's already-painted state is
+                        // close to good. If the first drag of a card
+                        // shows a blank image, the second works — an
+                        // acceptable trade for not blocking dragstart.
+                        e.dataTransfer.setDragImage(host, 64, 40);
+                      } catch {
+                        /* fall back to default drag image */
+                      }
+                    }
+                    setDraggingId(t.id);
+                  }}
+                  onDragEnd={() => setDraggingId(null)}
                   onClick={() => onInsert(t)}
-                  className="group flex w-full flex-col gap-1.5 rounded-md border border-white/8 bg-black/25 p-3 text-left transition-all hover:-translate-y-[1px] hover:border-atelier-brand-400/40 hover:bg-atelier-brand-400/[0.05]"
+                  className="group flex w-full flex-col gap-1.5 rounded-md border border-white/8 bg-black/25 p-3 text-left transition-all hover:-translate-y-[1px] hover:border-atelier-brand-400/40 hover:bg-atelier-brand-400/[0.05] data-[dragging=true]:scale-[0.98] data-[dragging=true]:opacity-50"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">
@@ -182,6 +278,27 @@ export function WorkflowsPanel({ onInsert }: Props) {
                   <p className="text-[11.5px] leading-[1.5] text-text-secondary/95">
                     {t.description}
                   </p>
+
+                  {/* Hover-reveal thumbnail — inline expanding row so it
+                      doesn't fight the rail's overflow-y scroll. The
+                      grid-rows trick animates between 0fr and 1fr,
+                      driving a smooth height interpolation without
+                      hard-coding a max-height. `group-focus-within`
+                      mirrors hover for keyboard parity. */}
+                  <div className="grid grid-rows-[0fr] transition-[grid-template-rows] duration-200 ease-out group-hover:grid-rows-[1fr] group-focus-within:grid-rows-[1fr]">
+                    <div className="overflow-hidden">
+                      <div className="flex items-center gap-2 pt-1.5 pb-0.5">
+                        <TemplateThumbnail template={t} size="sm" />
+                        <span className="text-[10px] tabular-nums tracking-tight text-white/45">
+                          {t.nodes.length} {t.nodes.length === 1 ? "node" : "nodes"}
+                          {t.edges.length > 0
+                            ? ` · ${t.edges.length} ${t.edges.length === 1 ? "ref" : "refs"}`
+                            : ""}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     {t.tags.map((tag) => (
                       <span
