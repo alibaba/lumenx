@@ -3099,6 +3099,137 @@ class ComicGenPipeline:
             self._save_atelier_data_unlocked()
             return node
 
+    def attach_atelier_reference(
+        self,
+        project_id: str,
+        target_node_id: str,
+        source_node_id: str,
+    ) -> Tuple[AtelierNode, AtelierNode]:
+        """Attach a reference URL resolved from ``source_node`` onto
+        ``target_node`` (which must be a video / draft node).
+
+        Source resolution rules:
+        - ``source.type == "image"`` with ``media_urls`` → first media_url
+          (this is the v0.6.x image-ref path; unchanged).
+        - ``source.type == "video"`` and the node carries candidates (a
+          draft): pick ``data.selected_candidate_id`` if it is completed
+          with a ``video_url``; otherwise pick the first candidate whose
+          status is ``completed`` and that has a ``video_url``. Raise
+          ``ValueError`` with the marker ``"no completed take"`` if no
+          such candidate exists — the API layer maps this to HTTP 422.
+        - ``source.type == "video"`` with no candidates but with
+          ``media_urls`` (e.g. an externally-attached video): use the
+          first media_url.
+        - Anything else (audio / idea / plan / sequence / region) is
+          rejected with ``ValueError``.
+
+        Writes to the target's ``data.reference_image_urls`` (the bucket
+        name is image-historical; per the data-model contract it now
+        also holds video URLs — the shell infers kind per-URL at render
+        time) and ``data.reference_node_ids`` (both deduped). On the
+        source side, stamps ``data.reference_role = "video_reference_image"``
+        and sets ``data.parent_node_id = target.id`` if not already set
+        (keeps the first-attacher back-pointer semantics).
+
+        Returns ``(target, source)`` so the API can echo both back in
+        one round-trip.
+        """
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                raise ValueError("Atelier project not found")
+            target = next(
+                (candidate for candidate in project.nodes if candidate.id == target_node_id),
+                None,
+            )
+            if not target:
+                raise ValueError("Target node not found")
+            source = next(
+                (candidate for candidate in project.nodes if candidate.id == source_node_id),
+                None,
+            )
+            if not source:
+                raise ValueError("Source node not found")
+            if target.type != "video":
+                raise ValueError("Target node must be a video / draft node")
+
+            source_url: Optional[str] = None
+            if source.type == "image":
+                if not source.media_urls:
+                    raise ValueError("Source image node has no media URL")
+                source_url = source.media_urls[0]
+            elif source.type == "video":
+                source_data = dict(source.data or {})
+                candidates = list(source_data.get("candidates") or [])
+                if candidates:
+                    selected_id = source_data.get("selected_candidate_id")
+                    picked: Optional[Dict[str, Any]] = None
+                    if selected_id:
+                        picked = next(
+                            (
+                                cand for cand in candidates
+                                if cand.get("id") == selected_id
+                                and cand.get("status") == "completed"
+                                and cand.get("video_url")
+                            ),
+                            None,
+                        )
+                    if picked is None:
+                        picked = next(
+                            (
+                                cand for cand in candidates
+                                if cand.get("status") == "completed"
+                                and cand.get("video_url")
+                            ),
+                            None,
+                        )
+                    if picked is None:
+                        raise ValueError(
+                            "Source draft has no completed take to reference. "
+                            "Generate or pick a take first."
+                        )
+                    source_url = picked.get("video_url")
+                elif source.media_urls:
+                    source_url = source.media_urls[0]
+                else:
+                    raise ValueError(
+                        "Source draft has no completed take to reference. "
+                        "Generate or pick a take first."
+                    )
+            else:
+                raise ValueError(
+                    f"Source node type '{source.type}' cannot be used as a reference"
+                )
+
+            if not source_url:
+                raise ValueError(
+                    "Could not resolve a reference URL from the source node"
+                )
+
+            target_data = dict(target.data or {})
+            reference_image_urls = list(target_data.get("reference_image_urls") or [])
+            reference_node_ids = list(target_data.get("reference_node_ids") or [])
+            if source_url not in reference_image_urls:
+                reference_image_urls.append(source_url)
+            if source.id not in reference_node_ids:
+                reference_node_ids.append(source.id)
+            target_data["reference_image_urls"] = reference_image_urls
+            target_data["reference_node_ids"] = reference_node_ids
+            target.data = target_data
+
+            source_data = dict(source.data or {})
+            source_data["reference_role"] = "video_reference_image"
+            if not source_data.get("parent_node_id"):
+                source_data["parent_node_id"] = target.id
+            source.data = source_data
+
+            now = time.time()
+            target.updated_at = now
+            source.updated_at = now
+            project.updated_at = now
+            self._save_atelier_data_unlocked()
+            return target, source
+
     def create_atelier_video_candidates(
         self,
         project_id: str,

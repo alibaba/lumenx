@@ -1825,8 +1825,21 @@ export function AtelierShellV3() {
     const parsedCand = parseCandidateNodeId(source.id);
     const isTakeSource = !!parsedCand;
     const isImageSource = source.type === "image" && (source.media_urls?.length ?? 0) > 0;
+    // v0.7 (item H) — draft videos with at least one completed candidate
+    // become valid connection sources. The "real" reference URL is the
+    // draft's selected (or first-completed) take's video_url; the store
+    // resolves that when attachReferenceNode runs (mirroring the image
+    // path — same call, same target-side semantics, just a video URL in
+    // the reference bucket). Drafts WITHOUT a completed take stay
+    // decorative (their PortDot never wires onPortDown, so we don't
+    // reach this branch from them — but we still gate here for safety).
+    const isDraftWithTakeSource =
+      isDraftVideo(source) &&
+      readCandidates(source).some(
+        (c) => c.status === "completed" && !!c.video_url,
+      );
 
-    if (!isTakeSource && !isImageSource) {
+    if (!isTakeSource && !isImageSource && !isDraftWithTakeSource) {
       // Should never fire — ports are only rendered on supported source
       // types. Belt-and-braces silent return rather than a toast: the
       // user clicked an affordance we shouldn't have shown.
@@ -1854,10 +1867,10 @@ export function AtelierShellV3() {
       if (!connectDragRef.current) return;
       connectDragRef.current.currentScreenX = ev.clientX;
       connectDragRef.current.currentScreenY = ev.clientY;
-      // Highlight only meaningful drop targets — for image sources, that's
-      // a draft video; takes don't snap onto a target (they create a new
-      // draft at the cursor regardless).
-      if (isImageSource) {
+      // Highlight only meaningful drop targets — for image and draft-with-
+      // take sources, that's a draft video; takes don't snap onto a target
+      // (they create a new draft at the cursor regardless).
+      if (isImageSource || isDraftWithTakeSource) {
         const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null;
         const nodeEl = el?.closest("[data-atelier-node]") as HTMLElement | null;
         const targetId = nodeEl?.dataset.atelierNode ?? null;
@@ -1924,9 +1937,15 @@ export function AtelierShellV3() {
         return;
       }
 
-      // Source = image
-      if (isImageSource) {
-        if (target && isDraftVideo(target)) {
+      // Source = image OR draft-with-completed-take. Both route through
+      // attachReferenceNode using source.id; the store resolves the
+      // correct URL (image media_urls[0] for images, selected / first-
+      // completed take's video_url for drafts). Target rule is the same
+      // either way: drop on a draft → attach; drop on empty canvas →
+      // create a new draft pre-attached. Self-target is blocked so a
+      // user can't accidentally point a draft at its own take.
+      if (isImageSource || isDraftWithTakeSource) {
+        if (target && isDraftVideo(target) && target.id !== source.id) {
           // Attach to an existing draft target (the typical "use as ref"
           // flow but performed via drag).
           void useAtelierStore.getState()
@@ -1937,10 +1956,17 @@ export function AtelierShellV3() {
             );
           return;
         }
+        if (target && target.id === source.id) {
+          // Dropped back on self — silent no-op, nothing to say.
+          return;
+        }
         if (!target) {
           // Drop on empty canvas → create a new draft pre-attached to this
-          // image. The new draft lands centered on the cursor so the user
+          // source. The new draft lands centered on the cursor so the user
           // sees confirmation at the drop point.
+          const successMsg = isDraftWithTakeSource
+            ? "New draft created and take attached"
+            : "New draft created and image attached";
           void useAtelierStore.getState()
             .createVideoNode()
             .then(async (newDraft) => {
@@ -1951,7 +1977,7 @@ export function AtelierShellV3() {
               useAtelierStore.getState().moveNodeLocal(newDraft.id, tx, ty);
               await useAtelierStore.getState().commitNodePosition(newDraft.id, tx, ty).catch(() => {});
               await useAtelierStore.getState().attachReferenceNode(newDraft.id, source.id);
-              pushToast("success", "New draft created and image attached");
+              pushToast("success", successMsg);
             })
             .catch((err: unknown) =>
               pushToast("error", `Create failed: ${err instanceof Error ? err.message : String(err)}`),
@@ -4823,11 +4849,31 @@ export function AtelierShellV3() {
                       pushToast("error", `Pick take failed: ${err instanceof Error ? err.message : String(err)}`),
                     );
                 }}
-                // v0.6.3 — the workbench output port is decorative.
-                // handlePortDragOut rejects draft-video sources (only
-                // isImageSource + isTakeSource pass), so the dot is no
-                // longer wired as a drag source. Branching happens from
-                // the per-candidate take MediaNodes instead.
+                // v0.7 (item H) — the workbench output port is wired as a
+                // connection source ONLY when this draft has at least one
+                // completed take with a video URL. handlePortDragOut then
+                // treats the draft as an isDraftWithTakeSource and routes
+                // it through attachReferenceNode (selected / first-
+                // completed take's video_url ends up in the target's
+                // reference bucket). Empty drafts leave onPortDown
+                // undefined so the PortDot stays decorative.
+                onPortDown={(() => {
+                  const cands = readCandidates(selectedNode);
+                  const hasCompletedTake = cands.some(
+                    (c) => c.status === "completed" && !!c.video_url,
+                  );
+                  if (!hasCompletedTake) return undefined;
+                  return (event: React.PointerEvent) => {
+                    const el = event.currentTarget as HTMLElement;
+                    const r = el.getBoundingClientRect();
+                    handlePortDragOut(
+                      event,
+                      selectedNode,
+                      r.left + r.width / 2,
+                      r.top + r.height / 2,
+                    );
+                  };
+                })()}
               />
             </div>
           ) : null}

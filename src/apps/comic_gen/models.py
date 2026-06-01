@@ -471,7 +471,17 @@ class AtelierNode(BaseModel):
     asset_id: Optional[str] = Field(None, description="Studio asset ID this node references")
     video_task_id: Optional[str] = Field(None, description="Shared VideoTask ID this node references")
     media_urls: List[str] = Field(default_factory=list, description="Generated or attached media URLs")
-    data: Dict[str, Any] = Field(default_factory=dict, description="Node-type specific payload")
+    data: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Node-type specific payload. For draft / video nodes this includes "
+            "`candidates`, `generation`, `selected_candidate_id`, and the single "
+            "`reference_image_urls` reference bucket — bucket name is image-historical "
+            "but as of v0.7 it also holds video URLs sourced from sibling drafts' "
+            "completed takes (attach_atelier_reference). The shell infers per-URL kind "
+            "at render time from the owning node's `type`."
+        ),
+    )
     created_by: str = Field("user", description="user or agent")
     created_at: float = Field(default_factory=time.time)
     updated_at: float = Field(default_factory=time.time)

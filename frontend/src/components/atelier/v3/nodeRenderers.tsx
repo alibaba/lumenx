@@ -104,15 +104,19 @@ export function renderNode(
    *  shell. The matching node renders in editing-mode (chrome only) so the
    *  overlaid textarea isn't doubled with the underlying body. */
   editingTextNodeId?: string | null,
-  /** v0.6.2/v0.6.3 — connection drag wiring. The shell binds the
-   *  AtelierNode and fires handlePortDragOut. We only forward this to
-   *  the leaf MediaNode for sources handlePortDragOut actually accepts
-   *  (image media with src). Audio, top-level (non-candidate) videos,
-   *  draft videos, ideas, comments, plans — all get NO onPortDown,
-   *  which keeps their output PortDot decorative (no data-port, no
-   *  hover affordance, gesture falls through to parent node select/
-   *  drag). Candidate takes are wired separately via
-   *  renderCandidatesAsMediaNodes. */
+  /** v0.6.2/v0.6.3/v0.7 — connection drag wiring. The shell binds the
+   *  AtelierNode and fires handlePortDragOut. We forward this to the
+   *  leaf for sources handlePortDragOut actually accepts:
+   *    - image MediaNode with src (isImageSource)
+   *    - compact draft node WITH ≥1 completed take + video_url
+   *      (v0.7 item H — backend resolves to the draft's selected /
+   *      first-completed take URL via attachReferenceNode)
+   *  Audio, top-level (non-candidate) non-draft videos, empty drafts,
+   *  ideas, comments, plans — all get NO onPortDown, which keeps their
+   *  output PortDot decorative (no data-port, no hover affordance,
+   *  gesture falls through to parent node select/drag). Candidate takes
+   *  are wired separately via renderCandidatesAsMediaNodes; the selected
+   *  draft's expanded workbench is wired separately by the shell. */
   onPortDown?: (node: AtelierNode, event: React.PointerEvent) => void,
 ): React.ReactNode {
   const isSelected = selectedIds.has(node.id);
@@ -245,6 +249,15 @@ export function renderNode(
       const cands = readCandidates(node);
       const candidatesReady = cands.filter((c) => c.status === "completed").length;
       const candidatesTotal = cands.length;
+      // v0.7 (item H) — compact draft is a valid handlePortDragOut source
+      // ONLY when it has at least one completed take with a video URL.
+      // The backend / store resolves the source draft to its selected (or
+      // first completed) take's video_url when attachReferenceNode runs.
+      // Empty drafts stay decorative — pointer-down on the dot falls
+      // through to parent node select/drag.
+      const hasCompletedTake = cands.some(
+        (c) => c.status === "completed" && !!c.video_url,
+      );
       return (
         <DraftNode
           key={node.id}
@@ -268,6 +281,7 @@ export function renderNode(
           onDetachRef={(url) => {
             void useAtelierStore.getState().detachReferenceNode(node.id, url).catch(() => {});
           }}
+          onPortDown={hasCompletedTake ? portHandler : undefined}
         />
       );
     }

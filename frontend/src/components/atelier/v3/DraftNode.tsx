@@ -27,6 +27,14 @@ interface Props {
    *  badge that hovers over a ref thumbnail). Wired by the shell to
    *  store.detachReferenceNode. When omitted, refs stay read-only. */
   onDetachRef?: (url: string) => void;
+  /** v0.7 (item H) — drag-from-output handler. Wired by the shell ONLY
+   *  when this draft has at least one completed take with a video URL,
+   *  so its selected/first-completed take can be used as a reference on
+   *  another draft. When omitted, the output PortDot stays decorative
+   *  (no data-port, no hover affordance) and the gesture falls through
+   *  to the parent node — preserving the v0.6.3 decorative contract for
+   *  empty drafts. */
+  onPortDown?: (event: React.PointerEvent) => void;
 }
 
 // Lifecycle status is NOT painted on the body/border/rail any more — it lives
@@ -48,6 +56,7 @@ export function DraftNode({
   onSelect,
   onIntentCommit,
   onDetachRef,
+  onPortDown,
 }: Props) {
   // Body is neutral-cool in every status; cobalt ring only when selected.
   // Status is carried by the StatusDot + footer caption, NOT the border.
@@ -106,14 +115,17 @@ export function DraftNode({
       // shows through faintly; replaces the flat #141416 card.
       className={`group absolute w-[280px] atelier-node-shell transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
-      {/* output port — decorative blue dot on the right edge. v0.6.3:
-          compact draft video nodes are not a valid handlePortDragOut source
-          (only image media + completed candidate takes are), so this dot
-          is a non-interactive indicator only. No data-port, no hover
-          affordance, no pointer handler — pointer-down "near" the dot still
-          selects/drags the parent draft card correctly. */}
+      {/* output port — v0.7 (item H): interactive when the shell wires
+          onPortDown (draft has ≥1 completed take with video_url → its
+          selected / first-completed take can be used as a reference on
+          another draft). Decorative otherwise — no data-port, no hover
+          affordance, no pointer handler, so pointer-down "near" the dot
+          still selects/drags the parent draft card correctly. Preserves
+          the v0.6.3 two-mode PortDot contract. */}
       <PortDot
         kind="output"
+        interactive={!!onPortDown}
+        onPointerDown={onPortDown}
         className="absolute right-[-3px] top-1/2 -translate-y-1/2 z-10"
       />
       <div className="px-[18px] pt-4 pb-3.5">

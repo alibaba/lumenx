@@ -84,6 +84,14 @@ interface Props {
   /** Callback when the user clicks a take in the strip. Caller should
    *  promote that take to "primary" (e.g. store.selectCandidate). */
   onPickTake?: (takeId: string) => void;
+  /** v0.7 (item H) — drag-from-output handler. Wired by the shell ONLY
+   *  when this draft has at least one completed take with a video URL,
+   *  so its selected / first-completed take can be used as a reference
+   *  on another draft. When omitted the workbench's output PortDot
+   *  stays decorative (no data-port, no hover affordance) and the
+   *  gesture falls through to the workbench's own selection / drag
+   *  handling — preserving the v0.6.3 decorative contract. */
+  onPortDown?: (event: React.PointerEvent) => void;
 }
 
 export function DraftWorkbench({
@@ -117,6 +125,7 @@ export function DraftWorkbench({
   staleRefCount = 0,
   takes,
   onPickTake,
+  onPortDown,
 }: Props) {
   // Title row (rename) — same affordance as DraftNode so the muscle
   // memory carries over. Double-click to rename, Enter commits, Esc
@@ -199,16 +208,18 @@ export function DraftWorkbench({
       // 520 keeps the prompt + ref content roomy.
       className={`group absolute w-[560px] origin-top-left atelier-opaque-shell transition-shadow duration-200 motion-safe:animate-atelier-workbench-in ${selectedClass}`}
     >
-      {/* §2 OUTPUT PORT — decorative blue dot anchored to the right edge
-          MIDLINE. v0.6.3: handlePortDragOut does NOT accept top-level draft
-          video nodes as a connection source (only image media + candidate
-          takes), so this port is a visual indicator only. No data-port, no
-          drag handlers, no hover affordance — pointer-downs on/near it fall
+      {/* §2 OUTPUT PORT — v0.7 (item H): interactive when the shell wires
+          onPortDown (this draft has ≥1 completed take with video_url → its
+          selected / first-completed take can be used as a reference on
+          another draft). Decorative otherwise — no data-port, no drag
+          handlers, no hover affordance, so pointer-downs on/near it fall
           through to the workbench's own selection/drag handling. The
-          interactive drag-from path lives on the per-take MediaNodes
-          rendered by renderCandidatesAsMediaNodes. */}
+          per-take MediaNodes rendered by renderCandidatesAsMediaNodes
+          still expose their own interactive ports independently. */}
       <PortDot
         kind="output"
+        interactive={!!onPortDown}
+        onPointerDown={onPortDown}
         className="absolute -right-[3px] top-1/2 z-20 -translate-y-1/2"
       />
 

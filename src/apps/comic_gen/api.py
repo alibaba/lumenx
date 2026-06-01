@@ -722,6 +722,51 @@ async def delete_atelier_video_candidate(project_id: str, node_id: str, candidat
         raise HTTPException(status_code=404, detail=str(e))
 
 
+class AttachAtelierReferenceRequest(BaseModel):
+    source_node_id: str
+
+
+@app.post("/atelier/projects/{project_id}/nodes/{node_id}/attach_reference")
+async def attach_atelier_reference(
+    project_id: str,
+    node_id: str,
+    request: AttachAtelierReferenceRequest,
+):
+    """Attach a reference URL resolved from `source_node_id` onto the
+    draft `node_id`. The source can be:
+    - an image node (uses media_urls[0]);
+    - a draft / video node with at least one completed candidate
+      (prefers data.selected_candidate_id, falls back to first completed
+      take with a video_url);
+    - a non-draft video node with media_urls (uses media_urls[0]).
+
+    Returns both nodes (target + source) so the client can patch its
+    local store in one round-trip. 422 when the source is a draft with
+    no completed take to use as a reference."""
+    try:
+        target, source = pipeline.attach_atelier_reference(
+            project_id=project_id,
+            target_node_id=node_id,
+            source_node_id=request.source_node_id,
+        )
+        return signed_response({
+            "target": target.model_dump(),
+            "source": source.model_dump(),
+        })
+    except ValueError as e:
+        message = str(e)
+        lower = message.lower()
+        if "not found" in lower:
+            raise HTTPException(status_code=404, detail=message)
+        if (
+            "no completed take" in lower
+            or "no media url" in lower
+            or "could not resolve" in lower
+        ):
+            raise HTTPException(status_code=422, detail=message)
+        raise HTTPException(status_code=400, detail=message)
+
+
 
 @app.get("/projects/", response_model=List[dict])
 async def list_projects():

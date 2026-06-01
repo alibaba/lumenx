@@ -292,6 +292,205 @@ def test_atelier_candidate_generation_requires_reference_images(pipeline):
         )
 
 
+def test_atelier_attach_reference_from_image_node_appends_url(pipeline):
+    """Baseline / v0.6.x behaviour: dragging an image node onto a draft
+    attaches its first media_url. The new pipeline helper must keep this
+    path intact (no functional regression for the existing image-ref drop)."""
+    project = pipeline.create_atelier_project("Board")
+    target = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Draft A"})
+    image = pipeline.create_atelier_node(
+        project.id,
+        {"type": "image", "title": "Ref", "media_urls": ["uploads/ref.png"]},
+    )
+
+    updated_target, updated_source = pipeline.attach_atelier_reference(
+        project_id=project.id,
+        target_node_id=target.id,
+        source_node_id=image.id,
+    )
+
+    assert updated_target.data["reference_image_urls"] == ["uploads/ref.png"]
+    assert updated_target.data["reference_node_ids"] == [image.id]
+    assert updated_source.data["parent_node_id"] == target.id
+    assert updated_source.data["reference_role"] == "video_reference_image"
+
+
+def test_atelier_attach_reference_from_draft_uses_selected_take(pipeline):
+    """v0.7 item H — dragging from a draft video with a selected completed
+    take should attach that take's video_url to the target draft. The
+    bucket name stays `reference_image_urls` (image-historical) but the
+    shell infers per-URL kind at render time."""
+    project = pipeline.create_atelier_project("Board")
+    target = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Target Draft"})
+    source = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Source Draft"})
+
+    pipeline.create_atelier_video_candidates(
+        project_id=project.id,
+        node_id=source.id,
+        prompt="A neon alley chase",
+        model="wan2.7-i2v",
+        reference_image_urls=["uploads/seed.png"],
+        batch_size=2,
+        params={"duration": 5},
+    )
+    candidates = source.data["candidates"]
+    failed_cand_id = candidates[0]["id"]
+    completed_cand_id = candidates[1]["id"]
+    candidates[0]["status"] = "failed"
+    candidates[0]["error"] = "provider timeout"
+    candidates[1]["status"] = "completed"
+    candidates[1]["video_url"] = "videos/atelier_completed_take.mp4"
+    source.data["selected_candidate_id"] = completed_cand_id
+
+    updated_target, updated_source = pipeline.attach_atelier_reference(
+        project_id=project.id,
+        target_node_id=target.id,
+        source_node_id=source.id,
+    )
+
+    assert updated_target.data["reference_image_urls"] == [
+        "videos/atelier_completed_take.mp4",
+    ]
+    assert updated_target.data["reference_node_ids"] == [source.id]
+    assert updated_source.data["parent_node_id"] == target.id
+    assert updated_source.data["reference_role"] == "video_reference_image"
+    # The failed candidate must never be picked even by id collision.
+    assert failed_cand_id != completed_cand_id
+
+
+def test_atelier_attach_reference_from_draft_falls_back_to_first_completed(pipeline):
+    """No selected_candidate_id → first completed candidate with a
+    video_url wins; failed / pending candidates are skipped."""
+    project = pipeline.create_atelier_project("Board")
+    target = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Target"})
+    source = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Source"})
+
+    pipeline.create_atelier_video_candidates(
+        project_id=project.id,
+        node_id=source.id,
+        prompt="A foggy harbour at dawn",
+        model="wan2.7-i2v",
+        reference_image_urls=["uploads/seed.png"],
+        batch_size=3,
+        params={},
+    )
+    cands = source.data["candidates"]
+    cands[0]["status"] = "failed"
+    cands[0]["error"] = "boom"
+    cands[1]["status"] = "completed"
+    cands[1]["video_url"] = "videos/first_completed.mp4"
+    cands[2]["status"] = "completed"
+    cands[2]["video_url"] = "videos/second_completed.mp4"
+    # no selected_candidate_id
+
+    updated_target, _ = pipeline.attach_atelier_reference(
+        project_id=project.id,
+        target_node_id=target.id,
+        source_node_id=source.id,
+    )
+
+    assert updated_target.data["reference_image_urls"] == [
+        "videos/first_completed.mp4",
+    ]
+
+
+def test_atelier_attach_reference_from_empty_draft_raises_no_completed_take(pipeline):
+    """A draft with no candidates (or only failed / pending ones) must
+    raise a `no completed take` ValueError. The API layer maps this to
+    HTTP 422 so the frontend can surface the right toast."""
+    project = pipeline.create_atelier_project("Board")
+    target = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Target"})
+    empty_source = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Empty"})
+
+    with pytest.raises(ValueError, match="no completed take"):
+        pipeline.attach_atelier_reference(
+            project_id=project.id,
+            target_node_id=target.id,
+            source_node_id=empty_source.id,
+        )
+
+    # Same outcome when the only candidate is still pending / failed.
+    pipeline.create_atelier_video_candidates(
+        project_id=project.id,
+        node_id=empty_source.id,
+        prompt="A storm gathers",
+        model="wan2.7-i2v",
+        reference_image_urls=["uploads/seed.png"],
+        batch_size=1,
+        params={},
+    )
+    empty_source.data["candidates"][0]["status"] = "failed"
+    with pytest.raises(ValueError, match="no completed take"):
+        pipeline.attach_atelier_reference(
+            project_id=project.id,
+            target_node_id=target.id,
+            source_node_id=empty_source.id,
+        )
+
+
+def test_atelier_attach_reference_skips_completed_candidate_without_video_url(pipeline):
+    """A candidate marked completed but missing video_url is unusable as
+    a reference. The helper must skip it and raise rather than attach a
+    dangling pointer."""
+    project = pipeline.create_atelier_project("Board")
+    target = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Target"})
+    source = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Source"})
+
+    pipeline.create_atelier_video_candidates(
+        project_id=project.id,
+        node_id=source.id,
+        prompt="A neon alley chase",
+        model="wan2.7-i2v",
+        reference_image_urls=["uploads/seed.png"],
+        batch_size=1,
+        params={},
+    )
+    source.data["candidates"][0]["status"] = "completed"
+    source.data["candidates"][0]["video_url"] = None
+
+    with pytest.raises(ValueError, match="no completed take"):
+        pipeline.attach_atelier_reference(
+            project_id=project.id,
+            target_node_id=target.id,
+            source_node_id=source.id,
+        )
+
+
+def test_atelier_attach_reference_dedupes_repeat_attaches(pipeline):
+    """Re-attaching the same source must be a no-op rather than a
+    duplicate (matches the v0.6.x N:M behaviour in
+    `_execute_attach_reference_node`)."""
+    project = pipeline.create_atelier_project("Board")
+    target = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Target"})
+    image = pipeline.create_atelier_node(
+        project.id,
+        {"type": "image", "title": "Ref", "media_urls": ["uploads/ref.png"]},
+    )
+
+    pipeline.attach_atelier_reference(project.id, target.id, image.id)
+    updated_target, _ = pipeline.attach_atelier_reference(project.id, target.id, image.id)
+
+    assert updated_target.data["reference_image_urls"] == ["uploads/ref.png"]
+    assert updated_target.data["reference_node_ids"] == [image.id]
+
+
+def test_atelier_attach_reference_rejects_non_video_target(pipeline):
+    """The drop target must be a video / draft node; attaching onto an
+    idea / image / audio node is not a supported gesture."""
+    project = pipeline.create_atelier_project("Board")
+    image_target = pipeline.create_atelier_node(
+        project.id,
+        {"type": "image", "title": "Img", "media_urls": ["uploads/a.png"]},
+    )
+    source = pipeline.create_atelier_node(
+        project.id,
+        {"type": "image", "title": "Src", "media_urls": ["uploads/b.png"]},
+    )
+
+    with pytest.raises(ValueError, match="video / draft"):
+        pipeline.attach_atelier_reference(project.id, image_target.id, source.id)
+
+
 def test_atelier_agent_lists_bounded_canvas_tools(pipeline):
     project = pipeline.create_atelier_project("Board")
 
