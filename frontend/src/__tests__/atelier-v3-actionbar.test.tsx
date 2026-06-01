@@ -91,10 +91,10 @@ describe("SelectionActionBar", () => {
     expect(container.querySelectorAll("button")).toHaveLength(1);
   });
 
-  it("clamps top to >= 8 when node is near canvas top", () => {
+  it("clamps top to >= 12 when node is near canvas top", () => {
     const { container } = render(<SelectionActionBar kind="video" x={0} y={20} width={200} onAct={() => {}} />);
     const root = container.firstElementChild as HTMLElement;
-    expect(root.style.top).toBe("8px");
+    expect(root.style.top).toBe("12px");
   });
 
   it("idea kind shows only Delete (no leading divider)", () => {

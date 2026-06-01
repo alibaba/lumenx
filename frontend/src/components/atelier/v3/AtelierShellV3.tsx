@@ -29,7 +29,6 @@ import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
 import { HistoryPanel } from "@/components/atelier/v3/HistoryPanel";
 import { RightControlStack } from "@/components/atelier/v3/RightControlStack";
-import { MultiplayerCursors } from "@/components/atelier/v3/MultiplayerCursors";
 import {
   RegionFrame,
   REGION_COLLAPSED_WIDTH,
@@ -3498,7 +3497,7 @@ export function AtelierShellV3() {
         <header
           role="banner"
           aria-label="Atelier header"
-          className="absolute left-[72px] top-3 z-30 flex h-10 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/88 pl-3 pr-1.5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.45),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+          className="absolute left-[80px] top-3 z-30 flex h-10 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/88 pl-3 pr-1.5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.45),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
           style={{ right: agentCollapsed ? 96 : 420 }}
         >
           {/* LumenX wordmark — v0.5.5 sentence-case Inter, matches Flova
@@ -3721,10 +3720,69 @@ export function AtelierShellV3() {
           ) : null}
           </div>
 
-          {/* Right cluster — share / credits / profile placeholders. v1
-              stubs only; pop a toast when clicked so we can wire real
-              flows later without changing markup. */}
+          {/* Right cluster — save-state chip, share / credits / profile
+              placeholders. v1 stubs only; pop a toast when clicked so we
+              can wire real flows later without changing markup. The
+              save-state chip folds in here (v0.5.8 polish) so it anchors
+              to a real toolbar instead of floating beside the canvas. */}
           <div className="ml-auto flex items-center gap-0.5">
+            {(() => {
+              const { inflight, savedAt, failedAt } = saveState;
+              if (inflight === 0 && savedAt === null && failedAt === null) return null;
+              const isSaving = inflight > 0;
+              const hasUnrecoveredFailure = failedAt !== null && (savedAt === null || failedAt > savedAt);
+              let label: string;
+              if (isSaving) {
+                label = "Saving…";
+              } else if (hasUnrecoveredFailure) {
+                label = "Save failed";
+              } else if (savedAt) {
+                const ago = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
+                if (ago < 5) label = "Saved";
+                else if (ago < 60) label = `Saved ${ago}s ago`;
+                else if (ago < 3600) label = `Saved ${Math.floor(ago / 60)}m ago`;
+                else label = `Saved ${Math.floor(ago / 3600)}h ago`;
+              } else {
+                label = "Saved";
+              }
+              const dotTone = isSaving
+                ? "bg-blue-300 shadow-[0_0_0_3px_rgba(96,165,250,0.18)] animate-pulse"
+                : hasUnrecoveredFailure
+                ? "bg-red-300 shadow-[0_0_0_3px_rgba(252,165,165,0.18)]"
+                : "bg-emerald-300 shadow-[0_0_0_3px_rgba(110,231,183,0.18)]";
+              const tone = isSaving
+                ? "text-blue-200/95"
+                : hasUnrecoveredFailure
+                ? "text-red-200/95"
+                : "text-emerald-200/95";
+              return (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-[10px] tracking-[0.01em] transition-opacity duration-300 ${tone}`}
+                >
+                  <span aria-hidden="true" className={`h-[5px] w-[5px] rounded-full ${dotTone}`} />
+                  <span>{label}</span>
+                  {hasUnrecoveredFailure && !isSaving ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Re-fetch the project — gives the user a way to
+                        // force-sync and verify whether the canvas matches
+                        // the server.
+                        void refreshCurrentProject().catch(() => {
+                          // failedAt will refresh from the next response error.
+                        });
+                      }}
+                      className="ml-1 rounded-full bg-red-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-100 hover:bg-red-400/30"
+                      aria-label="Retry sync"
+                    >
+                      Retry
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })()}
             <button
               type="button"
               aria-label="Share project"
@@ -3910,18 +3968,6 @@ export function AtelierShellV3() {
           className="absolute left-0 top-0 origin-top-left"
           style={{ transform: `translate(${panX}px, ${panY}px) scale(${zoomFactor})` }}
         >
-          {/* v0.5 Flova: collaborative-presence cursor pills (world-pinned,
-              decorative — spec §4). Anchored near real nodes when present. */}
-          {project && project.nodes.length > 0 ? (
-            <MultiplayerCursors
-              items={[
-                { name: "Kate", color: "#5b9dff", x: (project.nodes[1] ?? project.nodes[0]).x + 196, y: (project.nodes[1] ?? project.nodes[0]).y - 18 },
-                ...(project.nodes.length > 3
-                  ? [{ name: "Mario", color: "#f06fb0", x: project.nodes[3].x - 30, y: project.nodes[3].y + 150 }]
-                  : []),
-              ]}
-            />
-          ) : null}
           {/* edges layer (in world coords). Labels are collected during the
               same pass so the geometry math doesn't have to be duplicated;
               we render the path SVG and the chip overlay separately.
@@ -4589,10 +4635,10 @@ export function AtelierShellV3() {
           {editingIdeaId && project ? (() => {
             const node = project.nodes.find((n) => n.id === editingIdeaId);
             if (!node || (node.type !== "idea" && node.type !== "comment")) return null;
-            // Match the underlying node card: same width (224), same solid
+            // Match the underlying node card: same width (260), same solid
             // bg, same rounded corners, same outer shadow. The card itself
-            // renders editing-mode (chrome only) so this textarea owns the
-            // entire visual frame while the user types.
+            // returns null while editing so this textarea owns the entire
+            // visual frame — no double-shell halo.
             const isComment = node.type === "comment";
             const surfaceBg = isComment ? "bg-[#15141a]" : "bg-[#1a1611]";
             const ringTone = isComment
@@ -4619,7 +4665,7 @@ export function AtelierShellV3() {
                   }
                 }}
                 placeholder="Write the idea — Esc to cancel, ⌘⏎ to save"
-                className={`absolute z-30 w-[224px] resize-none rounded-[10px] border px-3.5 py-3 font-display text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95 placeholder:not-italic placeholder:text-[12px] placeholder:italic placeholder:tracking-tight placeholder:text-white/35 shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] outline-none ring-2 ${surfaceBg} ${ringTone}`}
+                className={`absolute z-30 w-[260px] resize-none rounded-[10px] border px-3.5 py-3 font-display text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95 placeholder:not-italic placeholder:text-[12px] placeholder:italic placeholder:tracking-tight placeholder:text-white/35 shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] outline-none ring-2 ${surfaceBg} ${ringTone}`}
                 style={{ left: node.x, top: node.y, minHeight: 140, height: Math.max(140, (node.height || 140)) }}
               />
             );
@@ -4642,6 +4688,7 @@ export function AtelierShellV3() {
       {selectedNode && !isMultiSelect ? (
         <SelectionActionBar
           kind={selectionKindOf(selectedNode)}
+          nodeId={selectedNode.id}
           x={panX + selectedNode.x * zoomFactor}
           y={panY + selectedNode.y * zoomFactor}
           width={(selectedNode.width || 240) * zoomFactor}
@@ -6135,7 +6182,7 @@ export function AtelierShellV3() {
           <div
             role="status"
             aria-live="polite"
-            className="absolute bottom-[120px] left-[72px] z-30 max-w-[300px] overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-node-in motion-reduce:animate-none"
+            className="absolute bottom-[120px] left-[80px] z-30 max-w-[300px] overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-node-in motion-reduce:animate-none"
           >
             {/* Top accent rule — primary hairline gradient signs the card as
                 'instructional', not generic info card */}
@@ -6503,67 +6550,9 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Save-state indicator — sits top-right, just inside the right rail.
-          Three faces: blue saving / emerald saved-Ns-ago / red failed +
-          retry. The chip stays hidden until the first round-trip so an
-          empty session doesn't show a noisy default. */}
-      {(() => {
-        const { inflight, savedAt, failedAt } = saveState;
-        if (inflight === 0 && savedAt === null && failedAt === null) return null;
-        const isSaving = inflight > 0;
-        const hasUnrecoveredFailure = failedAt !== null && (savedAt === null || failedAt > savedAt);
-        let label: string;
-        if (isSaving) {
-          label = "Saving…";
-        } else if (hasUnrecoveredFailure) {
-          label = "Save failed";
-        } else if (savedAt) {
-          const ago = Math.max(0, Math.floor((Date.now() - savedAt) / 1000));
-          if (ago < 5) label = "Saved";
-          else if (ago < 60) label = `Saved ${ago}s ago`;
-          else if (ago < 3600) label = `Saved ${Math.floor(ago / 60)}m ago`;
-          else label = `Saved ${Math.floor(ago / 3600)}h ago`;
-        } else {
-          label = "Saved";
-        }
-        const dotTone = isSaving
-          ? "bg-blue-300 shadow-[0_0_0_3px_rgba(96,165,250,0.18)] animate-pulse"
-          : hasUnrecoveredFailure
-          ? "bg-red-300 shadow-[0_0_0_3px_rgba(252,165,165,0.18)]"
-          : "bg-emerald-300 shadow-[0_0_0_3px_rgba(110,231,183,0.18)]";
-        const tone = isSaving
-          ? "text-blue-200/95"
-          : hasUnrecoveredFailure
-          ? "text-red-200/95"
-          : "text-emerald-200/95";
-        return (
-          <div
-            role="status"
-            aria-live="polite"
-            className={`absolute top-4 z-30 inline-flex items-center gap-2 rounded-full border border-white/8 bg-[#141416]/92 px-2.5 py-[5px] text-[10px] tracking-[0.01em] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl transition-opacity duration-300 ${tone}`}
-            style={{ right: agentCollapsed ? 88 : 412 }}
-          >
-            <span aria-hidden="true" className={`h-[5px] w-[5px] rounded-full ${dotTone}`} />
-            <span>{label}</span>
-            {hasUnrecoveredFailure && !isSaving ? (
-              <button
-                type="button"
-                onClick={() => {
-                  // Re-fetch the project — gives the user a way to force-sync
-                  // and verify whether the canvas matches the server.
-                  void refreshCurrentProject().catch(() => {
-                    // failedAt will refresh from the next response error.
-                  });
-                }}
-                className="ml-1 rounded-full bg-red-400/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-100 hover:bg-red-400/30"
-                aria-label="Retry sync"
-              >
-                Retry
-              </button>
-            ) : null}
-          </div>
-        );
-      })()}
+      {/* (v0.5.8) Save-state chip moved into the header's right cluster
+          so it anchors to a real toolbar instead of floating beside the
+          canvas. See the <header role="banner"> block above. */}
 
       {/* Toast queue — top-center stack with kind-tinted leading dot + chrome
           surface vocab. Reads as a status readout, not a marketing notification. */}

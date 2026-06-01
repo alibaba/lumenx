@@ -58,7 +58,7 @@ export function Minimap({
   };
   return (
     <div
-      className={`absolute bottom-16 left-[72px] z-30 h-[132px] w-[200px] overflow-hidden rounded-md border border-glass-border bg-elevated/85 backdrop-blur-md select-none animate-atelier-popover-in motion-reduce:animate-none ${
+      className={`absolute bottom-16 left-[80px] z-30 h-[132px] w-[200px] overflow-hidden rounded-md border border-glass-border bg-elevated/85 backdrop-blur-md select-none animate-atelier-popover-in motion-reduce:animate-none ${
         onRecenter ? "cursor-crosshair" : ""
       }`}
       onPointerDown={handlePointerDown}

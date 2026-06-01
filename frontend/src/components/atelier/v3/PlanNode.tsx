@@ -41,7 +41,7 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
     if (next && next !== title) onTitleCommit(next);
   };
   const borderClass = selected
-    ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/45"
+    ? "ring-1 ring-white/25 border-white/20"
     : "border-glass-border";
 
   const visibleBullets = bullets.slice(0, VISIBLE_BULLETS);

@@ -100,7 +100,7 @@ export function TakeTimeline({ takes, onPickTake }: Props) {
           const tilt = collapsed ? (i % 2 === 0 ? -2 : 2) * Math.min(1.6, 0.6 + i * 0.25) : 0;
           const z = isSelected ? 60 : collapsed ? ordered.length - i : i;
           const ringClass = isSelected
-            ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/60"
+            ? "ring-1 ring-white/25 border-white/20"
             : "border-white/10 hover:border-white/25";
           return (
             <button

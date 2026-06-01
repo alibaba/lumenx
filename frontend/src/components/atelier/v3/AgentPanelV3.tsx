@@ -135,34 +135,98 @@ function ToolCallParams({
   );
 }
 
-function statusBadge(status: AtelierAgentTurn["status"]): { tone: string; label: string } {
+function turnStatusCaption(status: AtelierAgentTurn["status"]): string {
   switch (status) {
     case "pending":
-      return {
-        tone: "border-atelier-processing/40 bg-atelier-processing/12 text-atelier-processing",
-        label: "Pending",
-      };
+      return "Pending";
     case "waiting_approval":
-      return {
-        tone: "border-atelier-brand-300/40 bg-atelier-brand-300/12 text-atelier-brand-300",
-        label: "Waiting",
-      };
+      return "Waiting";
     case "completed":
-      return {
-        tone: "border-atelier-completed/40 bg-atelier-completed/12 text-atelier-completed",
-        label: "Done",
-      };
+      return "Completed";
     case "failed":
-      return {
-        tone: "border-atelier-failed/40 bg-atelier-failed/12 text-atelier-failed",
-        label: "Failed",
-      };
+      return "Failed";
     default:
-      return {
-        tone: "border-white/8 bg-black/25 text-text-secondary",
-        label: status,
-      };
+      return status;
   }
+}
+
+function turnResponseText(status: AtelierAgentTurn["status"], toolCount: number): string {
+  // v0.5.9 §agent-message-rendering: backend AtelierAgentTurn has no
+  // free-text response field — only tool_calls + status. Render a quiet
+  // human-readable summary instead of the prior green "Done" pill.
+  switch (status) {
+    case "completed":
+      return toolCount > 0
+        ? `Turn complete · ${toolCount} action${toolCount === 1 ? "" : "s"} ran.`
+        : "Turn complete.";
+    case "failed":
+      return "This turn could not complete.";
+    case "waiting_approval":
+      return "Awaiting your approval.";
+    case "pending":
+      return "Working…";
+    default:
+      return "Turn complete.";
+  }
+}
+
+function AgentTurnRow({ turn }: { turn: AtelierAgentTurn }) {
+  const [showTools, setShowTools] = useState(false);
+  const toolCount = turn.tool_calls.length;
+  const time = new Date(turn.created_at * 1000).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const statusCaption = turnStatusCaption(turn.status);
+  const responseText = turnResponseText(turn.status, toolCount);
+  return (
+    <div className="space-y-2">
+      {turn.user_message ? (
+        <ConversationUserBubble>{turn.user_message}</ConversationUserBubble>
+      ) : null}
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-atelier-brand-soft/15 text-atelier-brand-soft ring-1 ring-inset ring-atelier-brand-soft/25">
+          <Bot size={13} aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p
+            className="text-[13px] leading-[1.55] text-foreground/75"
+            style={{ fontFamily: "'Inter', sans-serif" }}
+          >
+            {responseText}
+          </p>
+          {toolCount > 0 ? (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowTools((v) => !v)}
+                aria-expanded={showTools}
+                className="text-[11px] text-atelier-brand-soft/75 transition-colors hover:text-atelier-brand-soft"
+              >
+                {showTools ? "Hide" : "Show"} {toolCount} tool call{toolCount === 1 ? "" : "s"}
+              </button>
+              {showTools ? (
+                <ul className="mt-1 space-y-1 border-l border-white/6 pl-2.5 text-[12px] leading-[1.5]">
+                  {turn.tool_calls.map((c) => (
+                    <li key={c.call_id} className="flex items-start gap-1.5">
+                      <span
+                        aria-hidden="true"
+                        className={`mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full ${toolCallDot(c.status)}`}
+                      />
+                      <span className="text-text-secondary/95">{summarizeToolCall(c)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="text-[11px] text-white/40">
+            {statusCaption} · {time}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function toolCallDot(status: string): string {
@@ -416,78 +480,78 @@ export function AgentPanelV3({ pushToast }: Props) {
       {/* Conversation scroll region */}
       <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {recentTurns.length === 0 && !pendingTurn ? (
-          // Editorial 'try asking' card. Reads as a thumbed-down menu of
-          // possible openings — italic display body for each line, mono
-          // caps tear-stamp footer caption.
-          <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
-            <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-atelier-brand-soft/40 via-atelier-brand-soft/12 to-transparent" />
-            <div className="px-3.5 py-3">
-              <div className="mb-2 flex items-center gap-1.5 text-[11px] text-atelier-brand-soft/85">
-                <Sparkles size={10} aria-hidden="true" />
-                Try asking
-              </div>
-              <ul className="space-y-1.5 border-l border-white/6 pl-3 font-sans text-[13px] italic leading-[1.5] tracking-tight text-foreground/92">
-                {plannerMode === "director" ? (
-                  <>
-                    <li>3-shot story about a rooftop chase.</li>
-                    <li>4 variants from this reference.</li>
-                    <li>Motion study (select an image first).</li>
-                    <li>Character ref → video.</li>
-                  </>
-                ) : (
-                  <>
-                    <li>Create three drafts for a rainy rooftop chase.</li>
-                    <li>Generate 4 candidates for the selected draft.</li>
-                    <li>Add the neon alley reference to the cinematic draft.</li>
-                  </>
-                )}
-              </ul>
+          <>
+            {/* Empty-state orb header (RHTV reference image #8). Big sage-green
+                avatar + friendly greeting + caption — only shown before any
+                agent_turns exist, so it never pushes the conversation down. */}
+            <div className="flex flex-col items-center pt-1 pb-2 text-center">
               <div
                 aria-hidden="true"
-                className="mt-3 flex items-center gap-2"
+                className="relative grid h-14 w-14 place-items-center rounded-full"
+                style={{
+                  background:
+                    "radial-gradient(circle at 50% 50%, rgba(61,220,132,0.55) 0%, rgba(61,220,132,0.32) 30%, rgba(61,220,132,0.08) 60%, transparent 70%)",
+                  boxShadow:
+                    "0 0 22px -4px rgba(61,220,132,0.35), inset 0 1px 0 0 rgba(255,255,255,0.12)",
+                }}
               >
-                <div className="flex-1 border-t border-dashed border-white/10" />
-                <span className="text-[11px] text-text-muted/75">
-                  Prompt library
-                </span>
-                <div className="flex-1 border-t border-dashed border-white/10" />
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-3 rounded-full bg-white/85 shadow-[0_0_10px_2px_rgba(255,255,255,0.45)]"
+                />
+              </div>
+              <div className="mt-2.5 font-display text-[18px] text-foreground tracking-[-0.005em]">
+                Hey — what should we make?
+              </div>
+              <div className="mt-1 text-[12px] text-white/45">
+                Pick a node, ask anything, or drop a seed.
               </div>
             </div>
-          </div>
+
+            {/* Editorial 'try asking' card. Reads as a thumbed-down menu of
+                possible openings — italic display body for each line, mono
+                caps tear-stamp footer caption. */}
+            <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+              <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-atelier-brand-soft/40 via-atelier-brand-soft/12 to-transparent" />
+              <div className="px-3.5 py-3">
+                <div className="mb-2 flex items-center gap-1.5 text-[11px] text-atelier-brand-soft/85">
+                  <Sparkles size={10} aria-hidden="true" />
+                  Try asking
+                </div>
+                <ul className="space-y-1.5 border-l border-white/6 pl-3 font-sans text-[13px] italic leading-[1.5] tracking-tight text-foreground/92">
+                  {plannerMode === "director" ? (
+                    <>
+                      <li>3-shot story about a rooftop chase.</li>
+                      <li>4 variants from this reference.</li>
+                      <li>Motion study (select an image first).</li>
+                      <li>Character ref → video.</li>
+                    </>
+                  ) : (
+                    <>
+                      <li>Create three drafts for a rainy rooftop chase.</li>
+                      <li>Generate 4 candidates for the selected draft.</li>
+                      <li>Add the neon alley reference to the cinematic draft.</li>
+                    </>
+                  )}
+                </ul>
+                <div
+                  aria-hidden="true"
+                  className="mt-3 flex items-center gap-2"
+                >
+                  <div className="flex-1 border-t border-dashed border-white/10" />
+                  <span className="text-[11px] text-text-muted/75">
+                    Prompt library
+                  </span>
+                  <div className="flex-1 border-t border-dashed border-white/10" />
+                </div>
+              </div>
+            </div>
+          </>
         ) : null}
 
-        {recentTurns.map((turn) => {
-          const badge = statusBadge(turn.status);
-          return (
-            <div key={turn.id} className="space-y-2">
-              {turn.user_message ? (
-                <ConversationUserBubble>{turn.user_message}</ConversationUserBubble>
-              ) : null}
-              <ConversationAgentBubble>
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className={`rounded-full border px-1.5 py-[2px] text-[10px] tracking-[0.01em] ${badge.tone}`}>
-                      {badge.label}
-                    </span>
-                    <span className="font-mono text-[9px] tracking-tight text-text-muted/85">
-                      {new Date(turn.created_at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
-                  {turn.tool_calls.length > 0 ? (
-                    <ul className="space-y-1 border-l border-white/6 pl-2.5 text-[12px] leading-[1.5]">
-                      {turn.tool_calls.map((c) => (
-                        <li key={c.call_id} className="flex items-start gap-1.5">
-                          <span aria-hidden="true" className={`mt-[7px] h-[5px] w-[5px] shrink-0 rounded-full ${toolCallDot(c.status)}`} />
-                          <span className="text-text-secondary/95">{summarizeToolCall(c)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-              </ConversationAgentBubble>
-            </div>
-          );
-        })}
+        {recentTurns.map((turn) => (
+          <AgentTurnRow key={turn.id} turn={turn} />
+        ))}
 
         {/* Pending approval card */}
         {pendingTurn ? (

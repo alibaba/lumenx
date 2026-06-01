@@ -200,7 +200,7 @@ export function RegionFrame({
     if (draftTitle !== title) onTitleCommit?.(draftTitle);
   };
 
-  const ringClass = selected ? "ring-2 ring-atelier-brand-400" : "ring-1 ring-transparent";
+  const ringClass = selected ? "ring-1 ring-white/25" : "ring-1 ring-transparent";
   const accent = COLOR_ACCENT[color];
   const border = COLOR_BORDER[color];
   const bodyBg = COLOR_BODY[color];

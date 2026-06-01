@@ -35,7 +35,7 @@ import {
   type ComposerTab,
 } from "./Composer";
 import type { DraftNodeStatus } from "./DraftNode";
-import { NodePort } from "./NodePort";
+import { NodePort, PortDot } from "./NodePort";
 import { StatusDot, STATUS_TOKEN } from "./ornaments";
 import { TakeTimeline, type TakeTimelineEntry } from "./TakeTimeline";
 
@@ -147,7 +147,7 @@ export function DraftWorkbench({
   // breath. opaque-shell already provides the visible outer frame; ring +
   // border-cobalt only when selected to reinforce the "focused" state.
   const selectedClass = selected
-    ? "atelier-bloom atelier-bloom-hero atelier-breath-attending ring-2 ring-atelier-brand-400/55"
+    ? "atelier-bloom atelier-bloom-hero atelier-breath-attending ring-1 ring-white/25"
     : "";
 
   // Status caption — single source of truth shared with the compact DraftNode
@@ -191,11 +191,10 @@ export function DraftWorkbench({
     >
       {/* §2 OUTPUT PORT — blue dot half-outside the right border, on the title
           row. Connection beams plug in here. -right-[14px] = 10px shell padding
-          + 4px half-dot so the dot straddles the card border. Decorative. */}
-      <NodePort
+          + 4px half-dot so the dot straddles the card border. Decorative —
+          the dot's color alone signals "output"; no floating label needed. */}
+      <PortDot
         kind="output"
-        side="right"
-        label="image"
         size={7}
         className="absolute -right-[14px] top-[18px] z-20"
       />

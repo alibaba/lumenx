@@ -52,7 +52,7 @@ export function DraftNode({
   // Body is neutral-cool in every status; cobalt ring only when selected.
   // Status is carried by the StatusDot + footer caption, NOT the border.
   const borderClass = selected
-    ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/50"
+    ? "ring-1 ring-white/25 border-white/20"
     : "border-glass-border";
 
   const VISIBLE_REFS = 4;

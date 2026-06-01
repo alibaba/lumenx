@@ -56,7 +56,7 @@ function ringClass(
   selected: boolean | undefined,
   selectedAsTake: boolean | undefined,
 ): string {
-  if (selected || selectedAsTake) return "ring-2 ring-atelier-brand-400";
+  if (selected || selectedAsTake) return "ring-1 ring-white/25";
   if (status === "processing" || status === "pending") return "ring-1 ring-atelier-processing/60";
   if (status === "failed") return "ring-1 ring-atelier-failed/60";
   return "";
@@ -302,7 +302,7 @@ export function MediaNode({
     const resultDescription =
       filename ||
       [kind === "video" ? "Video" : "Image", duration].filter(Boolean).join(" · ");
-    const previewRing = selected || selectedAsTake ? "ring-2 ring-atelier-brand-400" : "";
+    const previewRing = selected || selectedAsTake ? "ring-1 ring-white/25" : "";
     const resultActions = [
       { key: "expand", Icon: Maximize2, label: "Expand" },
       { key: "bookmark", Icon: Bookmark, label: "Bookmark" },
@@ -428,7 +428,7 @@ export function MediaNode({
   if (kind === "image" && src && !isEmptyImageActionable) {
     const stampNum = id.slice(-3).toUpperCase();
     const cardBorder = selected || selectedAsTake
-      ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/50"
+      ? "ring-1 ring-white/25 border-white/20"
       : status === "failed"
         ? "border-atelier-failed/45"
         : "border-glass-border";

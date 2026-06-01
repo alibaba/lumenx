@@ -265,7 +265,7 @@ export function renderNode(
         <div
           key={node.id}
           className={`absolute w-[200px] rounded-md border bg-elevated transition-shadow shadow-2xl shadow-black/40 hover:shadow-[0_0_0_1px_rgba(59,107,255,0.18)] ${
-            isSelected ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/50" : "border-glass-border"
+            isSelected ? "ring-1 ring-white/25 border-white/20" : "border-glass-border"
           }`}
           style={{ transform: `translate(${node.x}px, ${node.y}px)` }}
           role="button"

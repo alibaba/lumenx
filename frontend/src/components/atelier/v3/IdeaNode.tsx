@@ -8,9 +8,10 @@ interface Props {
   x: number;
   y: number;
   onSelect?: (id: string) => void;
-  /** When true, the shell is overlaying an inline textarea editor — render
-   *  only the chrome shell so the editor sits cleanly on top. Skipping the
-   *  body + footer prevents the duplicated text the user reported. */
+  /** When true, the shell is overlaying an inline textarea editor — skip
+   *  rendering entirely so the editor owns the visual frame. Previously we
+   *  kept a chrome-only shell, but that produced a visible "double shell"
+   *  around the textarea when widths/borders didn't perfectly align. */
   editing?: boolean;
 }
 
@@ -20,8 +21,11 @@ interface Props {
 // the slip reads premium and quiet, never garish. The body sits in calm Inter
 // body text, signed off by a single muted sentence-case line.
 export function IdeaNode({ id, body, selected, x, y, onSelect, editing }: Props) {
+  // While editing, the AtelierShellV3 overlay textarea IS the visual surface
+  // — render nothing here to avoid a double-shell frame around the editor.
+  if (editing) return null;
   const borderClass = selected
-    ? "ring-2 ring-atelier-brand-400 border-atelier-brand-400/45"
+    ? "ring-1 ring-white/25 border-white/20"
     : "border-atelier-ochre/15";
   // Take the last 3 chars of the node id and display them as a stamped
   // index — keeps the slip identifiable without piping a real index in.
@@ -54,35 +58,27 @@ export function IdeaNode({ id, body, selected, x, y, onSelect, editing }: Props)
             "linear-gradient(155deg, rgba(201,168,126,0.055) 0%, rgba(201,168,126,0.015) 55%, rgba(0,0,0,0) 100%)",
         }}
       />
-      {editing ? (
-        // Editing mode: keep the chrome (size + border + glass) but skip the
-        // body + footer so the shell's inline textarea sits cleanly on top.
-        // Min height matches a body of ~5 lines so the card doesn't collapse
-        // while the user types.
-        <div aria-hidden="true" className="relative min-h-[150px]" />
-      ) : (
-        <div className="relative">
-          <div className="px-[18px] pb-3.5 pt-4">
-            <p className="line-clamp-5 whitespace-pre-wrap text-[13px] leading-[1.6] text-white/80">
-              {body || (
-                <span className="text-[12px] italic text-white/35">
-                  Empty · double-click to write
-                </span>
-              )}
-            </p>
-          </div>
-          {/* Quiet signature line — a tiny soft-ochre category dot + a
-              sentence-case Inter label. Replaces the old mono-caps colored
-              tear stamp that read "cheap". */}
-          <div className="flex items-center gap-1.5 px-[18px] pb-3.5 pt-0.5">
-            <span
-              aria-hidden="true"
-              className="h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-ochre/45"
-            />
-            <span className="text-[11px] text-white/40">Idea · No {stampNum}</span>
-          </div>
+      <div className="relative">
+        <div className="px-[18px] pb-3.5 pt-4">
+          <p className="line-clamp-5 whitespace-pre-wrap text-[13px] leading-[1.6] text-white/80">
+            {body || (
+              <span className="text-[12px] italic text-white/35">
+                Empty · double-click to write
+              </span>
+            )}
+          </p>
         </div>
-      )}
+        {/* Quiet signature line — a tiny soft-ochre category dot + a
+            sentence-case Inter label. Replaces the old mono-caps colored
+            tear stamp that read "cheap". */}
+        <div className="flex items-center gap-1.5 px-[18px] pb-3.5 pt-0.5">
+          <span
+            aria-hidden="true"
+            className="h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-ochre/45"
+          />
+          <span className="text-[11px] text-white/40">Idea · No {stampNum}</span>
+        </div>
+      </div>
     </div>
   );
 }

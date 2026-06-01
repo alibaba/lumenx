@@ -92,10 +92,10 @@ export function LeftRailV3({
     <aside
       role="toolbar"
       aria-label="Atelier mode rail"
-      className="absolute left-0 top-0 bottom-0 z-30 flex w-[56px] flex-col items-center justify-between border-r border-white/8 bg-[#0c0c10]/96 py-3 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.5),inset_-1px_0_0_0_rgba(255,255,255,0.04)]"
+      className="absolute left-0 top-0 bottom-0 z-30 flex w-[64px] flex-col items-center justify-between border-r border-white/8 bg-[#0c0c10]/96 py-3 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.5),inset_-1px_0_0_0_rgba(255,255,255,0.04)]"
     >
       {/* Top — brand mark + mode buttons */}
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex flex-col items-center gap-0.5">
         {/* Brand: a tiny sparkle so the rail isn't faceless. Click jumps
             to the canvas root (deselect). */}
         <span
@@ -117,7 +117,7 @@ export function LeftRailV3({
               aria-label={m.label}
               data-tip={m.shortcut ? `${m.label} · ${m.shortcut}` : m.label}
               onClick={() => onModeToggle(m.key)}
-              className={`btn-tip group/mode relative grid h-10 w-10 place-items-center rounded-md transition-all duration-150 active:scale-[0.94] ${
+              className={`btn-tip group/mode relative flex w-12 flex-col items-center justify-center gap-1 rounded-md py-1.5 transition-all duration-150 active:scale-[0.94] ${
                 active
                   ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                   : "text-text-muted hover:bg-white/[0.05] hover:text-foreground"
@@ -132,22 +132,24 @@ export function LeftRailV3({
                 />
               ) : null}
               <Icon size={15} aria-hidden="true" />
+              <span className="text-[10px] leading-none text-white/45">{m.label}</span>
             </button>
           );
         })}
       </div>
 
       {/* Bottom — undo / redo / help */}
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex flex-col items-center gap-0.5">
         <button
           type="button"
           aria-label="Undo"
           data-tip="Undo · ⌘Z"
           onClick={onUndo}
           disabled={!canUndo}
-          className="btn-tip grid h-9 w-9 place-items-center rounded-md text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:text-text-muted/45"
+          className="btn-tip flex w-12 flex-col items-center justify-center gap-1 rounded-md py-1.5 text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:text-text-muted/45"
         >
           <Undo2 size={14} aria-hidden="true" />
+          <span className="text-[10px] leading-none text-white/45">Undo</span>
         </button>
         <button
           type="button"
@@ -155,18 +157,20 @@ export function LeftRailV3({
           data-tip="Redo · ⌘⇧Z"
           onClick={onRedo}
           disabled={!canRedo}
-          className="btn-tip grid h-9 w-9 place-items-center rounded-md text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:text-text-muted/45"
+          className="btn-tip flex w-12 flex-col items-center justify-center gap-1 rounded-md py-1.5 text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground disabled:cursor-not-allowed disabled:text-text-muted/45"
         >
           <Redo2 size={14} aria-hidden="true" />
+          <span className="text-[10px] leading-none text-white/45">Redo</span>
         </button>
         <button
           type="button"
           aria-label="Help / Shortcuts"
           data-tip="Shortcuts · ?"
           onClick={onHelp}
-          className="btn-tip grid h-9 w-9 place-items-center rounded-md text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground"
+          className="btn-tip flex w-12 flex-col items-center justify-center gap-1 rounded-md py-1.5 text-text-muted transition-colors hover:bg-white/[0.05] hover:text-foreground"
         >
           <HelpCircle size={14} aria-hidden="true" />
+          <span className="text-[10px] leading-none text-white/45">Help</span>
         </button>
       </div>
     </aside>

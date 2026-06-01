@@ -1,4 +1,5 @@
 "use client";
+import { useLayoutEffect, useState } from "react";
 import {
   Play,
   Settings,
@@ -13,6 +14,7 @@ import {
   Bot,
   Camera,
   RefreshCw,
+  ChevronDown,
 } from "lucide-react";
 
 // Per Codex doc §4.6 / §7.6 — completed-take nodes need a richer action
@@ -35,6 +37,16 @@ export type ActionKey =
 
 interface Props {
   kind: "image" | "video" | "audio" | "draft" | "idea" | "comment";
+  // nodeId is the canonical selected node id (real node id OR virtual
+  // candidate key — both are mirrored as `data-atelier-node` attributes
+  // on the rendered card). When provided, the bar reads that element's
+  // live DOM rect so its position tracks pan/zoom/scroll without
+  // relying on stale world-coord math. Optional so unit tests that
+  // exercise the bar in isolation can keep using the x/y/width path.
+  nodeId?: string;
+  // Pan/zoom-derived fallback coords. Used as the initial paint and as
+  // the position when nodeId is omitted or its DOM element can't be
+  // found.
   x: number;
   y: number;
   width: number;
@@ -114,23 +126,49 @@ function buttonClass(variant: ActionDef["variant"]): string {
   return `${base} text-text-secondary hover:scale-[1.08] hover:bg-white/[0.06] hover:text-foreground`;
 }
 
-export function SelectionActionBar({ kind, x, y, width, onAct }: Props) {
+export function SelectionActionBar({ kind, nodeId, x, y, width, onAct }: Props) {
   const items = LAYOUTS[kind];
 
-  // Bar height: h-7 + py-1 + 1px border × 2 = ~32px. We want the bar to sit
-  // 8px above the node's top edge so the eye reads it as part of the same
-  // selection unit, not "another control floating away". Math:
-  //   bar-bottom = top + 32 (height)
-  //   want: bar-bottom = y - 8
-  //   ∴ top = y - 40 → was the previous value but read as too far
-  // New: bar-bottom = y - 4 → top = y - 36. Tighter pairing while still
-  // leaving a hairline of breathing room. Clamps to viewport top.
+  // Anchor to the selected node's live DOM rect rather than reconstruct
+  // its screen position from world coords. Bug v0.5.8: when a node sat
+  // low in world coords AND the user had panned, the old math
+  // (`Math.max(8, y - 36)`) underflowed and the bar pinned to the top of
+  // the viewport, orphaned far above its node. Reading the rect after
+  // layout keeps the bar 36px above the actual painted card across pan /
+  // zoom / scroll / virtual-candidate cases.
+  //
+  // pinnedTop=true means the desired top would have cut off the bar at
+  // the viewport edge; we clamp to 12px and emit a small downward arrow
+  // so users see the bar still belongs to the node below.
+  const [pos, setPos] = useState<{ left: number; top: number; pinnedTop: boolean }>(() => ({
+    left: x + width / 2,
+    top: Math.max(12, y - 36),
+    pinnedTop: false,
+  }));
+
+  // Re-measure on selection change AND on any pan/zoom/scroll that
+  // re-renders the parent (x/y/width recompute → effect re-fires).
+  useLayoutEffect(() => {
+    if (typeof document === "undefined") return;
+    if (!nodeId) return;
+    const el = document.querySelector(`[data-atelier-node="${nodeId}"]`) as HTMLElement | null;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const desiredTop = rect.top - 36;
+    if (desiredTop < 12) {
+      setPos({ left: centerX, top: 12, pinnedTop: true });
+    } else {
+      setPos({ left: centerX, top: desiredTop, pinnedTop: false });
+    }
+  }, [nodeId, x, y, width]);
+
   return (
     <div
       role="toolbar"
       aria-label="Selection actions"
       className="absolute z-40 inline-flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-white/8 bg-[#141416]/96 px-1 py-1 shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
-      style={{ left: x + width / 2, top: Math.max(8, y - 36) }}
+      style={{ left: pos.left, top: pos.top }}
     >
       {items.map((item, idx) => {
         if (item === "divider") {
@@ -160,6 +198,17 @@ export function SelectionActionBar({ kind, x, y, width, onAct }: Props) {
           </button>
         );
       })}
+      {/* When the bar would be cut off at the viewport top, we clamp it
+          to 12px and surface a tiny downward chevron so the user can
+          read the bar as still belonging to the (off-screen-above) node. */}
+      {pos.pinnedTop ? (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-full -translate-x-1/2 translate-y-[2px] text-white/60"
+        >
+          <ChevronDown size={12} />
+        </span>
+      ) : null}
     </div>
   );
 }
