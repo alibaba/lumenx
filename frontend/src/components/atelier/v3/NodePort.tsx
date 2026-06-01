@@ -7,13 +7,26 @@
 // The dot is meant to sit ON the node's border (consumers nudge it half-outside
 // with -ml/-mr) so connection beams visibly plug into it.
 //
-// v0.6.1 — `interactive` mode adds drag-to-connect affordance: hover scale,
-// amplified halo, grab cursor, tooltip via .btn-tip, plus an invisible
-// ~22px hit target via ::before so the user doesn't have to land on a 7px
-// circle. The actual drag wiring still lives in AtelierShellV3
-// (handlePortDragOut on the canvas-level 16×16 Plus button); the
-// interactive primitive just makes the visible dot read as "this is the
-// thing you drag from" so connection mechanics become discoverable.
+// v0.6.3 — TWO-MODE contract:
+//   DECORATIVE (default, interactive=false): a quiet 5px indicator. NO
+//     data-port attribute, NO .atelier-port-handle class (no hover scale /
+//     grab cursor / tooltip), NO onPointerDown wiring even if a handler is
+//     passed. The kind-tinted halo box-shadow stays so the color still
+//     signals "output" semantics, but the dot is purely visual — pointer-
+//     down "near" it is NOT eaten by the canvas-level
+//     `closest('[data-port]')` bail-out, so the parent node still selects
+//     and drags normally.
+//   INTERACTIVE (interactive=true): the drag-to-connect affordance — adds
+//     data-port + the .atelier-port-handle class (hover scale, amplified
+//     halo, grab cursor, ~22px invisible hit target via ::before), the
+//     "Drag to connect" tooltip, and the onPointerDown handler that owns
+//     the gesture so the surrounding card never claims it. The actual
+//     drag wiring still lives in AtelierShellV3 (handlePortDragOut);
+//     the interactive primitive just exposes the visible dot AS the
+//     drag source.
+// Pass `interactive` only when handlePortDragOut accepts this kind of
+// source (image MediaNode with media, completed candidate take with
+// video_url). Every other output port stays decorative.
 import * as React from "react";
 
 export type PortKind = "model" | "positive" | "negative" | "output";
@@ -44,29 +57,51 @@ interface Props {
 
 interface PortDotProps {
   kind: PortKind;
+  /** Dot diameter in px. Defaults differ by mode: decorative dots default
+   *  to 5px (quiet indicator); interactive dots default to 7px (visible
+   *  drag handle). Explicit `size` always wins. */
   size?: number;
   className?: string;
   /** When true the dot gains drag-to-connect affordance: hover scale,
-   *  amplified halo, grab cursor, tooltip, and an invisible enlarged
-   *  hit target via ::before. Visual only — drag wiring is owned by the
-   *  canvas-level connection handle in AtelierShellV3. */
+   *  amplified halo, grab cursor, tooltip, an invisible enlarged hit
+   *  target via ::before, AND the data-port attribute the canvas
+   *  node-drag bail-out keys off. When false (default) the dot is purely
+   *  decorative — no data-port, no class, no pointer handlers — so the
+   *  parent node can still claim pointer-downs that land on/near it. */
   interactive?: boolean;
   /** Drop-target state: when a connection drag is in flight and this
-   *  port is the hovered landing zone, the halo flips to green. */
+   *  port is the hovered landing zone, the halo flips to green. Only
+   *  meaningful for interactive ports. */
   dropTarget?: boolean;
   /** Custom tooltip text. Defaults to a sensible per-kind hint when
-   *  interactive (output → "Drag to connect"). */
+   *  interactive (output → "Drag to connect"). Ignored when decorative. */
   tip?: string;
-  /** Optional drag-from handler. When present, the dot is rendered as
-   *  a button so it can capture pointer events without being eaten by
-   *  the parent node's drag handler. */
+  /** Drag-from handler. Wired ONLY when `interactive` is true — passing
+   *  a handler without `interactive` is a no-op (the dot stays decorative
+   *  and the gesture falls through to the parent node). */
   onPointerDown?: (e: React.PointerEvent) => void;
 }
 
-/** The bare dot (no label) — for placing exactly on an edge. */
+/** The bare dot (no label) — for placing exactly on an edge.
+ *
+ *  Two modes, governed solely by the `interactive` flag:
+ *    - DECORATIVE (default): a quiet 5px tinted indicator. No data-port,
+ *      no .atelier-port-handle class, no onPointerDown wiring, no tooltip.
+ *      The kind-tinted halo box-shadow stays so the color still carries
+ *      semantics, but the dot is non-interactive — pointer-down near it
+ *      does NOT trip the canvas-level [data-port] bail-out, so the parent
+ *      node still selects/drags correctly.
+ *    - INTERACTIVE: drag-to-connect affordance — data-port + hover scale +
+ *      amplified halo + grab cursor + ~22px invisible hit target +
+ *      tooltip + onPointerDown owned by the dot so node-drag never claims
+ *      the gesture.
+ *  Pass `interactive` ONLY when handlePortDragOut in AtelierShellV3 accepts
+ *  this kind of source (image MediaNode with media, completed candidate
+ *  take with video_url). Every other output port stays decorative.
+ */
 export function PortDot({
   kind,
-  size = 7,
+  size,
   className = "",
   interactive = false,
   dropTarget = false,
@@ -80,9 +115,9 @@ export function PortDot({
   // "yes, drop here". Uses the positive-port green (61,220,132) regardless
   // of the port's own color so the cue is unambiguous.
   const dropShadow = `0 0 0 4px rgba(61,220,132,0.55), 0 0 14px rgba(61,220,132,0.6)`;
-  const isInteractive = interactive || !!onPointerDown;
 
-  if (isInteractive) {
+  if (interactive) {
+    const dotSize = size ?? 7;
     const tooltip = tip ?? (kind === "output" ? "Drag to connect" : undefined);
     const label =
       kind === "output" ? "Output port — drag to connect" : `${kind} port`;
@@ -99,8 +134,8 @@ export function PortDot({
           tooltip ? "btn-tip" : ""
         } ${className}`}
         style={{
-          width: size,
-          height: size,
+          width: dotSize,
+          height: dotSize,
           background: PORT_VAR[kind],
           boxShadow: dropTarget ? dropShadow : restShadow,
           // Per-instance CSS vars so the hover recipe in globals.css can
@@ -114,17 +149,22 @@ export function PortDot({
     );
   }
 
+  // Decorative branch — quiet visual indicator only. No data-port (so the
+  // canvas node-drag bail-out doesn't trigger), no .atelier-port-handle
+  // (no hover scale, no grab cursor), no onPointerDown (gesture passes
+  // through to the parent node). Defaults to 5px + 0.85 opacity so it
+  // reads as a non-actionable marker; the kind-tinted halo stays.
+  const dotSize = size ?? 5;
   return (
     <span
       aria-hidden="true"
-      data-port={kind}
-      data-drop-target={dropTarget ? "true" : undefined}
       className={`shrink-0 rounded-full ${className}`}
       style={{
-        width: size,
-        height: size,
+        width: dotSize,
+        height: dotSize,
         background: PORT_VAR[kind],
-        boxShadow: dropTarget ? dropShadow : restShadow,
+        boxShadow: restShadow,
+        opacity: 0.85,
       }}
     />
   );

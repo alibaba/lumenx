@@ -2000,14 +2000,14 @@ export function AtelierShellV3() {
     const tag = (event.target as HTMLElement).tagName;
     if (tag === "TEXTAREA" || tag === "INPUT" || tag === "BUTTON") return;
 
-    // v0.6.2 fix: capture-phase handler beats the bubble-phase pointerdown
-    // wired on the visible PortDot (NodePort.tsx). If the pointer origin is
-    // inside a [data-port] element, bail out completely so the node never
-    // claims the gesture as a drag — the PortDot's own onPointerDown will
-    // fire on the bubble and start the connection drag instead. Without this
-    // early-return the whole node moves when the user tries to drag from the
-    // visible output dot, which is what the v0.6.1 affordance promised but
-    // didn't deliver.
+    // v0.6.3: bail ONLY when the gesture originates on an INTERACTIVE port.
+    // After the PortDot gating cleanup, data-port is emitted ONLY by
+    // PortDot when interactive=true (decorative indicators have no
+    // data-port). So this closest() check now triggers exclusively for
+    // ports handlePortDragOut would accept as a drag source — pointer-
+    // down "near" a decorative indicator still selects/drags the parent
+    // node correctly, and pointer-down on a real handle defers to the
+    // PortDot's bubble-phase onPointerDown which starts the connection.
     if ((event.target as HTMLElement).closest("[data-port]")) return;
 
     // Plain click on a node that's already in a multi-selection (size > 1):
@@ -4436,10 +4436,12 @@ export function AtelierShellV3() {
                     pushToast("info", "Generate from prompt (T2I) is coming next.");
                   },
                 }, editingIdeaId, (srcNode, event) => {
-                  // v0.6.2 — output PortDot of a MediaNode kicked off a
-                  // connection drag. Read screen coords off the dot's own
-                  // bounding rect so the drag-line origin lands exactly on
-                  // the visible port (not the node center).
+                  // v0.6.3 — output PortDot of a MediaNode (image with
+                  // media; top-level video / audio / drafts no longer
+                  // forward to this handler) kicked off a connection
+                  // drag. Read screen coords off the dot's own bounding
+                  // rect so the drag-line origin lands exactly on the
+                  // visible port (not the node center).
                   const el = event.currentTarget as HTMLElement;
                   const r = el.getBoundingClientRect();
                   handlePortDragOut(event, srcNode, r.left + r.width / 2, r.top + r.height / 2);
@@ -4718,20 +4720,11 @@ export function AtelierShellV3() {
                       pushToast("error", `Pick take failed: ${err instanceof Error ? err.message : String(err)}`),
                     );
                 }}
-                onPortDown={(event) => {
-                  // v0.6.2 — workbench's own output port becomes the
-                  // connection drag source. Anchor the beam on the
-                  // visible port (not the card center) by reading the
-                  // wrapper's bounding rect at pointerdown.
-                  const el = event.currentTarget as HTMLElement;
-                  const r = el.getBoundingClientRect();
-                  handlePortDragOut(
-                    event,
-                    selectedNode,
-                    r.left + r.width / 2,
-                    r.top + r.height / 2,
-                  );
-                }}
+                // v0.6.3 — the workbench output port is decorative.
+                // handlePortDragOut rejects draft-video sources (only
+                // isImageSource + isTakeSource pass), so the dot is no
+                // longer wired as a drag source. Branching happens from
+                // the per-candidate take MediaNodes instead.
               />
             </div>
           ) : null}

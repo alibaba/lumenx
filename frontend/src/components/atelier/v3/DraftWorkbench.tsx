@@ -84,11 +84,6 @@ interface Props {
   /** Callback when the user clicks a take in the strip. Caller should
    *  promote that take to "primary" (e.g. store.selectCandidate). */
   onPickTake?: (takeId: string) => void;
-  /** v0.6.2 — fired when the user presses the output PortDot. Wired by
-   *  the shell to handlePortDragOut so the visible dot becomes the
-   *  drag source for connections, instead of the surrounding card
-   *  moving. */
-  onPortDown?: (event: React.PointerEvent) => void;
 }
 
 export function DraftWorkbench({
@@ -122,7 +117,6 @@ export function DraftWorkbench({
   staleRefCount = 0,
   takes,
   onPickTake,
-  onPortDown,
 }: Props) {
   // Title row (rename) — same affordance as DraftNode so the muscle
   // memory carries over. Double-click to rename, Enter commits, Esc
@@ -205,31 +199,18 @@ export function DraftWorkbench({
       // 520 keeps the prompt + ref content roomy.
       className={`group absolute w-[560px] origin-top-left atelier-opaque-shell transition-shadow duration-200 motion-safe:animate-atelier-workbench-in ${selectedClass}`}
     >
-      {/* §2 OUTPUT PORT — blue dot anchored to the right edge MIDLINE (no
-          longer floats in the top-right corner like an accidental sticker).
-          Wrapped in a hoverable 20px hit target with cursor:grab + tooltip so
-          the user immediately reads "drag from here to connect" — the fix for
-          the user's "节点之间如何连线？？" question. On hover the dot scales
-          and a soft halo ring fades in so the affordance is unmistakable. */}
-      {/* v0.6.2: the wrapper div carries data-port so the shell's capture-
-          phase node-drag handler bails for pointerdowns landing on the 20px
-          hit halo (not just the inner 9px dot). The onPointerDown now drives
-          handlePortDragOut directly via onPortDown — pure stopPropagation
-          would NOT defeat the capture-phase ancestor, so the wrapper has to
-          OWN the gesture, not just block it. */}
-      <div
-        role="button"
-        aria-label="Output port — drag to connect"
-        data-port="output"
-        data-tip="Drag to connect"
-        onPointerDown={(e) => {
-          e.stopPropagation();
-          onPortDown?.(e);
-        }}
-        className="btn-tip absolute -right-[5px] top-1/2 z-20 grid h-5 w-5 -translate-y-1/2 cursor-grab place-items-center rounded-full transition-all duration-150 hover:scale-125 hover:bg-[rgba(91,157,255,0.06)] hover:shadow-[0_0_0_3px_rgba(91,157,255,0.18),0_0_14px_rgba(91,157,255,0.5)] active:cursor-grabbing"
-      >
-        <PortDot kind="output" size={9} />
-      </div>
+      {/* §2 OUTPUT PORT — decorative blue dot anchored to the right edge
+          MIDLINE. v0.6.3: handlePortDragOut does NOT accept top-level draft
+          video nodes as a connection source (only image media + candidate
+          takes), so this port is a visual indicator only. No data-port, no
+          drag handlers, no hover affordance — pointer-downs on/near it fall
+          through to the workbench's own selection/drag handling. The
+          interactive drag-from path lives on the per-take MediaNodes
+          rendered by renderCandidatesAsMediaNodes. */}
+      <PortDot
+        kind="output"
+        className="absolute -right-[3px] top-1/2 z-20 -translate-y-1/2"
+      />
 
       {/* Header zone — sparkle + intent (rename on dblclick) + take pill.
           Sits in the outer shell's top band (above the inner card), like

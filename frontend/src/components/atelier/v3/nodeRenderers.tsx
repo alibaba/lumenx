@@ -104,11 +104,15 @@ export function renderNode(
    *  shell. The matching node renders in editing-mode (chrome only) so the
    *  overlaid textarea isn't doubled with the underlying body. */
   editingTextNodeId?: string | null,
-  /** v0.6.2 — connection drag wiring. The shell binds the AtelierNode and
-   *  fires handlePortDragOut so the visible PortDot inside MediaNode acts
-   *  as the drag source. Without this the dot has no pointerdown handler
-   *  and the user's gesture goes nowhere (since the node wrapper's
-   *  capture-phase handler now bails on [data-port] origins). */
+  /** v0.6.2/v0.6.3 — connection drag wiring. The shell binds the
+   *  AtelierNode and fires handlePortDragOut. We only forward this to
+   *  the leaf MediaNode for sources handlePortDragOut actually accepts
+   *  (image media with src). Audio, top-level (non-candidate) videos,
+   *  draft videos, ideas, comments, plans — all get NO onPortDown,
+   *  which keeps their output PortDot decorative (no data-port, no
+   *  hover affordance, gesture falls through to parent node select/
+   *  drag). Candidate takes are wired separately via
+   *  renderCandidatesAsMediaNodes. */
   onPortDown?: (node: AtelierNode, event: React.PointerEvent) => void,
 ): React.ReactNode {
   const isSelected = selectedIds.has(node.id);
@@ -138,7 +142,10 @@ export function renderNode(
         onSelect={onSelect}
         onUpload={isEmptyDraft && imageActions ? imageActions.onUpload : undefined}
         onGenerate={isEmptyDraft && imageActions ? imageActions.onGenerate : undefined}
-        onPortDown={portHandler}
+        // v0.6.3 — image is a valid handlePortDragOut source ONLY when it
+        // has media (isImageSource = type==="image" && media_urls>0). For
+        // empty image drafts we leave the port decorative.
+        onPortDown={!isEmptyDraft ? portHandler : undefined}
       />
     );
   }
@@ -160,7 +167,8 @@ export function renderNode(
         width={view.width}
         height={view.height}
         onSelect={onSelect}
-        onPortDown={portHandler}
+        // v0.6.3 — handlePortDragOut has no audio path; leave the dot
+        // decorative so pointer-downs on it still drag the parent node.
       />
     );
   }
@@ -260,7 +268,6 @@ export function renderNode(
           onDetachRef={(url) => {
             void useAtelierStore.getState().detachReferenceNode(node.id, url).catch(() => {});
           }}
-          onPortDown={portHandler}
         />
       );
     }
@@ -313,7 +320,9 @@ export function renderNode(
           width={view.width ? Math.min(view.width, 240) : undefined}
           height={view.height ? Math.min(view.height, 136) : undefined}
           onSelect={onSelect}
-          onPortDown={portHandler}
+          // v0.6.3 — top-level (non-candidate) videos are not a valid
+          // handlePortDragOut source (isTakeSource only matches the
+          // parent::cand::id form). Leave the dot decorative.
         />
       );
     }

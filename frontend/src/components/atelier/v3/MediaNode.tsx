@@ -41,12 +41,15 @@ interface Props {
    *  the spinner. Caller is responsible for hitting the backend cancel
    *  endpoint and refreshing local state. */
   onCancel?: (id: string) => Promise<void> | void;
-  /** v0.6.2 — when present, the output PortDot itself becomes the drag
-   *  source for connection creation. The shell binds this to
-   *  handlePortDragOut so the visible 7px dot starts the drag the moment
-   *  the user mouses down on it, no reliance on a separate canvas-level
-   *  overlay handle. The wrapper's capture-phase handler bails on
-   *  [data-port] origins so node-drag doesn't steal the gesture. */
+  /** v0.6.3 — when present, the output PortDot renders as interactive
+   *  (drag-to-connect: hover scale, grab cursor, data-port, tooltip) AND
+   *  the dot itself owns the pointer-down gesture, so the shell's
+   *  capture-phase node-drag handler bails on [data-port] origins.
+   *  When ABSENT, every output PortDot stays decorative (quiet 5px
+   *  indicator, no data-port, no hover affordance) — pointer-down "near"
+   *  the dot still selects/drags the parent node. The caller (renderer)
+   *  decides whether to pass this based on whether handlePortDragOut
+   *  would accept the rendered node as a source. */
   onPortDown?: (event: React.PointerEvent) => void;
 }
 
@@ -419,14 +422,16 @@ export function MediaNode({
             </button>
           </div>
           {/* Output port — completed media exposes a blue port on the right
-              edge so beams plug in. Card is overflow-hidden, so the dot sits
-              just inside at right-1. v0.6.2: the dot IS the drag source now
-              — onPortDown wires straight to handlePortDragOut on the shell,
-              and the wrapper's capture-phase node-drag handler bails on
-              [data-port] origins so this gesture wins the race. */}
+              edge. v0.6.3: interactive ONLY when the renderer wired
+              onPortDown — image media is always a valid handlePortDragOut
+              source, but a top-level (non-candidate) video isn't, so the
+              renderer skips onPortDown there and the dot stays decorative.
+              When interactive, the dot IS the drag source — onPortDown
+              wires to handlePortDragOut, and the shell's capture-phase
+              node-drag bails on [data-port] origins so this gesture wins. */}
           <PortDot
             kind="output"
-            interactive
+            interactive={!!onPortDown}
             onPointerDown={onPortDown}
             className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
           />
@@ -551,15 +556,16 @@ export function MediaNode({
           <span className="ml-auto text-[11px] tabular-nums text-white/40">{stampNum}</span>
         </div>
         {/* Output port — completed image cards expose a blue port on the
-            right edge so beams plug in. Card is overflow-hidden, so the dot
-            sits just inside at right-1 rather than half-outside. v0.6.2:
-            the dot is the drag source — onPortDown fires the connection
-            drag directly; the wrapper's capture-phase pointerdown handler
-            bails on [data-port] origins so node-drag never steals this. */}
+            right edge. v0.6.3: completed image media IS a valid
+            handlePortDragOut source (isImageSource), so the renderer
+            wires onPortDown and the dot becomes interactive. If
+            onPortDown is somehow missing (defensive: empty media_urls,
+            non-image consumer, etc.) we fall back to a decorative dot
+            so the user can't trigger a no-op drag. */}
         {status === "completed" ? (
           <PortDot
             kind="output"
-            interactive
+            interactive={!!onPortDown}
             onPointerDown={onPortDown}
             className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
           />
@@ -808,15 +814,18 @@ export function MediaNode({
         </span>
       ) : null}
 
-      {/* Output port — completed media (video / audio) exposes a blue port
-          on the right edge so beams plug in. Box is overflow-hidden, so the
-          dot sits just inside at right-1 rather than half-outside. v0.6.2:
-          interactive + onPortDown so the dot itself starts the connection
-          drag (capture-phase node-drag bails on [data-port] origins). */}
+      {/* Output port — completed media (audio is the typical case here;
+          image+completed+src takes the card-mode branch above, and
+          video+completed+src takes the preview-card branch above). v0.6.3:
+          handlePortDragOut has no audio path, so this dot is decorative by
+          default. We still honor onPortDown if the renderer wires one (for
+          forward-compatibility once audio takes are accepted as a source),
+          but today the renderer skips it for audio and the dot stays a
+          quiet visual indicator. */}
       {src && status === "completed" ? (
         <PortDot
           kind="output"
-          interactive
+          interactive={!!onPortDown}
           onPointerDown={onPortDown}
           className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
         />
