@@ -259,22 +259,22 @@ html.dark {
   position: absolute;
   top: 0;
   right: 0;
-  width: 70%;
-  height: 55%;
+  width: 78%;
+  height: 60%;
   background:
-    radial-gradient(ellipse 90% 100% at 62% 0%,
-      rgba(var(--atelier-bloom-1), calc(0.22 * var(--bloom-strength, 1))) 0%,
-      rgba(var(--atelier-bloom-2), calc(0.18 * var(--bloom-strength, 1))) 26%,
-      rgba(var(--atelier-bloom-3), calc(0.13 * var(--bloom-strength, 1))) 52%,
-      rgba(var(--atelier-bloom-4), calc(0.08 * var(--bloom-strength, 1))) 74%,
+    radial-gradient(ellipse 88% 100% at 64% 0%,
+      rgba(var(--atelier-bloom-1), calc(0.15 * var(--bloom-strength, 1))) 0%,
+      rgba(var(--atelier-bloom-2), calc(0.12 * var(--bloom-strength, 1))) 26%,
+      rgba(var(--atelier-bloom-3), calc(0.085 * var(--bloom-strength, 1))) 52%,
+      rgba(var(--atelier-bloom-4), calc(0.05 * var(--bloom-strength, 1))) 74%,
       transparent 92%);
-  filter: blur(calc(26px + 8px * var(--bloom-strength, 1)));
+  filter: blur(calc(32px + 10px * var(--bloom-strength, 1)));
   pointer-events: none;
   mix-blend-mode: screen;
   z-index: 0;
   border-radius: inherit;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.3s ease;
 }
 .atelier-opaque-shell.atelier-bloom::before { opacity: 1; }
 
@@ -297,11 +297,16 @@ html.dark {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
-/* ── §10.10.2 bloom tiers ── */
+/* ── §10.10.2 bloom tiers (v0.5.8 — Flova restraint) ──
+   The reference (Image 5 RON board) keeps bloom barely-perceptible at rest;
+   the colored halo only blooms when you're looking right at a node. Pulled
+   hero from 1.0 → 0.85, secondary 1.0 → 0.7, ambient 0.6 → 0.4 so the
+   canvas-wide colored wash recedes and the focal node's halo reads as
+   intentional, not decorative. */
 .atelier-bloom         { position: relative; }
-.atelier-bloom-hero      { --bloom-strength: 1.0; }
-.atelier-bloom-secondary { --bloom-strength: 1.0; }
-.atelier-bloom-ambient   { --bloom-strength: 0.6; }
+.atelier-bloom-hero      { --bloom-strength: 0.85; }
+.atelier-bloom-secondary { --bloom-strength: 0.70; }
+.atelier-bloom-ambient   { --bloom-strength: 0.40; }
 
 /* §12.7.3 base bloom recipe — single top-edge wash (NOT all-perimeter).
    Reference 03-instagram Image Generator: bloom is only on the top edge,
@@ -314,16 +319,16 @@ html.dark {
 .atelier-bloom::after {
   content: '';
   position: absolute;
-  inset: calc(-28px * var(--bloom-strength));
+  inset: calc(-32px * var(--bloom-strength));
   border-radius: inherit;
   background:
-    radial-gradient(ellipse 92% 38% at 50% 0%,
-      rgba(var(--atelier-bloom-1), calc(0.24 * var(--bloom-strength))) 0%,
-      rgba(var(--atelier-bloom-2), calc(0.19 * var(--bloom-strength))) 20%,
-      rgba(var(--atelier-bloom-3), calc(0.13 * var(--bloom-strength))) 44%,
-      rgba(var(--atelier-bloom-4), calc(0.08 * var(--bloom-strength))) 66%,
+    radial-gradient(ellipse 94% 42% at 50% 0%,
+      rgba(var(--atelier-bloom-1), calc(0.16 * var(--bloom-strength))) 0%,
+      rgba(var(--atelier-bloom-2), calc(0.13 * var(--bloom-strength))) 20%,
+      rgba(var(--atelier-bloom-3), calc(0.085 * var(--bloom-strength))) 44%,
+      rgba(var(--atelier-bloom-4), calc(0.05 * var(--bloom-strength))) 66%,
       transparent 84%);
-  filter: blur(calc(24px + 8px * var(--bloom-strength)));
+  filter: blur(calc(28px + 10px * var(--bloom-strength)));
   pointer-events: none;
   z-index: -3;
   mix-blend-mode: screen;
