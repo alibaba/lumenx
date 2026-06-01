@@ -127,7 +127,7 @@ export function WorkflowsPanel({ onInsert }: Props) {
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setFilter(cat)}
-                className={`rounded-full border px-2 py-[3px] font-mono text-[8.5px] font-medium uppercase tracking-[0.24em] transition-colors ${
+                className={`rounded-full border px-2 py-[3px] text-[10px] font-medium tracking-[0.01em] transition-colors ${
                   isActive
                     ? "border-atelier-brand-400/45 bg-atelier-brand-400/15 text-atelier-brand-400"
                     : "border-dashed border-white/15 text-text-muted/85 hover:border-white/25 hover:text-foreground"
@@ -135,7 +135,7 @@ export function WorkflowsPanel({ onInsert }: Props) {
               >
                 {labelFor(cat)}
                 {cat === "mine" && userTemplates.length > 0 ? (
-                  <span className="ml-1 rounded-full bg-atelier-brand-400/20 px-1 font-display text-[8.5px] text-atelier-brand-400/95">
+                  <span className="ml-1 rounded-full bg-atelier-brand-400/20 px-1 font-display text-[10px] tabular-nums tracking-tight text-atelier-brand-400/95">
                     {userTemplates.length}
                   </span>
                 ) : null}
@@ -152,7 +152,7 @@ export function WorkflowsPanel({ onInsert }: Props) {
       <ul className="flex-1 space-y-2 overflow-y-auto p-2.5">
         {filtered.length === 0 ? (
           <li className="grid place-items-center px-3 py-8 text-center text-text-muted/85">
-            <div className="font-mono text-[9.5px] uppercase tracking-[0.28em]">
+            <div className="text-[11px] text-white/45">
               {filter === "mine"
                 ? "Nothing saved yet · select nodes & use Save as workflow"
                 : "No templates in this category"}
@@ -174,7 +174,7 @@ export function WorkflowsPanel({ onInsert }: Props) {
                     </div>
                     <span
                       aria-hidden="true"
-                      className="inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed border-white/22 bg-black/40 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-text-muted/85"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-[3px] border border-dashed border-white/22 bg-black/40 px-1.5 py-[1px] text-[10px] font-medium tracking-[0.01em] text-text-muted/85"
                     >
                       {isUser ? "Mine" : TEMPLATE_CATEGORY_LABELS[t.category]}
                     </span>
@@ -186,12 +186,12 @@ export function WorkflowsPanel({ onInsert }: Props) {
                     {t.tags.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.18em] text-text-muted/85"
+                        className="rounded-full border border-white/8 bg-white/[0.03] px-1.5 py-[1px] text-[10px] tracking-[0.01em] text-text-muted/85"
                       >
                         {tag}
                       </span>
                     ))}
-                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-atelier-brand-400/12 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-atelier-brand-400/95 transition-colors group-hover:bg-atelier-brand-400/22">
+                    <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-atelier-brand-400/12 px-2 py-[3px] text-[10px] font-medium tracking-[0.01em] text-atelier-brand-400/95 transition-colors group-hover:bg-atelier-brand-400/22">
                       <Sparkles size={9} aria-hidden="true" />
                       Insert
                     </span>

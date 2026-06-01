@@ -95,7 +95,7 @@ export function Minimap({
           height: `${(viewport.h / worldBounds.height) * 100}%`,
         }}
       />
-      <span className="absolute right-1 bottom-1 font-mono text-[9px] text-text-muted">minimap</span>
+      <span className="absolute right-1 bottom-1 text-[11px] text-white/45">minimap</span>
     </div>
   );
 }

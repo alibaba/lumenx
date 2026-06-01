@@ -90,11 +90,11 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex items-center justify-between gap-2">
             <span
-              className={`inline-flex items-center gap-1 rounded-[3px] border border-dashed px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] ${statusToneClass(turn.status)}`}
+              className={`inline-flex items-center gap-1 rounded-[3px] border px-1.5 py-[1px] text-[10px] tracking-[0.01em] ${statusToneClass(turn.status)}`}
             >
-              {turn.status.replace("_", " ")}
+              {turn.status.charAt(0).toUpperCase() + turn.status.slice(1).replace("_", " ")}
             </span>
-            <span className="font-mono text-[9px] tracking-tight text-text-muted/85">
+            <span className="font-display text-[11px] tabular-nums tracking-tight text-text-muted/85">
               {formatTime(turn.created_at)}
             </span>
           </div>
@@ -103,12 +103,12 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
               {messageDisplay}
             </p>
           ) : (
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/70">
+            <p className="text-[11px] text-text-muted/70">
               System turn
             </p>
           )}
           {turn.tool_calls.length > 0 ? (
-            <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/85">
+            <div className="mt-1.5 text-[11px] text-text-muted/85">
               {turn.tool_calls.length} tool call
               {turn.tool_calls.length === 1 ? "" : "s"}
             </div>
@@ -119,7 +119,7 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
       {expanded ? (
         <div className="border-t border-white/8 px-3 py-2">
           {turn.tool_calls.length === 0 ? (
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/70">
+            <p className="text-[11px] text-text-muted/70">
               No tool calls recorded.
             </p>
           ) : (
@@ -132,11 +132,11 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
                     className="rounded-sm bg-black/30 px-2 py-1.5"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-[10px] tracking-tight text-foreground/95">
+                      <span className="font-display text-[11px] tabular-nums tracking-tight text-foreground/95">
                         {call.tool_name}
                       </span>
                       <span
-                        className={`font-mono text-[9px] uppercase tracking-[0.22em] ${
+                        className={`text-[10px] tracking-[0.01em] ${
                           call.status === "completed"
                             ? "text-atelier-completed"
                             : call.status === "failed"
@@ -144,7 +144,7 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
                               : "text-text-muted/85"
                         }`}
                       >
-                        {(call.status ?? "pending").replace("_", " ")}
+                        {`${(call.status ?? "pending").charAt(0).toUpperCase()}${(call.status ?? "pending").slice(1).replace("_", " ")}`}
                       </span>
                     </div>
                     {ids.length > 0 ? (
@@ -158,7 +158,7 @@ function TurnItem({ turn, onJumpToNode }: TurnItemProps) {
                               e.stopPropagation();
                               onJumpToNode(id);
                             }}
-                            className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-[2px] font-mono text-[9px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:border-atelier-brand-400/40 hover:bg-atelier-brand-400/10 hover:text-atelier-brand-400"
+                            className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-[2px] font-display text-[11px] tabular-nums tracking-tight text-text-secondary transition-colors hover:border-atelier-brand-400/40 hover:bg-atelier-brand-400/10 hover:text-atelier-brand-400"
                           >
                             <ArrowUpRight size={9} aria-hidden="true" />
                             {id.slice(-8)}
@@ -181,7 +181,7 @@ export function HistoryPanel({ turns, onJumpToNode }: Props) {
   if (turns.length === 0) {
     return (
       <div className="px-4 py-6 text-center">
-        <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.28em] text-text-muted/85">
+        <div className="mb-2 text-[11px] text-text-muted/85">
           No agent turns yet
         </div>
         <p className="text-[12px] leading-[1.55] text-text-secondary/95">

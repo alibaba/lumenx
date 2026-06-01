@@ -277,7 +277,7 @@ export function renderNode(
         >
           <div className="flex flex-col items-center gap-1 px-3 py-3 text-center">
             <Play size={14} className="text-text-muted" aria-hidden="true" />
-            <div className="font-mono text-[10px] uppercase tracking-wider text-text-muted">
+            <div className="text-[11px] text-text-muted">
               {node.title || "Empty video"}
             </div>
           </div>

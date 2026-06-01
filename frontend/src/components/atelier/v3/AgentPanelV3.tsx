@@ -38,7 +38,7 @@ function ConversationAgentBubble({ children, thinking = false }: { children?: Re
             <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-atelier-processing shadow-[0_0_0_3px_rgba(96,165,250,0.18)]" />
             <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-atelier-processing/85" style={{ animationDelay: "0.15s" }} />
             <span className="inline-block h-[5px] w-[5px] animate-pulse rounded-full bg-atelier-processing/65" style={{ animationDelay: "0.3s" }} />
-            <span className="ml-1 font-mono text-[10px] uppercase tracking-[0.2em] text-atelier-processing/85">Planning</span>
+            <span className="ml-1 text-[11px] text-atelier-processing/85">Planning</span>
           </span>
         ) : children}
       </div>
@@ -124,7 +124,7 @@ function ToolCallParams({
           {chips.map((c, i) => (
             <span
               key={i}
-              className="rounded-[3px] border border-white/8 bg-white/[0.03] px-1.5 py-[1px] font-mono text-[9px] uppercase tracking-[0.14em] text-text-muted/90"
+              className="rounded-[3px] border border-white/8 bg-white/[0.03] px-1.5 py-[1px] font-mono text-[10px] tracking-[0.01em] text-text-muted/90"
             >
               {c}
             </span>
@@ -422,7 +422,7 @@ export function AgentPanelV3({ pushToast }: Props) {
           <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
             <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-atelier-brand-soft/40 via-atelier-brand-soft/12 to-transparent" />
             <div className="px-3.5 py-3">
-              <div className="mb-2 flex items-center gap-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-atelier-brand-soft/85">
+              <div className="mb-2 flex items-center gap-1.5 text-[11px] text-atelier-brand-soft/85">
                 <Sparkles size={10} aria-hidden="true" />
                 Try asking
               </div>
@@ -447,8 +447,8 @@ export function AgentPanelV3({ pushToast }: Props) {
                 className="mt-3 flex items-center gap-2"
               >
                 <div className="flex-1 border-t border-dashed border-white/10" />
-                <span className="font-mono text-[8.5px] font-medium uppercase tracking-[0.28em] text-text-muted/75">
-                  Prompt · Library
+                <span className="text-[11px] text-text-muted/75">
+                  Prompt library
                 </span>
                 <div className="flex-1 border-t border-dashed border-white/10" />
               </div>
@@ -466,7 +466,7 @@ export function AgentPanelV3({ pushToast }: Props) {
               <ConversationAgentBubble>
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <span className={`rounded-full border px-1.5 py-[2px] font-mono text-[9px] font-medium uppercase tracking-[0.18em] ${badge.tone}`}>
+                    <span className={`rounded-full border px-1.5 py-[2px] text-[10px] tracking-[0.01em] ${badge.tone}`}>
                       {badge.label}
                     </span>
                     <span className="font-mono text-[9px] tracking-tight text-text-muted/85">
@@ -499,7 +499,7 @@ export function AgentPanelV3({ pushToast }: Props) {
             <div className="px-3.5 pb-3 pt-3">
               <div className="mb-2 flex items-center gap-1.5">
                 <ShieldCheck size={12} className="text-atelier-brand-300" aria-hidden="true" />
-                <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-atelier-brand-300">
+                <span className="text-[11px] text-atelier-brand-300">
                   Action required
                 </span>
               </div>
@@ -576,7 +576,7 @@ export function AgentPanelV3({ pushToast }: Props) {
                     <button
                       disabled={isLocked}
                       onClick={handleApprove}
-                      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-all duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 ${
+                      className={`inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[11px] font-medium tracking-tight transition-all duration-200 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 ${
                         allSkipped
                           ? "border border-atelier-failed/35 bg-atelier-failed/10 text-atelier-failed hover:bg-atelier-failed/15"
                           : "bg-atelier-brand-400 text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(59,107,255,0.5)] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(59,107,255,0.6)]"
@@ -596,7 +596,7 @@ export function AgentPanelV3({ pushToast }: Props) {
                 <button
                   disabled={isLocked}
                   onClick={handleReject}
-                  className="rounded-md border border-white/10 bg-black/25 px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-secondary/95 transition-all duration-150 hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="rounded-md border border-white/10 bg-black/25 px-3 py-2 text-[11px] font-medium tracking-tight text-text-secondary/95 transition-all duration-150 hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Reject
                 </button>
@@ -615,7 +615,7 @@ export function AgentPanelV3({ pushToast }: Props) {
           <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/20 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)] motion-safe:animate-atelier-popover-in">
             <div aria-hidden="true" className="h-[1px] bg-gradient-to-r from-atelier-brand-soft/40 via-atelier-brand-soft/12 to-transparent" />
             <div className="px-3 py-2.5">
-              <div className="mb-1.5 flex items-center justify-between gap-2 font-mono text-[9px] font-medium uppercase tracking-[0.22em]">
+              <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px]">
                 <span className="flex items-center gap-1.5 text-atelier-brand-soft/85">
                   <Sparkles size={10} aria-hidden="true" />
                   Plan preview
@@ -639,7 +639,7 @@ export function AgentPanelV3({ pushToast }: Props) {
 
         {planError ? (
           <div role="alert" className="rounded-md border border-atelier-failed/35 bg-atelier-failed/[0.06] px-3 py-2 text-[12px] leading-[1.5] text-foreground/95 motion-safe:animate-atelier-popover-in">
-            <div className="mb-1 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-atelier-failed">
+            <div className="mb-1 text-[11px] text-atelier-failed">
               Planner blocked
             </div>
             {planError}
@@ -661,7 +661,7 @@ export function AgentPanelV3({ pushToast }: Props) {
             ctxNode.title ||
             `${ctxNode.type} node`;
           return (
-            <div className="mb-1.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-atelier-brand-soft/85">
+            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] text-atelier-brand-soft/85">
               <span aria-hidden="true" className="h-[5px] w-[5px] shrink-0 rounded-full bg-atelier-brand-soft/70" />
               <span className="truncate">Reading · {label}</span>
             </div>
@@ -733,7 +733,7 @@ export function AgentPanelV3({ pushToast }: Props) {
                 </button>
               </div>
               {policy?.approval_mode ? (
-                <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-text-muted/80">
+                <span className="text-[11px] text-text-muted/80">
                   <span aria-hidden="true" className="text-text-muted/50">·</span>{" "}
                   <span className="text-text-secondary/95">{policy.approval_mode.replace("_", " ")}</span>
                 </span>
@@ -743,7 +743,7 @@ export function AgentPanelV3({ pushToast }: Props) {
               <button
                 disabled={isLocked || previewing || !hasDraft}
                 onClick={handlePreview}
-                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-black/25 px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-secondary/95 transition-all duration-150 hover:border-white/15 hover:bg-white/[0.05] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-black/25 px-2.5 py-1 text-[11px] font-medium tracking-tight text-text-secondary/95 transition-all duration-150 hover:border-white/15 hover:bg-white/[0.05] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {previewing ? (
                   <Loader2 size={11} className="animate-spin" aria-hidden="true" />

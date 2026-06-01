@@ -22,7 +22,7 @@
 // 36×36 button on the left edge. Toggle via the same button or the `A`
 // keyboard shortcut.
 import { useMemo, useState } from "react";
-import { Check, CheckSquare, ChevronLeft, ChevronRight, Image as ImageIcon, Link2, Music, Search, Square, Video, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Link2, Music, Search, Square, Video, X } from "lucide-react";
 import type { AtelierNode } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 
@@ -223,9 +223,9 @@ export function AssetLibrary({
       <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-atelier-brand-400/85 via-atelier-brand-400/35 to-transparent" />
 
       {/* Editorial slip + collapse */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-dashed border-white/8 px-3.5 py-1.5">
-        <span aria-hidden="true" className="font-mono text-[8.5px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
-          Atelier · Library · No 001
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/8 px-3.5 py-1.5">
+        <span aria-hidden="true" className="text-[11px] text-white/45">
+          Library
         </span>
         <button
           type="button"
@@ -244,7 +244,7 @@ export function AssetLibrary({
           <div className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">
             Project <span className="italic">assets</span>
           </div>
-          <div className="mt-[2px] font-mono text-[9px] uppercase tracking-[0.28em] text-text-muted/85">
+          <div className="mt-[2px] text-[11px] text-white/45">
             {counts.all} item{counts.all === 1 ? "" : "s"}
           </div>
         </div>
@@ -253,7 +253,7 @@ export function AssetLibrary({
             type="button"
             onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
             data-tip={selectMode ? "Cancel selection" : "Multi-select"}
-            className={`btn-tip rounded-full border px-2 py-[3px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] transition-colors ${
+            className={`btn-tip rounded-full border px-2 py-[3px] text-[10px] tracking-[0.01em] transition-colors ${
               selectMode
                 ? "border-atelier-brand-400/45 bg-atelier-brand-400/15 text-atelier-brand-400"
                 : "border-dashed border-white/15 text-text-muted/85 hover:border-white/25 hover:text-foreground"
@@ -302,7 +302,7 @@ export function AssetLibrary({
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setKindFilter(k)}
-                className={`inline-flex items-center gap-1 rounded-md px-2 py-[5px] font-mono text-[9.5px] font-medium uppercase tracking-[0.22em] transition-colors ${
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-[5px] text-[11px] transition-colors ${
                   isActive
                     ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                     : "text-text-muted hover:bg-white/[0.04] hover:text-foreground/90"
@@ -341,7 +341,7 @@ export function AssetLibrary({
                   role="tab"
                   aria-selected={isActive}
                   onClick={() => setImageCategoryFilter(cat)}
-                  className={`rounded-full border px-2 py-[3px] font-mono text-[8.5px] font-medium uppercase tracking-[0.24em] transition-colors ${
+                  className={`rounded-full border px-2 py-[3px] text-[10px] tracking-[0.01em] transition-colors ${
                     isActive
                       ? "border-atelier-brand-400/45 bg-atelier-brand-400/15 text-atelier-brand-400"
                       : "border-dashed border-white/15 text-text-muted/85 hover:border-white/25 hover:text-foreground"
@@ -360,7 +360,7 @@ export function AssetLibrary({
         {filtered.length === 0 ? (
           <div className="grid h-full place-items-center px-3 text-center">
             <div className="space-y-1.5 text-text-muted/85">
-              <div className="font-mono text-[9.5px] uppercase tracking-[0.28em]">
+              <div className="text-[11px] text-white/45">
                 {allCards.length === 0 ? "No assets yet" : "No matches"}
               </div>
               <div className="text-[11px] leading-[1.45]">
@@ -430,7 +430,7 @@ export function AssetLibrary({
                       </div>
                     )}
                     {/* Kind tag — top-left */}
-                    <span aria-hidden="true" className="absolute left-1 top-1 rounded-[3px] border border-dashed border-white/22 bg-black/70 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.2em] text-white/85">
+                    <span aria-hidden="true" className="absolute left-1 top-1 rounded-[3px] border border-dashed border-white/22 bg-black/70 px-1 py-[1px] text-[10px] tracking-[0.01em] text-white/85">
                       {card.kind}
                     </span>
                     {/* Category pill — image only, click to cycle */}
@@ -445,7 +445,7 @@ export function AssetLibrary({
                         }}
                         onPointerDown={(e) => e.stopPropagation()}
                         onDragStart={(e) => e.preventDefault()}
-                        className={`btn-tip absolute right-1 top-1 rounded-[3px] border px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.2em] transition-colors ${
+                        className={`btn-tip absolute right-1 top-1 rounded-[3px] border px-1 py-[1px] text-[10px] tracking-[0.01em] transition-colors ${
                           card.category
                             ? "border-atelier-brand-400/55 bg-atelier-brand-400/20 text-atelier-brand-400"
                             : "border-dashed border-white/22 bg-black/55 text-text-muted/85 opacity-0 group-hover:opacity-100"
@@ -462,7 +462,7 @@ export function AssetLibrary({
                     {card.kind === "audio" && card.audioRole ? (
                       <span
                         aria-label={`Audio role: ${AUDIO_ROLE_LABELS[card.audioRole]}`}
-                        className="absolute right-1 top-1 rounded-[3px] border border-[#b59abe]/45 bg-[#b59abe]/18 px-1 py-[1px] font-mono text-[8px] font-medium uppercase tracking-[0.2em] text-[#d8cce0]"
+                        className="absolute right-1 top-1 rounded-[3px] border border-[#b59abe]/45 bg-[#b59abe]/18 px-1 py-[1px] text-[10px] tracking-[0.01em] text-[#d8cce0]"
                       >
                         {AUDIO_ROLE_LABELS[card.audioRole]}
                       </span>
@@ -506,7 +506,7 @@ export function AssetLibrary({
               onBulkAttach(ids);
               exitSelectMode();
             }}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-atelier-brand-400 px-3 py-2 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(59,107,255,0.5)] transition-all hover:bg-atelier-brand-400/92 active:scale-[0.97]"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-atelier-brand-400 px-3 py-2 text-[11px] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(59,107,255,0.5)] transition-all hover:bg-atelier-brand-400/92 active:scale-[0.97]"
           >
             <Link2 size={11} aria-hidden="true" />
             Attach {selectedIds.size} ref{selectedIds.size === 1 ? "" : "s"}

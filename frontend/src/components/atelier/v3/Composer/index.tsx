@@ -4,7 +4,6 @@ import { Settings, X, Plus, Trash2, Sparkles } from "lucide-react";
 import { ChipDropdown } from "./ChipDropdown";
 import { composerPlacement, type ComposerAnchor, type ComposerViewport } from "./positioning";
 import { validateAtelierRefs, type AtelierRefKind } from "@/lib/modelCatalog";
-import { TearLine } from "../ornaments";
 import { AdvancedPopover, type AdvancedParamsValue } from "./AdvancedPopover";
 
 const TABS = ["T2I", "I2I", "T2V", "I2V", "R2V", "V2V", "Audio"] as const;
@@ -278,13 +277,14 @@ export function Composer({
       className={sectionClass}
       style={inline ? undefined : computedStyle}
     >
-      {/* Editorial slip header — a faint top strip ("Atelier · Composer · No
-          001", sentence-case Inter per spec §10) anchoring the panel as an
-          issued ticket. The serial is fixed-style 001 just for that "stamped"
-          reading; it isn't a real id. */}
+      {/* v0.5.5 — receipt-stamp serial gone. The Composer is the operating
+          surface, not an issued ticket; the only label it needs is the
+          active tab, set apart by a faint dot. Calmer header reads with
+          the Flova "tool, not document" stance. */}
       <div className="flex items-center justify-between gap-2 border-b border-white/8 px-5 py-2.5">
-        <span aria-hidden="true" className="text-[11px] text-white/40">
-          Atelier · Composer · No 001
+        <span aria-hidden="true" className="inline-flex items-center gap-1.5 text-[11px] text-white/45">
+          <span className="h-[5px] w-[5px] rounded-full bg-atelier-port-positive/65" />
+          Composer
         </span>
         <span aria-hidden="true" className="text-[11px] text-white/45">
           {activeTab}
@@ -509,13 +509,11 @@ export function Composer({
         ) : null}
       </div>
 
-      {/* Chip row — config strip prefaced by a dashed perforation reading
-          "TEAR HERE TO GENERATE", carrying the receipt metaphor through.
-          The Generate button on the right gets its own visual weight
-          (primary halo shadow) so the eye lands there at submit time. */}
-      <div className="px-5 pt-3">
-        <TearLine label="Tear here to generate" />
-      </div>
+      {/* v0.5.5 — the dashed "Tear here to generate" perforation read as
+          cheap-fancy receipt metaphor, fighting the Flova tool/instrument
+          stance. Replace with a single quiet 1px hairline. The Generate
+          button still anchors the eye at submit time via its green pill. */}
+      <div className="mt-3 border-t border-white/8" aria-hidden="true" />
       <div className="flex items-center justify-between gap-2 px-5 pb-4 pt-3">
         <div className="flex items-center gap-2">
           <ChipDropdown label="Model"    value={m} primary

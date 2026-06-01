@@ -14,10 +14,10 @@ interface Props {
   canRedo?: boolean;
 }
 
-// Cinematic toolbar capsule. Single 48-tall pill, mono caps for the only
-// labeled action ('VIDEO'), icon-only for everything else with consistent
-// 28×28 hit targets. Inset top edge highlight signs the surface as 'lit
-// from above'; hover bg/[0.06] + 150ms transitions on every hit target.
+// Cinematic toolbar capsule. Single 48-tall pill, sentence-case Inter label
+// for the only labeled action ('Video'), icon-only for everything else with
+// consistent 28×28 hit targets. Inset top edge highlight signs the surface as
+// 'lit from above'; hover bg/[0.06] + 150ms transitions on every hit target.
 const HIT_BASE =
   "btn-tip inline-flex h-7 w-7 items-center justify-center rounded-md transition-all duration-150 active:scale-[0.94]";
 const HIT_ENABLED = "text-text-secondary hover:bg-white/[0.06] hover:text-foreground";
@@ -46,14 +46,14 @@ export function ToolbarV3({
       aria-label="Atelier toolbar"
       className="absolute left-4 top-4 z-30 flex h-9 items-center gap-0.5 rounded-full border border-white/8 bg-[#141416]/96 px-1 shadow-[0_14px_30px_-18px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl"
     >
-      {/* Primary action: New Video. Pill anchored at the head, mono caps
-          label keeps it kinetic without being SaaS-cute. */}
+      {/* Primary action: New Video. Pill anchored at the head, sentence-case
+          Inter label keeps it kinetic without being SaaS-cute. */}
       <button
         type="button"
         aria-label="New Video Node"
         data-tip="New Video Node (V)"
         onClick={() => onCreate("video")}
-        className="btn-tip inline-flex h-7 items-center gap-1.5 rounded-full bg-atelier-brand-400 pl-2 pr-2.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(59,107,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(59,107,255,0.6)] active:scale-[0.96]"
+        className="btn-tip inline-flex h-7 items-center gap-1.5 rounded-full bg-atelier-brand-400 pl-2 pr-2.5 text-[11px] font-medium text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(59,107,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.22),0_6px_16px_-4px_rgba(59,107,255,0.6)] active:scale-[0.96]"
       >
         <Film size={12} aria-hidden="true" />
         Video
@@ -111,7 +111,7 @@ export function ToolbarV3({
         className={askClass}
       >
         <Sparkles size={12} aria-hidden="true" />
-        <span className="font-mono text-[10px] font-medium uppercase tracking-[0.18em]">
+        <span className="text-[11px] font-medium">
           Agent
         </span>
       </button>

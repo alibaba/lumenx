@@ -84,7 +84,7 @@ export function TakeTimeline({ takes, onPickTake }: Props) {
     >
       <span
         aria-hidden="true"
-        className="shrink-0 font-mono text-[9px] uppercase tracking-[0.22em] text-text-muted/85"
+        className="shrink-0 text-[11px] text-white/45"
       >
         Takes · {ordered.length}
       </span>

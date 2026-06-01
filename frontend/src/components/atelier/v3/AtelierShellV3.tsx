@@ -3226,7 +3226,7 @@ export function AtelierShellV3() {
       <RailPanel
         open={activeRailMode === "add"}
         title="Add to canvas"
-        tag="Atelier · Add · No 001"
+        subtitle="Pick a node, image, idea, or template"
         onClose={() => setActiveRailMode(null)}
       >
         <ul className="space-y-1 p-2">
@@ -3363,7 +3363,7 @@ export function AtelierShellV3() {
                   <div className="font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">
                     {opt.title}
                   </div>
-                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/85">
+                  <div className="text-[11px] text-white/45">
                     {opt.desc}
                   </div>
                 </div>
@@ -3383,7 +3383,7 @@ export function AtelierShellV3() {
       <RailPanel
         open={activeRailMode === "workflows"}
         title="Workflows"
-        tag="Atelier · Workflows · No 001"
+        subtitle="Drop a pre-wired graph onto the canvas"
         onClose={() => setActiveRailMode(null)}
       >
         <WorkflowsPanel
@@ -3458,7 +3458,7 @@ export function AtelierShellV3() {
       <RailPanel
         open={activeRailMode === "history"}
         title="History"
-        tag="Atelier · History · No 001"
+        subtitle="Every agent turn on this project"
         onClose={() => setActiveRailMode(null)}
       >
         <HistoryPanel
@@ -3501,13 +3501,14 @@ export function AtelierShellV3() {
           className="absolute left-[72px] top-3 z-30 flex h-10 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/88 pl-3 pr-1.5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.45),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
           style={{ right: agentCollapsed ? 96 : 420 }}
         >
-          {/* LumenX wordmark — quiet, mono caps tracked. The bracket is a
-              tiny rhetorical wink at "this is the Atelier surface, not
-              Studio". */}
-          <span aria-hidden="true" className="select-none font-mono text-[10px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
-            <span className="text-atelier-brand-400/90">LumenX</span>
-            <span className="px-1.5 text-text-muted/55">·</span>
-            <span className="text-foreground/85">Atelier</span>
+          {/* LumenX wordmark — v0.5.5 sentence-case Inter, matches Flova
+              header restraint (no mono-caps tracking). The tinted "LumenX"
+              still signals brand without shouting; the dot separator is
+              the only ornament. */}
+          <span aria-hidden="true" className="select-none font-display text-[12px] font-medium tracking-[-0.005em] text-foreground/85">
+            <span className="text-atelier-brand-400/95">LumenX</span>
+            <span className="px-1.5 text-white/30">·</span>
+            <span className="text-white/70">Atelier</span>
           </span>
           <span aria-hidden="true" className="h-4 w-px bg-white/8" />
           <div className="relative">
@@ -3537,9 +3538,9 @@ export function AtelierShellV3() {
                 aria-label="Atelier projects"
                 className="absolute left-0 top-10 z-[35] w-[300px] origin-top rounded-md border border-white/8 bg-[#141416]/96 p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
               >
-                <div className="flex items-center justify-between border-b border-dashed border-white/8 px-2.5 py-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
-                  <span>Atelier · Projects</span>
-                  <span className="font-display text-[11px] tracking-tight text-text-muted/65">
+                <div className="flex items-center justify-between border-b border-white/8 px-2.5 py-2 text-[11px] text-white/55">
+                  <span>Projects</span>
+                  <span className="font-display text-[11px] tabular-nums tracking-tight text-white/45">
                     {String(projects.length).padStart(2, "0")}
                   </span>
                 </div>
@@ -3553,8 +3554,8 @@ export function AtelierShellV3() {
                       className="pr-6 font-sans text-[12px] italic leading-[1.5] tracking-tight text-text-secondary/95"
                     />
                   ) : (
-                    <p className="pr-6 font-mono text-[9.5px] uppercase tracking-[0.24em] text-text-muted/75">
-                      No description · click pencil to add
+                    <p className="pr-6 text-[11px] italic text-white/40">
+                      No description — click the pencil to add one
                     </p>
                   )}
                   <button
@@ -3615,12 +3616,12 @@ export function AtelierShellV3() {
                             <div className="truncate font-display text-[13px] font-medium tracking-[-0.005em]">
                               {p.title || "Untitled"}
                             </div>
-                            <div className="mt-[2px] font-mono text-[9px] uppercase tracking-[0.18em] text-text-muted/85">
+                            <div className="mt-[2px] text-[11px] text-white/45">
                               {p.nodes.length} node{p.nodes.length === 1 ? "" : "s"}
                             </div>
                           </div>
                           {isCurrent ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-atelier-brand-400/15 px-1.5 py-[2px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-atelier-brand-400/95">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-atelier-brand-400/15 px-1.5 py-[2px] text-[10px] text-atelier-brand-400/95">
                               <Check size={9} aria-hidden="true" /> Current
                             </span>
                           ) : null}
@@ -3709,7 +3710,7 @@ export function AtelierShellV3() {
                         },
                       });
                     }}
-                    className="flex w-full items-center gap-1.5 rounded px-2.5 py-2 text-left font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-atelier-brand-400 transition-colors hover:bg-atelier-brand-400/10"
+                    className="flex w-full items-center gap-1.5 rounded px-2.5 py-2 text-left text-[12px] font-medium text-atelier-brand-400/95 transition-colors hover:bg-atelier-brand-400/10"
                   >
                     <Plus size={11} aria-hidden="true" />
                     New project
@@ -3739,7 +3740,7 @@ export function AtelierShellV3() {
               className="btn-tip inline-flex h-8 items-center gap-1 rounded-full px-2 text-emerald-200/85"
             >
               <CreditCard size={12} aria-hidden="true" />
-              <span className="font-mono text-[10px] uppercase tracking-[0.22em]">Local</span>
+              <span className="text-[11px] font-medium">Local</span>
             </span>
           </div>
         </header>
@@ -3813,7 +3814,7 @@ export function AtelierShellV3() {
                 style={{ backgroundColor: "#141416", animationDelay: "0.45s" }}
               />
             </div>
-            <div className="absolute bottom-12 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/85">
+            <div className="absolute bottom-12 flex items-center gap-2 text-[11px] text-white/55">
               <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-atelier-brand-400/80 shadow-[0_0_0_3px_rgba(59,107,255,0.18)] motion-safe:animate-pulse" />
               Loading Atelier
             </div>
@@ -3827,8 +3828,9 @@ export function AtelierShellV3() {
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
             <div className="pointer-events-auto flex flex-col items-center gap-7 text-center animate-atelier-node-in motion-reduce:animate-none">
               <div className="space-y-2.5">
-                <span className="font-mono text-[10px] font-medium uppercase tracking-[0.36em] text-text-muted/85">
-                  Atelier · No 001 · v0.3
+                <span className="inline-flex items-center gap-1.5 text-[11px] text-white/45">
+                  <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-atelier-brand-400/65" />
+                  Empty canvas
                 </span>
                 <div className="font-display text-[30px] font-medium leading-[1.02] tracking-[-0.012em] text-foreground">
                   Drop a <span className="italic">seed</span>.
@@ -3866,13 +3868,13 @@ export function AtelierShellV3() {
                     }`}
                   >
                     <div className="flex w-full items-center justify-between">
-                      <span className={`font-mono text-[10px] font-medium uppercase tracking-[0.22em] ${card.primary ? "text-atelier-brand-400" : "text-text-muted/85"}`}>
+                      <span className={`font-display text-[13px] font-medium tracking-[-0.005em] ${card.primary ? "text-atelier-brand-400" : "text-foreground/90"}`}>
                         {card.title}
                       </span>
-                      <kbd className={`rounded-[3px] border px-1 py-[1px] font-mono text-[10px] tracking-tight ${
+                      <kbd className={`rounded-[3px] border px-1 py-[1px] font-mono text-[10px] tabular-nums tracking-tight ${
                         card.primary
                           ? "border-atelier-brand-400/30 bg-atelier-brand-400/10 text-atelier-brand-400"
-                          : "border-white/8 bg-black/35 text-text-muted/85"
+                          : "border-white/8 bg-black/35 text-white/55"
                       }`}>
                         {card.key}
                       </kbd>
@@ -3885,9 +3887,9 @@ export function AtelierShellV3() {
                   and a one-liner explaining how nodes get linked, since
                   the right-edge drag handle isn't visible until something
                   is selected. */}
-              <div className="flex flex-col items-center gap-2 font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/75">
+              <div className="flex flex-col items-center gap-2 text-[11px] text-white/40">
                 <div className="flex items-center gap-2">
-                  <kbd className="rounded-[3px] border border-atelier-brand-400/30 bg-atelier-brand-400/10 px-1.5 py-[1px] text-[10px] tracking-tight text-atelier-brand-400">?</kbd>
+                  <kbd className="rounded-[3px] border border-atelier-brand-400/30 bg-atelier-brand-400/10 px-1.5 py-[1px] font-mono text-[10px] tracking-tight text-atelier-brand-400">?</kbd>
                   <span>shortcuts</span>
                   <span aria-hidden="true" className="h-3 w-px bg-white/8" />
                   <span>drop image files anywhere</span>
@@ -4011,7 +4013,7 @@ export function AtelierShellV3() {
                     <div
                       key={l.key}
                       aria-hidden="true"
-                      className={`pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-1/2 rounded-full border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider backdrop-blur-md animate-atelier-node-in motion-reduce:animate-none ${tone}`}
+                      className={`pointer-events-none absolute z-[6] -translate-x-1/2 -translate-y-1/2 rounded-full border px-1.5 py-0.5 text-[10px] tracking-[0.01em] backdrop-blur-md animate-atelier-node-in motion-reduce:animate-none ${tone}`}
                       style={{ left: l.midX, top: l.midY }}
                     >
                       {l.text}
@@ -4617,7 +4619,7 @@ export function AtelierShellV3() {
                   }
                 }}
                 placeholder="Write the idea — Esc to cancel, ⌘⏎ to save"
-                className={`absolute z-30 w-[224px] resize-none rounded-[10px] border px-3.5 py-3 font-display text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95 placeholder:not-italic placeholder:font-mono placeholder:text-[10.5px] placeholder:uppercase placeholder:tracking-[0.22em] placeholder:text-text-muted/60 shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] outline-none ring-2 ${surfaceBg} ${ringTone}`}
+                className={`absolute z-30 w-[224px] resize-none rounded-[10px] border px-3.5 py-3 font-display text-[13.5px] italic leading-[1.5] tracking-tight text-foreground/95 placeholder:not-italic placeholder:text-[12px] placeholder:italic placeholder:tracking-tight placeholder:text-white/35 shadow-[0_14px_36px_-22px_rgba(0,0,0,0.7),0_2px_4px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] outline-none ring-2 ${surfaceBg} ${ringTone}`}
                 style={{ left: node.x, top: node.y, minHeight: 140, height: Math.max(140, (node.height || 140)) }}
               />
             );
@@ -4681,8 +4683,8 @@ export function AtelierShellV3() {
             className="pointer-events-auto absolute z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/96 px-3 py-[6px] text-[12px] shadow-[0_14px_30px_-16px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
             style={{ left: screenCx, top: Math.max(8, screenY) }}
           >
-            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-text-muted/85">
-              <span className="text-foreground/95">{allSelectedIds.size}</span>{" "}
+            <span className="text-[11px] text-white/55">
+              <span className="font-display tabular-nums text-foreground/95">{allSelectedIds.size}</span>{" "}
               <span>selected</span>
             </span>
             <span aria-hidden="true" className="h-3.5 w-px bg-white/8" />
@@ -4692,7 +4694,7 @@ export function AtelierShellV3() {
                 onClick={() => setShowAlignMenu((v) => !v)}
                 aria-expanded={showAlignMenu}
                 aria-haspopup="menu"
-                className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
+                className="inline-flex items-center gap-1 rounded-full px-2 py-[3px] text-[11px] text-white/65 transition-colors hover:bg-hover-bg hover:text-foreground"
               >
                 Align
                 <ChevronDown size={9} aria-hidden="true" />
@@ -4709,7 +4711,7 @@ export function AtelierShellV3() {
                     aria-label="Align selection"
                     className="absolute left-0 top-8 z-[32] w-[200px] origin-top rounded-md border border-white/8 bg-[#141416] p-1 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
                   >
-                    <div className="px-2 pb-1 pt-1 font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted/80">
+                    <div className="px-2 pb-1 pt-1 text-[11px] text-white/45">
                       Align
                     </div>
                     {([
@@ -4850,7 +4852,7 @@ export function AtelierShellV3() {
                   },
                 });
               }}
-              className="rounded-full bg-atelier-brand-400/15 px-2 py-[3px] font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-atelier-brand-400/95 transition-colors hover:bg-atelier-brand-400/25"
+              className="rounded-full bg-atelier-brand-400/15 px-2.5 py-[3px] text-[11px] font-medium text-atelier-brand-400/95 transition-colors hover:bg-atelier-brand-400/25"
               aria-label="Save selection as workflow"
             >
               Save as workflow
@@ -4859,7 +4861,7 @@ export function AtelierShellV3() {
             <button
               type="button"
               onClick={() => void deleteSelection()}
-              className="rounded-full bg-red-400/12 px-2 py-[3px] font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-red-200/95 transition-colors hover:bg-red-400/22"
+              className="rounded-full bg-red-400/12 px-2.5 py-[3px] text-[11px] font-medium text-red-200/95 transition-colors hover:bg-red-400/22"
               aria-label="Delete selected nodes"
             >
               Delete
@@ -4870,7 +4872,7 @@ export function AtelierShellV3() {
                 setExtraSelectedIds(new Set());
                 selectNode(null);
               }}
-              className="rounded-full px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/85 transition-colors hover:bg-hover-bg hover:text-foreground"
+              className="rounded-full px-2 py-[3px] text-[11px] text-white/55 transition-colors hover:bg-hover-bg hover:text-foreground"
               aria-label="Clear selection"
             >
               Clear
@@ -4936,8 +4938,8 @@ export function AtelierShellV3() {
             {facts.map((f, i) => (
               <React.Fragment key={f.label}>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="uppercase tracking-[0.2em] text-text-muted/85">{f.label}</span>
-                  <span className="text-foreground/95">{f.value}</span>
+                  <span className="text-[11px] text-white/45">{f.label}</span>
+                  <span className="font-display text-[11px] tabular-nums tracking-tight text-foreground/95">{f.value}</span>
                 </span>
                 {i < facts.length - 1 ? (
                   <span aria-hidden="true" className="h-3 w-px bg-white/8" />
@@ -5372,17 +5374,17 @@ export function AtelierShellV3() {
           }
         }}
       >
-        {/* Editorial header: stamped 'CUT · SEQUENCE · NO 001' identity +
-            running clip count rendered as a typewriter readout. The bullet
-            dot becomes part of the rhythm, not a status indicator. */}
-        <div className="mb-2 flex items-center justify-between gap-2 border-b border-dashed border-white/8 px-1 pb-1.5 font-mono text-[9px] uppercase tracking-[0.28em] text-text-muted/85">
+        {/* v0.5.5 — receipt-stamp ("CUT · SEQUENCE · NO 001") replaced with
+            quiet sentence-case Inter. Sequence is a tool, not a document
+            issued to the user. The clip count keeps tabular alignment. */}
+        <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/8 px-1 pb-1.5 text-[11px] text-white/45">
           <div className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-atelier-brand-400/70 shadow-[0_0_0_2px_rgba(59,107,255,0.16)]" />
-            <span className="font-medium">Cut · Sequence · No 001</span>
+            <span aria-hidden="true" className="h-[5px] w-[5px] rounded-full bg-atelier-brand-400/70" />
+            <span>Sequence</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span aria-hidden="true" className="text-text-muted/55">{sequenceEntries.length === 1 ? "Clip" : "Clips"}</span>
-            <span className="font-display text-[11px] tracking-tight text-foreground/95">
+            <span aria-hidden="true" className="text-white/35">{sequenceEntries.length === 1 ? "clip" : "clips"}</span>
+            <span className="font-display text-[11px] tabular-nums tracking-tight text-foreground/95">
               {String(sequenceEntries.length).padStart(2, "0")}
             </span>
             {sequenceEntries.length > 0 ? (
@@ -5433,7 +5435,7 @@ export function AtelierShellV3() {
                       .finally(() => setExportingSequence(false));
                   }}
                   disabled={exportingSequence}
-                  className="ml-1 rounded bg-atelier-brand-400/15 px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.24em] text-atelier-brand-400/95 transition-colors hover:bg-atelier-brand-400/25 disabled:cursor-wait disabled:opacity-60"
+                  className="ml-1 rounded bg-atelier-brand-400/15 px-2 py-0.5 text-[11px] font-medium text-atelier-brand-400/95 transition-colors hover:bg-atelier-brand-400/25 disabled:cursor-wait disabled:opacity-60"
                 >
                   {exportingSequence ? "Exporting…" : "Export"}
                 </button>
@@ -5444,7 +5446,7 @@ export function AtelierShellV3() {
         {sequenceEntries.length === 0 ? (
           <div className="px-2 py-2 text-[11px] text-text-muted/85">
             Drag a completed take here, or use{" "}
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/70">Add to Sequence</span>{" "}
+            <span className="text-[11px] text-white/50">Add to sequence</span>{" "}
             from its action bar.
           </div>
         ) : (
@@ -5607,7 +5609,7 @@ export function AtelierShellV3() {
                     onClick={(e) => e.stopPropagation()}
                     className="absolute -top-[120px] left-1/2 z-30 w-[200px] -translate-x-1/2 rounded-md border border-white/8 bg-[#141416]/96 p-2 shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none"
                   >
-                    <div className="mb-1.5 flex items-center justify-between font-mono text-[8.5px] uppercase tracking-[0.22em] text-text-muted/85">
+                    <div className="mb-1.5 flex items-center justify-between text-[11px] text-white/55">
                       <span>Trim · clip {i + 1}</span>
                       <button
                         type="button"
@@ -5654,14 +5656,14 @@ export function AtelierShellV3() {
                         onClick={() => {
                           setSequence((prev) => prev.map((s, idx) => idx === i ? { parentId: s.parentId, candidateId: s.candidateId } : s));
                         }}
-                        className="rounded-full px-2 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-text-muted/85 transition-colors hover:bg-hover-bg hover:text-foreground"
+                        className="rounded-full px-2 py-[3px] text-[11px] text-white/55 transition-colors hover:bg-hover-bg hover:text-foreground"
                       >
                         Reset
                       </button>
                       <button
                         type="button"
                         onClick={() => setTrimEditingIndex(null)}
-                        className="rounded-full bg-atelier-brand-400/15 px-2 py-[3px] font-mono text-[9px] uppercase tracking-[0.18em] text-atelier-brand-400 transition-colors hover:bg-atelier-brand-400/25"
+                        className="rounded-full bg-atelier-brand-400/15 px-2.5 py-[3px] text-[11px] font-medium text-atelier-brand-400 transition-colors hover:bg-atelier-brand-400/25"
                       >
                         Done
                       </button>
@@ -5905,7 +5907,7 @@ export function AtelierShellV3() {
               <div className="px-4 pb-3 pt-3.5">
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-baseline gap-2.5">
-                    <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-atelier-brand-400/85">Reference</span>
+                    <span className="text-[11px] font-medium text-atelier-brand-400/85">Reference</span>
                     <span className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">Attach to a draft</span>
                   </div>
                   <button onClick={() => setUseAsRefSourceId(null)} className="inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground" aria-label="Close">
@@ -5918,7 +5920,7 @@ export function AtelierShellV3() {
                   ) : null}
                   <div className="min-w-0 text-[12px] text-text-secondary">
                     <div className="truncate font-display text-[13px] font-medium text-foreground/95">{source.title || "Untitled image"}</div>
-                    <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-text-muted/80">Source</div>
+                    <div className="text-[11px] text-white/40">Source</div>
                   </div>
                 </div>
                 {drafts.length === 0 ? (
@@ -5945,9 +5947,9 @@ export function AtelierShellV3() {
                           >
                             <div className="min-w-0">
                               <div className="truncate font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">{intent}</div>
-                              <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-text-muted/85">{model}</div>
+                              <div className="text-[11px] text-white/45">{model}</div>
                             </div>
-                            <span className="rounded-full bg-atelier-brand-400/12 px-2 py-[3px] font-mono text-[9px] font-medium uppercase tracking-[0.2em] text-atelier-brand-400/95 transition-colors group-hover:bg-atelier-brand-400/20">
+                            <span className="rounded-full bg-atelier-brand-400/12 px-2.5 py-[3px] text-[11px] font-medium text-atelier-brand-400/95 transition-colors group-hover:bg-atelier-brand-400/20">
                               Attach
                             </span>
                         </button>
@@ -5996,7 +5998,7 @@ export function AtelierShellV3() {
                     <div className="truncate font-display text-[13px] font-medium tracking-[-0.005em] text-foreground/95">
                       {parent.title}
                     </div>
-                    <div className="mt-[2px] flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em]">
+                    <div className="mt-[2px] flex items-center gap-1.5 text-[11px]">
                       <span className="text-atelier-brand-400/85">{cand.model}</span>
                       <span aria-hidden="true" className="text-text-muted/50">·</span>
                       <span className="text-text-muted/85">{cand.label || cand.id.slice(0, 8)}</span>

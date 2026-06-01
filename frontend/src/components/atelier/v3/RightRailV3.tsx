@@ -79,7 +79,7 @@ function PermissionSegmented({
           tabIndex={value === m ? 0 : -1}
           onClick={() => onChange?.(m)}
           onKeyDown={handleKey}
-          className={`rounded-full px-2.5 py-[5px] font-mono text-[9px] font-medium uppercase tracking-[0.18em] transition-colors ${
+          className={`rounded-full px-2.5 py-[5px] text-[10px] tracking-[0.01em] transition-colors ${
             value === m
               ? "bg-atelier-brand-400/20 text-[#6e8fff]"
               : "text-text-muted/80 hover:text-foreground"
@@ -141,12 +141,12 @@ export function RightRailV3({
       {/* Editorial slip: tiny mono caps ribbon above the avatar. Same voice
           as the Composer's "ATELIER · COMPOSER · NO 001" — the rail reads
           as an issued credential, not a chrome panel. */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-dashed border-white/8 px-3.5 py-1.5">
-        <span aria-hidden="true" className="font-mono text-[8.5px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
-          Atelier · Agent · No 001
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/8 px-3.5 py-1.5">
+        <span aria-hidden="true" className="text-[11px] text-white/45">
+          Agent
         </span>
-        <span aria-hidden="true" className="font-mono text-[8.5px] uppercase tracking-[0.28em] text-text-muted/55">
-          {agentStatus}
+        <span aria-hidden="true" className="text-[11px] text-white/45">
+          {STATUS_LABEL[agentStatus]}
         </span>
       </div>
 
@@ -166,7 +166,7 @@ export function RightRailV3({
             <div className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">
               Creative <span className="italic">Agent</span>
             </div>
-            <div className="mt-[2px] font-mono text-[9px] uppercase tracking-[0.28em] text-text-muted/85">
+            <div className="mt-[2px] text-[11px] text-white/45">
               {STATUS_LABEL[agentStatus]}
             </div>
           </div>
@@ -183,8 +183,8 @@ export function RightRailV3({
 
       <div className="shrink-0 border-b border-white/6 px-3.5 py-2.5">
         <div className="mb-1.5 flex items-center justify-between gap-2">
-          <span className="font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
-            Permission · Class
+          <span className="text-[11px] text-white/45">
+            Permission
           </span>
           <span className="truncate text-[10.5px] leading-tight text-text-muted/85">
             {PERMISSION_HINT[mode]}

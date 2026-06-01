@@ -15,15 +15,18 @@ import { X } from "lucide-react";
 interface Props {
   open: boolean;
   title: string;
-  /** Mono-caps tag shown above the title — keeps the panel chrome
-   *  visually consistent with the rest of Atelier (Composer header,
-   *  Asset Library, etc.). */
+  /** Optional one-line subtitle in sentence-case Inter, sat under the
+   *  title. v0.5.5 — replaces the old mono-caps "Atelier · X · No 001"
+   *  receipt-tag chrome with quieter contextual subline. */
+  subtitle?: string;
+  /** @deprecated v0.5.5 — receipt-tag chrome removed. Still accepted so
+   *  existing call sites don't break; ignored. */
   tag?: string;
   onClose: () => void;
   children: React.ReactNode;
 }
 
-export function RailPanel({ open, title, tag, onClose, children }: Props) {
+export function RailPanel({ open, title, subtitle, onClose, children }: Props) {
   if (!open) return null;
   return (
     <aside
@@ -33,38 +36,26 @@ export function RailPanel({ open, title, tag, onClose, children }: Props) {
     >
       <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-atelier-brand-400/85 via-atelier-brand-400/35 to-transparent" />
 
-      {tag ? (
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-dashed border-white/8 px-3.5 py-1.5">
-          <span aria-hidden="true" className="font-mono text-[8.5px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
-            {tag}
-          </span>
-          <button
-            type="button"
-            aria-label="Close panel"
-            data-tip="Close"
-            onClick={onClose}
-            className="btn-tip inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
-          >
-            <X size={11} aria-hidden="true" />
-          </button>
+      <header className="flex shrink-0 items-start justify-between gap-3 border-b border-white/6 px-3.5 py-3">
+        <div className="min-w-0">
+          <div className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">
+            {title}
+          </div>
+          {subtitle ? (
+            <div className="mt-[2px] text-[11px] text-white/45">
+              {subtitle}
+            </div>
+          ) : null}
         </div>
-      ) : null}
-
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/6 px-3.5 py-2.5">
-        <div className="font-display text-[14px] font-medium tracking-[-0.005em] text-foreground">
-          {title}
-        </div>
-        {!tag ? (
-          <button
-            type="button"
-            aria-label="Close panel"
-            data-tip="Close"
-            onClick={onClose}
-            className="btn-tip inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
-          >
-            <X size={11} aria-hidden="true" />
-          </button>
-        ) : null}
+        <button
+          type="button"
+          aria-label="Close panel"
+          data-tip="Close"
+          onClick={onClose}
+          className="btn-tip inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
+        >
+          <X size={11} aria-hidden="true" />
+        </button>
       </header>
 
       <div className="flex-1 overflow-y-auto">{children}</div>
