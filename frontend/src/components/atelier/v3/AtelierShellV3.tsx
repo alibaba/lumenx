@@ -464,6 +464,44 @@ export function AtelierShellV3() {
     return set;
   }, [extraSelectedIds, selectedNodeId]);
   const isMultiSelect = allSelectedIds.size > 1;
+
+  // v0.5.5 — Focus / composition density (RON aesthetic, mode "a").
+  //
+  // When the user has a clear point of attention on the canvas — either
+  // hovering a node or having clicked one — we promote that node to the
+  // "focal" node and dim every node that isn't directly related to it.
+  // Hover wins over selection so the live mouse signal feels responsive;
+  // selection is the sticky fallback. Result: the canvas reads as a few
+  // bright focal cards floating in dark space, rather than a uniform
+  // wallpaper of every node shouting at the same volume.
+  const focalNodeId: string | null = hoveredNodeId ?? selectedNodeId ?? null;
+  const relatedToFocal = useMemo(() => {
+    const set = new Set<string>();
+    if (!focalNodeId || !project) return set;
+    set.add(focalNodeId);
+    // Reference edges: any node directly upstream OR downstream of focal.
+    const links = buildReferenceLinks(project.nodes);
+    for (const l of links) {
+      if (l.from.id === focalNodeId) set.add(l.to.id);
+      if (l.to.id === focalNodeId) set.add(l.from.id);
+    }
+    // Candidate spokes: if focal IS a video parent, all its takes glow.
+    // If focal is itself a virtual candidate node, its parent + siblings
+    // glow (we never want to dim the very thing the user is staring at).
+    for (const node of project.nodes) {
+      if (node.type !== "video") continue;
+      const cands = readCandidates(node);
+      for (const c of cands) {
+        const candKey = candidateNodeId(node.id, c.id);
+        if (node.id === focalNodeId || candKey === focalNodeId) {
+          set.add(node.id);
+          set.add(candKey);
+        }
+      }
+    }
+    return set;
+  }, [focalNodeId, project]);
+
   const [minimapOpen, setMinimapOpen] = useState(false);
   // P2 (E'): persistent grid-snap toggle. Read from localStorage so a
   // power user who flipped it on stays in that mode across sessions.
@@ -3894,7 +3932,12 @@ export function AtelierShellV3() {
             const refEdgeMidpoints: RefEdgeMidpoint[] = [];
             const paths = renderEdges(
               project ?? null,
-              hoveredNodeId,
+              // v0.5.5 — selection counts as focal too (not just hover) so a
+              // clicked node also fires the white-beam treatment on its
+              // edges + dims unrelated spokes. renderEdges still calls its
+              // arg `hoveredNodeId` for back-compat but the semantics are
+              // now "focal" (hover wins, selection is the sticky fallback).
+              focalNodeId,
               selectedRefEdgeId,
               (id) => {
                 // Selecting an edge clears node selection so the SelectionActionBar
@@ -4196,6 +4239,17 @@ export function AtelierShellV3() {
             const isBeingDragged =
               nodeDragRef.current?.nodeId === node.id ||
               groupDragRef.current?.members.some((m) => m.nodeId === node.id);
+            // v0.5.5 — composition density (mode "a"): when something is
+            // focal (hover or selection), unrelated non-selected nodes drop
+            // to 28% opacity and lose most of their saturation. The result
+            // is the RON / Flova "few bright focal cards, dark vitrine"
+            // reading — the focal node + its directly-connected neighbors
+            // form a clear constellation while the rest recede.
+            const isDimmed =
+              !!focalNodeId &&
+              !isSelected &&
+              focalNodeId !== node.id &&
+              !relatedToFocal.has(node.id);
             return (
               <div
                 key={node.id}
@@ -4226,9 +4280,13 @@ export function AtelierShellV3() {
                   zIndex: isBeingDragged ? 25 : isSelected ? 20 : 10,
                   // Subtle drag ghost: 85% opacity while moving. Transition
                   // makes hover-grab and release feel intentional rather
-                  // than snappy.
-                  opacity: isBeingDragged ? 0.88 : undefined,
-                  transition: "opacity 140ms ease-out",
+                  // than snappy. v0.5.5 — dim wins over the default when
+                  // focal is set; drag still overrides everything because
+                  // a moving card always needs to be visible.
+                  opacity: isBeingDragged ? 0.88 : isDimmed ? 0.28 : undefined,
+                  filter: isDimmed ? "saturate(0.55)" : undefined,
+                  transition:
+                    "opacity 220ms ease-out, filter 220ms ease-out",
                 }}
               >
                 {renderNode(node, allSelectedIds, selectNode, {
@@ -4308,6 +4366,11 @@ export function AtelierShellV3() {
                   pushToast("error", `Cancel failed: ${err instanceof Error ? err.message : String(err)}`);
                 }
               },
+              // v0.5.5 composition density — same focal dim that real
+              // nodes use, so candidates fall into the same constellation
+              // logic. relatedKeys already includes the parent video's
+              // own candidate ids when the parent is focal.
+              { focalNodeId, relatedKeys: relatedToFocal },
             ),
           )}
 

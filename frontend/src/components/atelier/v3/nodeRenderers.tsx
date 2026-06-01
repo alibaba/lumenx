@@ -319,6 +319,11 @@ export function renderCandidatesAsMediaNodes(
   retryModelOptions?: string[],
   onRetryWithModel?: (parentId: string, candidateId: string, modelLabel: string) => void,
   onCancel?: (parentId: string, candidateId: string) => Promise<void> | void,
+  // v0.5.5 composition density (mode "a"): when the shell has a focal node
+  // (hover OR sticky selection), dim every candidate not on the focal
+  // constellation. Passed in from the shell so this renderer doesn't have
+  // to know about hoveredNodeId / selectedNodeId / link graph.
+  focalDim?: { focalNodeId: string | null; relatedKeys: Set<string> },
 ): React.ReactNode[] {
   if (node.type !== "video") return [];
   const candidates = readCandidates(node);
@@ -386,6 +391,16 @@ export function renderCandidatesAsMediaNodes(
       }
       return JSON.stringify(batch);
     };
+    // v0.5.5 — focal dim for virtual candidate nodes. Mirrors the same
+    // logic the shell applies to real nodes so the dimming reads as a
+    // single canvas-wide effect, not "real nodes dim, takes don't".
+    // Selected (isMultiSelected OR primary) candidates stay bright.
+    const isCandSelected = selectedIds.has(candKey);
+    const isCandDimmed =
+      !!focalDim?.focalNodeId &&
+      !isCandSelected &&
+      focalDim.focalNodeId !== candKey &&
+      !focalDim.relatedKeys.has(candKey);
     return (
       // Wrap each candidate MediaNode with a positional shell that carries
       // data-atelier-node, so the Composer's DOM-rect anchor lookup can
@@ -408,6 +423,9 @@ export function renderCandidatesAsMediaNodes(
           top: 0,
           width: 0,
           height: 0,
+          opacity: isCandDimmed ? 0.28 : undefined,
+          filter: isCandDimmed ? "saturate(0.55)" : undefined,
+          transition: "opacity 220ms ease-out, filter 220ms ease-out",
         }}
       >
         <MediaNode
