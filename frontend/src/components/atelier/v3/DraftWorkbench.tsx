@@ -84,6 +84,11 @@ interface Props {
   /** Callback when the user clicks a take in the strip. Caller should
    *  promote that take to "primary" (e.g. store.selectCandidate). */
   onPickTake?: (takeId: string) => void;
+  /** v0.6.2 — fired when the user presses the output PortDot. Wired by
+   *  the shell to handlePortDragOut so the visible dot becomes the
+   *  drag source for connections, instead of the surrounding card
+   *  moving. */
+  onPortDown?: (event: React.PointerEvent) => void;
 }
 
 export function DraftWorkbench({
@@ -117,6 +122,7 @@ export function DraftWorkbench({
   staleRefCount = 0,
   takes,
   onPickTake,
+  onPortDown,
 }: Props) {
   // Title row (rename) — same affordance as DraftNode so the muscle
   // memory carries over. Double-click to rename, Enter commits, Esc
@@ -160,6 +166,16 @@ export function DraftWorkbench({
       role="button"
       tabIndex={0}
       aria-label={`Draft workbench: ${intent}`}
+      // v0.6.2 — SelectionActionBar anchors via `data-atelier-workbench`
+      // (preferred) before falling back to `data-atelier-node`. The
+      // workbench root is `position: absolute` + `transform:translate(x,y)`
+      // + `w-[560px]`, so `getBoundingClientRect()` returns its TRUE
+      // painted screen rect. The outer AtelierShell wrapper that carries
+      // `data-atelier-node` is a static, 0×0 shell whose rect doesn't
+      // reflect this card; querying the workbench attribute first puts
+      // the action bar at the actual top edge instead of inside the
+      // prompt textarea.
+      data-atelier-workbench={id}
       onPointerDown={(event) => {
         event.stopPropagation();
         onSelect?.(id);
@@ -195,11 +211,21 @@ export function DraftWorkbench({
           the user immediately reads "drag from here to connect" — the fix for
           the user's "节点之间如何连线？？" question. On hover the dot scales
           and a soft halo ring fades in so the affordance is unmistakable. */}
+      {/* v0.6.2: the wrapper div carries data-port so the shell's capture-
+          phase node-drag handler bails for pointerdowns landing on the 20px
+          hit halo (not just the inner 9px dot). The onPointerDown now drives
+          handlePortDragOut directly via onPortDown — pure stopPropagation
+          would NOT defeat the capture-phase ancestor, so the wrapper has to
+          OWN the gesture, not just block it. */}
       <div
         role="button"
         aria-label="Output port — drag to connect"
+        data-port="output"
         data-tip="Drag to connect"
-        onPointerDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onPortDown?.(e);
+        }}
         className="btn-tip absolute -right-[5px] top-1/2 z-20 grid h-5 w-5 -translate-y-1/2 cursor-grab place-items-center rounded-full transition-all duration-150 hover:scale-125 hover:bg-[rgba(91,157,255,0.06)] hover:shadow-[0_0_0_3px_rgba(91,157,255,0.18),0_0_14px_rgba(91,157,255,0.5)] active:cursor-grabbing"
       >
         <PortDot kind="output" size={9} />

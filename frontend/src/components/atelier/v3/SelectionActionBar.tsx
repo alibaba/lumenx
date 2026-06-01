@@ -148,19 +148,50 @@ export function SelectionActionBar({ kind, nodeId, x, y, width, onAct }: Props) 
 
   // Re-measure on selection change AND on any pan/zoom/scroll that
   // re-renders the parent (x/y/width recompute → effect re-fires).
+  //
+  // v0.6.2 anchor resolution order:
+  //   1. `[data-atelier-workbench="${nodeId}"]` — the EXPANDED workbench
+  //      root for a selected draft. This element is `position: absolute`
+  //      + `transform: translate(x,y)` + a real width, so its rect is
+  //      the true painted card. Without this preference, querySelector
+  //      hits the outer AtelierShell wrapper (also tagged with
+  //      `data-atelier-node` for selection wiring) which is a static,
+  //      0×0 shell whose rect collapses to the world flow origin and
+  //      causes the bar to land inside the workbench textarea.
+  //   2. `[data-atelier-node="${nodeId}"]` — compact cards and virtual
+  //      candidate tiles. For those, the data attribute already sits on
+  //      a `position:absolute` card with real dimensions, so a single
+  //      lookup is enough.
+  //
+  // ResizeObserver below also re-measures while the workbench plays its
+  // 360ms `atelier-workbench-in` grow animation, keeping the bar's
+  // horizontal center aligned through the expansion.
   useLayoutEffect(() => {
     if (typeof document === "undefined") return;
     if (!nodeId) return;
-    const el = document.querySelector(`[data-atelier-node="${nodeId}"]`) as HTMLElement | null;
+    const el =
+      (document.querySelector(`[data-atelier-workbench="${nodeId}"]`) as HTMLElement | null) ??
+      (document.querySelector(`[data-atelier-node="${nodeId}"]`) as HTMLElement | null);
     if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const desiredTop = rect.top - 36;
-    if (desiredTop < 12) {
-      setPos({ left: centerX, top: 12, pinnedTop: true });
-    } else {
-      setPos({ left: centerX, top: desiredTop, pinnedTop: false });
-    }
+    const place = () => {
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const desiredTop = rect.top - 36;
+      if (desiredTop < 12) {
+        setPos({ left: centerX, top: 12, pinnedTop: true });
+      } else {
+        setPos({ left: centerX, top: desiredTop, pinnedTop: false });
+      }
+    };
+    place();
+    // ResizeObserver covers the workbench grow-in animation (and any
+    // future content-driven height/width changes) so the bar tracks the
+    // top edge throughout the transition instead of pinning to the
+    // pre-animation rect.
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => place());
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [nodeId, x, y, width]);
 
   return (

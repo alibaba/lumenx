@@ -104,10 +104,17 @@ export function renderNode(
    *  shell. The matching node renders in editing-mode (chrome only) so the
    *  overlaid textarea isn't doubled with the underlying body. */
   editingTextNodeId?: string | null,
+  /** v0.6.2 — connection drag wiring. The shell binds the AtelierNode and
+   *  fires handlePortDragOut so the visible PortDot inside MediaNode acts
+   *  as the drag source. Without this the dot has no pointerdown handler
+   *  and the user's gesture goes nowhere (since the node wrapper's
+   *  capture-phase handler now bails on [data-port] origins). */
+  onPortDown?: (node: AtelierNode, event: React.PointerEvent) => void,
 ): React.ReactNode {
   const isSelected = selectedIds.has(node.id);
   const onSelect = () => select(node.id);
   const isEditingThis = editingTextNodeId === node.id;
+  const portHandler = onPortDown ? (event: React.PointerEvent) => onPortDown(node, event) : undefined;
 
   if (node.type === "image") {
     const view = toMediaNodeView(node, { selectedNodeId: null });
@@ -131,6 +138,7 @@ export function renderNode(
         onSelect={onSelect}
         onUpload={isEmptyDraft && imageActions ? imageActions.onUpload : undefined}
         onGenerate={isEmptyDraft && imageActions ? imageActions.onGenerate : undefined}
+        onPortDown={portHandler}
       />
     );
   }
@@ -152,6 +160,7 @@ export function renderNode(
         width={view.width}
         height={view.height}
         onSelect={onSelect}
+        onPortDown={portHandler}
       />
     );
   }
@@ -251,6 +260,7 @@ export function renderNode(
           onDetachRef={(url) => {
             void useAtelierStore.getState().detachReferenceNode(node.id, url).catch(() => {});
           }}
+          onPortDown={portHandler}
         />
       );
     }
@@ -303,6 +313,7 @@ export function renderNode(
           width={view.width ? Math.min(view.width, 240) : undefined}
           height={view.height ? Math.min(view.height, 136) : undefined}
           onSelect={onSelect}
+          onPortDown={portHandler}
         />
       );
     }
@@ -324,6 +335,10 @@ export function renderCandidatesAsMediaNodes(
   // constellation. Passed in from the shell so this renderer doesn't have
   // to know about hoveredNodeId / selectedNodeId / link graph.
   focalDim?: { focalNodeId: string | null; relatedKeys: Set<string> },
+  /** v0.6.2 — connection drag wiring for candidate takes. The shell
+   *  builds a virtual AtelierNode for the candidate id (parent::cand::id)
+   *  so handlePortDragOut treats it as an isTakeSource. */
+  onPortDown?: (candidateNodeKey: string, event: React.PointerEvent) => void,
 ): React.ReactNode[] {
   if (node.type !== "video") return [];
   const candidates = readCandidates(node);
@@ -455,6 +470,7 @@ export function renderCandidatesAsMediaNodes(
               ? () => onCancel(node.id, c.id)
               : undefined
           }
+          onPortDown={onPortDown ? (event) => onPortDown(candKey, event) : undefined}
         />
       </div>
     );

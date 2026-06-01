@@ -2000,6 +2000,16 @@ export function AtelierShellV3() {
     const tag = (event.target as HTMLElement).tagName;
     if (tag === "TEXTAREA" || tag === "INPUT" || tag === "BUTTON") return;
 
+    // v0.6.2 fix: capture-phase handler beats the bubble-phase pointerdown
+    // wired on the visible PortDot (NodePort.tsx). If the pointer origin is
+    // inside a [data-port] element, bail out completely so the node never
+    // claims the gesture as a drag — the PortDot's own onPointerDown will
+    // fire on the bubble and start the connection drag instead. Without this
+    // early-return the whole node moves when the user tries to drag from the
+    // visible output dot, which is what the v0.6.1 affordance promised but
+    // didn't deliver.
+    if ((event.target as HTMLElement).closest("[data-port]")) return;
+
     // Plain click on a node that's already in a multi-selection (size > 1):
     // preserve the selection and start a *group* drag. If the clicked node
     // wasn't the primary, promote it to primary (and demote the old primary
@@ -3563,17 +3573,21 @@ export function AtelierShellV3() {
         />
       </RailPanel>
 
-      {/* Top brand bar — Atelier wordmark + project picker on the left,
-          share / credits / profile placeholders on the right. Replaces
-          the previous bare top-[60px] picker. Spans from the rail's
-          right edge to just inside the agent right rail. The picker
-          dropdown still anchors below the picker pill (top-10 left-0
-          relative to the picker's wrapper div). */}
+      {/* v0.6.2 — RHTV-style bare-canvas header.
+          The whole region used to be one giant rounded-full pill with
+          border + bg + backdrop-blur (the "white-line ceiling" the user
+          red-boxed). That bordered chrome is gone now: header items sit
+          directly on the canvas, each child gets its own per-element
+          hover plate (hover:bg-white/[0.06]) instead of the entire
+          cluster shouting from inside a permanent pill. The project
+          picker keeps its button-level border because it IS an
+          actionable dropdown trigger — the inner pill is the only chrome
+          left, but no outer pill wraps it. */}
       {project ? (
         <header
           role="banner"
           aria-label="Atelier header"
-          className="absolute left-[80px] top-3 z-30 flex h-10 items-center gap-2 rounded-full border border-white/8 bg-[#141416]/88 pl-3 pr-1.5 shadow-[0_8px_22px_-14px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.45),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl"
+          className="absolute left-[80px] top-3 z-30 flex h-10 items-center gap-3"
           style={{ right: agentCollapsed ? 96 : 420 }}
         >
           {/* LumenX wordmark — v0.5.5 sentence-case Inter, matches Flova
@@ -3585,14 +3599,13 @@ export function AtelierShellV3() {
             <span className="px-1.5 text-white/30">·</span>
             <span className="text-white/70">Atelier</span>
           </span>
-          <span aria-hidden="true" className="h-4 w-px bg-white/8" />
           <div className="relative">
           <button
             type="button"
             aria-label="Switch project"
             aria-expanded={showProjectPicker}
             onClick={() => setShowProjectPicker((v) => !v)}
-            className="btn-tip inline-flex items-center gap-2 rounded-full border border-white/8 bg-[#0c0c10]/92 px-2.5 py-[5px] text-foreground transition-colors hover:bg-[#1a1a1d]"
+            className="btn-tip inline-flex items-center gap-2 rounded-md px-2 py-1 text-foreground transition-colors hover:bg-white/[0.06]"
             data-tip="Switch project"
           >
             <FolderOpen size={11} className="text-text-muted/85" aria-hidden="true" />
@@ -4422,7 +4435,15 @@ export function AtelierShellV3() {
                   onGenerate: () => {
                     pushToast("info", "Generate from prompt (T2I) is coming next.");
                   },
-                }, editingIdeaId)}
+                }, editingIdeaId, (srcNode, event) => {
+                  // v0.6.2 — output PortDot of a MediaNode kicked off a
+                  // connection drag. Read screen coords off the dot's own
+                  // bounding rect so the drag-line origin lands exactly on
+                  // the visible port (not the node center).
+                  const el = event.currentTarget as HTMLElement;
+                  const r = el.getBoundingClientRect();
+                  handlePortDragOut(event, srcNode, r.left + r.width / 2, r.top + r.height / 2);
+                })}
               </div>
             );
           })}
@@ -4496,6 +4517,23 @@ export function AtelierShellV3() {
               // logic. relatedKeys already includes the parent video's
               // own candidate ids when the parent is focal.
               { focalNodeId, relatedKeys: relatedToFocal },
+              (candidateNodeKey, event) => {
+                // v0.6.2 — output PortDot of a virtual candidate take.
+                // handlePortDragOut needs an AtelierNode-shaped source so
+                // it can detect isTakeSource via parseCandidateNodeId; the
+                // candidateNodeKey is the parent::cand::id form, which is
+                // what parseCandidateNodeId expects. We stub just enough
+                // (id + type) so the source != image branch and source.id
+                // parsing both work.
+                const el = event.currentTarget as HTMLElement;
+                const r = el.getBoundingClientRect();
+                const stub = {
+                  id: candidateNodeKey,
+                  type: "video",
+                  media_urls: [],
+                } as unknown as AtelierNode;
+                handlePortDragOut(event, stub, r.left + r.width / 2, r.top + r.height / 2);
+              },
             ),
           )}
 
@@ -4679,6 +4717,20 @@ export function AtelierShellV3() {
                     .catch((err: unknown) =>
                       pushToast("error", `Pick take failed: ${err instanceof Error ? err.message : String(err)}`),
                     );
+                }}
+                onPortDown={(event) => {
+                  // v0.6.2 — workbench's own output port becomes the
+                  // connection drag source. Anchor the beam on the
+                  // visible port (not the card center) by reading the
+                  // wrapper's bounding rect at pointerdown.
+                  const el = event.currentTarget as HTMLElement;
+                  const r = el.getBoundingClientRect();
+                  handlePortDragOut(
+                    event,
+                    selectedNode,
+                    r.left + r.width / 2,
+                    r.top + r.height / 2,
+                  );
                 }}
               />
             </div>
@@ -5197,10 +5249,15 @@ export function AtelierShellV3() {
           hovered target, both ports light primary to confirm the
           landing zone. */}
       {(() => {
-        const candidate = selectedNode
-          ? selectedNode
-          : hoveredNodeId
-            ? (project?.nodes.find((n) => n.id === hoveredNodeId) ?? null)
+        // v0.6.2: prefer the hovered node over the selected node. The
+        // affordance the user is about to click on lives on whichever node
+        // they're pointing at — anchoring to the orthogonal selection meant
+        // the overlay floated on a different node entirely, leaving the
+        // hovered node's port unprotected (and so node-drag won the race).
+        const candidate = hoveredNodeId
+          ? (project?.nodes.find((n) => n.id === hoveredNodeId) ?? null)
+          : selectedNode
+            ? selectedNode
             : null;
         if (!candidate) return null;
         if (connectDragRef.current?.sourceNodeId === candidate.id) return null;
@@ -5420,17 +5477,20 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Sequence Strip — bottom rail. Outer surface uses the cinematic
-          chrome vocabulary (1px white/8 hairline + inset top edge highlight
-          + layered shadow) so it reads as a real surface, not a glass card.
-          Drop target: HTML5-draggable completed takes from the canvas can
-          be dropped here to append to the sequence (handler reads the
-          custom application/x-atelier-take mime). Visibility toggled via
-          the LeftRailV3 Sequence mode button (Sprint D). */}
+      {/* Sequence Strip — bottom rail. v0.6.2: stripped the floating
+          card chrome (atelier-chrome-opaque + border + shadow + rounded-2xl)
+          per RHTV-style: thumbnails sit directly on the canvas, the outer
+          rail is invisible until a drop is in flight. Active drop-target
+          state still highlights via ring-atelier-brand-400 — the only time
+          this surface visibly announces itself. Drop target: HTML5-draggable
+          completed takes from the canvas can be dropped here to append to
+          the sequence (handler reads the custom application/x-atelier-take
+          mime). Visibility toggled via the LeftRailV3 Sequence mode button
+          (Sprint D). */}
       {sequenceVisible ? (
       <div
-        className={`atelier-chrome-opaque absolute bottom-16 left-[280px] z-20 rounded-2xl border p-2.5 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)] transition-colors animate-atelier-popover-in motion-reduce:animate-none ${
-          seqDropActive ? "border-atelier-brand-400/60 ring-2 ring-atelier-brand-400/35" : "border-white/8"
+        className={`absolute bottom-16 left-[280px] z-20 p-2.5 transition-colors animate-atelier-popover-in motion-reduce:animate-none ${
+          seqDropActive ? "rounded-2xl ring-2 ring-atelier-brand-400/35" : ""
         }`}
         style={{ right: agentCollapsed ? 88 : 412 }}
         onDragEnter={(e) => {

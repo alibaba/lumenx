@@ -67,7 +67,10 @@ function PermissionSegmented({
     <div
       role="radiogroup"
       aria-label="Permission mode"
-      className="inline-flex items-center gap-px rounded-full border border-white/8 bg-black/30 p-[3px]"
+      // v0.6.2 — dropped the pill-in-pill recipe (rounded-full + border +
+      // bg). Segmented control reads as a bare row of toggles; the active
+      // segment carries its own brand plate.
+      className="inline-flex items-center gap-px p-[3px]"
     >
       {PERMISSION_ORDER.map((m) => (
         <button
@@ -105,7 +108,10 @@ export function RightRailV3({
       <aside
         role="region"
         aria-label="Atelier Agent (collapsed)"
-        className="absolute right-4 top-4 bottom-4 z-30 flex w-[56px] flex-col items-center justify-start gap-3 rounded-2xl atelier-chrome-opaque py-3 shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+        // v0.6.2 — RHTV bare-canvas: dropped the rounded-2xl + shadow
+        // floating-card chrome. The collapsed rail is now just an icon
+        // column floating on the canvas, no surrounding plate.
+        className="absolute right-4 top-4 bottom-4 z-30 flex w-[56px] flex-col items-center justify-start gap-3 py-3"
       >
         <button
           aria-label="Expand panel"
@@ -132,7 +138,12 @@ export function RightRailV3({
     <aside
       role="region"
       aria-label="Atelier Agent"
-      className="atelier-chrome-opaque absolute right-4 top-4 bottom-4 z-30 flex w-[380px] flex-col overflow-hidden rounded-2xl shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+      // v0.6.2 — keep the frosted darker bg (atelier-chrome-opaque)
+      // because the agent panel still needs to read as a distinct region
+      // for legibility (live-region tab order, focus trap), but the
+      // rounded-2xl + shadow floating-card chrome is gone per RHTV-style.
+      // No outer white border. The dark plate alone defines the zone.
+      className="atelier-chrome-opaque absolute right-4 top-4 bottom-4 z-30 flex w-[380px] flex-col overflow-hidden"
     >
       {/* Top accent — primary→transparent gradient hairline. Identifies the
           rail as the "agent zone" without shouting. */}

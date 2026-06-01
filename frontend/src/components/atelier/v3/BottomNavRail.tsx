@@ -40,10 +40,14 @@ export function BottomNavRail({
     <div
       role="toolbar"
       aria-label="Canvas navigation"
-      // left-[80px] clears the 64px-wide left icon rail + a 16px gutter (mockup
-      // .bottom-rail sits at left:78px for the same reason). At left-4 (16px) the
-      // pill overlapped the rail's undo/redo/help controls.
-      className="absolute left-[80px] bottom-4 z-30 flex h-9 items-center gap-0.5 rounded-full border border-white/8 bg-[#141416]/96 px-1 shadow-[0_14px_30px_-18px_rgba(0,0,0,0.7),0_2px_6px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
+      // v0.6.2 — RHTV bare-canvas: dropped the rounded-full border + bg
+      // + shadow pill. The controls float directly on the canvas; each
+      // already carries its own hover plate via HIT_QUIET / snap / minimap
+      // classes, so the per-element hover affordance is intact while the
+      // permanent pill chrome is gone.
+      // left-[80px] clears the 64px-wide left icon rail + a 16px gutter
+      // (mockup .bottom-rail sits at left:78px for the same reason).
+      className="absolute left-[80px] bottom-4 z-30 flex h-9 items-center gap-0.5"
     >
       <button
         type="button"

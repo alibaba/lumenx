@@ -711,8 +711,10 @@ export function AgentPanelV3({ pushToast }: Props) {
         ) : null}
       </div>
 
-      {/* Composer */}
-      <div className="border-t border-white/6 px-3 pb-3 pt-2.5">
+      {/* Composer — v0.6.2: dropped the heavy top hairline separator;
+          the composer flows directly out of the message history without
+          a chrome boundary. */}
+      <div className="px-3 pb-3 pt-2.5">
         {/* Canvas-context chip — makes the agent visibly "read" the canvas: when
             a node is selected the agent grounds its plan on it (selected_node_id
             is already passed to the planner). Shows WHICH node so the resident
@@ -731,7 +733,12 @@ export function AgentPanelV3({ pushToast }: Props) {
             </div>
           );
         })()}
-        <div className="overflow-hidden rounded-[10px] border border-white/8 bg-black/25 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]">
+        {/* v0.6.2 — dropped the bordered card recipe around the composer
+            (the bottom-right card the user red-boxed). The textarea now
+            sits directly on the agent panel's frosted bg; only the
+            internal toolbar carries a hairline separator since textarea +
+            tools are different affordance groups. */}
+        <div className="overflow-hidden">
           <textarea
             rows={2}
             value={draft}
@@ -749,7 +756,7 @@ export function AgentPanelV3({ pushToast }: Props) {
             }}
             className="block w-full resize-none bg-transparent px-3 pt-2.5 pb-1 text-[13px] leading-[1.55] text-foreground/95 outline-none placeholder:text-text-muted/85 disabled:cursor-not-allowed"
           />
-          <div className="flex items-center justify-between gap-2 border-t border-white/5 px-2 py-1.5">
+          <div className="flex items-center justify-between gap-2 px-2 py-1.5">
             <div className="flex items-center gap-2">
               <button
                 className="btn-tip inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"

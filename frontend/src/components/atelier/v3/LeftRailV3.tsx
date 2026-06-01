@@ -92,7 +92,14 @@ export function LeftRailV3({
     <aside
       role="toolbar"
       aria-label="Atelier mode rail"
-      className="absolute left-0 top-0 bottom-0 z-30 flex w-[64px] flex-col items-center justify-between border-r border-white/8 bg-[#0c0c10]/96 py-3 shadow-[2px_0_8px_-4px_rgba(0,0,0,0.5),inset_-1px_0_0_0_rgba(255,255,255,0.04)]"
+      // v0.6.2 — RHTV-style bare-canvas rail.
+      // The previous design was a full-height vertical slab with
+      // border-r + bg + shadow — the visible white-edge column the
+      // user red-boxed. Now the rail is invisible structurally: just a
+      // narrow flex column at left edge, items float directly on the
+      // canvas and each carry their own hover plate. Active mode keeps
+      // its brand-tinted plate at the per-item level (line ~120 below).
+      className="absolute left-0 top-0 bottom-0 z-30 flex w-[64px] flex-col items-center justify-between py-3"
     >
       {/* Top — brand mark + mode buttons */}
       <div className="flex flex-col items-center gap-0.5">

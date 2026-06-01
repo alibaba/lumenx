@@ -41,6 +41,13 @@ interface Props {
    *  the spinner. Caller is responsible for hitting the backend cancel
    *  endpoint and refreshing local state. */
   onCancel?: (id: string) => Promise<void> | void;
+  /** v0.6.2 — when present, the output PortDot itself becomes the drag
+   *  source for connection creation. The shell binds this to
+   *  handlePortDragOut so the visible 7px dot starts the drag the moment
+   *  the user mouses down on it, no reliance on a separate canvas-level
+   *  overlay handle. The wrapper's capture-phase handler bails on
+   *  [data-port] origins so node-drag doesn't steal the gesture. */
+  onPortDown?: (event: React.PointerEvent) => void;
 }
 
 const DEFAULT_SIZE: Record<MediaKind, { w: number; h: number }> = {
@@ -219,6 +226,7 @@ export function MediaNode({
   retryModelOptions,
   onRetryWithModel,
   onCancel,
+  onPortDown,
 }: Props) {
   const def = DEFAULT_SIZE[kind];
   const w = Math.max(40, Math.min(width ?? def.w, MAX_WIDTH));
@@ -412,12 +420,14 @@ export function MediaNode({
           </div>
           {/* Output port — completed media exposes a blue port on the right
               edge so beams plug in. Card is overflow-hidden, so the dot sits
-              just inside at right-1. v0.6.1: interactive — hover grows + glows
-              + grab cursor + "Drag to connect" tooltip so the port reads as a
-              drag handle, not decoration. */}
+              just inside at right-1. v0.6.2: the dot IS the drag source now
+              — onPortDown wires straight to handlePortDragOut on the shell,
+              and the wrapper's capture-phase node-drag handler bails on
+              [data-port] origins so this gesture wins the race. */}
           <PortDot
             kind="output"
             interactive
+            onPointerDown={onPortDown}
             className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
           />
         </div>
@@ -542,14 +552,15 @@ export function MediaNode({
         </div>
         {/* Output port — completed image cards expose a blue port on the
             right edge so beams plug in. Card is overflow-hidden, so the dot
-            sits just inside at right-1 rather than half-outside. v0.6.1:
-            interactive affordance — hover/cursor/tooltip signal "drag from
-            here" (paired with the canvas-level Plus handle in AtelierShellV3
-            which actually fires the connect drag). */}
+            sits just inside at right-1 rather than half-outside. v0.6.2:
+            the dot is the drag source — onPortDown fires the connection
+            drag directly; the wrapper's capture-phase pointerdown handler
+            bails on [data-port] origins so node-drag never steals this. */}
         {status === "completed" ? (
           <PortDot
             kind="output"
             interactive
+            onPointerDown={onPortDown}
             className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
           />
         ) : null}
@@ -799,9 +810,16 @@ export function MediaNode({
 
       {/* Output port — completed media (video / audio) exposes a blue port
           on the right edge so beams plug in. Box is overflow-hidden, so the
-          dot sits just inside at right-1 rather than half-outside. */}
+          dot sits just inside at right-1 rather than half-outside. v0.6.2:
+          interactive + onPortDown so the dot itself starts the connection
+          drag (capture-phase node-drag bails on [data-port] origins). */}
       {src && status === "completed" ? (
-        <PortDot kind="output" className="absolute right-1 top-1/2 -translate-y-1/2 z-10" />
+        <PortDot
+          kind="output"
+          interactive
+          onPointerDown={onPortDown}
+          className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
+        />
       ) : null}
     </div>
   );
