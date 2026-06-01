@@ -101,9 +101,9 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
       style={style}
     >
       <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400 via-atelier-brand-400/45 to-transparent" />
-      <div className="flex items-center justify-between gap-2 border-b border-dashed border-white/8 px-3 py-1.5">
-        <span aria-hidden="true" className="font-mono text-[8.5px] font-medium uppercase tracking-[0.32em] text-text-muted/85">
-          Atelier · Advanced · {modelLabel}
+      <div className="flex items-center justify-between gap-2 border-b border-white/8 px-3 py-2">
+        <span aria-hidden="true" className="text-[11px] text-white/55">
+          Advanced · <span className="text-white/70">{modelLabel}</span>
         </span>
         <button
           type="button"
@@ -116,14 +116,14 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
       </div>
 
       {!anyField ? (
-        <div className="px-3.5 py-3 text-center font-mono text-[10px] uppercase tracking-[0.22em] text-text-muted/85">
+        <div className="px-3.5 py-3 text-center text-[11px] italic text-white/45">
           No advanced params for this model
         </div>
       ) : (
         <div className="space-y-3 px-3.5 py-3">
           {supportsNegative ? (
             <div>
-              <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
+              <label className="mb-1 block text-[11px] text-white/55">
                 Negative prompt
               </label>
               <textarea
@@ -138,7 +138,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
 
           {supportsSeed ? (
             <div>
-              <label className="mb-1 flex items-center justify-between gap-2 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
+              <label className="mb-1 flex items-center justify-between gap-2 text-[11px] text-white/55">
                 <span>Seed</span>
                 <span className="font-display text-[10px] tracking-tight text-text-muted/65">
                   {seedLocked ? "Locked" : "Random"}
@@ -188,7 +188,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
 
           {cfgScale ? (
             <div>
-              <label className="mb-1 flex items-center justify-between gap-2 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
+              <label className="mb-1 flex items-center justify-between gap-2 text-[11px] text-white/55">
                 <span>Guidance · cfgScale</span>
                 <span className="font-display text-[10px] tracking-tight text-foreground/95">
                   {(value.cfgScale ?? cfgScale.default).toFixed(1)}
@@ -208,7 +208,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
 
           {supportsMode && modeOptions.length > 0 ? (
             <div>
-              <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
+              <label className="mb-1 block text-[11px] text-white/55">
                 Mode
               </label>
               <div className="flex items-center gap-1">
@@ -219,7 +219,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
                       key={opt}
                       type="button"
                       onClick={() => onChange({ ...value, mode: opt })}
-                      className={`flex-1 rounded-md px-2 py-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
+                      className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
                         active
                           ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                           : "border border-white/8 text-text-muted hover:bg-white/[0.04] hover:text-foreground"
@@ -235,7 +235,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
 
           {supportsMovement && movementOptions.length > 0 ? (
             <div>
-              <label className="mb-1 block font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
+              <label className="mb-1 block text-[11px] text-white/55">
                 Movement
               </label>
               <div className="flex flex-wrap items-center gap-1">
@@ -248,7 +248,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
                       key={opt}
                       type="button"
                       onClick={() => onChange({ ...value, movementAmplitude: opt })}
-                      className={`rounded-md px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] transition-colors ${
+                      className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
                         active
                           ? "bg-atelier-brand-400/15 text-atelier-brand-400 shadow-[inset_0_0_0_1px_rgba(59,107,255,0.3)]"
                           : "border border-white/8 text-text-muted hover:bg-white/[0.04] hover:text-foreground"
@@ -263,7 +263,7 @@ export function AdvancedPopover({ open, modelLabel, value, onChange, onClose, an
           ) : null}
 
           {supportsSound ? (
-            <label className="flex items-center justify-between gap-2 font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-text-muted/85">
+            <label className="flex items-center justify-between gap-2 text-[11px] text-white/55">
               <span>Sound</span>
               <input
                 type="checkbox"

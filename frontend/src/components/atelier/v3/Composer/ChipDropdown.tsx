@@ -39,8 +39,8 @@ export function ChipDropdown({ label, value, options, onChange, primary, disable
         <ChevronDown size={9} className="text-text-muted/70 transition-transform duration-200 group-open:rotate-180" aria-hidden="true" />
       </summary>
       <div className="absolute left-0 top-full z-50 mt-1.5 min-w-[180px] origin-top overflow-hidden rounded-md border border-white/8 bg-[#141416] shadow-[0_18px_36px_-20px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl animate-atelier-popover-in motion-reduce:animate-none">
-        <div className="border-b border-dashed border-white/8 px-2.5 py-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.28em] text-text-muted/85">
-          Field · {label}
+        <div className="border-b border-white/8 px-2.5 py-2 text-[11px] text-white/45">
+          {label}
         </div>
         <div className="p-1">
           {children ?? options?.map(o => (
@@ -52,7 +52,7 @@ export function ChipDropdown({ label, value, options, onChange, primary, disable
               }`}>
               <span>{o.label}</span>
               {o.value === value ? (
-                <span aria-hidden="true" className="font-mono text-[9px] uppercase tracking-[0.24em] text-atelier-brand-400/85">
+                <span aria-hidden="true" className="text-[10px] tracking-[0.01em] text-atelier-brand-400/85">
                   Current
                 </span>
               ) : null}

@@ -6014,12 +6014,12 @@ export function AtelierShellV3() {
                             .catch((err: unknown) => pushToast("error", `Select failed: ${err instanceof Error ? err.message : String(err)}`));
                           close();
                         }}
-                        className="rounded-full bg-atelier-brand-400 px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_12px_-4px_rgba(59,107,255,0.5)] transition-colors hover:bg-atelier-brand-400/92"
+                        className="rounded-full bg-atelier-brand-400 px-2.5 py-1 text-[11px] font-medium text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_12px_-4px_rgba(59,107,255,0.5)] transition-colors hover:bg-atelier-brand-400/92"
                       >
                         Select as take
                       </button>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/12 px-2 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-emerald-200/95">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/12 px-2 py-1 text-[10px] font-medium tracking-[0.01em] text-emerald-200/95">
                         <Check size={10} aria-hidden="true" /> Selected
                       </span>
                     )}
@@ -6031,7 +6031,7 @@ export function AtelierShellV3() {
                           .catch((err: unknown) => pushToast("error", `Branch failed: ${err instanceof Error ? err.message : String(err)}`));
                         close();
                       }}
-                      className="rounded-full px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
+                      className="rounded-full px-2 py-1 text-[11px] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
                     >
                       Branch
                     </button>
@@ -6044,7 +6044,7 @@ export function AtelierShellV3() {
                         });
                         pushToast("success", "Added to Sequence");
                       }}
-                      className="rounded-full px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
+                      className="rounded-full px-2 py-1 text-[11px] text-text-secondary transition-colors hover:bg-hover-bg hover:text-foreground"
                     >
                       + Sequence
                     </button>
@@ -6056,7 +6056,7 @@ export function AtelierShellV3() {
                           .catch((err: unknown) => pushToast("error", `Delete failed: ${err instanceof Error ? err.message : String(err)}`));
                         close();
                       }}
-                      className="rounded-full bg-red-400/12 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-red-200/95 transition-colors hover:bg-red-400/22"
+                      className="rounded-full bg-red-400/12 px-2 py-1 text-[11px] text-red-200/95 transition-colors hover:bg-red-400/22"
                     >
                       Delete
                     </button>
@@ -6142,7 +6142,7 @@ export function AtelierShellV3() {
             <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400 via-atelier-brand-400/45 to-transparent" />
             <div className="px-4 pb-3 pt-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-atelier-brand-400/85">
+                <span className="text-[11px] font-medium text-atelier-brand-400/85">
                   {step.tag.replace(/Step (\d+) of (\d+)/, "Step $1 / $2")}
                 </span>
                 <button
@@ -6174,7 +6174,7 @@ export function AtelierShellV3() {
                   <button
                     type="button"
                     onClick={dismissOnboarding}
-                    className="rounded-full px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-muted/85 transition-colors hover:bg-hover-bg hover:text-foreground"
+                    className="rounded-full px-2 py-1 text-[11px] text-text-muted/85 transition-colors hover:bg-hover-bg hover:text-foreground"
                   >
                     Skip
                   </button>
@@ -6188,7 +6188,7 @@ export function AtelierShellV3() {
                         advanceOnboarding();
                       }
                     }}
-                    className="rounded-full bg-atelier-brand-400 px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_10px_-3px_rgba(59,107,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_14px_-3px_rgba(59,107,255,0.6)] active:scale-[0.96]"
+                    className="rounded-full bg-atelier-brand-400 px-2.5 py-1 text-[11px] font-medium text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_10px_-3px_rgba(59,107,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_14px_-3px_rgba(59,107,255,0.6)] active:scale-[0.96]"
                   >
                     {isLast ? "Shortcuts" : "Next"}
                   </button>
@@ -6313,7 +6313,7 @@ export function AtelierShellV3() {
                 }}
                 className="block w-full bg-transparent px-4 py-3 text-[14px] leading-[1.4] text-foreground outline-none placeholder:text-text-muted/85"
               />
-              <div className="border-t border-white/6 px-3 py-1 font-mono text-[8.5px] uppercase tracking-[0.28em] text-text-muted/85">
+              <div className="border-t border-white/6 px-3 py-1 text-[11px] text-text-muted/85">
                 {matches.length === 0 ? "No matches" : `${matches.length} match${matches.length === 1 ? "" : "es"}${allMatches.length > matches.length ? ` of ${allMatches.length}` : ""}`}
               </div>
               <ul role="listbox" className="max-h-[40vh] overflow-y-auto py-1">
@@ -6331,7 +6331,7 @@ export function AtelierShellV3() {
                       >
                         <span
                           aria-hidden="true"
-                          className="inline-flex shrink-0 items-center rounded-[3px] border border-dashed border-white/22 bg-black/40 px-1.5 py-[1px] font-mono text-[8.5px] font-medium uppercase tracking-[0.22em] text-text-muted/85"
+                          className="inline-flex shrink-0 items-center rounded-[3px] border border-dashed border-white/22 bg-black/40 px-1.5 py-[1px] text-[11px] font-medium text-text-muted/85"
                         >
                           {m.kind}
                         </span>
@@ -6350,7 +6350,7 @@ export function AtelierShellV3() {
                   );
                 })}
               </ul>
-              <div className="flex items-center justify-between border-t border-white/6 px-3 py-1.5 font-mono text-[8.5px] uppercase tracking-[0.22em] text-text-muted/70">
+              <div className="flex items-center justify-between border-t border-white/6 px-3 py-1.5 text-[11px] text-text-muted/70">
                 <span>Atelier · Search · No 001</span>
                 <span>↑↓ navigate · ↵ jump · esc close</span>
               </div>
@@ -6361,7 +6361,7 @@ export function AtelierShellV3() {
 
       {showHelp ? (() => {
         // Grouped sections — turns the wall of bindings into a learnable
-        // map. Sections are uppercase mono captions; rows are label / kbd
+        // map. Sections are quiet sentence-case captions; rows are label / kbd
         // pairs at typographic minor scale.
         const groups: Array<{ heading: string; items: Array<[string, string]> }> = [
           {
@@ -6462,7 +6462,7 @@ export function AtelierShellV3() {
               <div className="px-5 pb-4 pt-4">
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-baseline gap-3">
-                    <span className="font-mono text-[10px] font-medium uppercase tracking-[0.22em] text-atelier-brand-400/85">
+                    <span className="text-[11px] font-medium text-atelier-brand-400/85">
                       Atelier
                     </span>
                     <span className="font-display text-[15px] font-medium tracking-[-0.005em] text-foreground">
@@ -6481,7 +6481,7 @@ export function AtelierShellV3() {
                 <div className="grid grid-cols-2 gap-x-7 gap-y-5">
                   {groups.map((g) => (
                     <div key={g.heading}>
-                      <div className="mb-2 font-mono text-[9px] font-medium uppercase tracking-[0.22em] text-text-muted/80">
+                      <div className="mb-2 text-[11px] font-medium text-text-muted/80">
                         {g.heading}
                       </div>
                       <div className="space-y-1">
@@ -6540,7 +6540,7 @@ export function AtelierShellV3() {
           <div
             role="status"
             aria-live="polite"
-            className={`absolute top-4 z-30 inline-flex items-center gap-2 rounded-full border border-white/8 bg-[#141416]/92 px-2.5 py-[5px] font-mono text-[10px] uppercase tracking-[0.18em] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl transition-opacity duration-300 ${tone}`}
+            className={`absolute top-4 z-30 inline-flex items-center gap-2 rounded-full border border-white/8 bg-[#141416]/92 px-2.5 py-[5px] text-[10px] tracking-[0.01em] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] backdrop-blur-xl transition-opacity duration-300 ${tone}`}
             style={{ right: agentCollapsed ? 88 : 412 }}
           >
             <span aria-hidden="true" className={`h-[5px] w-[5px] rounded-full ${dotTone}`} />

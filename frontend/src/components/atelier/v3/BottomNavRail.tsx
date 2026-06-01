@@ -126,7 +126,7 @@ export function BottomNavRail({
         aria-label="Reset zoom to 100%"
         data-tip="Reset to 100%"
         onClick={() => onZoomChange(100)}
-        className="btn-tip ml-0.5 inline-flex h-6 items-center gap-1 rounded px-1.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.22em] text-text-muted/85 transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-text-muted/85"
+        className="btn-tip ml-0.5 inline-flex h-6 items-center gap-1 rounded px-2 text-[11px] text-white/55 transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:hover:bg-transparent disabled:hover:text-white/55"
         disabled={zoom === 100}
       >
         <span aria-hidden="true">Zoom</span>
