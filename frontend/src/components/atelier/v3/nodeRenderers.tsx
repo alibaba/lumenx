@@ -408,6 +408,7 @@ export function renderCandidatesAsMediaNodes(
       <div
         key={candKey}
         data-atelier-node={candKey}
+        data-atelier-dim={isCandDimmed ? "true" : undefined}
         draggable={c.status === "completed" && !!c.video_url}
         onDragStart={(e) => {
           if (c.status !== "completed" || !c.video_url) return;

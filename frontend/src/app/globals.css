@@ -117,7 +117,9 @@ html.dark {
   /* canvas — Flova-grade black vitrine (v0.5 target spec §1/§6). The stage is
      near-black; nodes + glowing edges are the only light. */
   --atelier-canvas-base: #08080a;
-  --atelier-canvas-dot:  rgba(255, 255, 255, 0.05);
+  /* v0.6.1: nudged 0.05 → 0.04 so the vignette layer underneath can breathe
+     without the dot grid washing out the brighter center. */
+  --atelier-canvas-dot:  rgba(255, 255, 255, 0.04);
 
   /* §v0.5 Flova node + port + beam system (docs/design/atelier-flova-target-spec.md) */
   --atelier-node-fill:   rgba(22, 22, 28, 0.66);  /* frosted node body */
@@ -261,14 +263,22 @@ html.dark {
   right: 0;
   width: 78%;
   height: 60%;
+  /* v0.6.1: soft TRANSPARENT core at 0% so the radial gradient has no sharp
+     peak — without this the blurred bright point bled through the workbench's
+     semi-transparent prompt textarea (bg-black/35) and read as a stray purple
+     dot floating in the prompt whitespace. Pushing the inner color stops out
+     a few % gives the gradient a haloed-around-nothing shape; the visible
+     colored wash on the header band is unchanged. Blur radius also bumped
+     slightly so any residual hot spot fully diffuses. */
   background:
     radial-gradient(ellipse 88% 100% at 64% 0%,
-      rgba(var(--atelier-bloom-1), calc(0.15 * var(--bloom-strength, 1))) 0%,
-      rgba(var(--atelier-bloom-2), calc(0.12 * var(--bloom-strength, 1))) 26%,
-      rgba(var(--atelier-bloom-3), calc(0.085 * var(--bloom-strength, 1))) 52%,
-      rgba(var(--atelier-bloom-4), calc(0.05 * var(--bloom-strength, 1))) 74%,
+      transparent 0%,
+      rgba(var(--atelier-bloom-1), calc(0.15 * var(--bloom-strength, 1))) 12%,
+      rgba(var(--atelier-bloom-2), calc(0.12 * var(--bloom-strength, 1))) 30%,
+      rgba(var(--atelier-bloom-3), calc(0.085 * var(--bloom-strength, 1))) 54%,
+      rgba(var(--atelier-bloom-4), calc(0.05 * var(--bloom-strength, 1))) 76%,
       transparent 92%);
-  filter: blur(calc(32px + 10px * var(--bloom-strength, 1)));
+  filter: blur(calc(42px + 12px * var(--bloom-strength, 1)));
   pointer-events: none;
   mix-blend-mode: screen;
   z-index: 0;
@@ -277,6 +287,17 @@ html.dark {
   transition: opacity 0.3s ease;
 }
 .atelier-opaque-shell.atelier-bloom::before { opacity: 1; }
+
+/* v0.6.1: when a node sits in the AMBIENT (focal-dimmed) state, its I/O port
+   dots fade even further than the node body so they stop reading as
+   "stray bright dots in dark canvas space". The wrapper already drops to
+   ~28% opacity; multiplying the dot's own opacity by ~0.35 lands the
+   effective brightness around 10% — visible if you look, invisible at a
+   glance. Targets the data-port primitives from NodePort.tsx. */
+[data-atelier-dim="true"] [data-port] {
+  opacity: 0.35;
+  transition: opacity 220ms ease-out;
+}
 
 .atelier-shell-header {
   position: relative;
@@ -295,6 +316,60 @@ html.dark {
   border-radius: 9px;
   padding: 18px 20px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+/* ── §port-handle — drag-to-connect affordance (v0.6.1) ──
+   Static PortDots are a fixed 7px circle. When the consumer marks them
+   `interactive`, we add three things on top WITHOUT moving the visual
+   center (so layout stays identical):
+     1. An invisible enlarged hit target via ::before (~26px square)
+        so the user doesn't have to land on a 7px dot.
+     2. Hover: scale 1.0 → 1.7 + amplified halo (per-kind blue/green/etc.
+        via --port-halo-hover CSS var the React primitive sets inline).
+     3. Cursor: grab idle, grabbing active.
+   The dot's own background + box-shadow are kept inline by the primitive
+   for portability; we override box-shadow with the var on hover and the
+   drop-target attribute selector for the drop state. */
+.atelier-port-handle {
+  position: relative;
+  cursor: grab;
+  transition: transform 150ms cubic-bezier(0.2, 0.7, 0.2, 1),
+              box-shadow 150ms ease;
+  will-change: transform;
+}
+.atelier-port-handle::before {
+  /* invisible enlarged hit target — extends the click zone ~10px in
+     every direction so a 7px dot becomes effectively 27×27. Stays
+     transparent so it doesn't disturb the visual. */
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+}
+.atelier-port-handle:hover {
+  transform: scale(1.7);
+  box-shadow: var(--port-halo-hover) !important;
+}
+.atelier-port-handle:active {
+  cursor: grabbing;
+  transform: scale(1.55);
+}
+/* Drop-target state — overrides hover so the green halo is unmistakable
+   even if the cursor happens to be over the input port (it usually is
+   when dragging to it). The data-drop-target attribute is set by the
+   primitive when its consumer flags the port as the live drop zone. */
+.atelier-port-handle[data-drop-target="true"] {
+  box-shadow: var(--port-halo-drop) !important;
+  transform: scale(1.4);
+}
+
+/* While a connect drag is in flight, force crosshair globally so the
+   cursor reads as "you're laying down a connection" instead of flipping
+   back to default the moment the pointer leaves the source handle.
+   Added/removed by the connect-drag lifecycle in AtelierShellV3. */
+body.atelier-connect-dragging,
+body.atelier-connect-dragging * {
+  cursor: crosshair !important;
 }
 
 /* ── §10.10.2 bloom tiers (v0.5.8 — Flova restraint) ──
@@ -512,13 +587,25 @@ html.dark {
    .atelier-endpoint-{cobalt,amber,violet} drop-shadows above are kept for the
    planned Pattern-B edge-endpoint bloom.) */
 
-/* ── v0.5 Flova canvas — black vitrine + 30px dotted grid (target spec §1) ── */
+/* ── v0.5 Flova canvas — black vitrine + 30px dotted grid (target spec §1) ──
+   v0.6.1 RHTV atmospheric uplift: layer a soft edge vignette UNDER the dot
+   grid so the canvas reads as a weighted vitrine (center slightly brighter
+   than the corners) instead of a flat tint. Base color (#08080a via
+   --atelier-canvas-base) is unchanged. Grid alpha is nudged via the
+   --atelier-canvas-dot token (no override here) so the vignette can breathe.
+   Stacking order (top → bottom):
+     1. 30px dotted grid (existing)
+     2. radial vignette ellipse — transparent at center, ~35% black at corners
+     3. canvas base color
+*/
 .atelier-canvas-bg {
   background:
     radial-gradient(circle, var(--atelier-canvas-dot) 1px, transparent 1px),
+    radial-gradient(ellipse 80% 60% at 50% 50%, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.35) 100%),
     var(--atelier-canvas-base);
-  background-size: 30px 30px, auto;
-  background-position: -15px -15px, 0 0;
+  background-size: 30px 30px, 100% 100%, auto;
+  background-position: -15px -15px, 0 0, 0 0;
+  background-repeat: repeat, no-repeat, repeat;
 }
 
 /* ── v0.5 frosted node shell — the single source of truth for the Flova node

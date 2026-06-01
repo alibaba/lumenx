@@ -125,6 +125,9 @@ function renderEdges(
     // a quiet thin grey hairline. Beam state = selected OR (related on hover).
     const beam = isSelected || (related && !!hoveredNodeId);
     const dimmed = dimUnrelated && !related && !isSelected;
+    // SVG id-safe key (linearGradient ids must avoid `:` `/` `?` etc that
+    // ref edge ids carry from their URL payload).
+    const safeEid = eid.replace(/[^a-zA-Z0-9_-]/g, "_");
     edges.push(
       <g
         key={`ref-${eid}`}
@@ -147,8 +150,36 @@ function renderEdges(
             <circle cx={x2} cy={y2} r={isSelected ? 9 : 6.5} fill="url(#beam-flare)" />
           </>
         ) : (
-          // ambient — barely-there white whisper (Flova calm)
-          <path d={d} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth={1} strokeLinecap="round" style={{ transition: "stroke 180ms ease-out" }} />
+          // v0.6.1 ambient — calm directional light beam (Flova restraint).
+          // Bumped from a 1px 0.10 alpha whisper to a 1.5px gradient that
+          // fades source→dest so users can *read* node connections at rest
+          // without lighting up the canvas. Endpoint dots mark wired ports
+          // even when the edge isn't hovered.
+          <>
+            <defs>
+              <linearGradient
+                id={`amb-ref-${safeEid}`}
+                gradientUnits="userSpaceOnUse"
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+              >
+                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.32" />
+                <stop offset="100%" stopColor="#ffffff" stopOpacity="0.12" />
+              </linearGradient>
+            </defs>
+            <path
+              d={d}
+              fill="none"
+              stroke={`url(#amb-ref-${safeEid})`}
+              strokeWidth={1.5}
+              strokeLinecap="round"
+              style={{ transition: "stroke 180ms ease-out" }}
+            />
+            <circle cx={x1} cy={y1} r={2.5} fill="rgba(255,255,255,0.30)" />
+            <circle cx={x2} cy={y2} r={2.5} fill="rgba(255,255,255,0.30)" />
+          </>
         )}
       </g>,
     );
@@ -186,23 +217,56 @@ function renderEdges(
       const failed = c.status === "failed";
       // v0.5: candidate spokes are quiet white beams (no glow — the ref edges
       // carry the focal glow); failed = red, in-flight = dashed marching white.
-      const stroke = failed
-        ? "rgba(240,97,109,0.6)"        // atelier-port-negative red
-        : "rgba(255,255,255,0.55)";     // white filament
+      // v0.6.1: white spokes get a source→dest gradient fade (~0.55 avg) so
+      // the wire reads as a directional light flow even at rest. Failed stays
+      // a flat red — status colour must remain unambiguous.
       const candKey = candidateNodeId(node.id, c.id);
+      const safeCandId = `${node.id}-${c.id}`.replace(/[^a-zA-Z0-9_-]/g, "_");
       const related = isRelated(node.id, candKey);
       const opacity = dimUnrelated && !related ? 0.12 : 1;
+      const d = `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+      const stroke = failed
+        ? "rgba(240,97,109,0.6)"
+        : `url(#amb-cand-${safeCandId})`;
       edges.push(
-        <path
+        <g
           key={`${node.id}-${c.id}`}
-          d={`M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`}
-          fill="none"
-          stroke={stroke}
-          strokeWidth={related && hoveredNodeId ? 2 : 1.5}
-          strokeDasharray={c.status === "completed" ? undefined : "6 4"}
-          className={inflight ? "animate-atelier-dash motion-reduce:animate-none" : undefined}
-          style={{ opacity, transition: "opacity 180ms ease-out, stroke-width 180ms" }}
-        />,
+          style={{ opacity, transition: "opacity 180ms ease-out" }}
+        >
+          {!failed && (
+            <defs>
+              <linearGradient
+                id={`amb-cand-${safeCandId}`}
+                gradientUnits="userSpaceOnUse"
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+              >
+                <stop offset="0%" stopColor="#ffffff" stopOpacity="0.7" />
+                <stop offset="100%" stopColor="#ffffff" stopOpacity="0.35" />
+              </linearGradient>
+            </defs>
+          )}
+          <path
+            d={d}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={related && hoveredNodeId ? 2 : 1.5}
+            strokeDasharray={c.status === "completed" ? undefined : "6 4"}
+            className={inflight ? "animate-atelier-dash motion-reduce:animate-none" : undefined}
+            style={{ transition: "stroke-width 180ms" }}
+          />
+          {/* endpoint dots — small white markers so users can see exactly
+              which ports are wired without hovering. Suppressed on failed
+              edges where the red stroke already carries the status. */}
+          {!failed && (
+            <>
+              <circle cx={x1} cy={y1} r={2.5} fill="rgba(255,255,255,0.30)" />
+              <circle cx={x2} cy={y2} r={2.5} fill="rgba(255,255,255,0.30)" />
+            </>
+          )}
+        </g>,
       );
       if (labelsOut && hoveredNodeId && related) {
         const text = c.status === "completed"
@@ -1771,6 +1835,14 @@ export function AtelierShellV3() {
       currentScreenY: event.clientY,
     };
     setConnectDragTick((v) => v + 1);
+    // v0.6.1: global cursor lock — without this the cursor flips back to
+    // default the instant the pointer leaves the 16×16 source handle,
+    // breaking the "I'm actively drawing a connection" affordance. The
+    // body class drives a `cursor: crosshair !important` rule in
+    // globals.css; cleared in onUp below.
+    if (typeof document !== "undefined") {
+      document.body.classList.add("atelier-connect-dragging");
+    }
 
     const onMove = (ev: PointerEvent) => {
       if (!connectDragRef.current) return;
@@ -1800,6 +1872,10 @@ export function AtelierShellV3() {
       connectDragRef.current = null;
       setHoveredConnectTargetId(null);
       setConnectDragTick((v) => v + 1);
+      // v0.6.1: release the global crosshair cursor.
+      if (typeof document !== "undefined") {
+        document.body.classList.remove("atelier-connect-dragging");
+      }
       if (!drag) return;
 
       const dragged =
@@ -4302,6 +4378,7 @@ export function AtelierShellV3() {
               <div
                 key={node.id}
                 data-atelier-node={node.id}
+                data-atelier-dim={isDimmed ? "true" : undefined}
                 onPointerDownCapture={(e) => handleNodePointerDown(e, node)}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -5164,7 +5241,7 @@ export function AtelierShellV3() {
           <>
             <span
               aria-hidden="true"
-              data-tip={isDropTarget ? "Drop to connect" : "Input"}
+              data-tip={isDropTarget ? "Drop to connect" : "Input · drop a connection here"}
               className={`btn-tip ${baseShape} ${
                 isDropTarget ? dropTargetTone : isDragSourceCompatible ? activeTone : idleTone
               }`}
@@ -5174,10 +5251,10 @@ export function AtelierShellV3() {
             </span>
             <button
               type="button"
-              aria-label="Connection output — drag onto a node or empty canvas"
-              data-tip="Drag onto a draft, or to empty canvas to spawn a connected draft"
+              aria-label="Output — drag to connect"
+              data-tip="Drag to connect · onto a node, or to empty canvas to spawn one"
               onPointerDown={(e) => handlePortDragOut(e, candidate, rightX, cy)}
-              className={`btn-tip cursor-grab active:cursor-grabbing hover:scale-[1.18] hover:border-atelier-brand-400/60 hover:bg-atelier-brand-400/30 hover:text-white ${baseShape} ${
+              className={`btn-tip cursor-grab active:cursor-grabbing hover:scale-[1.22] hover:border-atelier-brand-400/70 hover:bg-atelier-brand-400/35 hover:text-white hover:shadow-[0_0_0_4px_rgba(59,107,255,0.25),0_0_14px_rgba(59,107,255,0.55)] ${baseShape} ${
                 isDropTarget ? dropTargetTone : activeTone
               }`}
               style={{ left: rightX, top: cy }}

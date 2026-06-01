@@ -412,8 +412,14 @@ export function MediaNode({
           </div>
           {/* Output port — completed media exposes a blue port on the right
               edge so beams plug in. Card is overflow-hidden, so the dot sits
-              just inside at right-1. */}
-          <PortDot kind="output" className="absolute right-1 top-1/2 -translate-y-1/2 z-10" />
+              just inside at right-1. v0.6.1: interactive — hover grows + glows
+              + grab cursor + "Drag to connect" tooltip so the port reads as a
+              drag handle, not decoration. */}
+          <PortDot
+            kind="output"
+            interactive
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
+          />
         </div>
       </div>
     );
@@ -536,9 +542,16 @@ export function MediaNode({
         </div>
         {/* Output port — completed image cards expose a blue port on the
             right edge so beams plug in. Card is overflow-hidden, so the dot
-            sits just inside at right-1 rather than half-outside. */}
+            sits just inside at right-1 rather than half-outside. v0.6.1:
+            interactive affordance — hover/cursor/tooltip signal "drag from
+            here" (paired with the canvas-level Plus handle in AtelierShellV3
+            which actually fires the connect drag). */}
         {status === "completed" ? (
-          <PortDot kind="output" className="absolute right-1 top-1/2 -translate-y-1/2 z-10" />
+          <PortDot
+            kind="output"
+            interactive
+            className="absolute right-1 top-1/2 -translate-y-1/2 z-10"
+          />
         ) : null}
       </div>
     );

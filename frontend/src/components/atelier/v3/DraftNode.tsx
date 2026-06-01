@@ -106,8 +106,16 @@ export function DraftNode({
       // shows through faintly; replaces the flat #141416 card.
       className={`group absolute w-[280px] atelier-node-shell transition-[box-shadow,border-color] duration-200 ease-out ${borderClass}`}
     >
-      {/* output port — blue dot on the right edge so connection beams plug in */}
-      <PortDot kind="output" className="absolute right-[-4px] top-1/2 -translate-y-1/2 z-10" />
+      {/* output port — blue dot on the right edge so connection beams plug in.
+          v0.6.1: interactive — hover grows + glows + cursor:grab + "Drag to
+          connect" tooltip + enlarged hit target. Communicates "drag from here"
+          so the user understands the connection mechanism without trial and
+          error (the "节点之间如何连线" discoverability fix). */}
+      <PortDot
+        kind="output"
+        interactive
+        className="absolute right-[-4px] top-1/2 -translate-y-1/2 z-10"
+      />
       <div className="px-[18px] pt-4 pb-3.5">
         {/* Title row — muted Sparkles glyph + sentence-case intent title.
             The take counter sits right-aligned as a quiet neutral chip. */}

@@ -189,15 +189,21 @@ export function DraftWorkbench({
       // 520 keeps the prompt + ref content roomy.
       className={`group absolute w-[560px] origin-top-left atelier-opaque-shell transition-shadow duration-200 motion-safe:animate-atelier-workbench-in ${selectedClass}`}
     >
-      {/* §2 OUTPUT PORT — blue dot half-outside the right border, on the title
-          row. Connection beams plug in here. -right-[14px] = 10px shell padding
-          + 4px half-dot so the dot straddles the card border. Decorative —
-          the dot's color alone signals "output"; no floating label needed. */}
-      <PortDot
-        kind="output"
-        size={7}
-        className="absolute -right-[14px] top-[18px] z-20"
-      />
+      {/* §2 OUTPUT PORT — blue dot anchored to the right edge MIDLINE (no
+          longer floats in the top-right corner like an accidental sticker).
+          Wrapped in a hoverable 20px hit target with cursor:grab + tooltip so
+          the user immediately reads "drag from here to connect" — the fix for
+          the user's "节点之间如何连线？？" question. On hover the dot scales
+          and a soft halo ring fades in so the affordance is unmistakable. */}
+      <div
+        role="button"
+        aria-label="Output port — drag to connect"
+        data-tip="Drag to connect"
+        onPointerDown={(e) => e.stopPropagation()}
+        className="btn-tip absolute -right-[5px] top-1/2 z-20 grid h-5 w-5 -translate-y-1/2 cursor-grab place-items-center rounded-full transition-all duration-150 hover:scale-125 hover:bg-[rgba(91,157,255,0.06)] hover:shadow-[0_0_0_3px_rgba(91,157,255,0.18),0_0_14px_rgba(91,157,255,0.5)] active:cursor-grabbing"
+      >
+        <PortDot kind="output" size={9} />
+      </div>
 
       {/* Header zone — sparkle + intent (rename on dblclick) + take pill.
           Sits in the outer shell's top band (above the inner card), like
