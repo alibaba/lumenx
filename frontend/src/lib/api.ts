@@ -148,11 +148,17 @@ export interface AtelierAgentTurn {
     project_id: string;
     user_message: string;
     preview: boolean;
-    status: "pending" | "waiting_approval" | "completed" | "failed";
+    status: "pending" | "waiting_approval" | "completed" | "failed" | "canceled";
     tool_calls: AtelierAgentToolCall[];
     created_at: number;
     completed_at?: number | null;
     response?: string | null;
+    // v1.1 track X — multi-step loop persistence. Optional on the wire so
+    // pre-v1.1 turns load cleanly.
+    iteration_count?: number;
+    messages_history?: Array<Record<string, unknown>>;
+    max_iterations?: number;
+    pending_tool_calls?: AtelierAgentToolCallPayload[];
 }
 
 export interface AtelierAgentToolSpec {
@@ -211,6 +217,22 @@ export interface StreamAtelierAgentTurnPayload {
     model?: string | null;
 }
 
+// v1.1 track X — multi-step SSE loop payload. Wraps the same body as the
+// single-iter /stream variant plus the loop-only fields: max_iterations
+// (default = backend ATELIER_AGENT_MAX_ITERATIONS env / 3, clipped to [1,
+// 10]), turn_id + resume (set together to resume a paused
+// awaiting_approval turn by folding its approved tool_calls into the
+// next LLM round).
+export interface StreamAtelierAgentLoopPayload {
+    user_message?: string;
+    selected_node_id?: string | null;
+    skill_name?: string | null;
+    model?: string | null;
+    max_iterations?: number | null;
+    turn_id?: string | null;
+    resume?: boolean;
+}
+
 export interface AgentStreamMetadataEvent {
     planner: string;
     model?: string | null;
@@ -218,7 +240,7 @@ export interface AgentStreamMetadataEvent {
 }
 
 export interface AgentStreamDoneEvent {
-    status: "completed" | "waiting_approval" | "blocked" | "failed";
+    status: "completed" | "waiting_approval" | "awaiting_approval" | "blocked" | "failed" | "canceled";
     full_response: string;
     tool_calls: AtelierAgentToolCallPayload[];
     turn: AtelierAgentTurn | null;
@@ -236,11 +258,13 @@ export interface AtelierAgentStreamTurnEvent {
     planner: string;
     model?: string | null;
     turn_id: string;
+    iteration?: number;
 }
 
 export interface AtelierAgentStreamLlmDeltaEvent {
     type: "llm_delta";
     text: string;
+    iteration?: number;
 }
 
 export interface AtelierAgentStreamLlmDoneEvent {
@@ -248,6 +272,7 @@ export interface AtelierAgentStreamLlmDoneEvent {
     response: string;
     tool_calls: Array<Record<string, unknown>>;
     error?: string | null;
+    iteration?: number;
 }
 
 export interface AtelierAgentStreamToolStartEvent {
@@ -255,6 +280,10 @@ export interface AtelierAgentStreamToolStartEvent {
     call_id: string;
     tool_name: string;
     arguments: Record<string, unknown>;
+    // v1.1 X — multi-step + retry stamps. `attempt` is 1 for the first try
+    // and ≥2 for retries; `iteration` is the multi-step LLM round number.
+    attempt?: number;
+    iteration?: number;
 }
 
 export interface AtelierAgentStreamToolDoneEvent {
@@ -264,11 +293,25 @@ export interface AtelierAgentStreamToolDoneEvent {
     status: string;
     result_snapshot?: Record<string, unknown> | null;
     error?: string | null;
+    attempt?: number;
+    iteration?: number;
+    /** True when the failure is retriable AND another attempt will follow.
+     *  The chip rail uses this to show "Retrying…" instead of a hard X. */
+    retriable?: boolean;
+}
+
+// v1.1 X — preview-then-execute pause event. Emitted by the multi-step
+// loop when policy demands approval; the frontend renders a Preview card
+// listing the planned calls with Approve / Reject buttons.
+export interface AtelierAgentStreamToolPlanEvent {
+    type: "tool_plan";
+    iteration: number;
+    tool_calls: AtelierAgentToolCallPayload[];
 }
 
 export interface AtelierAgentStreamTurnDoneEvent {
     type: "turn_done";
-    status: "completed" | "waiting_approval" | "blocked" | "failed";
+    status: "completed" | "waiting_approval" | "awaiting_approval" | "blocked" | "failed" | "canceled";
     full_response: string;
     tool_calls: AtelierAgentToolCallPayload[];
     turn: AtelierAgentTurn | null;
@@ -281,6 +324,7 @@ export type AtelierAgentStreamEvent =
     | AtelierAgentStreamLlmDoneEvent
     | AtelierAgentStreamToolStartEvent
     | AtelierAgentStreamToolDoneEvent
+    | AtelierAgentStreamToolPlanEvent
     | AtelierAgentStreamTurnDoneEvent;
 
 export interface AgentStreamHandlers {
@@ -358,6 +402,17 @@ export interface AtelierSequenceEntry {
     trimEnd?: number | null;
 }
 
+export interface AtelierExportRecord {
+    id: string;
+    project_id: string;
+    created_at: number;
+    clip_count: number;
+    size_mb: number;
+    video_url: string;
+    filename: string;
+    source_entries: AtelierSequenceEntry[];
+}
+
 export interface AtelierProject {
     id: string;
     title: string;
@@ -367,6 +422,7 @@ export interface AtelierProject {
     agent_policy: AtelierAgentPolicy;
     agent_turns?: AtelierAgentTurn[];
     sequence?: AtelierSequenceEntry[];
+    exports?: AtelierExportRecord[];
     created_at: number;
     updated_at: number;
 }
@@ -1119,6 +1175,38 @@ export const api = {
         return response.data;
     },
     /**
+     * v1.1 track X — resume a paused (awaiting_approval) agent turn.
+     * The backend reads the turn's `pending_tool_calls` and reruns them
+     * through the existing approval flow; on success the returned turn
+     * has `status === "completed"` (or "failed" if a tool errored).
+     */
+    continueAtelierAgentTurn: async (
+        projectId: string,
+        turnId: string,
+    ): Promise<AtelierAgentTurn> => {
+        const response = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/agent/turns/${turnId}/continue`,
+            {},
+        );
+        return response.data;
+    },
+    /**
+     * v1.1 track X — cancel a paused (awaiting_approval / pending) turn.
+     * Distinct from the deny flow: cancel produces a terminal
+     * `status === "canceled"` and dismisses the Preview card without
+     * firing the failed/denied summary.
+     */
+    cancelAtelierAgentTurn: async (
+        projectId: string,
+        turnId: string,
+    ): Promise<AtelierAgentTurn> => {
+        const response = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/agent/turns/${turnId}/cancel`,
+            {},
+        );
+        return response.data;
+    },
+    /**
      * v0.9 track P — POST to the SSE streaming agent endpoint and dispatch
      * parsed events to the supplied handlers. Implemented with fetch +
      * ReadableStream instead of native EventSource because (a) the route
@@ -1231,6 +1319,14 @@ export const api = {
                         parsed.arguments && typeof parsed.arguments === "object"
                             ? (parsed.arguments as Record<string, unknown>)
                             : {},
+                    attempt:
+                        typeof parsed.attempt === "number"
+                            ? (parsed.attempt as number)
+                            : 1,
+                    iteration:
+                        typeof parsed.iteration === "number"
+                            ? (parsed.iteration as number)
+                            : 1,
                 });
             } else if (eventName === "tool_done") {
                 handlers.onEvent?.({
@@ -1247,6 +1343,29 @@ export const api = {
                         typeof parsed.error === "string"
                             ? (parsed.error as string)
                             : null,
+                    attempt:
+                        typeof parsed.attempt === "number"
+                            ? (parsed.attempt as number)
+                            : 1,
+                    iteration:
+                        typeof parsed.iteration === "number"
+                            ? (parsed.iteration as number)
+                            : 1,
+                    retriable: parsed.retriable === true,
+                });
+            } else if (eventName === "tool_plan") {
+                // v1.1 X — preview-then-execute pause. The loop emits this
+                // frame before stopping at awaiting_approval; the panel
+                // renders a Preview card with Approve/Reject.
+                handlers.onEvent?.({
+                    type: "tool_plan",
+                    iteration:
+                        typeof parsed.iteration === "number"
+                            ? (parsed.iteration as number)
+                            : 1,
+                    tool_calls: Array.isArray(parsed.tool_calls)
+                        ? (parsed.tool_calls as AtelierAgentToolCallPayload[])
+                        : [],
                 });
             } else if (eventName === "turn_done" || eventName === "done") {
                 finalEvent = parsed as unknown as AgentStreamDoneEvent;
@@ -1304,6 +1423,231 @@ export const api = {
         }
         return finalEvent;
     },
+    /**
+     * v1.1 track X — multi-step SSE agent loop. Same wire format as the
+     * single-iter /stream variant (the parser dispatches identically to
+     * `handlers.onEvent`), but the backend runs LLM round → execute →
+     * feed-tool-results-back-to-LLM up to `max_iterations` times. Under
+     * untrusted / on_request policy, ANY iteration whose plan would
+     * require approval emits a single `tool_plan` event and persists
+     * the turn as `waiting_approval` — the panel renders a Preview card
+     * and resolves it by calling continueAtelierAgentTurn (Approve) or
+     * cancelAtelierAgentTurn (Reject). Pass `{turn_id, resume: true}` to
+     * fold a previously-approved set of tool_calls into the next round.
+     */
+    streamAtelierAgentLoop: async (
+        projectId: string,
+        payload: StreamAtelierAgentLoopPayload,
+        handlers: AgentStreamHandlers = {},
+    ): Promise<AgentStreamDoneEvent> => {
+        const response = await fetch(
+            `${API_URL}/atelier/projects/${projectId}/agent/turns/stream_loop`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "text/event-stream",
+                },
+                body: JSON.stringify(payload),
+                signal: handlers.signal,
+            },
+        );
+
+        if (!response.ok || !response.body) {
+            const text = await response.text().catch(() => "");
+            throw new Error(
+                text || `Atelier agent loop stream failed: HTTP ${response.status}`,
+            );
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+        let finalEvent: AgentStreamDoneEvent | null = null;
+        let errorMessage: string | null = null;
+
+        const processEventBlock = (block: string) => {
+            if (!block.trim()) return;
+            let eventName = "message";
+            const dataLines: string[] = [];
+            for (const rawLine of block.split("\n")) {
+                const line = rawLine.replace(/\r$/, "");
+                if (line.startsWith(":")) continue;
+                if (line.startsWith("event:")) {
+                    eventName = line.slice(6).trim() || "message";
+                } else if (line.startsWith("data:")) {
+                    dataLines.push(line.slice(5).replace(/^\s/, ""));
+                }
+            }
+            if (dataLines.length === 0) return;
+            const data = dataLines.join("\n");
+            let parsed: Record<string, unknown> = {};
+            try {
+                parsed = JSON.parse(data);
+            } catch {
+                parsed = { raw: data };
+            }
+            // Same discriminated union as streamAtelierAgentTurn — the
+            // loop endpoint reuses every event name (turn, llm_delta,
+            // llm_done, tool_start, tool_done, tool_plan, turn_done)
+            // and adds the iteration stamp to every frame.
+            if (eventName === "turn" || eventName === "metadata") {
+                const metaEvent = parsed as unknown as AgentStreamMetadataEvent & { iteration?: number };
+                handlers.onMetadata?.(metaEvent);
+                handlers.onEvent?.({
+                    type: "turn",
+                    planner: metaEvent.planner,
+                    model: metaEvent.model ?? null,
+                    turn_id: metaEvent.turn_id,
+                    iteration:
+                        typeof parsed.iteration === "number"
+                            ? (parsed.iteration as number)
+                            : undefined,
+                });
+            } else if (eventName === "llm_delta" || eventName === "delta") {
+                const text =
+                    typeof parsed.text === "string"
+                        ? (parsed.text as string)
+                        : "";
+                if (text) {
+                    handlers.onDelta?.(text);
+                    handlers.onEvent?.({
+                        type: "llm_delta",
+                        text,
+                        iteration:
+                            typeof parsed.iteration === "number"
+                                ? (parsed.iteration as number)
+                                : undefined,
+                    });
+                }
+            } else if (eventName === "llm_done") {
+                handlers.onEvent?.({
+                    type: "llm_done",
+                    response:
+                        typeof parsed.response === "string"
+                            ? (parsed.response as string)
+                            : "",
+                    tool_calls: Array.isArray(parsed.tool_calls)
+                        ? (parsed.tool_calls as Array<Record<string, unknown>>)
+                        : [],
+                    error:
+                        typeof parsed.error === "string"
+                            ? (parsed.error as string)
+                            : null,
+                    iteration:
+                        typeof parsed.iteration === "number"
+                            ? (parsed.iteration as number)
+                            : undefined,
+                });
+            } else if (eventName === "tool_start") {
+                handlers.onEvent?.({
+                    type: "tool_start",
+                    call_id: String(parsed.call_id ?? ""),
+                    tool_name: String(parsed.tool_name ?? ""),
+                    arguments:
+                        parsed.arguments && typeof parsed.arguments === "object"
+                            ? (parsed.arguments as Record<string, unknown>)
+                            : {},
+                    attempt:
+                        typeof parsed.attempt === "number"
+                            ? (parsed.attempt as number)
+                            : 1,
+                    iteration:
+                        typeof parsed.iteration === "number"
+                            ? (parsed.iteration as number)
+                            : 1,
+                });
+            } else if (eventName === "tool_done") {
+                handlers.onEvent?.({
+                    type: "tool_done",
+                    call_id: String(parsed.call_id ?? ""),
+                    tool_name: String(parsed.tool_name ?? ""),
+                    status: String(parsed.status ?? ""),
+                    result_snapshot:
+                        parsed.result_snapshot &&
+                        typeof parsed.result_snapshot === "object"
+                            ? (parsed.result_snapshot as Record<string, unknown>)
+                            : null,
+                    error:
+                        typeof parsed.error === "string"
+                            ? (parsed.error as string)
+                            : null,
+                    attempt:
+                        typeof parsed.attempt === "number"
+                            ? (parsed.attempt as number)
+                            : 1,
+                    iteration:
+                        typeof parsed.iteration === "number"
+                            ? (parsed.iteration as number)
+                            : 1,
+                    retriable: parsed.retriable === true,
+                });
+            } else if (eventName === "tool_plan") {
+                handlers.onEvent?.({
+                    type: "tool_plan",
+                    iteration:
+                        typeof parsed.iteration === "number"
+                            ? (parsed.iteration as number)
+                            : 1,
+                    tool_calls: Array.isArray(parsed.tool_calls)
+                        ? (parsed.tool_calls as AtelierAgentToolCallPayload[])
+                        : [],
+                });
+            } else if (eventName === "turn_done" || eventName === "done") {
+                finalEvent = parsed as unknown as AgentStreamDoneEvent;
+                handlers.onDone?.(finalEvent);
+                handlers.onEvent?.({
+                    type: "turn_done",
+                    status: finalEvent.status,
+                    full_response: finalEvent.full_response ?? "",
+                    tool_calls: finalEvent.tool_calls ?? [],
+                    turn: finalEvent.turn ?? null,
+                    error: finalEvent.error ?? null,
+                });
+            } else if (eventName === "error") {
+                const message =
+                    typeof parsed.message === "string"
+                        ? (parsed.message as string)
+                        : "Stream error";
+                errorMessage = message;
+                handlers.onError?.(message);
+            }
+        };
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let sepIdx = buffer.indexOf("\n\n");
+                while (sepIdx !== -1) {
+                    const block = buffer.slice(0, sepIdx);
+                    buffer = buffer.slice(sepIdx + 2);
+                    processEventBlock(block);
+                    sepIdx = buffer.indexOf("\n\n");
+                }
+            }
+            const tail = buffer + decoder.decode();
+            if (tail.trim()) processEventBlock(tail);
+        } catch (err) {
+            if (err instanceof DOMException && err.name === "AbortError") {
+                throw err;
+            }
+            throw err instanceof Error
+                ? err
+                : new Error("Atelier agent loop stream reader failed");
+        }
+
+        if (errorMessage) {
+            throw new Error(errorMessage);
+        }
+        if (!finalEvent) {
+            throw new Error(
+                "Atelier agent loop stream closed without a done event.",
+            );
+        }
+        return finalEvent;
+    },
     // Track O (v0.9) — async export job orchestration.
     //
     // POST /sequence/export now returns {job_id} immediately. GET
@@ -1341,6 +1685,23 @@ export const api = {
     }> => {
         const response = await axios.get(
             `${API_URL}/atelier/projects/${projectId}/sequence/export/${jobId}`,
+            { signal: options?.signal },
+        );
+        return response.data;
+    },
+    // ── v1.1 track U: bounded export worker pool — per-project queue
+    //
+    // Returns a snapshot of the pool's per-project queue: how many
+    // exports are in flight (`running`) vs sitting behind the cap
+    // (`queued`), plus the cap itself so the SequenceStrip can render
+    // an N-of-N badge. Cheap (in-memory dict scan) so the strip can
+    // poll it on a 1.5s cadence while exports are alive.
+    getAtelierExportQueueStatus_U: async (
+        projectId: string,
+        options?: { signal?: AbortSignal },
+    ): Promise<{ queued: number; running: number; pool_size: number }> => {
+        const response = await axios.get(
+            `${API_URL}/atelier/projects/${projectId}/sequence/export/queue/status`,
             { signal: options?.signal },
         );
         return response.data;
@@ -1471,6 +1832,43 @@ export const api = {
         const response = await axios.put(
             `${API_URL}/atelier/projects/${projectId}/sequence`,
             { entries },
+        );
+        return response.data;
+    },
+    // ── Track W (v1.1): Export history ────────────────────────────────
+    //
+    // The backend now persists an ExportRecord on the project after
+    // each successful sequence export. These three thin wrappers expose
+    // the GET (list, newest first) + DELETE (record + optional file) +
+    // POST .../redo (kick off a new export job from the recorded
+    // source_entries) surface to the frontend. The Redo response shape
+    // is identical to a fresh POST /sequence/export so callers can
+    // hand the returned job_id straight back to `pollAtelierExportJob`.
+    listAtelierProjectExports: async (
+        projectId: string,
+    ): Promise<AtelierExportRecord[]> => {
+        const response = await axios.get(
+            `${API_URL}/atelier/projects/${projectId}/exports`,
+        );
+        return response.data ?? [];
+    },
+    deleteAtelierProjectExport: async (
+        projectId: string,
+        exportId: string,
+        options?: { deleteFile?: boolean },
+    ): Promise<{ status: string; export_id: string; file_deleted: boolean }> => {
+        const response = await axios.delete(
+            `${API_URL}/atelier/projects/${projectId}/exports/${exportId}`,
+            { params: options?.deleteFile ? { delete_file: true } : undefined },
+        );
+        return response.data;
+    },
+    redoAtelierProjectExport: async (
+        projectId: string,
+        exportId: string,
+    ): Promise<{ job_id: string; status: string }> => {
+        const response = await axios.post(
+            `${API_URL}/atelier/projects/${projectId}/exports/${exportId}/redo`,
         );
         return response.data;
     },

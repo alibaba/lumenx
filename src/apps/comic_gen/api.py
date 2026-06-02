@@ -20,6 +20,7 @@ from .models import (
     AtelierNode,
     AtelierProject,
     AtelierSequenceEntry,
+    ExportRecord,
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -569,14 +570,21 @@ async def replace_atelier_sequence(project_id: str, request: ReplaceAtelierSeque
 async def export_atelier_sequence(
     project_id: str,
     request: ExportAtelierSequenceRequest,
-    background_tasks: BackgroundTasks,
 ):
-    """Track O (v0.9): start an async export job and return the job_id.
-    The legacy synchronous payload (video_url / filename / size_mb /
-    clip_count) is now served by GET .../sequence/export/{job_id} once
-    the worker reaches `status == "completed"`. Validation and
-    missing-ffmpeg failures still surface as 4xx/5xx eagerly so the
-    client never sees a phantom job_id."""
+    """Track O (v0.9) + v1.1 track U: allocate an async export job and
+    submit it to the bounded worker pool. Returns immediately with the
+    new job_id; status polling continues to land on GET
+    .../sequence/export/{job_id}. Validation + missing-ffmpeg failures
+    still surface as 4xx/5xx eagerly so the client never sees a phantom
+    job_id.
+
+    v1.1 U: scheduling went from `background_tasks.add_task(...)` (no
+    concurrency cap) to `pipeline.schedule_atelier_sequence_export_job`
+    (cap = ATELIER_EXPORT_WORKERS, default min(2, cpu_count())). Excess
+    submissions sit in the pool queue as `status='pending'` until a
+    worker frees up — surfaced as `queued` in the queue-status route
+    below.
+    """
     try:
         job_id = pipeline.start_atelier_sequence_export_job(
             project_id,
@@ -586,7 +594,7 @@ async def export_atelier_sequence(
         raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
-    background_tasks.add_task(pipeline.process_atelier_sequence_export_job, job_id)
+    pipeline.schedule_atelier_sequence_export_job(job_id)
     return {"job_id": job_id, "status": "pending"}
 
 
@@ -599,6 +607,101 @@ async def get_atelier_sequence_export_job(project_id: str, job_id: str):
     if status is None:
         raise HTTPException(status_code=404, detail="Atelier export job not found")
     return signed_response(status)
+
+
+@app.get(
+    "/atelier/projects/{project_id}/sequence/export/queue/status",
+)
+async def get_atelier_sequence_export_queue(project_id: str):
+    """v1.1 track U: per-project export-queue snapshot. Returns the
+    count of pending (queued in the worker pool) + running (actively
+    inside ffmpeg) jobs, plus the configured pool size. The frontend
+    polls this every few seconds while the Sequence strip is open and
+    renders a small N-of-N badge so the user can see when a brand-new
+    export is back-pressured behind earlier ones."""
+    return pipeline.get_atelier_export_queue_status(project_id)
+
+
+# ─── v1.1 track W — Export history routes ─────────────────────────────
+# Persisted ExportRecord list (newest first), per-record delete (with
+# optional file unlink), and a Redo route that resolves the saved
+# source_entries and starts a brand-new export job via U's allocator.
+#
+# These routes are W-owned. They do NOT touch the existing live-job
+# routes above; the live job_id is a transient handle that disappears
+# after the worker terminates, whereas an ExportRecord is the durable
+# artifact a creator sees in the left-rail Exports panel.
+
+
+@app.get(
+    "/atelier/projects/{project_id}/exports",
+    response_model=List[ExportRecord],
+)
+async def list_atelier_project_exports(project_id: str):
+    """Newest-first list of past successful exports for a project.
+    Returns 404 if the project is unknown."""
+    try:
+        records = pipeline.list_atelier_exports(project_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return signed_response(records)
+
+
+@app.delete("/atelier/projects/{project_id}/exports/{export_id}")
+async def delete_atelier_project_export(
+    project_id: str,
+    export_id: str,
+    delete_file: bool = False,
+):
+    """Remove an ExportRecord. When ?delete_file=true is set, the
+    underlying mp4 under output/video/ is best-effort unlinked as well
+    (failure here is logged but does not fail the request — the
+    record is already removed)."""
+    try:
+        removed = pipeline.delete_atelier_export(
+            project_id,
+            export_id,
+            delete_file=bool(delete_file),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404 if "not found" in str(e).lower() else 400,
+            detail=str(e),
+        )
+    return {"status": "deleted", "export_id": removed.id, "file_deleted": bool(delete_file)}
+
+
+@app.post(
+    "/atelier/projects/{project_id}/exports/{export_id}/redo",
+    response_model=ExportAtelierSequenceResponse,
+)
+async def redo_atelier_project_export(
+    project_id: str,
+    export_id: str,
+):
+    """Re-runs an export using the saved source_entries. Returns the
+    same {job_id, status} envelope as POST /sequence/export, so the
+    frontend can reuse its existing polling code path. Validation
+    errors (e.g. a referenced candidate has since been deleted)
+    surface as 400; missing project / record map to 404; missing
+    ffmpeg surfaces as 500.
+
+    v1.1 U coordination: the redo path also routes through U's bounded
+    worker pool (pipeline.schedule_atelier_sequence_export_job) instead
+    of FastAPI BackgroundTasks so the project-wide ATELIER_EXPORT_WORKERS
+    cap applies regardless of whether the export was kicked off via the
+    Sequence strip or via the Exports panel's Redo button."""
+    try:
+        job_id = pipeline.redo_atelier_export(project_id, export_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404 if "not found" in str(e).lower() else 400,
+            detail=str(e),
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    pipeline.schedule_atelier_sequence_export_job(job_id)
+    return {"job_id": job_id, "status": "pending"}
 
 
 @app.post("/atelier/projects/{project_id}/agent/turns", response_model=AtelierAgentTurn)
@@ -634,6 +737,125 @@ async def run_atelier_agent_turn(
         return signed_response(turn)
     except ValueError as e:
         raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+# ─── v1.1 track X — continue + cancel a paused agent turn ────────────
+# Frontend posts to /continue when the user clicks Approve on the
+# Preview card surfaced by the multi-step loop's `tool_plan` event; the
+# route resumes execution via run_atelier_agent_turn (approve=True) so
+# the existing approval flow is reused unchanged. /cancel marks the turn
+# as `canceled` (distinct from the deny path's `failed`) so the Preview
+# card resolves cleanly without firing the deny side effects.
+class ContinueAtelierAgentTurnRequest(BaseModel):
+    pass
+
+
+class CancelAtelierAgentTurnRequest(BaseModel):
+    pass
+
+
+@app.post(
+    "/atelier/projects/{project_id}/agent/turns/{turn_id}/continue",
+    response_model=AtelierAgentTurn,
+)
+async def continue_atelier_agent_turn(
+    project_id: str,
+    turn_id: str,
+    request: ContinueAtelierAgentTurnRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Resume a `waiting_approval` turn by executing its pending_tool_calls.
+
+    Reuses the sync run path (approve=True + turn_id) so background-task
+    fanout for generation.createVideoCandidates still kicks off. Returns
+    the updated AtelierAgentTurn so the client can reconcile the panel
+    state without a separate refresh round-trip.
+    """
+    project = pipeline.get_atelier_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Atelier project not found")
+    turn = next((t for t in project.agent_turns if t.id == turn_id), None)
+    if not turn:
+        raise HTTPException(status_code=404, detail="Atelier agent turn not found")
+    if turn.status != "waiting_approval":
+        raise HTTPException(
+            status_code=400,
+            detail="Atelier agent turn is not waiting for approval",
+        )
+    pending_payloads = list(turn.pending_tool_calls or [])
+    if not pending_payloads:
+        # Fallback: derive from APPROVAL_REQUIRED placeholders on the turn
+        # (handles older turns persisted before pending_tool_calls existed).
+        derived: List[Dict[str, Any]] = []
+        for c in turn.tool_calls:
+            status_value = c.status.value if hasattr(c.status, "value") else str(c.status)
+            if status_value == "approval_required":
+                derived.append({
+                    "tool_name": c.tool_name,
+                    "arguments": dict(c.arguments or {}),
+                })
+        pending_payloads = derived
+        if not pending_payloads:
+            raise HTTPException(
+                status_code=400,
+                detail="No pending tool calls to continue",
+            )
+    try:
+        resumed = pipeline.run_atelier_agent_turn(
+            project_id=project_id,
+            tool_calls=pending_payloads,
+            user_message=turn.user_message,
+            approve=True,
+            turn_id=turn_id,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404 if "not found" in str(e).lower() else 400,
+            detail=str(e),
+        )
+    # Clear pending_tool_calls now that execution resumed.
+    resumed.pending_tool_calls = []
+    pipeline._save_atelier_data()
+    # Background-task fanout for generation.createVideoCandidates mirrors
+    # the sync /agent/turns route.
+    for call in resumed.tool_calls:
+        if call.tool_name != "generation.createVideoCandidates" or call.status != "completed":
+            continue
+        node_id = call.arguments.get("node_id")
+        candidate_ids = (call.result_snapshot or {}).get("candidate_ids") or []
+        for candidate_id in candidate_ids:
+            background_tasks.add_task(
+                _safe_run_atelier_candidate,
+                project_id,
+                node_id,
+                candidate_id,
+            )
+    return signed_response(resumed)
+
+
+@app.post(
+    "/atelier/projects/{project_id}/agent/turns/{turn_id}/cancel",
+    response_model=AtelierAgentTurn,
+)
+async def cancel_atelier_agent_turn(
+    project_id: str,
+    turn_id: str,
+    request: CancelAtelierAgentTurnRequest,
+):
+    """Mark a `waiting_approval` (or `pending`) turn as `canceled`.
+
+    Distinct from the existing deny path (`run_atelier_agent_turn` with
+    deny=True) — cancel produces a clean terminal status without firing
+    the failed/denied summary. Used by the Preview card's Reject button.
+    """
+    try:
+        turn = pipeline.cancel_atelier_agent_turn(project_id, turn_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=404 if "not found" in str(e).lower() else 400,
+            detail=str(e),
+        )
+    return signed_response(turn)
 
 
 # v0.9 track P — SSE streaming agent turn. Combines plan + execute in one
@@ -1064,6 +1286,249 @@ async def stream_atelier_agent_turn(
                 "type": "turn_done",
                 "status": executed_turn.status,
                 "full_response": buffered_response,
+                "tool_calls": [
+                    {"tool_name": c.tool_name, "arguments": c.arguments}
+                    for c in executed_turn.tool_calls
+                ],
+                "turn": turn_payload,
+                "error": None,
+            },
+        )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+# ─── v1.1 track X — multi-step SSE agent loop ────────────────────────────
+# Wraps `pipeline.run_atelier_agent_loop_streaming` in the same SSE bridge
+# the single-iter /stream route uses. The harness owns the LLM + tool
+# loop, persists per-iteration state on the AtelierAgentTurn, and emits a
+# `tool_plan` + paused `turn_done(awaiting_approval)` when policy demands
+# approval — the frontend renders that as the Preview card and resolves
+# it via POST /agent/turns/{id}/continue or /cancel.
+#
+# Kept as a SEPARATE route from /stream so the v1.0 single-iter
+# integration tests (which monkeypatch stream_atelier_llm_planner with a
+# stateless fake) don't accidentally loop into 3-node creates. Frontend
+# opts in by hitting /stream_loop when it wants multi-step + preview;
+# /stream remains the unchanged single-iter fallback.
+class StreamAtelierAgentLoopRequest(BaseModel):
+    user_message: str = ""
+    selected_node_id: Optional[str] = None
+    skill_name: Optional[str] = None
+    model: Optional[str] = None
+    max_iterations: Optional[int] = None
+    turn_id: Optional[str] = None  # set when resuming a paused turn
+    resume: bool = False  # set with turn_id to fold approved tools into round N+1
+
+
+@app.post("/atelier/projects/{project_id}/agent/turns/stream_loop")
+async def stream_atelier_agent_loop(
+    project_id: str,
+    request: StreamAtelierAgentLoopRequest,
+    raw_request: Request,
+    background_tasks: BackgroundTasks,
+):
+    project = pipeline.get_atelier_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Atelier project not found")
+
+    async def event_stream():
+        loop = asyncio.get_event_loop()
+        executed_turn: Optional[AtelierAgentTurn] = None
+        cancelled = False
+        try:
+            queue, sentinel, task = _bridge_sync_iter(
+                loop,
+                lambda: pipeline.run_atelier_agent_loop_streaming(
+                    project_id=project_id,
+                    user_message=request.user_message,
+                    selected_node_id=request.selected_node_id,
+                    skill_name=request.skill_name,
+                    model=request.model,
+                    max_iterations=request.max_iterations,
+                    turn_id=request.turn_id,
+                    resume=request.resume,
+                ),
+            )
+            try:
+                while True:
+                    if await raw_request.is_disconnected():
+                        cancelled = True
+                        break
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=0.5)
+                    except asyncio.TimeoutError:
+                        continue
+                    if event is sentinel:
+                        break
+                    if isinstance(event, dict) and "__exception__" in event:
+                        exc = event["__exception__"]
+                        yield _sse_event(
+                            "turn_done",
+                            {
+                                "type": "turn_done",
+                                "status": "failed",
+                                "full_response": "",
+                                "tool_calls": [],
+                                "turn": None,
+                                "error": str(exc),
+                            },
+                        )
+                        return
+                    etype = event.get("type")
+                    if etype == "turn":
+                        yield _sse_event(
+                            "turn",
+                            {
+                                "type": "turn",
+                                "planner": event.get("planner") or "model_adapter",
+                                "model": event.get("model"),
+                                "turn_id": event.get("turn_id"),
+                                "iteration": event.get("iteration"),
+                            },
+                        )
+                    elif etype == "llm_delta":
+                        yield _sse_event(
+                            "llm_delta",
+                            {
+                                "type": "llm_delta",
+                                "text": event.get("text") or "",
+                                "iteration": event.get("iteration"),
+                            },
+                        )
+                    elif etype == "llm_done":
+                        yield _sse_event(
+                            "llm_done",
+                            {
+                                "type": "llm_done",
+                                "response": event.get("response") or "",
+                                "tool_calls": event.get("tool_calls") or [],
+                                "error": event.get("error"),
+                                "iteration": event.get("iteration"),
+                            },
+                        )
+                    elif etype == "tool_plan":
+                        yield _sse_event(
+                            "tool_plan",
+                            {
+                                "type": "tool_plan",
+                                "tool_calls": event.get("tool_calls") or [],
+                                "iteration": event.get("iteration"),
+                            },
+                        )
+                    elif etype == "tool_start":
+                        yield _sse_event(
+                            "tool_start",
+                            {
+                                "type": "tool_start",
+                                "call_id": event.get("call_id"),
+                                "tool_name": event.get("tool_name"),
+                                "arguments": event.get("arguments") or {},
+                                "attempt": event.get("attempt", 1),
+                                "iteration": event.get("iteration", 1),
+                            },
+                        )
+                    elif etype == "tool_done":
+                        yield _sse_event(
+                            "tool_done",
+                            {
+                                "type": "tool_done",
+                                "call_id": event.get("call_id"),
+                                "tool_name": event.get("tool_name"),
+                                "status": event.get("status"),
+                                "result_snapshot": event.get("result_snapshot"),
+                                "error": event.get("error"),
+                                "attempt": event.get("attempt", 1),
+                                "iteration": event.get("iteration", 1),
+                                "retriable": bool(event.get("retriable", False)),
+                            },
+                        )
+                    elif etype == "turn_done":
+                        inner = event.get("turn")
+                        if isinstance(inner, AtelierAgentTurn):
+                            executed_turn = inner
+                    else:
+                        yield _sse_event(etype or "info", event)
+            finally:
+                try:
+                    await task
+                except Exception:  # pragma: no cover
+                    pass
+        except ValueError as exc:
+            yield _sse_event(
+                "turn_done",
+                {
+                    "type": "turn_done",
+                    "status": "failed",
+                    "full_response": "",
+                    "tool_calls": [],
+                    "turn": None,
+                    "error": str(exc),
+                },
+            )
+            return
+
+        if cancelled:
+            return
+
+        if executed_turn is None:
+            yield _sse_event(
+                "turn_done",
+                {
+                    "type": "turn_done",
+                    "status": "failed",
+                    "full_response": "",
+                    "tool_calls": [],
+                    "turn": None,
+                    "error": "Agent loop closed without a turn_done event.",
+                },
+            )
+            return
+
+        # Background-task fanout for generation.createVideoCandidates so
+        # r2v/i2v processing still kicks off the same way the single-iter
+        # route does.
+        try:
+            for call in executed_turn.tool_calls:
+                if call.tool_name != "generation.createVideoCandidates" or call.status != "completed":
+                    continue
+                node_id = call.arguments.get("node_id")
+                candidate_ids = (call.result_snapshot or {}).get("candidate_ids") or []
+                for candidate_id in candidate_ids:
+                    background_tasks.add_task(
+                        _safe_run_atelier_candidate,
+                        project_id,
+                        node_id,
+                        candidate_id,
+                    )
+        except Exception:  # pragma: no cover — defensive
+            logger.exception("stream_atelier_agent_loop: background-task fanout failed")
+
+        try:
+            turn_payload = executed_turn.model_dump(mode="json")
+        except Exception:
+            turn_payload = None
+        # Map internal status onto the api-layer terminal status so the
+        # frontend's discriminated union stays consistent: "waiting_approval"
+        # surfaces as "awaiting_approval" (the wire term used by the spec
+        # for the Preview card pause), every other status passes through.
+        api_status = executed_turn.status
+        if api_status == "waiting_approval":
+            api_status = "awaiting_approval"
+        yield _sse_event(
+            "turn_done",
+            {
+                "type": "turn_done",
+                "status": api_status,
+                "full_response": executed_turn.response or "",
                 "tool_calls": [
                     {"tool_name": c.tool_name, "arguments": c.arguments}
                     for c in executed_turn.tool_calls

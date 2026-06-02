@@ -32,6 +32,8 @@ import { SequenceStrip } from "@/components/atelier/v3/SequenceStrip";
 import { MiniMarkdown } from "@/components/atelier/v3/MiniMarkdown";
 import { AssetLibrary } from "@/components/atelier/v3/AssetLibrary";
 import { HistoryPanel } from "@/components/atelier/v3/HistoryPanel";
+import { ExportsPanel } from "@/components/atelier/v3/ExportsPanel";
+import { OnboardingTour, type OnboardingStep } from "@/components/atelier/v3/OnboardingTour";
 import { RightControlStack } from "@/components/atelier/v3/RightControlStack";
 import BrandMark from "@/components/atelier/v3/BrandMark";
 import {
@@ -2904,36 +2906,31 @@ export function AtelierShellV3() {
   const lastFocusedBeforeOverlayRef = useRef<HTMLElement | null>(null);
   // Effect lives further below — declared after all overlay states.
 
-  // First-run onboarding tour — 3 sequential coachmark cards. Persists
-  // "seen" across refreshes via localStorage so we don't nag returning
-  // users. tourStep === null means inactive (returning user or finished).
-  const [tourStep, setTourStep] = useState<number | null>(null);
+  // ─── v1.1 track V — Onboarding guided tour ──────────────────────────
+  // State lives in atelierStore under the `_V` action prefix; the Shell
+  // is the only consumer because the tour anchors to Shell-rendered DOM
+  // (left rail Add button, draft nodes, Composer, etc). First-mount probe
+  // runs after a 1.2s settle so the rail + brand mark have time to paint
+  // — landing the spotlight on a half-built layout looks broken. Replay
+  // is wired from the Help dialog further below.
+  const tourStep = useAtelierStore((s) => s.onboardingStepIndex_V);
+  const maybeStartOnboarding_V = useAtelierStore((s) => s.maybeStartOnboarding_V);
+  const startOnboarding_V = useAtelierStore((s) => s.startOnboarding_V);
+  const advanceOnboarding_V = useAtelierStore((s) => s.advanceOnboarding_V);
+  const setOnboardingStep_V = useAtelierStore((s) => s.setOnboardingStep_V);
+  const dismissOnboarding_V = useAtelierStore((s) => s.dismissOnboarding_V);
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const seen = window.localStorage.getItem("atelier-v3-onboarding-seen");
-      if (!seen) {
-        const t = window.setTimeout(() => setTourStep(0), 1200);
-        return () => window.clearTimeout(t);
-      }
-    } catch {
-      /* localStorage may be unavailable; fall back to no tour */
-    }
-  }, []);
-  const dismissOnboarding = () => {
-    setTourStep(null);
-    try { window.localStorage.setItem("atelier-v3-onboarding-seen", "1"); } catch { /* ignore */ }
-  };
-  const advanceOnboarding = () => {
-    setTourStep((s) => {
-      if (s === null) return null;
-      if (s >= 2) {
-        try { window.localStorage.setItem("atelier-v3-onboarding-seen", "1"); } catch { /* ignore */ }
-        return null;
-      }
-      return s + 1;
-    });
-  };
+    const t = window.setTimeout(() => {
+      maybeStartOnboarding_V();
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [maybeStartOnboarding_V]);
+  // Aliases kept so the existing `?` keyboard shortcut + Help-overlay
+  // dismiss path read naturally. `advanceOnboarding` / `dismissOnboarding`
+  // were the v0.x names; preserving them here means the jump-to-shortcut
+  // block below at the keyboard handler doesn't need to relearn the API.
+  const dismissOnboarding = dismissOnboarding_V;
 
   // Right-click context menu. Holds the cursor position (screen coords)
   // plus an optional node it was opened on. Closed by outside click,
@@ -3869,6 +3866,21 @@ export function AtelierShellV3() {
             }
           }}
         />
+      </RailPanel>
+
+      {/* v1.1 track W — Exports panel. Persisted history of past
+          successful Atelier sequence exports. Each row carries a
+          mp4-thumb preview + Download / Copy share link / Redo /
+          Delete actions. Body lives in ExportsPanel; the shell only
+          owns the slide-out chrome + the pushToast bridge so
+          delete / redo / copy feedback rides the shared toast stack. */}
+      <RailPanel
+        open={activeRailMode === "exports"}
+        title="Exports"
+        subtitle="Past sequence exports on this project"
+        onClose={() => setActiveRailMode(null)}
+      >
+        <ExportsPanel pushToast={pushToast} />
       </RailPanel>
 
       {/* v0.6.2 — RHTV-style bare-canvas header.
@@ -6253,127 +6265,149 @@ export function AtelierShellV3() {
         );
       })() : null}
 
-      {/* Multi-step onboarding tour — 3 sequential cards walking the user
-          through the seed → compose → approve flow. Bottom-left, doesn't
-          block canvas interaction. Each step has Skip + Next buttons. */}
+      {/* v1.1 track V — Anchored multi-step onboarding tour. Each step
+          targets a real DOM element via a CSS selector; OnboardingTour
+          handles the spotlight cutout, tooltip placement, and graceful
+          fallback to centered when the anchor isn't on screen yet (e.g.
+          Composer Generate button doesn't exist until a draft is open).
+          The criterionMet flag controls whether Next is enabled — it's
+          derived from live store state so the moment the user satisfies
+          the prompt (creates a node, opens Composer, adds to sequence)
+          Next lights up. Skip stays available at every step. */}
       {tourStep !== null && !showHelp ? (() => {
-        const steps = [
+        const nodes = project?.nodes ?? [];
+        const sequenceLen = sequenceEntries.length;
+        // Heuristics for "did the user actually do this step".
+        const hasAnyNode = nodes.length > 0;
+        const hasDraft = nodes.some(
+          (n) => n.type === "video" && n.status === "draft",
+        );
+        const hasMedia = nodes.some(
+          (n) =>
+            (n.type === "video" || n.type === "image") &&
+            Array.isArray(n.media_urls) &&
+            n.media_urls.length > 0,
+        );
+        const RAIL = 'aside[role="toolbar"][aria-label="Atelier mode rail"]';
+        const steps: OnboardingStep[] = [
           {
-            tag: "Step 1 of 4",
+            tag: `Step 1 of 6`,
             title: "Welcome to Atelier",
             body: "Your AI video studio canvas. Drop seeds, link them with references, generate takes, judge, and stitch a sequence — all in one space.",
+            selector: null,
+            criterionMet: true,
+            placement: "auto",
           },
           {
-            tag: "Step 2 of 4",
-            title: "Drop a seed",
+            tag: `Step 2 of 6`,
+            title: "Open the Add menu",
+            body: (
+              <>
+                The <strong>Add</strong> button on the left rail is your entry
+                to every node type — Image, Video, Idea, Comment. You can also
+                press{" "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">V</kbd>
+                {" / "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">I</kbd>
+                {" / "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">T</kbd>
+                {" / "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">C</kbd>
+                {" "}directly, or double-click empty canvas.
+              </>
+            ),
+            selector: `${RAIL} button[aria-label="Add"]`,
+            criterionMet: hasAnyNode,
+            hint: "Click Add (or press V) to drop your first node",
+            placement: "right",
+          },
+          {
+            tag: `Step 3 of 6`,
+            title: "Tune the draft",
+            body: (
+              <>
+                The video node you just spawned is a <em>draft</em> — empty,
+                waiting for a prompt and references. Click it to pop the
+                Composer underneath, or drag from the Assets panel to attach
+                a reference image.
+              </>
+            ),
+            selector: '[data-atelier-node]',
+            criterionMet: hasDraft || hasAnyNode,
+            hint: hasDraft
+              ? undefined
+              : "Drop a video draft (press V) to continue",
+            placement: "auto",
+          },
+          {
+            tag: `Step 4 of 6`,
+            title: "Generate a take",
+            body: (
+              <>
+                With a draft selected the Composer floats below. Press{" "}
+                <kbd className="rounded border border-atelier-brand-400/40 bg-atelier-brand-400/10 px-1 font-mono text-[10px] text-atelier-brand-400">⌘ Enter</kbd>
+                {" "}or hit{" "}
+                <strong className="text-atelier-port-positive">Generate</strong>{" "}
+                to spin a take. Type{" "}
+                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">@</kbd>
+                {" "}to mention a canvas node and auto-attach matching images.
+              </>
+            ),
+            selector:
+              '[role="region"][aria-label="Generation composer"] button[aria-label="Submit"]',
+            criterionMet: hasMedia,
+            hint: hasMedia
+              ? undefined
+              : "Click a draft to open Composer, then Generate",
+            placement: "auto",
+          },
+          {
+            tag: `Step 5 of 6`,
+            title: "Build a sequence",
+            body: (
+              <>
+                Drag any completed take onto the bottom Sequence Strip to
+                build your cut. Reorder with drag, trim with the scissor
+                handle, then click <strong>Export</strong> to render MP4.
+                Past renders persist under the new <strong>Exports</strong>
+                {" "}panel.
+              </>
+            ),
+            selector: `${RAIL} button[aria-label="Sequence"]`,
+            criterionMet: sequenceLen > 0,
+            hint:
+              sequenceLen > 0
+                ? undefined
+                : "Drag a take to the bottom strip to continue",
+            placement: "right",
+          },
+          {
+            tag: `Step 6 of 6`,
+            title: "Shortcuts & replay",
             body: (
               <>
                 Press{" "}
-                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">V</kbd>{" "}
-                for video,{" "}
-                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">I</kbd>{" "}
-                for image,{" "}
-                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">T</kbd>{" "}
-                for idea, or{" "}
-                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">C</kbd>{" "}
-                for comment. Or double-click anywhere on empty canvas to drop a video.
+                <kbd className="rounded border border-atelier-brand-400/40 bg-atelier-brand-400/10 px-1 font-mono text-[10px] text-atelier-brand-400">?</kbd>
+                {" "}any time for the full shortcut list. Need this tour
+                again? Use{" "}
+                <strong>Replay tour</strong> in the Shortcuts dialog.
+                That's it — back to the canvas.
               </>
             ),
-          },
-          {
-            tag: "Step 3 of 4",
-            title: "Wire it up",
-            body: (
-              <>
-                Hover an image or completed take — left + right{" "}
-                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">+</kbd>{" "}
-                ports appear on its edges. Drag the right port onto a draft to attach as reference, onto another node to branch, or to empty canvas to spawn a new draft pre-connected.
-              </>
-            ),
-          },
-          {
-            tag: "Step 4 of 4",
-            title: "Generate & sequence",
-            body: (
-              <>
-                Click a draft → Composer pops up below. Press{" "}
-                <kbd className="rounded border border-atelier-brand-400/40 bg-atelier-brand-400/10 px-1 font-mono text-[10px] text-atelier-brand-400">⌘ Enter</kbd>{" "}
-                to generate. Type{" "}
-                <kbd className="rounded border border-glass-border bg-glass px-1 font-mono text-[10px] text-foreground">@</kbd>{" "}
-                to mention nodes (auto-attaches matching images). Drag completed takes into the bottom Sequence Strip to stitch your cut. Press{" "}
-                <kbd className="rounded border border-atelier-brand-400/40 bg-atelier-brand-400/10 px-1 font-mono text-[10px] text-atelier-brand-400">?</kbd>{" "}
-                for the full shortcut list.
-              </>
-            ),
+            selector: `${RAIL} button[aria-label="Help / Shortcuts"]`,
+            criterionMet: true,
+            placement: "right",
           },
         ];
-        const step = steps[tourStep];
-        const isLast = tourStep >= steps.length - 1;
+        const safeStep = Math.min(Math.max(0, tourStep), steps.length - 1);
         return (
-          <div
-            role="status"
-            aria-live="polite"
-            className="absolute bottom-[120px] left-[80px] z-30 max-w-[300px] overflow-hidden rounded-[12px] border border-white/8 bg-[#141416]/96 shadow-[0_28px_60px_-26px_rgba(0,0,0,0.85),0_8px_18px_-6px_rgba(0,0,0,0.55),inset_0_1px_0_0_rgba(255,255,255,0.06)] backdrop-blur-xl animate-atelier-node-in motion-reduce:animate-none"
-          >
-            {/* Top accent rule — primary hairline gradient signs the card as
-                'instructional', not generic info card */}
-            <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-atelier-brand-400 via-atelier-brand-400/45 to-transparent" />
-            <div className="px-4 pb-3 pt-3">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-[11px] font-medium text-atelier-brand-400/85">
-                  {step.tag.replace(/Step (\d+) of (\d+)/, "Step $1 / $2")}
-                </span>
-                <button
-                  type="button"
-                  onClick={dismissOnboarding}
-                  aria-label="Dismiss tour"
-                  className="inline-flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
-                >
-                  <X size={11} aria-hidden="true" />
-                </button>
-              </div>
-              <div className="mb-1 font-display text-[14px] font-medium tracking-[-0.01em] text-foreground">
-                {step.title}
-              </div>
-              <div className="text-[12px] leading-[1.55] text-text-secondary/95">{step.body}</div>
-              <div className="mt-3 flex items-center justify-between gap-2 border-t border-white/6 pt-2.5">
-                <div className="flex items-center gap-1">
-                  {steps.map((_, i) => (
-                    <span
-                      key={i}
-                      aria-hidden="true"
-                      className={`h-[3px] rounded-full transition-all ${
-                        i === tourStep ? "w-5 bg-atelier-brand-400" : i < tourStep ? "w-1.5 bg-atelier-brand-400/40" : "w-1.5 bg-white/12"
-                      }`}
-                    />
-                  ))}
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={dismissOnboarding}
-                    className="rounded-full px-2 py-1 text-[11px] text-text-muted/85 transition-colors hover:bg-hover-bg hover:text-foreground"
-                  >
-                    Skip
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (isLast) {
-                        setShowHelp(true);
-                        dismissOnboarding();
-                      } else {
-                        advanceOnboarding();
-                      }
-                    }}
-                    className="rounded-full bg-atelier-brand-400 px-2.5 py-1 text-[11px] font-medium text-white shadow-[inset_0_1px_0_0_rgba(255,255,255,0.16),0_4px_10px_-3px_rgba(59,107,255,0.5)] transition-all duration-200 hover:scale-[1.04] hover:bg-atelier-brand-400/92 hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),0_6px_14px_-3px_rgba(59,107,255,0.6)] active:scale-[0.96]"
-                  >
-                    {isLast ? "Shortcuts" : "Next"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <OnboardingTour
+            stepIndex={safeStep}
+            steps={steps}
+            onDismiss={dismissOnboarding_V}
+            onAdvance={() => advanceOnboarding_V(steps.length)}
+            onJumpTo={(i) => setOnboardingStep_V(i, steps.length)}
+          />
         );
       })() : null}
 
@@ -6647,14 +6681,31 @@ export function AtelierShellV3() {
                       Shortcuts
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowHelp(false)}
-                    aria-label="Close"
-                    className="inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
-                  >
-                    <X size={13} aria-hidden="true" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* v1.1 track V — Replay tour entry. Closes the
+                        shortcuts dialog and kicks the onboarding tour
+                        back to step 0; the store action also clears the
+                        persisted "seen" flag so a subsequent reload
+                        respects the user's recent replay intent. */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowHelp(false);
+                        startOnboarding_V();
+                      }}
+                      className="inline-flex items-center gap-1 rounded-full border border-atelier-brand-400/40 bg-atelier-brand-400/10 px-2.5 py-1 text-[11px] font-medium text-atelier-brand-400 transition-all duration-150 hover:bg-atelier-brand-400/20 active:scale-[0.97]"
+                    >
+                      Replay tour
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowHelp(false)}
+                      aria-label="Close"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
+                    >
+                      <X size={13} aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-x-7 gap-y-5">
                   {groups.map((g) => (

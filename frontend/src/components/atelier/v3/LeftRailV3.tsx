@@ -28,6 +28,7 @@ import {
   Bot,
   Clapperboard,
   Compass,
+  Download,
   HelpCircle,
   Layers,
   Plus,
@@ -44,7 +45,12 @@ export type LeftRailMode =
   | "history"
   | "director"
   | "agent"
-  | "sequence";
+  | "sequence"
+  // v1.1 track W: persisted export history panel. Added after sequence
+  // because the panel surfaces what HAPPENED to a sequence; it sits at
+  // the end of the orchestration cluster rather than the middle of the
+  // creation flow.
+  | "exports";
 
 export interface LeftRailModeDef {
   key: LeftRailMode;
@@ -65,6 +71,10 @@ const MODES: LeftRailModeDef[] = [
   { key: "director",  label: "Director",  Icon: Compass },
   { key: "agent",     label: "Agent",     Icon: Bot,         shortcut: "/" },
   { key: "sequence",  label: "Sequence",  Icon: Clapperboard },
+  // v1.1 track W: persisted export history. Distinct from "Sequence"
+  // (the live cut on the bottom strip) — "Exports" is the past-tense
+  // gallery of mp4s the user has already produced.
+  { key: "exports",   label: "Exports",   Icon: Download },
 ];
 
 interface Props {

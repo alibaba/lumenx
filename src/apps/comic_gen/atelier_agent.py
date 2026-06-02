@@ -469,6 +469,83 @@ class DeterministicCorePlanner:
 _AGENT_LLM_MODEL_ENV = "DASHSCOPE_AGENT_MODEL"
 
 
+# --- v1.1 track X — multi-step loop + retry classification ----------------
+#
+# Three building blocks shared by both `run_turn_streaming` (per-call retry)
+# and `run_agent_loop_streaming` (outer iteration cap):
+#
+#   _AGENT_MAX_ITERATIONS_ENV / _get_agent_max_iterations
+#     Bound the LLM call → execute → feed-back-results loop. Default 3,
+#     hard-clipped to [1, 10] so a typo in env doesn't unbox unbounded
+#     spend. The cap is snapshotted onto AtelierAgentTurn.max_iterations
+#     at the turn's first iteration so a mid-flight env change can't
+#     extend an already-running turn.
+#
+#   _is_retriable
+#     Conservative substring match on the error message. Network /
+#     timeout / 5xx / rate-limit categories retry; ValidationError-style
+#     terminal errors (unknown node, schema mismatch) surface immediately.
+#     Lower-cased + literal so it stays predictable for tests; if a new
+#     provider surfaces a novel transient error, extend _RETRIABLE_PATTERNS.
+#
+#   _AGENT_RETRY_BACKOFFS
+#     Seconds slept between attempts. 0.5 + 1.5 — chosen so an "instant
+#     fix" deploy doesn't make the user wait 30s for a retry, but a real
+#     thundering herd on the provider gets meaningful spacing. Length
+#     of this tuple is implicitly the per-call retry budget (2 → attempts
+#     1, 2, 3 total).
+_AGENT_MAX_ITERATIONS_ENV = "ATELIER_AGENT_MAX_ITERATIONS"
+_AGENT_MAX_ITERATIONS_DEFAULT = 3
+_AGENT_RETRY_BACKOFFS: Tuple[float, ...] = (0.5, 1.5)
+_RETRIABLE_PATTERNS: Tuple[str, ...] = (
+    "timeout",
+    "timed out",
+    "rate limit",
+    "rate-limit",
+    "rate_limit",
+    "429",
+    "500",
+    "502",
+    "503",
+    "504",
+    "bad gateway",
+    "service unavailable",
+    "gateway timeout",
+    "connection reset",
+    "connection refused",
+    "temporarily unavailable",
+    "transient",
+)
+
+
+def _get_agent_max_iterations(default: int = _AGENT_MAX_ITERATIONS_DEFAULT) -> int:
+    """Read ATELIER_AGENT_MAX_ITERATIONS with safe clipping.
+
+    Returns `default` when unset or non-numeric. Clipped to [1, 10] so a
+    bogus env can't cascade into unbounded LLM spend.
+    """
+    raw = os.getenv(_AGENT_MAX_ITERATIONS_ENV)
+    if not raw:
+        return default
+    try:
+        n = int(raw)
+    except ValueError:
+        return default
+    return max(1, min(10, n))
+
+
+def _is_retriable(exc: Exception) -> bool:
+    """Classify a tool executor exception as transient-and-retriable.
+
+    Returns True for the common transient failures (timeout, rate-limit,
+    5xx gateway). False for everything else — schema validation,
+    missing nodes, permission denials — those surface to the user
+    immediately because retrying them won't change the outcome.
+    """
+    msg = str(exc).lower()
+    return any(token in msg for token in _RETRIABLE_PATTERNS)
+
+
 def _build_atelier_llm_system_prompt(package: AtelierAgentPlannerPackage) -> str:
     """Compose the system prompt fed to the LLM.
 
@@ -1640,7 +1717,34 @@ class AtelierAgentHarness:
         deny: bool = False,
         turn_id: Optional[str] = None,
         assistant_response: Optional[str] = None,
+        iteration_n: int = 1,
+        preview_on_approval: bool = False,
+        existing_turn: Optional[AtelierAgentTurn] = None,
+        skip_persist: bool = False,
     ) -> Iterator[Dict[str, Any]]:
+        """Per-tool-call streaming generator.
+
+        v1.1 track X extensions (all default to backward-compatible values):
+        - `iteration_n` stamps every tool_start/tool_done with the current
+          multi-step iteration index so the UI can group chips by round.
+        - `preview_on_approval` short-circuits execution when ANY call would
+          require approval per policy: instead of executing or marking the
+          calls APPROVAL_REQUIRED inline, the harness emits a single
+          `tool_plan` event with the full planned list and persists the
+          turn as `waiting_approval` for the /continue route to resume.
+        - `existing_turn` lets the multi-step loop reuse the turn it
+          already appended (so iteration_n > 1 doesn't create a fresh turn
+          per call). Mutually exclusive with the approve/turn_id resume
+          path — the loop owns the turn lifecycle in that case.
+        - `skip_persist` lets the loop defer `_save_atelier_data` until
+          after every iteration in a multi-step run completes; the
+          terminal turn_done in the loop method calls save once.
+        - Tool executor failures classified by `_is_retriable` retry up
+          to len(_AGENT_RETRY_BACKOFFS) extra times with exponential
+          backoff; each attempt emits its own tool_start/tool_done with
+          an `attempt` field so the chip rail can render an attempt
+          badge.
+        """
         project = self.pipeline.get_atelier_project(project_id)
         if not project:
             raise ValueError("Atelier project not found")
@@ -1729,17 +1833,90 @@ class AtelierAgentHarness:
         elif approve:
             raise ValueError("turn_id is required when approving an Atelier agent turn")
         else:
-            if pending_turns:
-                raise ValueError("Resolve the pending Atelier agent turn before starting a new turn")
-            turn = AtelierAgentTurn(
-                project_id=project_id,
-                user_message=user_message,
-                preview=preview,
-                status="pending",
-            )
+            if existing_turn is not None:
+                # v1.1 X: multi-step loop owns the turn — reuse the one it
+                # already appended on iteration 1 instead of creating fresh
+                # turns per iteration. Pending-approval guard is intentionally
+                # skipped here: the loop pre-creates the turn before any
+                # iteration runs and we'd self-block otherwise.
+                turn = existing_turn
+                turn.user_message = user_message or turn.user_message
+                turn.preview = preview
+                if turn.status not in ("waiting_approval",):
+                    turn.status = "pending"
+                turn.completed_at = None
+            else:
+                if pending_turns:
+                    raise ValueError("Resolve the pending Atelier agent turn before starting a new turn")
+                turn = AtelierAgentTurn(
+                    project_id=project_id,
+                    user_message=user_message,
+                    preview=preview,
+                    status="pending",
+                )
 
         projected_node_cost = 0
-        appending_new_turn = not (approve and turn_id)
+        appending_new_turn = not (approve and turn_id) and existing_turn is None
+        # v1.1 X (b) — preview-then-execute gate. When the caller sets
+        # `preview_on_approval` AND we're not already in an approve-resume
+        # branch, do a first-pass policy check: if any call would require
+        # approval, emit a single `tool_plan` event with the full planned
+        # list and pause the turn as `waiting_approval`. The /continue
+        # route reads `pending_tool_calls` off the turn and re-invokes the
+        # harness with approve=True. Mirrors the existing per-call
+        # APPROVAL_REQUIRED flow but consolidates the wire signal so the
+        # frontend can render a single Preview card with Approve/Reject
+        # instead of N inline pending chips.
+        if preview_on_approval and not approve and not preview and not deny and tool_calls:
+            any_requires_approval = False
+            for raw_call in tool_calls:
+                tn = str(raw_call.get("tool_name") or raw_call.get("name") or "")
+                entry_x = self.registry.get(tn)
+                spec_x = entry_x[0] if entry_x else None
+                policy_status_x, reason_x = self.enforcer.evaluate(
+                    project.agent_policy, spec_x, tn, dict(raw_call.get("arguments") or {}), 0
+                )
+                if policy_status_x == AtelierAgentToolStatus.APPROVAL_REQUIRED.value and not reason_x:
+                    any_requires_approval = True
+                    break
+            if any_requires_approval:
+                # Persist each planned call onto the turn with APPROVAL_REQUIRED
+                # status so the existing approval/deny endpoints (which match
+                # against turn.tool_calls) keep working unchanged.
+                planned_payload = []
+                for raw_call in tool_calls:
+                    tn = str(raw_call.get("tool_name") or raw_call.get("name") or "")
+                    args = dict(raw_call.get("arguments") or {})
+                    pending_call = AtelierAgentToolCall(
+                        tool_name=tn,
+                        arguments=args,
+                        status=AtelierAgentToolStatus.APPROVAL_REQUIRED,
+                        approval_required=True,
+                    )
+                    turn.tool_calls.append(pending_call)
+                    planned_payload.append({"tool_name": tn, "arguments": args})
+                turn.pending_tool_calls = list(planned_payload)
+                turn.status = "waiting_approval"
+                turn.iteration_count = max(turn.iteration_count, iteration_n)
+                turn.response = _build_turn_response(turn.tool_calls, turn.status, preview=False)
+                if appending_new_turn:
+                    project.agent_turns.append(turn)
+                project.updated_at = time.time()
+                if not skip_persist:
+                    self.pipeline._save_atelier_data()
+                yield {
+                    "type": "tool_plan",
+                    "iteration": iteration_n,
+                    "tool_calls": list(planned_payload),
+                }
+                yield {
+                    "type": "turn_done",
+                    "turn": turn,
+                    "status": "awaiting_approval",
+                    "error": None,
+                }
+                return
+
         # Turn-scoped alias bindings. Producer calls (`_alias` set) bind
         # their result.node.id here; consumer calls (`*_alias` keys)
         # resolve against this map at executor-call time. Reset on every
@@ -1859,46 +2036,90 @@ class AtelierAgentHarness:
             # is caught and emitted as tool_done(status="failed") so the loop
             # keeps walking downstream calls (their unresolved-alias errors
             # surface on their own chips).
-            yield {
-                "type": "tool_start",
-                "call_id": call.call_id,
-                "tool_name": tool_name,
-                "arguments": dict(resolved_arguments),
-            }
-            try:
-                result = executor(project_id, resolved_arguments, self.pipeline)
-                call.status = AtelierAgentToolStatus.COMPLETED
-                call.approval_required = policy_status == AtelierAgentToolStatus.APPROVAL_REQUIRED.value
-                call.approval_granted = call.approval_required and approve
-                call.result_snapshot = result
-                call.completed_at = time.time()
-                # Bind the alias once the producer call succeeds.
-                if produced_alias and isinstance(result, dict):
-                    node_payload = result.get("node")
-                    if isinstance(node_payload, dict):
-                        node_id = node_payload.get("id")
-                        if isinstance(node_id, str) and node_id:
-                            alias_map[produced_alias] = node_id
+            # v1.1 X (c): retriable transient failures (timeout / 5xx /
+            # rate-limit) retry up to len(_AGENT_RETRY_BACKOFFS) extra times
+            # with exponential backoff. Each attempt emits its own
+            # tool_start/tool_done with an `attempt` field so the chip rail
+            # can show "Retrying… (2/3)" — terminal status is whatever the
+            # last attempt produced.
+            max_attempts = 1 + len(_AGENT_RETRY_BACKOFFS)
+            attempt_succeeded = False
+            attempt_index = 0
+            last_exc: Optional[Exception] = None
+            for attempt_index in range(1, max_attempts + 1):
                 yield {
-                    "type": "tool_done",
+                    "type": "tool_start",
                     "call_id": call.call_id,
                     "tool_name": tool_name,
-                    "status": AtelierAgentToolStatus.COMPLETED.value,
-                    "result_snapshot": result if isinstance(result, dict) else None,
-                    "error": None,
+                    "arguments": dict(resolved_arguments),
+                    "attempt": attempt_index,
+                    "iteration": iteration_n,
                 }
-            except Exception as exc:
-                call.status = AtelierAgentToolStatus.FAILED
-                call.error = str(exc)
-                call.completed_at = time.time()
-                yield {
-                    "type": "tool_done",
-                    "call_id": call.call_id,
-                    "tool_name": tool_name,
-                    "status": AtelierAgentToolStatus.FAILED.value,
-                    "result_snapshot": None,
-                    "error": str(exc),
-                }
+                try:
+                    result = executor(project_id, resolved_arguments, self.pipeline)
+                except Exception as exc:
+                    last_exc = exc
+                    retriable = _is_retriable(exc)
+                    if retriable and attempt_index < max_attempts:
+                        # Interim failure — emit the per-attempt tool_done
+                        # so the rail can show the retry, then sleep + loop.
+                        yield {
+                            "type": "tool_done",
+                            "call_id": call.call_id,
+                            "tool_name": tool_name,
+                            "status": AtelierAgentToolStatus.FAILED.value,
+                            "result_snapshot": None,
+                            "error": str(exc),
+                            "attempt": attempt_index,
+                            "iteration": iteration_n,
+                            "retriable": True,
+                        }
+                        sleep_for = _AGENT_RETRY_BACKOFFS[attempt_index - 1]
+                        try:
+                            time.sleep(sleep_for)
+                        except Exception:  # pragma: no cover — defensive
+                            pass
+                        continue
+                    # Terminal failure (non-retriable or attempts exhausted).
+                    call.status = AtelierAgentToolStatus.FAILED
+                    call.error = str(exc)
+                    call.completed_at = time.time()
+                    yield {
+                        "type": "tool_done",
+                        "call_id": call.call_id,
+                        "tool_name": tool_name,
+                        "status": AtelierAgentToolStatus.FAILED.value,
+                        "result_snapshot": None,
+                        "error": str(exc),
+                        "attempt": attempt_index,
+                        "iteration": iteration_n,
+                    }
+                    break
+                else:
+                    call.status = AtelierAgentToolStatus.COMPLETED
+                    call.approval_required = policy_status == AtelierAgentToolStatus.APPROVAL_REQUIRED.value
+                    call.approval_granted = call.approval_required and approve
+                    call.result_snapshot = result
+                    call.completed_at = time.time()
+                    # Bind the alias once the producer call succeeds.
+                    if produced_alias and isinstance(result, dict):
+                        node_payload = result.get("node")
+                        if isinstance(node_payload, dict):
+                            node_id = node_payload.get("id")
+                            if isinstance(node_id, str) and node_id:
+                                alias_map[produced_alias] = node_id
+                    yield {
+                        "type": "tool_done",
+                        "call_id": call.call_id,
+                        "tool_name": tool_name,
+                        "status": AtelierAgentToolStatus.COMPLETED.value,
+                        "result_snapshot": result if isinstance(result, dict) else None,
+                        "error": None,
+                        "attempt": attempt_index,
+                        "iteration": iteration_n,
+                    }
+                    attempt_succeeded = True
+                    break
             if existing_call is None:
                 turn.tool_calls.append(call)
 
@@ -1921,16 +2142,415 @@ class AtelierAgentHarness:
             turn.response = assistant_response.strip()
         else:
             turn.response = _build_turn_response(turn.tool_calls, turn.status, turn.preview)
+        # v1.1 X: stamp the iteration index whenever the run executed for a
+        # multi-step loop; single-step callers default to iteration_n=1
+        # which is also a sane post-run marker.
+        if iteration_n > turn.iteration_count:
+            turn.iteration_count = iteration_n
         if appending_new_turn:
             project.agent_turns.append(turn)
         project.updated_at = time.time()
-        self.pipeline._save_atelier_data()
+        if not skip_persist:
+            self.pipeline._save_atelier_data()
         yield {
             "type": "turn_done",
             "turn": turn,
             "status": turn.status,
             "error": None,
         }
+
+    # ── v1.1 X (a) — multi-step LLM loop ──────────────────────────────────
+    # Owns the outer iteration loop that:
+    #   1. streams the LLM (delegates to stream_atelier_llm_planner so tests
+    #      can monkeypatch the single seam)
+    #   2. executes the planner-emitted tool_calls via run_turn_streaming
+    #      (skip_persist=True so we save once at the end of the run)
+    #   3. appends the round's assistant text + per-tool results to the
+    #      messages_history snapshot persisted on the turn
+    #   4. iterates until either max_iterations is hit, the LLM emits no
+    #      tool_calls, or a preview-pause / failure-cancel terminal occurs
+    #
+    # Each yielded event carries `iteration` so the UI can group its chip
+    # rail under the matching LLM bubble. Round-shape:
+    #
+    #   {"type": "turn", "turn_id", "iteration", "planner", "model"}        ← once per iteration
+    #   {"type": "llm_delta", "iteration", "text"}                          ← N per iteration
+    #   {"type": "llm_done", "iteration", "response", "tool_calls", "error"}← once per iteration
+    #   {"type": "tool_start"|"tool_done", "attempt", "iteration", ...}     ← N per iteration
+    #   {"type": "tool_plan", "iteration", "tool_calls"}                    ← only when paused for approval
+    #   {"type": "turn_done", "turn", "status", "error"}                    ← always last (loop terminator)
+    def run_agent_loop_streaming(
+        self,
+        project_id: str,
+        user_message: str = "",
+        selected_node_id: Optional[str] = None,
+        skill_name: Optional[str] = None,
+        model: Optional[str] = None,
+        max_iterations: Optional[int] = None,
+        turn_id: Optional[str] = None,
+        resume: bool = False,
+    ) -> Iterator[Dict[str, Any]]:
+        project = self.pipeline.get_atelier_project(project_id)
+        if not project:
+            raise ValueError("Atelier project not found")
+
+        cap = max_iterations if max_iterations is not None else _get_agent_max_iterations()
+        cap = max(1, min(10, int(cap)))
+
+        # Locate or create the turn. The loop owns the turn lifecycle:
+        # iteration 1 creates the turn (pending), every subsequent iteration
+        # mutates the same instance, and the terminal turn_done writes the
+        # final status. Resume path: caller supplies turn_id of a turn that
+        # was previously paused at `waiting_approval` and now wants to fold
+        # the approved pending_tool_calls into iteration N+1.
+        turn: Optional[AtelierAgentTurn] = None
+        existing_message_history: List[Dict[str, Any]] = []
+        iteration_seed = 0
+        if turn_id:
+            turn = next((t for t in project.agent_turns if t.id == turn_id), None)
+            if not turn:
+                raise ValueError("Atelier agent turn not found")
+            existing_message_history = list(turn.messages_history or [])
+            iteration_seed = max(0, int(turn.iteration_count or 0))
+            if resume and turn.status != "waiting_approval":
+                raise ValueError("Atelier agent turn is not waiting for approval")
+        else:
+            if any(t.status == "waiting_approval" for t in project.agent_turns):
+                raise ValueError("Resolve the pending Atelier agent turn before starting a new turn")
+            turn = AtelierAgentTurn(
+                project_id=project_id,
+                user_message=user_message,
+                preview=False,
+                status="pending",
+                max_iterations=cap,
+            )
+            project.agent_turns.append(turn)
+
+        messages_history: List[Dict[str, Any]] = list(existing_message_history)
+        last_assistant_response: str = ""
+        loop_error: Optional[str] = None
+        iteration = iteration_seed
+
+        # If resuming, the first action is to execute the previously-planned
+        # tool_calls under the same iteration index that paused, then push
+        # the next LLM round.
+        if resume and turn_id:
+            pending = list(turn.pending_tool_calls or [])
+            if not pending:
+                raise ValueError("Atelier agent turn has no pending tool calls to resume")
+            turn.pending_tool_calls = []
+            turn.status = "pending"
+            paused_iteration = max(1, iteration_seed)
+            # Translate the existing APPROVAL_REQUIRED placeholders into
+            # the (raw_call, existing_call) zip the harness expects. We
+            # reuse the existing approve+turn_id resume path so chip ids
+            # stay stable across the pause.
+            approved_calls = [
+                c for c in turn.tool_calls
+                if c.status == AtelierAgentToolStatus.APPROVAL_REQUIRED
+            ]
+            if not approved_calls:
+                raise ValueError("Atelier agent turn has no approval-required tool calls")
+            approved_payloads = [_tool_call_payload(c) for c in approved_calls]
+            tool_results_messages: List[Dict[str, Any]] = []
+            tool_chip_results: List[Dict[str, Any]] = []
+            for event in self.run_turn_streaming(
+                project_id=project_id,
+                tool_calls=approved_payloads,
+                user_message=user_message or turn.user_message,
+                approve=True,
+                turn_id=turn.id,
+                assistant_response=None,
+                iteration_n=paused_iteration,
+                skip_persist=True,
+            ):
+                ev_type = event.get("type")
+                if ev_type == "tool_done":
+                    tool_chip_results.append(event)
+                    tool_results_messages.append(
+                        _build_tool_message_from_done_event(event)
+                    )
+                    yield event
+                elif ev_type == "tool_start":
+                    yield event
+                elif ev_type == "turn_done":
+                    # Don't surface the inner turn_done; the loop owns the
+                    # terminal frame. Just update the turn reference.
+                    inner_turn = event.get("turn")
+                    if isinstance(inner_turn, AtelierAgentTurn):
+                        turn = inner_turn
+                else:
+                    yield event
+            # Append the previously-buffered assistant text (if any) plus the
+            # tool results so the next LLM round sees the resumed context.
+            iteration = paused_iteration
+            if turn.response:
+                last_assistant_response = turn.response
+            if tool_results_messages and not messages_history:
+                # No prior history captured (older turns) — synthesize one.
+                messages_history = [
+                    {
+                        "role": "user",
+                        "content": user_message or turn.user_message or "",
+                    }
+                ]
+            if last_assistant_response:
+                messages_history.append({
+                    "role": "assistant",
+                    "content": last_assistant_response,
+                })
+            messages_history.extend(tool_results_messages)
+            turn.messages_history = list(messages_history)
+
+        while iteration < cap:
+            iteration += 1
+            # Build the planner package fresh per iteration so the LLM sees
+            # the latest canvas state (each tool call may have mutated it).
+            try:
+                package = self.build_planner_package(
+                    project_id=project_id,
+                    user_message=user_message or turn.user_message,
+                    selected_node_id=selected_node_id,
+                    skill_name=skill_name,
+                )
+            except ValueError as exc:
+                loop_error = str(exc)
+                break
+
+            yield {
+                "type": "turn",
+                "turn_id": turn.id,
+                "iteration": iteration,
+                "planner": "model_adapter",
+                "model": model,
+            }
+
+            buffered_response = ""
+            iter_tool_calls: List[Dict[str, Any]] = []
+            iter_error: Optional[str] = None
+            try:
+                # NOTE: stream_atelier_llm_planner is the test seam — keep
+                # this call site narrow so monkeypatching one module-level
+                # function is enough to drive every iteration.
+                for event in stream_atelier_llm_planner(
+                    package,
+                    user_message or turn.user_message,
+                    model=model,
+                ):
+                    ev_type = event.get("type")
+                    if ev_type == "delta":
+                        text = event.get("text") or ""
+                        if text:
+                            buffered_response += text
+                            yield {
+                                "type": "llm_delta",
+                                "iteration": iteration,
+                                "text": text,
+                            }
+                    elif ev_type == "done":
+                        final_response = event.get("response")
+                        if isinstance(final_response, str) and final_response:
+                            buffered_response = final_response
+                        iter_tool_calls = list(event.get("tool_calls") or [])
+                        iter_error = event.get("error") or None
+            except Exception as exc:  # pragma: no cover — defensive
+                logger.exception("run_agent_loop_streaming: LLM round %d crashed", iteration)
+                iter_error = f"LLM round crashed: {exc}"
+
+            yield {
+                "type": "llm_done",
+                "iteration": iteration,
+                "response": buffered_response,
+                "tool_calls": list(iter_tool_calls),
+                "error": iter_error,
+            }
+
+            # Record this LLM round into messages_history for the next
+            # iteration. We seed the user message on the first round so
+            # the model can chain results to intent.
+            if not messages_history:
+                messages_history.append({
+                    "role": "user",
+                    "content": user_message or turn.user_message or "",
+                })
+            messages_history.append({
+                "role": "assistant",
+                "content": buffered_response or "",
+            })
+            last_assistant_response = buffered_response
+
+            if iter_error and iter_error != "parse_failed":
+                loop_error = iter_error
+                break
+            if not iter_tool_calls:
+                # No more actions — model decided we're done.
+                break
+            if iter_error == "parse_failed":
+                loop_error = "Model response was not valid JSON; no tool calls executed."
+                break
+
+            # Defer to the per-call harness so we get retries + alias
+            # resolution + policy enforcement + preview_on_approval gating
+            # for free. existing_turn=turn so the inner generator mutates
+            # the same AtelierAgentTurn we own.
+            policy_mode = (
+                project.agent_policy.approval_mode.value
+                if hasattr(project.agent_policy.approval_mode, "value")
+                else str(project.agent_policy.approval_mode)
+            )
+            preview_gate = policy_mode in {"untrusted", "on_request"}
+            paused = False
+            iter_tool_done_events: List[Dict[str, Any]] = []
+            for event in self.run_turn_streaming(
+                project_id=project_id,
+                tool_calls=iter_tool_calls,
+                user_message=user_message or turn.user_message,
+                assistant_response=buffered_response or None,
+                iteration_n=iteration,
+                preview_on_approval=preview_gate,
+                existing_turn=turn,
+                skip_persist=True,
+            ):
+                ev_type = event.get("type")
+                if ev_type == "tool_plan":
+                    # The harness paused — forward the event and break out
+                    # of the loop. The harness has already persisted the
+                    # turn as waiting_approval; we re-emit our own
+                    # terminal turn_done after this loop.
+                    paused = True
+                    yield event
+                elif ev_type == "tool_start":
+                    yield event
+                elif ev_type == "tool_done":
+                    iter_tool_done_events.append(event)
+                    yield event
+                elif ev_type == "turn_done":
+                    inner_turn = event.get("turn")
+                    if isinstance(inner_turn, AtelierAgentTurn):
+                        turn = inner_turn
+                    # Suppress the inner terminal — the loop owns the wire
+                    # terminal turn_done. Exception: if paused, also break.
+                else:
+                    yield event
+
+            # Append the round's tool results to messages_history so
+            # iteration N+1 sees them (OpenAI-style {"role":"tool", ...}).
+            for done_event in iter_tool_done_events:
+                messages_history.append(_build_tool_message_from_done_event(done_event))
+
+            if paused:
+                turn.messages_history = list(messages_history)
+                # turn.iteration_count + pending_tool_calls were already set
+                # by run_turn_streaming's preview gate. Just persist and exit.
+                project.updated_at = time.time()
+                self.pipeline._save_atelier_data()
+                yield {
+                    "type": "turn_done",
+                    "turn": turn,
+                    "status": "awaiting_approval",
+                    "error": None,
+                }
+                return
+
+            # If any tool failed terminally AND this is the last allowed
+            # iteration, surface as loop terminal. Otherwise keep going
+            # so the LLM can react to the failure.
+            terminal_failure = any(
+                e.get("status") == AtelierAgentToolStatus.FAILED.value
+                and not e.get("retriable")
+                for e in iter_tool_done_events
+            )
+            if terminal_failure and iteration >= cap:
+                break
+
+        # Loop terminator: write the final turn status + persist once.
+        turn.iteration_count = max(turn.iteration_count, iteration)
+        turn.messages_history = list(messages_history)
+        if loop_error:
+            turn.status = "failed"
+            turn.response = loop_error
+            turn.completed_at = time.time()
+        else:
+            # Status derives from the underlying tool_calls — the per-call
+            # branch already wrote completed / failed onto each call. If
+            # nothing actually executed (e.g. LLM emitted no tool_calls on
+            # round 1), `completed` with the LLM text is the right answer.
+            if any(c.status == AtelierAgentToolStatus.FAILED for c in turn.tool_calls):
+                turn.status = "failed"
+            elif any(c.status == AtelierAgentToolStatus.APPROVAL_REQUIRED for c in turn.tool_calls):
+                turn.status = "waiting_approval"
+            else:
+                turn.status = "completed"
+            turn.completed_at = time.time()
+            if last_assistant_response and last_assistant_response.strip():
+                turn.response = last_assistant_response.strip()
+            else:
+                turn.response = _build_turn_response(turn.tool_calls, turn.status, preview=False)
+        project.updated_at = time.time()
+        self.pipeline._save_atelier_data()
+        yield {
+            "type": "turn_done",
+            "turn": turn,
+            "status": turn.status,
+            "error": loop_error,
+        }
+
+    # ── v1.1 X (b) — explicit cancel of a paused/waiting turn ─────────────
+    # Frontend posts to /agent/turns/{id}/cancel when the user clicks
+    # Reject on the Preview card. We mark every APPROVAL_REQUIRED call as
+    # DENIED (so the chip rail flips to the rejected style) and the turn
+    # itself as `canceled` (new terminal status, distinct from the
+    # deny-existing-pending path which marks the turn `failed`).
+    def cancel_turn(self, project_id: str, turn_id: str) -> AtelierAgentTurn:
+        project = self.pipeline.get_atelier_project(project_id)
+        if not project:
+            raise ValueError("Atelier project not found")
+        turn = next((t for t in project.agent_turns if t.id == turn_id), None)
+        if not turn:
+            raise ValueError("Atelier agent turn not found")
+        if turn.status not in ("waiting_approval", "pending"):
+            raise ValueError("Atelier agent turn is not cancelable in its current status")
+        now = time.time()
+        for call in turn.tool_calls:
+            if call.status == AtelierAgentToolStatus.APPROVAL_REQUIRED:
+                call.status = AtelierAgentToolStatus.DENIED
+                call.approval_required = True
+                call.approval_granted = False
+                call.error = call.error or "User canceled the agent turn"
+                call.completed_at = now
+        turn.pending_tool_calls = []
+        turn.status = "canceled"
+        turn.completed_at = now
+        if not turn.response:
+            turn.response = "Turn canceled."
+        project.updated_at = now
+        self.pipeline._save_atelier_data()
+        return turn
+
+
+def _build_tool_message_from_done_event(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Synthesize an OpenAI-style `{"role":"tool", ...}` message from a
+    harness tool_done event. The exact shape matches what an OpenAI
+    function-calling round-trip would emit — content holds either the
+    serialized result_snapshot (success) or the error string (failure),
+    and tool_call_id mirrors the call_id so future tool_choice replay can
+    pin to the right invocation.
+    """
+    content_obj: Any
+    if event.get("status") == AtelierAgentToolStatus.COMPLETED.value:
+        content_obj = event.get("result_snapshot") or {}
+    else:
+        content_obj = {"error": event.get("error") or "unknown"}
+    try:
+        serialized = json.dumps(content_obj, ensure_ascii=False, default=str)
+    except Exception:  # pragma: no cover — defensive
+        serialized = str(content_obj)
+    return {
+        "role": "tool",
+        "tool_call_id": str(event.get("call_id") or ""),
+        "name": str(event.get("tool_name") or ""),
+        "content": serialized,
+    }
 
 
 def _compact_node(node: AtelierNode) -> Dict[str, Any]:

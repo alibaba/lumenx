@@ -8,11 +8,13 @@ import {
     type AtelierAgentPlannerPackage,
     type AtelierAgentToolCallPayload,
     type AtelierAgentTurn,
+    type AtelierExportRecord,
     type AtelierGenerationConfig,
     type AtelierNode,
     type AtelierProject,
     type RunAtelierAgentTurnPayload,
     type StreamAtelierAgentTurnPayload,
+    type StreamAtelierAgentLoopPayload,
     type AgentStreamDoneEvent,
 } from "@/lib/api";
 import { computeRegionBoundsForNodes } from "@/components/atelier/v3/regionGeometry";
@@ -34,6 +36,14 @@ export interface ToolProgress {
     tool_name: string;
     status: "running" | "completed" | "failed" | string;
     error?: string;
+    // v1.1 track X — multi-step + retry metadata. `attempt` ≥ 2 means
+    // the chip is showing a retry; `iteration` groups chips by LLM
+    // round (1-based). `retriable` flags an interim failure that's
+    // expected to retry, so the rail can show "Retrying…" instead of a
+    // terminal X.
+    attempt?: number;
+    iteration?: number;
+    retriable?: boolean;
 }
 
 // Q (v0.9): per-file upload entry surfaced by AssetLibrary's
@@ -127,6 +137,18 @@ interface AtelierStore {
     runAgentTurnStreaming_P: (
         payload: StreamAtelierAgentTurnPayload & { signal?: AbortSignal },
     ) => Promise<AtelierAgentTurn | null>;
+    /** v1.1 track X — multi-step SSE loop variant. Same return contract
+     *  as `runAgentTurnStreaming_P` (resolves with the final turn, or
+     *  `null` on abort / blocked / failed terminal). Differs in three
+     *  ways: (1) backend loops up to `max_iterations` LLM rounds, (2)
+     *  under untrusted policy ANY round whose plan would require
+     *  approval pauses the turn at `awaiting_approval` and surfaces
+     *  the Preview card via `agentPreview_X`, (3) when resuming a
+     *  paused turn the caller supplies `{turn_id, resume: true}` to
+     *  fold previously-approved tool_calls into the next round. */
+    runAgentTurnLoop_X: (
+        payload: StreamAtelierAgentLoopPayload & { signal?: AbortSignal },
+    ) => Promise<AtelierAgentTurn | null>;
     createVideoNode: () => Promise<AtelierNode>;
     createImageNode: (file: File) => Promise<AtelierNode>;
     /** v0.8 (M): persist a curated Browse seed as a real Atelier node.
@@ -190,6 +212,111 @@ interface AtelierStore {
         entries: Array<{ parentId: string; candidateId: string; trimStart?: number; trimEnd?: number }>,
         options?: { signal?: AbortSignal; onProgress?: (pct: number) => void },
     ) => Promise<{ video_url: string; filename: string; size_mb: number; clip_count: number }>;
+    // ── Track U (v1.1): bounded export-worker pool surface ────────────
+    // Backed by GET /atelier/projects/{id}/sequence/export/queue/status.
+    // The SequenceStrip subscribes to this slice + polls
+    // `refreshExportQueue_U` every ~1.5s while any export is alive so
+    // the user sees a small N-of-N badge ("running/cap"). Suffix `_U`
+    // per the v1.1 collision rule — U/V/W/X all co-edit this store.
+    /** Most recent queue snapshot for the active project, or null when
+     *  nothing has been fetched yet. Fields mirror the backend DTO:
+     *    queued: jobs allocated but sitting in the pool queue
+     *            (status='pending'),
+     *    running: jobs actively inside ffmpeg (status='running'),
+     *    poolSize: configured cap (ATELIER_EXPORT_WORKERS or default
+     *              min(2, cpu_count())).
+     *  Cached project id lets the panel discard a stale snapshot after
+     *  a project switch without an extra round-trip. */
+    exportQueue_U: {
+        projectId: string;
+        queued: number;
+        running: number;
+        poolSize: number;
+    } | null;
+    /** Pull the latest queue snapshot for the given project, store it,
+     *  and return the parsed form. Errors are swallowed (the badge is a
+     *  UX nicety — a backend hiccup shouldn't surface a toast) but do
+     *  clear the cached slice so the strip falls back to no-badge
+     *  rendering. */
+    refreshExportQueue_U: (
+        projectId: string,
+        options?: { signal?: AbortSignal },
+    ) => Promise<{ queued: number; running: number; poolSize: number } | null>;
+    /** Reset the slice — called by SequenceStrip's project-switch
+     *  effect so the badge from project A doesn't bleed into project
+     *  B between mount and the first refresh. */
+    clearExportQueue_U: () => void;
+    // ── Track W (v1.1): Export history persistence ────────────────────
+    // Persistent per-project list of completed exports, plus delete +
+    // redo actions. The slice lives in zustand so the ExportsPanel can
+    // subscribe + re-render across mounts (e.g. when the rail panel
+    // is toggled). Naming suffix `_W` per the v1.1 collision rule.
+    /** Newest-first cache of ExportRecord rows for the active project.
+     *  Replaced wholesale on each `loadExports_W` call so a deletion or
+     *  a fresh export on another tab is reflected on next load.
+     *  Empty when the panel hasn't been opened yet, when the active
+     *  project has no exports, or when the load failed (see
+     *  `exportsError_W`). */
+    exports_W: AtelierExportRecord[];
+    /** True while the most recent `loadExports_W` is in flight. */
+    exportsLoading_W: boolean;
+    /** Last load error (string) or null. Surfaced by the panel as a
+     *  small empty-state hint with a Retry button. */
+    exportsError_W: string | null;
+    /** Fetch the project's export history and cache it under
+     *  `exports_W`. Returns the records so the caller can await + chain
+     *  if needed. */
+    loadExports_W: (projectId: string) => Promise<AtelierExportRecord[]>;
+    /** Remove an export from the project. `deleteFile` defaults to
+     *  false (keep the mp4 on disk so any open download still works);
+     *  the panel's destructive confirmation passes true. */
+    deleteExport_W: (
+        projectId: string,
+        exportId: string,
+        options?: { deleteFile?: boolean },
+    ) => Promise<void>;
+    /** Kick off a new export job using the saved source_entries.
+     *  Returns the new job_id so the caller can hand it to the
+     *  existing `pollAtelierExportJob` polling code path (the
+     *  panel does not need to wait for completion — it just refreshes
+     *  the list once the user comes back). */
+    redoExport_W: (
+        projectId: string,
+        exportId: string,
+    ) => Promise<{ job_id: string; status: string }>;
+    // ── Track X (v1.1): Agent preview-then-execute slice ─────────────
+    //
+    // Populated by the SSE parser when the multi-step loop emits a
+    // `tool_plan` event under untrusted / on_request policy. The panel
+    // renders a Preview card under the StreamingAgentBubble; the user
+    // clicks Approve (→ continueAgentTurn_X) or Reject (→ cancelAgentTurn_X)
+    // to resolve it. Action suffix `_X` keeps the slice unique amongst the
+    // parallel v1.1 tracks (U / V / W / X all co-edit this store).
+    agentPreview_X: {
+        /** Turn id assigned by the backend when it persisted the paused
+         *  turn. The /continue + /cancel routes key on this. */
+        turnId: string;
+        /** Iteration number the loop paused at (1-based). Surfaced in the
+         *  Preview card subtitle so the user knows it's "step N of N". */
+        iteration: number;
+        /** Planner-emitted tool calls awaiting approval. */
+        toolCalls: AtelierAgentToolCallPayload[];
+    } | null;
+    /** True while either continueAgentTurn_X or cancelAgentTurn_X is in
+     *  flight. Disables the Preview card buttons so the user can't
+     *  double-click. */
+    agentPreviewBusy_X: boolean;
+    /** Approve the pending preview — calls /agent/turns/{id}/continue,
+     *  refreshes the project / agent_turns slices, clears
+     *  `agentPreview_X`. Throws on failure (the panel toasts). */
+    continueAgentTurn_X: (projectId: string, turnId: string) => Promise<AtelierAgentTurn>;
+    /** Reject the pending preview — calls /agent/turns/{id}/cancel,
+     *  refreshes state, clears `agentPreview_X`. */
+    cancelAgentTurn_X: (projectId: string, turnId: string) => Promise<AtelierAgentTurn>;
+    /** Drop the slice without an API call. Used by `loadProjects` after
+     *  a refresh resolves it elsewhere, and by the SSE parser when a
+     *  fresh stream supersedes the previous one. */
+    clearAgentPreview_X: () => void;
     // ── Track R (v0.9): user-saved workflow templates ────────────────
     // Per-project localStorage round-trip. Suffix `_R` keeps the action
     // names unique across the v0.9 parallel tracks (O / P / Q / R all
@@ -204,6 +331,63 @@ interface AtelierStore {
     getUserTemplates_R: (projectId?: string | null) => PersistedUserTemplate[];
     addUserTemplate_R: (projectId: string, tpl: PersistedUserTemplate) => void;
     removeUserTemplate_R: (projectId: string, id: string) => void;
+    // ── Track V (v1.1): onboarding guided-tour state ─────────────────
+    // `null` = inactive (returning user who has already finished, or the
+    // first-mount probe hasn't decided yet). A number is the active step
+    // index. The Shell renders <OnboardingTour/> only when this is a
+    // number, and the dot pager is N-of-`steps.length`. The persistence
+    // key (`atelier-onboarding-completed-v1.1`) is intentionally bumped
+    // from the v0.x `atelier-v3-onboarding-seen` flag so every user gets
+    // the new anchored-spotlight tour exactly once after the v1.1 ship;
+    // the legacy flag is left in place so a downgrade respects it.
+    onboardingStepIndex_V: number | null;
+    /** Probe localStorage for the "completed" flag and start the tour at
+     *  step 0 if the user hasn't seen it. No-op when already completed
+     *  or when window is unavailable (SSR). Returns whether a tour was
+     *  started so callers can wire follow-up effects. */
+    maybeStartOnboarding_V: () => boolean;
+    /** Force-start the tour at step 0. Used by the "Replay tour" button
+     *  in the Help dialog — clears the persisted completed flag so the
+     *  next mount doesn't immediately re-suppress the tour. */
+    startOnboarding_V: () => void;
+    /** Move to the next step. On the last step, this is equivalent to
+     *  `dismissOnboarding_V` (writes the seen flag and clears state).
+     *  Caller passes the total step count so the store stays decoupled
+     *  from the authored step list (kept in AtelierShellV3). */
+    advanceOnboarding_V: (totalSteps: number) => void;
+    /** Direct jump from the dot pager. Clamped to [0, totalSteps - 1]. */
+    setOnboardingStep_V: (index: number, totalSteps: number) => void;
+    /** Skip / X / Esc. Writes the persisted completed flag and clears
+     *  the active index. Safe to call multiple times. */
+    dismissOnboarding_V: () => void;
+}
+
+// ── Track V (v1.1): onboarding persistence helpers ───────────────────
+// Both helpers are defensive: localStorage may throw (Safari private
+// mode, quota, etc.). The completed key is bumped to v1.1 so every
+// user gets the new anchored tour exactly once after the v1.1 ship.
+const ATELIER_ONBOARDING_COMPLETED_KEY_V = "atelier-onboarding-completed-v1.1";
+
+function readOnboardingCompleted_V(): boolean {
+    if (typeof window === "undefined") return true;
+    try {
+        return window.localStorage.getItem(ATELIER_ONBOARDING_COMPLETED_KEY_V) === "1";
+    } catch {
+        return false;
+    }
+}
+
+function writeOnboardingCompleted_V(completed: boolean): void {
+    if (typeof window === "undefined") return;
+    try {
+        if (completed) {
+            window.localStorage.setItem(ATELIER_ONBOARDING_COMPLETED_KEY_V, "1");
+        } else {
+            window.localStorage.removeItem(ATELIER_ONBOARDING_COMPLETED_KEY_V);
+        }
+    } catch {
+        /* ignore quota / private mode */
+    }
 }
 
 // ── Track R (v0.9): localStorage helpers ─────────────────────────────
@@ -601,6 +785,35 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                                     };
                                 case "tool_start": {
                                     const progress = current.tool_progress ?? [];
+                                    // v1.1 X — when this is a retry attempt
+                                    // (attempt ≥ 2) we PATCH the existing
+                                    // chip in place rather than appending a
+                                    // new one, so the chip rail stays one
+                                    // entry per logical call_id and the
+                                    // attempt badge updates live.
+                                    const existingIdx = progress.findIndex(
+                                        (entry) => entry.call_id === event.call_id,
+                                    );
+                                    if (existingIdx >= 0) {
+                                        const updated = progress.map((entry, idx) =>
+                                            idx === existingIdx
+                                                ? {
+                                                      ...entry,
+                                                      status: "running" as const,
+                                                      attempt: event.attempt,
+                                                      iteration: event.iteration,
+                                                      error: undefined,
+                                                      retriable: undefined,
+                                                  }
+                                                : entry,
+                                        );
+                                        return {
+                                            streamingAgentTurn: {
+                                                ...current,
+                                                tool_progress: updated,
+                                            },
+                                        };
+                                    }
                                     return {
                                         streamingAgentTurn: {
                                             ...current,
@@ -610,6 +823,8 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                                                     call_id: event.call_id,
                                                     tool_name: event.tool_name,
                                                     status: "running",
+                                                    attempt: event.attempt,
+                                                    iteration: event.iteration,
                                                 },
                                             ],
                                         },
@@ -631,6 +846,9 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                                             ...entry,
                                             status: nextStatus,
                                             error: event.error ?? undefined,
+                                            attempt: event.attempt ?? entry.attempt,
+                                            iteration: event.iteration ?? entry.iteration,
+                                            retriable: event.retriable,
                                         };
                                     });
                                     if (!matched) {
@@ -645,6 +863,26 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                                         streamingAgentTurn: {
                                             ...current,
                                             tool_progress: updated,
+                                        },
+                                    };
+                                }
+                                case "tool_plan": {
+                                    // v1.1 X — preview pause. Populate
+                                    // agentPreview_X so AgentPanelV3 can
+                                    // render the Preview card. We don't
+                                    // touch tool_progress here: the loop
+                                    // hasn't actually executed any tools
+                                    // for this iteration yet, so a chip
+                                    // would lie about the state.
+                                    const turnId = current.turnId ?? null;
+                                    if (!turnId) {
+                                        return {};
+                                    }
+                                    return {
+                                        agentPreview_X: {
+                                            turnId,
+                                            iteration: event.iteration,
+                                            toolCalls: event.tool_calls,
                                         },
                                     };
                                 }
@@ -666,6 +904,37 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                     },
                 },
             );
+
+            // v1.1 X — awaiting_approval terminal: keep agentPreview_X
+            // populated, clear the streaming slice, hydrate the project
+            // so the persisted turn appears in agentTurns under its
+            // waiting_approval status. The user resolves via the
+            // Preview card → continueAgentTurn_X / cancelAgentTurn_X.
+            if ((done.status === "awaiting_approval" || done.status === "waiting_approval") && done.turn) {
+                const pausedTurn = done.turn;
+                const refreshed = await api.getAtelierProject(project.id);
+                const agentTurns = refreshed.agent_turns ?? [pausedTurn];
+                set((state) => ({
+                    currentProject: refreshed,
+                    projects: replaceProject(state.projects, refreshed),
+                    agentTurns,
+                    pendingAgentTurn: getPendingAgentTurn(agentTurns),
+                    streamingAgentTurn: null,
+                    // If the tool_plan event didn't fire (race), seed
+                    // agentPreview_X from the turn's pending_tool_calls so
+                    // the Preview card still renders.
+                    agentPreview_X: state.agentPreview_X ?? (
+                        pausedTurn.pending_tool_calls && pausedTurn.pending_tool_calls.length > 0
+                            ? {
+                                  turnId: pausedTurn.id,
+                                  iteration: pausedTurn.iteration_count ?? 1,
+                                  toolCalls: pausedTurn.pending_tool_calls,
+                              }
+                            : null
+                    ),
+                }));
+                return pausedTurn;
+            }
 
             if (done.status === "completed" && done.turn) {
                 // Hydrate the canvas / turns view from the executed turn.
@@ -705,6 +974,234 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                     : error instanceof Error
                         ? error.message
                         : "Atelier agent stream failed",
+            });
+            if (isAbort) return null;
+            throw error;
+        } finally {
+            set({ isAgentRunning: false });
+        }
+    },
+
+    // ── Track X (v1.1) — multi-step SSE loop ──────────────────────────
+    // Sister of runAgentTurnStreaming_P. The wire format is identical so
+    // the per-event reducer below reuses the same dispatch table; the
+    // only behavioural delta is the post-stream awaiting_approval branch
+    // which keeps `agentPreview_X` populated so the Preview card lights
+    // up. Resume path: pass `{turn_id, resume: true}` after the user
+    // clicks Approve elsewhere (continueAgentTurn_X handles the simpler
+    // sync /continue route; this action only opens a new SSE round when
+    // the loop itself needs to keep streaming).
+    runAgentTurnLoop_X: async (payload) => {
+        const project = await get().ensureProject();
+        const { signal, ...streamPayload } = payload;
+        set({
+            isAgentRunning: true,
+            error: null,
+            streamingAgentTurn: { response: "", done: false },
+        });
+        try {
+            const done: AgentStreamDoneEvent = await api.streamAtelierAgentLoop(
+                project.id,
+                streamPayload,
+                {
+                    signal,
+                    onEvent: (event) => {
+                        set((state) => {
+                            const current = state.streamingAgentTurn ?? {
+                                response: "",
+                                done: false,
+                            };
+                            switch (event.type) {
+                                case "turn":
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            planner: event.planner,
+                                            turnId: event.turn_id,
+                                        },
+                                    };
+                                case "llm_delta":
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            response: current.response + event.text,
+                                        },
+                                    };
+                                case "llm_done":
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            response:
+                                                event.response && event.response.length > current.response.length
+                                                    ? event.response
+                                                    : current.response,
+                                        },
+                                    };
+                                case "tool_start": {
+                                    const progress = current.tool_progress ?? [];
+                                    const existingIdx = progress.findIndex(
+                                        (entry) => entry.call_id === event.call_id,
+                                    );
+                                    if (existingIdx >= 0) {
+                                        const updated = progress.map((entry, idx) =>
+                                            idx === existingIdx
+                                                ? {
+                                                      ...entry,
+                                                      status: "running" as const,
+                                                      attempt: event.attempt,
+                                                      iteration: event.iteration,
+                                                      error: undefined,
+                                                      retriable: undefined,
+                                                  }
+                                                : entry,
+                                        );
+                                        return {
+                                            streamingAgentTurn: {
+                                                ...current,
+                                                tool_progress: updated,
+                                            },
+                                        };
+                                    }
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            tool_progress: [
+                                                ...progress,
+                                                {
+                                                    call_id: event.call_id,
+                                                    tool_name: event.tool_name,
+                                                    status: "running",
+                                                    attempt: event.attempt,
+                                                    iteration: event.iteration,
+                                                },
+                                            ],
+                                        },
+                                    };
+                                }
+                                case "tool_done": {
+                                    const progress = current.tool_progress ?? [];
+                                    const nextStatus: ToolProgress["status"] =
+                                        event.status === "completed"
+                                            ? "completed"
+                                            : event.status === "failed"
+                                              ? "failed"
+                                              : event.status;
+                                    let matched = false;
+                                    const updated = progress.map((entry) => {
+                                        if (entry.call_id !== event.call_id) return entry;
+                                        matched = true;
+                                        return {
+                                            ...entry,
+                                            status: nextStatus,
+                                            error: event.error ?? undefined,
+                                            attempt: event.attempt ?? entry.attempt,
+                                            iteration: event.iteration ?? entry.iteration,
+                                            retriable: event.retriable,
+                                        };
+                                    });
+                                    if (!matched) {
+                                        updated.push({
+                                            call_id: event.call_id,
+                                            tool_name: event.tool_name,
+                                            status: nextStatus,
+                                            error: event.error ?? undefined,
+                                        });
+                                    }
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            tool_progress: updated,
+                                        },
+                                    };
+                                }
+                                case "tool_plan": {
+                                    const turnId = current.turnId ?? null;
+                                    if (!turnId) {
+                                        return {};
+                                    }
+                                    return {
+                                        agentPreview_X: {
+                                            turnId,
+                                            iteration: event.iteration,
+                                            toolCalls: event.tool_calls,
+                                        },
+                                    };
+                                }
+                                case "turn_done":
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            done: true,
+                                        },
+                                    };
+                                default:
+                                    return {};
+                            }
+                        });
+                    },
+                },
+            );
+
+            // Mirror runAgentTurnStreaming_P's terminal branching.
+            if ((done.status === "awaiting_approval" || done.status === "waiting_approval") && done.turn) {
+                const pausedTurn = done.turn;
+                const refreshed = await api.getAtelierProject(project.id);
+                const agentTurns = refreshed.agent_turns ?? [pausedTurn];
+                set((state) => ({
+                    currentProject: refreshed,
+                    projects: replaceProject(state.projects, refreshed),
+                    agentTurns,
+                    pendingAgentTurn: getPendingAgentTurn(agentTurns),
+                    streamingAgentTurn: null,
+                    agentPreview_X: state.agentPreview_X ?? (
+                        pausedTurn.pending_tool_calls && pausedTurn.pending_tool_calls.length > 0
+                            ? {
+                                  turnId: pausedTurn.id,
+                                  iteration: pausedTurn.iteration_count ?? 1,
+                                  toolCalls: pausedTurn.pending_tool_calls,
+                              }
+                            : null
+                    ),
+                }));
+                return pausedTurn;
+            }
+
+            if (done.status === "completed" && done.turn) {
+                const refreshed = await api.getAtelierProject(project.id);
+                const agentTurns = refreshed.agent_turns ?? [done.turn];
+                const resultNodeId = getPrimaryAgentResultNodeId(done.turn);
+                set((state) => ({
+                    currentProject: refreshed,
+                    projects: replaceProject(state.projects, refreshed),
+                    selectedNodeId: getProjectSelection(
+                        refreshed,
+                        resultNodeId ?? state.selectedNodeId,
+                    ),
+                    agentTurns,
+                    pendingAgentTurn: getPendingAgentTurn(agentTurns),
+                    streamingAgentTurn: null,
+                    agentPreview_X: null,
+                }));
+                return done.turn;
+            }
+
+            // Blocked / failed terminal — keep error visible.
+            set({
+                streamingAgentTurn: null,
+                error: done.error || (done.status === "blocked"
+                    ? done.full_response || "Agent declined to act."
+                    : "Agent turn failed."),
+            });
+            return null;
+        } catch (error) {
+            const isAbort = error instanceof DOMException && error.name === "AbortError";
+            set({
+                streamingAgentTurn: null,
+                error: isAbort
+                    ? null
+                    : error instanceof Error
+                        ? error.message
+                        : "Atelier agent loop stream failed",
             });
             if (isAbort) return null;
             throw error;
@@ -1573,6 +2070,147 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
         return api.exportAtelierSequence(projectId, entries, options);
     },
 
+    // ── Track U (v1.1): bounded export-worker pool surface ────────────
+    // The action wraps api.getAtelierExportQueueStatus_U with the
+    // store-shape mapping (snake → camel for poolSize + project-id
+    // attribution) and swallows axios cancellation so the SequenceStrip
+    // can fire-and-forget refresh calls from its polling timer without
+    // routing aborted requests through the toast queue. Network errors
+    // null out the slice so the strip's badge-render guard falls back
+    // to no-badge instead of stale numbers.
+    exportQueue_U: null,
+    refreshExportQueue_U: async (projectId, options) => {
+        try {
+            const res = await api.getAtelierExportQueueStatus_U(projectId, options);
+            const snapshot = {
+                projectId,
+                queued: res.queued ?? 0,
+                running: res.running ?? 0,
+                poolSize: res.pool_size ?? 1,
+            };
+            set({ exportQueue_U: snapshot });
+            return {
+                queued: snapshot.queued,
+                running: snapshot.running,
+                poolSize: snapshot.poolSize,
+            };
+        } catch (err) {
+            // Cancellation is a deliberate teardown signal (the strip
+            // aborts its in-flight queue poll on unmount) — leave the
+            // last good snapshot in place rather than clearing it.
+            const code = (err as { code?: string } | null)?.code;
+            const name = (err as { name?: string } | null)?.name;
+            if (code === "ERR_CANCELED" || name === "CanceledError" || name === "AbortError") {
+                return null;
+            }
+            // Real failure → clear so the badge stops rendering stale
+            // numbers. Don't toast — the badge is a nice-to-have, not
+            // a blocker for the export flow itself.
+            set({ exportQueue_U: null });
+            return null;
+        }
+    },
+    clearExportQueue_U: () => {
+        set({ exportQueue_U: null });
+    },
+
+    // ── Track W (v1.1): Export history persistence ───────────────────
+    //
+    // Backed by api.listAtelierProjectExports / deleteAtelierProjectExport
+    // / redoAtelierProjectExport. The slice keeps the active project's
+    // records under `exports_W` so the ExportsPanel can render
+    // synchronously after a panel toggle without re-fetching, while
+    // still letting consumers force a refresh with `loadExports_W`.
+    //
+    // The actions take an explicit `projectId` (mirroring the v0.9 R
+    // workflow-template actions) rather than reading from
+    // `state.currentProject`. The panel resolves the active project
+    // from the store at call time — keeps the actions pure.
+    exports_W: [],
+    exportsLoading_W: false,
+    exportsError_W: null,
+    loadExports_W: async (projectId) => {
+        set({ exportsLoading_W: true, exportsError_W: null });
+        try {
+            const records = await api.listAtelierProjectExports(projectId);
+            // Server returns newest-first; preserve that order verbatim
+            // so the panel doesn't have to sort on every render.
+            set({ exports_W: records, exportsLoading_W: false });
+            return records;
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            set({
+                exports_W: [],
+                exportsLoading_W: false,
+                exportsError_W: message,
+            });
+            throw err;
+        }
+    },
+    deleteExport_W: async (projectId, exportId, options) => {
+        await api.deleteAtelierProjectExport(projectId, exportId, options);
+        // Optimistic local trim so the row disappears immediately even
+        // before the next loadExports_W call (a panel re-mount will
+        // refresh anyway).
+        set((state) => ({
+            exports_W: state.exports_W.filter((rec) => rec.id !== exportId),
+        }));
+    },
+    redoExport_W: async (projectId, exportId) => {
+        return api.redoAtelierProjectExport(projectId, exportId);
+    },
+
+    // ── Track X (v1.1): Agent preview-then-execute slice ─────────────
+    //
+    // Three actions back the Preview card UI. continueAgentTurn_X reuses
+    // the existing /continue route (which delegates to the approval flow
+    // and runs background-task fanout for generation tools). Both
+    // continue/cancel refresh the project so the panel sees the resolved
+    // status on the next render — we can't rely on the streamingAgentTurn
+    // path here because the SSE stream that delivered tool_plan has
+    // already closed (turn_done(awaiting_approval) terminates it).
+    agentPreview_X: null,
+    agentPreviewBusy_X: false,
+    continueAgentTurn_X: async (projectId, turnId) => {
+        set({ agentPreviewBusy_X: true });
+        try {
+            const resumed = await api.continueAtelierAgentTurn(projectId, turnId);
+            const refreshed = await api.getAtelierProject(projectId);
+            const agentTurns = refreshed.agent_turns ?? [resumed];
+            set((state) => ({
+                currentProject: refreshed,
+                projects: replaceProject(state.projects, refreshed),
+                agentTurns,
+                pendingAgentTurn: getPendingAgentTurn(agentTurns),
+                agentPreview_X: null,
+            }));
+            return resumed;
+        } finally {
+            set({ agentPreviewBusy_X: false });
+        }
+    },
+    cancelAgentTurn_X: async (projectId, turnId) => {
+        set({ agentPreviewBusy_X: true });
+        try {
+            const canceled = await api.cancelAtelierAgentTurn(projectId, turnId);
+            const refreshed = await api.getAtelierProject(projectId);
+            const agentTurns = refreshed.agent_turns ?? [canceled];
+            set((state) => ({
+                currentProject: refreshed,
+                projects: replaceProject(state.projects, refreshed),
+                agentTurns,
+                pendingAgentTurn: getPendingAgentTurn(agentTurns),
+                agentPreview_X: null,
+            }));
+            return canceled;
+        } finally {
+            set({ agentPreviewBusy_X: false });
+        }
+    },
+    clearAgentPreview_X: () => {
+        set({ agentPreview_X: null });
+    },
+
     // ── Track R (v0.9): user-saved workflow templates ────────────────
     // Pure localStorage round-trip; no zustand state lives in the store
     // (the Mine tab subscribes to the `atelier-user-workflows-changed`
@@ -1600,5 +2238,57 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
         const next = list.filter((t) => t.id !== id);
         if (next.length === list.length) return; // nothing to remove
         writeUserTemplatesToStorage(projectId, next);
+    },
+
+    // ── Track V (v1.1): onboarding guided-tour actions ───────────────
+    // The Shell mounts <OnboardingTour/> only when `onboardingStepIndex_V`
+    // is a number. `maybeStartOnboarding_V` is the first-mount entry
+    // point: it consults `atelier-onboarding-completed-v1.1` and starts
+    // at step 0 on a miss. `startOnboarding_V` is the replay entry point
+    // (Help dialog) — it ignores the persisted flag AND clears it so a
+    // subsequent reload doesn't immediately re-suppress the tour the
+    // user just asked to revisit.
+    onboardingStepIndex_V: null,
+
+    maybeStartOnboarding_V: () => {
+        if (readOnboardingCompleted_V()) return false;
+        if (get().onboardingStepIndex_V !== null) return false;
+        set({ onboardingStepIndex_V: 0 });
+        return true;
+    },
+
+    startOnboarding_V: () => {
+        writeOnboardingCompleted_V(false);
+        set({ onboardingStepIndex_V: 0 });
+    },
+
+    advanceOnboarding_V: (totalSteps) => {
+        const cur = get().onboardingStepIndex_V;
+        if (cur === null) return;
+        const safeTotal = Math.max(1, totalSteps);
+        const next = cur + 1;
+        if (next >= safeTotal) {
+            writeOnboardingCompleted_V(true);
+            set({ onboardingStepIndex_V: null });
+            return;
+        }
+        set({ onboardingStepIndex_V: next });
+    },
+
+    setOnboardingStep_V: (index, totalSteps) => {
+        if (get().onboardingStepIndex_V === null) return;
+        const safeTotal = Math.max(1, totalSteps);
+        const clamped = Math.min(Math.max(0, Math.floor(index)), safeTotal - 1);
+        set({ onboardingStepIndex_V: clamped });
+    },
+
+    dismissOnboarding_V: () => {
+        // Always write the flag — even if the index is already null —
+        // because a Help-dialog Skip without ever opening the tour
+        // (edge case) should still mark it seen.
+        writeOnboardingCompleted_V(true);
+        if (get().onboardingStepIndex_V !== null) {
+            set({ onboardingStepIndex_V: null });
+        }
     },
 }));

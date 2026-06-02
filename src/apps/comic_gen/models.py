@@ -451,7 +451,10 @@ class AtelierAgentTurn(BaseModel):
     project_id: str
     user_message: str = ""
     preview: bool = False
-    status: str = Field("pending", description="pending/waiting_approval/completed/failed")
+    status: str = Field(
+        "pending",
+        description="pending/waiting_approval/completed/failed/canceled",
+    )
     tool_calls: List[AtelierAgentToolCall] = Field(default_factory=list)
     created_at: float = Field(default_factory=time.time)
     completed_at: Optional[float] = None
@@ -462,6 +465,39 @@ class AtelierAgentTurn(BaseModel):
             "Populated by AtelierAgentHarness when the turn reaches a terminal "
             "status (completed/failed/waiting_approval). Optional so historical "
             "persisted turns load cleanly."
+        ),
+    )
+    # ── v1.1 track X — multi-step loop + preview-then-execute resumption ────
+    # All four fields are optional and default to "single-step empty" so v1.0
+    # turns load cleanly. They power the agent loop's pause/resume cycle:
+    # `iteration_count` tracks how many LLM rounds have completed (0 before
+    # the first round, incremented after each round's llm_done);
+    # `messages_history` is the accumulated OpenAI-style messages array fed
+    # back into the LLM on each iteration so the model can see its own
+    # prior actions + tool results; `max_iterations` is the cap snapshotted
+    # from ATELIER_AGENT_MAX_ITERATIONS at turn-start; `pending_tool_calls`
+    # holds the planned tool_call list emitted via `tool_plan` when the
+    # loop pauses for approval — POST /agent/turns/{id}/continue reads it
+    # back to resume execution.
+    iteration_count: int = Field(
+        0,
+        description="Number of completed LLM rounds in the multi-step loop (v1.1 X)",
+    )
+    messages_history: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Accumulated OpenAI-style messages history fed back into the LLM on each iteration (v1.1 X)",
+    )
+    max_iterations: int = Field(
+        3,
+        description="Snapshot of ATELIER_AGENT_MAX_ITERATIONS at turn start; the loop terminates after this many iterations (v1.1 X)",
+    )
+    pending_tool_calls: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Tool calls planned by the LLM but pending user approval. "
+            "Populated when the multi-step loop emits a `tool_plan` event "
+            "and pauses; consumed by POST /agent/turns/{id}/continue to "
+            "resume execution. Cleared once execution proceeds (v1.1 X)."
         ),
     )
 
@@ -511,6 +547,32 @@ class AtelierSequenceEntry(BaseModel):
     trimEnd: Optional[float] = Field(None, description="Optional out-point in seconds")
 
 
+class ExportRecord(BaseModel):
+    """v1.1 track W — persisted record of a successful Atelier sequence
+    export. Stored on the project (AtelierProject.exports) so the user
+    can re-download / re-share / re-run / delete a finished mp4 days or
+    weeks later instead of losing the link the moment they refresh.
+
+    The `source_entries` field is the original POST body the user (or a
+    Redo click) submitted — keeping the raw entry shape (parentId /
+    candidateId / trim points) means the Redo route can re-validate
+    against current project state and surface a friendly error if a
+    referenced candidate has since been deleted, without having to
+    re-resolve URLs that may have been GC'd.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    project_id: str = Field(..., description="Owning Atelier project id")
+    created_at: float = Field(default_factory=time.time)
+    clip_count: int = Field(0, description="Number of clips concatenated into the export")
+    size_mb: float = Field(0.0, description="Final mp4 size in MiB (matches export job response)")
+    video_url: str = Field(..., description="Relative URL of the exported mp4 (e.g. videos/atelier_seq_*.mp4)")
+    filename: str = Field(..., description="Basename of the exported file under output/video/")
+    source_entries: List[AtelierSequenceEntry] = Field(
+        default_factory=list,
+        description="Snapshot of the original sequence entries that produced this export; used by Redo to re-run with identical inputs.",
+    )
+
+
 class AtelierProject(BaseModel):
     id: str = Field(..., description="Unique Atelier project ID")
     title: str = Field(..., description="Canvas project title")
@@ -522,6 +584,15 @@ class AtelierProject(BaseModel):
     sequence: List[AtelierSequenceEntry] = Field(
         default_factory=list,
         description="Ordered list of clips assembled in the Sequence Strip; persisted server-side so the cut survives across devices",
+    )
+    exports: List[ExportRecord] = Field(
+        default_factory=list,
+        description=(
+            "v1.1 track W — persisted history of successful sequence exports. "
+            "Appended by pipeline._record_atelier_export after the export job "
+            "worker reaches status='completed'. Surfaced through GET /atelier/"
+            "projects/{id}/exports (newest first) and the left-rail Exports panel."
+        ),
     )
     created_at: float
     updated_at: float

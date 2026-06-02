@@ -7,6 +7,7 @@ import uuid
 import subprocess
 import threading
 import platform
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote
 from .models import (
     AtelierAgentPolicy,
@@ -16,6 +17,7 @@ from .models import (
     AtelierNode,
     AtelierProject,
     AtelierSequenceEntry,
+    ExportRecord,
     Script,
     GenerationStatus,
     VideoTask,
@@ -65,6 +67,32 @@ def _safe_resolve_path(base_dir: str, untrusted_rel: str) -> str:
         raise ValueError(f"Path escapes base directory: {untrusted_rel}")
     return resolved
 
+
+# v1.1 track U — bounded worker pool for Atelier sequence exports.
+#
+# ATELIER_EXPORT_WORKERS (positive int) caps how many ffmpeg-backed
+# export workers can run simultaneously across the process. Default
+# `min(2, cpu_count())` keeps a single-core box from running its only
+# core flat while still letting a typical 4+ core dev box overlap two
+# exports without explicit tuning. Pool is constructed lazily by
+# `ComicGenPipeline._get_atelier_export_pool` so tests can mutate
+# `self._atelier_export_pool_size` and shutdown the cached pool to
+# rebuild at a different cap.
+def _compute_atelier_export_pool_size() -> int:
+    raw = os.environ.get("ATELIER_EXPORT_WORKERS")
+    if raw:
+        try:
+            parsed = int(raw)
+            if parsed >= 1:
+                return parsed
+        except (TypeError, ValueError):
+            logger.warning(
+                "Ignoring invalid ATELIER_EXPORT_WORKERS=%r (expected positive int)",
+                raw,
+            )
+    cpu = os.cpu_count() or 1
+    return max(1, min(2, cpu))
+
 class ComicGenPipeline:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
@@ -99,6 +127,20 @@ class ComicGenPipeline:
         # half-written dict.
         self.atelier_export_tasks: Dict[str, Dict[str, Any]] = {}
         self._atelier_export_lock = threading.Lock()
+        # v1.1 track U — explicit ThreadPoolExecutor cap for the export
+        # workers. Earlier (v0.9) we threw the worker function at
+        # FastAPI's BackgroundTasks, which has no concurrency cap and so
+        # would oversubscribe ffmpeg/CPU on a flurry of parallel exports
+        # (one per project + per redo). The pool here bounds in-flight
+        # workers to `_atelier_export_pool_size` (env-overridable via
+        # ATELIER_EXPORT_WORKERS, default min(2, cpu_count())). Lazily
+        # constructed in _get_atelier_export_pool so tests can resize the
+        # cap by clearing the cached pool. The pool is process-scoped —
+        # the same pipeline instance survives the entire app lifecycle so
+        # we don't bother with an atexit shutdown hook.
+        self._atelier_export_pool_size = _compute_atelier_export_pool_size()
+        self._atelier_export_pool: Optional[ThreadPoolExecutor] = None
+        self._atelier_export_pool_lock = threading.Lock()
         # Temporary cache for file import previews (import_id -> text)
         self._import_cache: Dict[str, str] = {}
         # Cached model instances for Kling/Vidu (lazily initialized)
@@ -3065,6 +3107,8 @@ class ComicGenPipeline:
         deny: bool = False,
         turn_id: Optional[str] = None,
         assistant_response: Optional[str] = None,
+        iteration_n: int = 1,
+        preview_on_approval: bool = False,
     ) -> Iterator[Dict[str, Any]]:
         yield from AtelierAgentHarness(self).run_turn_streaming(
             project_id=project_id,
@@ -3075,7 +3119,44 @@ class ComicGenPipeline:
             deny=deny,
             turn_id=turn_id,
             assistant_response=assistant_response,
+            iteration_n=iteration_n,
+            preview_on_approval=preview_on_approval,
         )
+
+    # ── v1.1 track X — multi-step LLM loop + cancel shims ─────────────────
+    # `run_atelier_agent_loop_streaming` runs the full LLM-driven multi-step
+    # loop (LLM round → execute → feed results back) and is used by the SSE
+    # route and tests. `cancel_atelier_agent_turn` flips a waiting_approval
+    # turn to `canceled` so the frontend Reject button can dismiss the
+    # Preview card without going through the heavier deny flow.
+    def run_atelier_agent_loop_streaming(
+        self,
+        project_id: str,
+        user_message: str = "",
+        selected_node_id: Optional[str] = None,
+        skill_name: Optional[str] = None,
+        model: Optional[str] = None,
+        max_iterations: Optional[int] = None,
+        turn_id: Optional[str] = None,
+        resume: bool = False,
+    ) -> Iterator[Dict[str, Any]]:
+        yield from AtelierAgentHarness(self).run_agent_loop_streaming(
+            project_id=project_id,
+            user_message=user_message,
+            selected_node_id=selected_node_id,
+            skill_name=skill_name,
+            model=model,
+            max_iterations=max_iterations,
+            turn_id=turn_id,
+            resume=resume,
+        )
+
+    def cancel_atelier_agent_turn(
+        self,
+        project_id: str,
+        turn_id: str,
+    ) -> AtelierAgentTurn:
+        return AtelierAgentHarness(self).cancel_turn(project_id, turn_id)
 
     def create_atelier_node(self, project_id: str, payload: Dict[str, Any]) -> AtelierNode:
         with self._save_lock:
@@ -3812,6 +3893,14 @@ class ComicGenPipeline:
                 # Internal: the resolved tuples the worker will replay.
                 # Not surfaced through get_atelier_export_job_status.
                 "_resolved": resolved,
+                # v1.1 track W — keep an immutable copy of the raw
+                # request entries (parentId / candidateId / trim points)
+                # so the post-success branch can persist an ExportRecord
+                # whose source_entries can later drive a Redo without
+                # having to reconstruct the original input shape from
+                # the resolved tuples. Stored as plain dicts (the
+                # POST handler already coerced them via Pydantic).
+                "_source_entries": [dict(entry) for entry in entries],
                 # Terminal fields filled in on success.
                 "video_url": None,
                 "filename": None,
@@ -3888,10 +3977,34 @@ class ComicGenPipeline:
             job["filename"] = result.get("filename")
             job["size_mb"] = result.get("size_mb")
             job["clip_count"] = result.get("clip_count")
+            # v1.1 track W — pop the cached source_entries before we
+            # release the lock so the helper call runs unlocked
+            # (it acquires _save_lock internally).
+            source_entries = job.pop("_source_entries", None) or []
             # Drop the cached resolved tuples once the job is terminal —
             # they reference internal pipeline objects and aren't needed
             # for polling responses.
             job.pop("_resolved", None)
+            captured_project_id = job.get("project_id")
+
+        # v1.1 track W — persist an ExportRecord on the project so the
+        # left-rail Exports panel + the Redo button have a durable
+        # history to draw from. Wrapped defensively: a persistence
+        # failure must never demote a successful export to failed.
+        try:
+            self._record_atelier_export(
+                project_id=captured_project_id,
+                video_url=result.get("video_url") or "",
+                filename=result.get("filename") or "",
+                size_mb=float(result.get("size_mb") or 0.0),
+                clip_count=int(result.get("clip_count") or 0),
+                source_entries=source_entries,
+            )
+        except Exception:  # pragma: no cover — best-effort persistence
+            logger.exception(
+                "Failed to persist Atelier ExportRecord for job %s",
+                job_id,
+            )
 
     def _set_atelier_export_progress(self, job_id: str, pct: int) -> None:
         with self._atelier_export_lock:
@@ -3946,6 +4059,69 @@ class ComicGenPipeline:
             on_progress=wrapped_progress,
         )
 
+    # ── v1.1 track U: bounded export worker pool ─────────────────────
+    #
+    # `_get_atelier_export_pool` lazily creates a ThreadPoolExecutor with
+    # max_workers == self._atelier_export_pool_size. We do NOT shut the
+    # pool down on each export — workers are re-used across submissions
+    # for the entire pipeline lifetime. Tests that need to resize the
+    # cap mutate _atelier_export_pool_size + clear _atelier_export_pool.
+    def _get_atelier_export_pool(self) -> ThreadPoolExecutor:
+        with self._atelier_export_pool_lock:
+            if self._atelier_export_pool is None:
+                workers = max(1, int(self._atelier_export_pool_size or 1))
+                self._atelier_export_pool = ThreadPoolExecutor(
+                    max_workers=workers,
+                    thread_name_prefix="atelier-export",
+                )
+            return self._atelier_export_pool
+
+    def schedule_atelier_sequence_export_job(self, job_id: str) -> None:
+        """Submit a previously-allocated export job to the bounded
+        worker pool. Returns immediately. The job's `status` stays
+        `pending` until a worker thread picks it up (at which point
+        process_atelier_sequence_export_job flips it to `running`).
+
+        Callers must have already invoked
+        `start_atelier_sequence_export_job` to allocate the job entry;
+        otherwise the worker just logs a warning and no-ops. This is the
+        v1.1 replacement for the v0.9 pattern of throwing the worker
+        straight at FastAPI BackgroundTasks (which had no concurrency
+        cap), so the pool's max_workers bound applies project-wide and
+        across the redo path.
+        """
+        pool = self._get_atelier_export_pool()
+        pool.submit(self.process_atelier_sequence_export_job, job_id)
+
+    def get_atelier_export_queue_status(self, project_id: str) -> Dict[str, Any]:
+        """Per-project queue snapshot used by the SequenceStrip's N-of-N
+        badge. Counts allocated-but-not-yet-running jobs (`pending`) as
+        `queued`, and active workers (`running`) as `running`. Terminal
+        jobs (`completed` / `failed`) are excluded — they're surfaced via
+        the ExportRecord history (track W) once persisted, not via the
+        live-job dict.
+
+        Returned shape: `{queued, running, pool_size}`. `pool_size` is
+        the current cap so the frontend can render "running/cap" when it
+        wants to surface back-pressure.
+        """
+        queued = 0
+        running = 0
+        with self._atelier_export_lock:
+            for job in self.atelier_export_tasks.values():
+                if job.get("project_id") != project_id:
+                    continue
+                status = job.get("status")
+                if status == "pending":
+                    queued += 1
+                elif status == "running":
+                    running += 1
+        return {
+            "queued": queued,
+            "running": running,
+            "pool_size": max(1, int(self._atelier_export_pool_size or 1)),
+        }
+
     def get_atelier_export_job_status(
         self,
         project_id: str,
@@ -3977,6 +4153,154 @@ class ComicGenPipeline:
             if job.get("clip_count") is not None:
                 payload["clip_count"] = job["clip_count"]
             return payload
+
+    # ── v1.1 track W: ExportRecord history ───────────────────────────
+    #
+    # A successful Atelier sequence export persists an ExportRecord on
+    # the owning project so that the left-rail Exports panel + the Redo
+    # button can list / re-run / delete past exports across refresh and
+    # session boundaries.
+    #
+    # API surface owned here (W):
+    #   _record_atelier_export — called by the worker post-success.
+    #   list_atelier_exports   — newest-first read for the GET handler.
+    #   delete_atelier_export  — DELETE handler backend; optional file
+    #                            removal under output/video/.
+    #   redo_atelier_export    — resolves source_entries and calls the
+    #                            existing start_atelier_sequence_export_job
+    #                            (U's job allocator) to kick off a brand
+    #                            new job with identical inputs.
+
+    def _record_atelier_export(
+        self,
+        project_id: Optional[str],
+        *,
+        video_url: str,
+        filename: str,
+        size_mb: float,
+        clip_count: int,
+        source_entries: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[ExportRecord]:
+        """Append an ExportRecord to the project + persist. Called by
+        process_atelier_sequence_export_job's success branch (and by
+        U's concurrent worker, post-success). Returns the recorded
+        ExportRecord or None when the project no longer exists (race
+        with a project delete during the export run — we don't want to
+        re-create a deleted project just to persist history)."""
+        if not project_id:
+            return None
+        coerced_entries: List[AtelierSequenceEntry] = []
+        for raw in source_entries or []:
+            try:
+                # AtelierSequenceEntry accepts both camelCase keys and
+                # the snake_case aliases the public API tolerates.
+                coerced_entries.append(AtelierSequenceEntry.model_validate(raw))
+            except Exception:  # pragma: no cover — entry might be a
+                # leftover with an unexpected shape (e.g. extra fields
+                # an older client wrote). Skip silently; the Redo path
+                # validates again at click time.
+                logger.debug("Skipping malformed source_entries item for export record")
+        record = ExportRecord(
+            project_id=project_id,
+            video_url=video_url,
+            filename=filename,
+            size_mb=round(float(size_mb or 0.0), 2),
+            clip_count=int(clip_count or 0),
+            source_entries=coerced_entries,
+        )
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                return None
+            # Prepend so the newest export is at the head of the list —
+            # matches the panel's display ordering and avoids the panel
+            # having to reverse on every render.
+            project.exports = [record, *list(project.exports or [])]
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+        return record
+
+    def list_atelier_exports(self, project_id: str) -> List[ExportRecord]:
+        """Return the project's exports newest-first. Raises ValueError
+        if the project is unknown so the HTTP handler can map to 404."""
+        project = self.atelier_projects.get(project_id)
+        if not project:
+            raise ValueError("Atelier project not found")
+        # `exports` is already prepended-on-insert (newest first), but
+        # sort defensively in case a legacy load order differs.
+        return sorted(
+            list(project.exports or []),
+            key=lambda rec: rec.created_at,
+            reverse=True,
+        )
+
+    def delete_atelier_export(
+        self,
+        project_id: str,
+        export_id: str,
+        *,
+        delete_file: bool = False,
+    ) -> ExportRecord:
+        """Remove an ExportRecord from the project. When delete_file is
+        true, also unlink the underlying mp4 under output/video/. Raises
+        ValueError if the project or record is missing."""
+        with self._save_lock:
+            project = self.atelier_projects.get(project_id)
+            if not project:
+                raise ValueError("Atelier project not found")
+            target = next(
+                (rec for rec in (project.exports or []) if rec.id == export_id),
+                None,
+            )
+            if not target:
+                raise ValueError("Atelier export record not found")
+            project.exports = [rec for rec in project.exports if rec.id != export_id]
+            project.updated_at = time.time()
+            self._save_atelier_data_unlocked()
+        if delete_file and target.filename:
+            # ExportRecord.filename is a basename (e.g. atelier_seq_*.mp4)
+            # — resolve it under output/video/ via the same safe-path
+            # helper used during export, and best-effort remove. Errors
+            # are logged but never surfaced; the record is already gone.
+            try:
+                disk_path = _safe_resolve_path(
+                    os.path.join("output", "video"),
+                    target.filename,
+                )
+                if os.path.exists(disk_path):
+                    os.remove(disk_path)
+            except Exception:
+                logger.warning(
+                    "Failed to delete Atelier export file %s for record %s",
+                    target.filename,
+                    export_id,
+                )
+        return target
+
+    def redo_atelier_export(self, project_id: str, export_id: str) -> str:
+        """Resolve the recorded source_entries and start a brand-new
+        export job via start_atelier_sequence_export_job (U's allocator).
+        Returns the new job_id. ValueError if the project or record is
+        missing or if validation rejects the entries (e.g. a referenced
+        candidate has been deleted)."""
+        project = self.atelier_projects.get(project_id)
+        if not project:
+            raise ValueError("Atelier project not found")
+        target = next(
+            (rec for rec in (project.exports or []) if rec.id == export_id),
+            None,
+        )
+        if not target:
+            raise ValueError("Atelier export record not found")
+        # Re-emit as plain dicts so the allocator's validator (which
+        # accepts both camelCase + snake_case) sees the original shape.
+        entries = [entry.model_dump() for entry in (target.source_entries or [])]
+        if not entries:
+            raise ValueError(
+                "This export has no recorded source entries — Redo isn't available. "
+                "Re-build the sequence on the strip and export again."
+            )
+        return self.start_atelier_sequence_export_job(project_id, entries)
 
     def _get_atelier_candidate(self, node: AtelierNode, candidate_id: str) -> Dict[str, Any]:
         node_data = dict(node.data or {})

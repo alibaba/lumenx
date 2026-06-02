@@ -36,6 +36,7 @@ import * as React from "react";
 import { Play, Scissors, X } from "lucide-react";
 import axios from "axios";
 import { api } from "@/lib/api";
+import { useAtelierStore } from "@/store/atelierStore";
 import { getAssetUrl } from "@/lib/utils";
 
 /** Sequence entry shape — matches the SequenceEntry type used in the Shell. */
@@ -192,6 +193,35 @@ export function SequenceStrip(props: SequenceStripProps): React.JSX.Element | nu
   // the chip survives a remount when `sequenceVisible` toggles off/on.
   const [exporting, setExporting] = React.useState(false);
   const [exportChip, setExportChip] = React.useState<ExportChip | null>(null);
+  // v1.1 track U: per-project N-of-N badge sourced from the
+  // exportQueue_U slice. The badge surfaces back-pressure when a second
+  // (or third) export is sitting in the ThreadPoolExecutor queue behind
+  // the cap (`pool_size`). We pull the snapshot + the refresh action
+  // from the store rather than directly polling api.ts here so unit
+  // tests can stub the slice without intercepting axios.
+  //
+  // The selectors fall back to no-op shims when the underlying slice
+  // isn't present — some component-level tests mock `useAtelierStore`
+  // with a deliberately narrow surface that omits the v1.1 actions, and
+  // we want SequenceStrip to keep rendering rather than throw on
+  // `undefined()`. The store wrapper below preserves the same
+  // reference-stability the real actions have so the effect deps stay
+  // quiet between renders.
+  const exportQueue = useAtelierStore((s) =>
+    s.exportQueue_U && s.exportQueue_U.projectId === projectId ? s.exportQueue_U : null,
+  );
+  const storeRefreshQueue = useAtelierStore((s) => s.refreshExportQueue_U);
+  const storeClearQueue = useAtelierStore((s) => s.clearExportQueue_U);
+  const refreshExportQueue_U = React.useCallback(
+    (pid: string, options?: { signal?: AbortSignal }) => {
+      if (typeof storeRefreshQueue !== "function") return Promise.resolve(null);
+      return storeRefreshQueue(pid, options);
+    },
+    [storeRefreshQueue],
+  );
+  const clearExportQueue_U = React.useCallback(() => {
+    if (typeof storeClearQueue === "function") storeClearQueue();
+  }, [storeClearQueue]);
   // Track O (v0.9): determinate progress for the in-flight bar. `null`
   // means "no progress event has landed yet" → render the indeterminate
   // shimmer (matches the `pending` state before the first poll). Any
@@ -214,7 +244,56 @@ export function SequenceStrip(props: SequenceStripProps): React.JSX.Element | nu
     // lastPayloadRef is wiped because the entries belong to the previous
     // project; Retry would point at stale candidates.
     lastPayloadRef.current = null;
-  }, [projectId]);
+    // v1.1 U: clear the queue snapshot too so the project-A badge
+    // doesn't briefly render on project B's strip before the first
+    // refresh lands.
+    clearExportQueue_U();
+  }, [projectId, clearExportQueue_U]);
+
+  // v1.1 U: keep the exportQueue_U slice fresh. We refresh on three
+  // triggers:
+  //   1. Mount + project switch (so the badge is correct on first
+  //      paint even if no export is in flight from this client).
+  //   2. Whenever this client kicks off a new export (`exporting` flips
+  //      true) — the just-allocated job should appear in the badge
+  //      immediately.
+  //   3. While ANY export is alive (queued or running) project-wide,
+  //      a 1.5 s polling cadence picks up other clients' progress so
+  //      a teammate's queued export shows up here too.
+  // The cadence stops when the queue empties out so we don't burn
+  // requests while the strip sits idle. An AbortController per refresh
+  // call gets torn down on unmount or before the next tick.
+  React.useEffect(() => {
+    if (!projectId) return;
+    const controller = new AbortController();
+    void refreshExportQueue_U(projectId, { signal: controller.signal });
+    return () => {
+      controller.abort();
+    };
+  }, [projectId, exporting, refreshExportQueue_U]);
+
+  const queueActive =
+    (exportQueue?.queued ?? 0) + (exportQueue?.running ?? 0) > 0 || exporting;
+  React.useEffect(() => {
+    if (!projectId || !queueActive) return;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      const controller = new AbortController();
+      const promise = refreshExportQueue_U(projectId, { signal: controller.signal });
+      // Schedule the next tick after the call resolves so we don't
+      // stack overlapping polls if the network is slow.
+      void promise.finally(() => {
+        if (cancelled) return;
+        timer = window.setTimeout(tick, 1500);
+      });
+    };
+    let timer = window.setTimeout(tick, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [projectId, queueActive, refreshExportQueue_U]);
 
   const buildPayload = React.useCallback((): SequenceEntry[] => {
     return sequence.map((s) => {
@@ -440,6 +519,26 @@ export function SequenceStrip(props: SequenceStripProps): React.JSX.Element | nu
           ) : null}
           {exportChip ? (
             <ExportChipView chip={exportChip} onRetry={handleRetryClick} onDismiss={handleDismissChip} />
+          ) : null}
+          {/* v1.1 track U: small N-of-N badge that surfaces when more
+              than one export is alive project-wide. We render only when
+              the queue depth (running + queued) >= 2 — a single export
+              already has the determinate progress bar telling the user
+              what's happening, so the badge would be noise. The badge
+              also disappears as soon as the queue empties out.
+              Format: "<running+queued>/<poolSize>", e.g. "3/2" means
+              two are mid-ffmpeg and one is waiting on the pool cap. */}
+          {exportQueue
+            && exportQueue.poolSize > 0
+            && exportQueue.running + exportQueue.queued >= 2 ? (
+            <span
+              role="status"
+              aria-label={`${exportQueue.running} export${exportQueue.running === 1 ? "" : "s"} running, ${exportQueue.queued} queued (cap ${exportQueue.poolSize})`}
+              title={`Export pool: ${exportQueue.running} running · ${exportQueue.queued} queued · cap ${exportQueue.poolSize}`}
+              className="ml-1 inline-flex items-center rounded bg-white/[0.06] px-1.5 py-0.5 font-display text-[10px] tabular-nums tracking-tight text-foreground/80"
+            >
+              {exportQueue.running + exportQueue.queued}/{exportQueue.poolSize}
+            </span>
           ) : null}
         </div>
         {/* Track O (v0.9): the export route is now an async job with

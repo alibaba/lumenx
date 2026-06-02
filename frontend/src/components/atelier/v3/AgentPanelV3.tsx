@@ -203,11 +203,28 @@ function ToolProgressTimeline({ progress }: { progress: ToolProgress[] }) {
         const isRunning = entry.status === "running";
         const isCompleted = entry.status === "completed";
         const isFailed = entry.status === "failed";
+        // v1.1 X — attempt badge. `attempt ≥ 2` means the chip is showing
+        // a retry; we surface it as a small "·2/3" suffix so the user
+        // knows the harness already retried once. `retriable: true`
+        // means this is an interim failure that another attempt will
+        // follow — render as a yellow "Retrying" pill instead of a
+        // hard X.
+        const attempt = entry.attempt ?? 1;
+        const showAttempt = attempt > 1;
+        const isRetriableFailure = isFailed && entry.retriable === true;
         return (
           <span
             key={entry.call_id}
             className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2 py-1 text-[11px] text-foreground/80 animate-atelier-popover-in"
-            title={isFailed ? entry.error || "Tool call failed" : undefined}
+            title={
+              isFailed
+                ? `${entry.error || "Tool call failed"}${
+                    showAttempt ? ` (attempt ${attempt})` : ""
+                  }`
+                : showAttempt
+                  ? `Attempt ${attempt}`
+                  : undefined
+            }
           >
             {isRunning ? (
               <Loader2
@@ -221,6 +238,12 @@ function ToolProgressTimeline({ progress }: { progress: ToolProgress[] }) {
                 className="text-atelier-port-positive"
                 aria-hidden="true"
               />
+            ) : isRetriableFailure ? (
+              <Loader2
+                size={11}
+                className="animate-spin text-amber-300/85"
+                aria-hidden="true"
+              />
             ) : isFailed ? (
               <X size={11} className="text-red-300" aria-hidden="true" />
             ) : (
@@ -230,7 +253,15 @@ function ToolProgressTimeline({ progress }: { progress: ToolProgress[] }) {
                 aria-hidden="true"
               />
             )}
-            <span>{verb}</span>
+            <span>{isRetriableFailure ? `Retrying ${verb.toLowerCase()}` : verb}</span>
+            {showAttempt ? (
+              <span
+                aria-label={`attempt ${attempt} of 3`}
+                className="ml-0.5 rounded-sm bg-white/[0.08] px-1 font-mono text-[9.5px] tracking-tight text-foreground/65"
+              >
+                {attempt}/3
+              </span>
+            ) : null}
           </span>
         );
       })}
@@ -475,6 +506,15 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
   // on every delta.
   const streamingTurn  = useAtelierStore((s) => s.streamingAgentTurn);
   const runAgentTurnStreaming_P = useAtelierStore((s) => s.runAgentTurnStreaming_P);
+  // v1.1 X — preview-then-execute slice + actions. Populated when the
+  // multi-step loop emits a `tool_plan` event under untrusted policy;
+  // resolved by the user via Approve (continueAgentTurn_X) or Reject
+  // (cancelAgentTurn_X). When non-null, the Preview card replaces the
+  // existing approval card in the panel layout.
+  const agentPreview_X     = useAtelierStore((s) => s.agentPreview_X);
+  const agentPreviewBusy_X = useAtelierStore((s) => s.agentPreviewBusy_X);
+  const continueAgentTurn_X = useAtelierStore((s) => s.continueAgentTurn_X);
+  const cancelAgentTurn_X   = useAtelierStore((s) => s.cancelAgentTurn_X);
   // AbortController for the in-flight stream. Replaced on each new run
   // so a Stop click cancels exactly the request the user is watching.
   const streamAbortRef = useRef<AbortController | null>(null);
@@ -917,6 +957,94 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
               done={streamingTurn.done}
               toolProgress={streamingTurn.tool_progress}
             />
+          </div>
+        ) : null}
+
+        {/* v1.1 X — Preview-then-execute card. Rendered when the
+            multi-step loop emitted a `tool_plan` event under untrusted
+            policy and paused at `awaiting_approval`. Approve dispatches
+            continueAgentTurn_X (resumes via the existing approval flow);
+            Reject dispatches cancelAgentTurn_X (terminal `canceled`).
+            Distinct from the pendingTurn approval card below — that one
+            lists per-call approval chips; this one is the single planned
+            iteration summary the spec asks for. */}
+        {agentPreview_X && project ? (
+          <div
+            role="alertdialog"
+            aria-label="Agent plan preview — Approve or Reject"
+            className="overflow-hidden rounded-[12px] border border-amber-300/35 bg-amber-300/[0.04] shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(245,200,80,0.08)] motion-safe:animate-atelier-popover-in"
+          >
+            <div aria-hidden="true" className="h-[2px] bg-gradient-to-r from-amber-300/85 via-amber-300/30 to-transparent" />
+            <div className="px-3.5 pb-3 pt-3">
+              <div className="mb-2 flex items-center gap-1.5">
+                <Sparkles size={12} className="text-amber-300" aria-hidden="true" />
+                <span className="text-[11px] text-amber-300">
+                  Preview — step {agentPreview_X.iteration}
+                </span>
+              </div>
+              <p className="mb-2.5 text-[12px] leading-[1.5] text-text-secondary/95">
+                The agent wants to run the following before continuing.
+                Approve to execute, or Reject to dismiss this turn.
+              </p>
+              <ul className="mb-3 space-y-1 border-l border-amber-300/20 pl-2.5 text-[13px] leading-[1.5] text-foreground/95">
+                {agentPreview_X.toolCalls.map((c, i) => (
+                  <li key={`${c.tool_name}-${i}`} className="flex items-start gap-1.5">
+                    <Sparkles
+                      size={10}
+                      className="mt-[5px] shrink-0 text-amber-300/80"
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-foreground/95">{summarizeToolCall(c)}</span>
+                      <ToolCallParams call={c} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  disabled={agentPreviewBusy_X}
+                  onClick={async () => {
+                    try {
+                      await continueAgentTurn_X(project.id, agentPreview_X.turnId);
+                      pushToast?.("success", "Agent resumed.");
+                    } catch (err) {
+                      pushToast?.(
+                        "error",
+                        err instanceof Error ? err.message : "Continue failed",
+                      );
+                    }
+                  }}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md bg-amber-400/85 px-3 py-2 text-[11px] font-medium tracking-tight text-black/85 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.18),0_4px_12px_-4px_rgba(245,200,80,0.5)] transition-all duration-200 hover:bg-amber-400 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {agentPreviewBusy_X ? (
+                    <>
+                      <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+                      Resuming
+                    </>
+                  ) : (
+                    "Approve & continue"
+                  )}
+                </button>
+                <button
+                  disabled={agentPreviewBusy_X}
+                  onClick={async () => {
+                    try {
+                      await cancelAgentTurn_X(project.id, agentPreview_X.turnId);
+                      pushToast?.("info", "Agent turn canceled.");
+                    } catch (err) {
+                      pushToast?.(
+                        "error",
+                        err instanceof Error ? err.message : "Cancel failed",
+                      );
+                    }
+                  }}
+                  className="rounded-md border border-white/10 bg-black/25 px-3 py-2 text-[11px] font-medium tracking-tight text-text-secondary/95 transition-all duration-150 hover:border-white/15 hover:bg-white/[0.06] hover:text-foreground active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
 

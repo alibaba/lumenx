@@ -1890,6 +1890,341 @@ def test_atelier_sequence_export_async_job_marks_failed_on_ffmpeg_error(pipeline
     assert status.get("video_url") is None
 
 
+# ─── v1.1 track W: ExportRecord history ──────────────────────────────
+
+
+def test_atelier_export_record_persisted_on_successful_job(pipeline, monkeypatch):
+    """v1.1 W: a successful export job appends an ExportRecord to the
+    owning project. The record captures the resolved mp4 metadata plus
+    the original source_entries (so a future Redo can re-validate)."""
+    project = pipeline.create_atelier_project("History board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            **(video.data or {}),
+            "candidates": [
+                {"id": "c1", "status": "completed", "video_url": "videos/atelier_c1.mp4"},
+            ],
+        },
+    })
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.get_ffmpeg_path",
+        lambda: "/usr/bin/true",
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.exists",
+        lambda _p: True,
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.getsize",
+        lambda _p: 3 * 1024 * 1024,
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.subprocess.run",
+        lambda *args, **kwargs: MagicMock(returncode=0, stderr=b"", stdout=b""),
+    )
+
+    job_id = pipeline.start_atelier_sequence_export_job(project.id, [
+        {"parentId": video.id, "candidateId": "c1", "trimStart": 0.0, "trimEnd": 4.0},
+    ])
+    pipeline.process_atelier_sequence_export_job(job_id)
+
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert refreshed is not None
+    assert len(refreshed.exports) == 1
+    rec = refreshed.exports[0]
+    assert rec.project_id == project.id
+    assert rec.clip_count == 1
+    assert rec.size_mb == pytest.approx(3.0, abs=0.01)
+    assert rec.video_url.startswith("videos/atelier_seq_")
+    assert rec.filename.endswith(".mp4")
+    # source_entries round-trips the original POST shape so Redo can
+    # re-resolve without inventing keys.
+    assert len(rec.source_entries) == 1
+    entry = rec.source_entries[0]
+    assert entry.parentId == video.id
+    assert entry.candidateId == "c1"
+    assert entry.trimStart == pytest.approx(0.0)
+    assert entry.trimEnd == pytest.approx(4.0)
+
+
+def test_atelier_export_history_list_and_delete(pipeline, monkeypatch):
+    """v1.1 W: list_atelier_exports returns newest-first; delete_atelier_export
+    removes the record and (when delete_file=True) the underlying mp4."""
+    project = pipeline.create_atelier_project("List+delete board")
+
+    # Seed two records directly via the helper (faster than running two
+    # full export jobs, and exercises the helper's coercion path).
+    first = pipeline._record_atelier_export(
+        project.id,
+        video_url="videos/atelier_seq_first.mp4",
+        filename="atelier_seq_first.mp4",
+        size_mb=1.0,
+        clip_count=2,
+        source_entries=[{"parentId": "node-a", "candidateId": "cand-a"}],
+    )
+    time.sleep(0.01)  # ensure created_at ordering is deterministic
+    second = pipeline._record_atelier_export(
+        project.id,
+        video_url="videos/atelier_seq_second.mp4",
+        filename="atelier_seq_second.mp4",
+        size_mb=2.0,
+        clip_count=3,
+        source_entries=[{"parentId": "node-b", "candidateId": "cand-b"}],
+    )
+    assert first is not None and second is not None
+
+    listed = pipeline.list_atelier_exports(project.id)
+    assert [rec.id for rec in listed] == [second.id, first.id]
+
+    # Project-missing → ValueError → handler maps to 404.
+    with pytest.raises(ValueError, match="not found"):
+        pipeline.list_atelier_exports("does-not-exist")
+
+    # Delete the first one (no file unlink) — record removed, list shrinks.
+    pipeline.delete_atelier_export(project.id, first.id, delete_file=False)
+    listed_after = pipeline.list_atelier_exports(project.id)
+    assert [rec.id for rec in listed_after] == [second.id]
+
+    # Unknown record id → ValueError.
+    with pytest.raises(ValueError, match="not found"):
+        pipeline.delete_atelier_export(project.id, "no-such-id")
+
+    # Delete the second with delete_file=True — file unlink is best-effort,
+    # so we monkeypatch os.remove + os.path.exists to verify the call
+    # happens against the resolved path and doesn't blow up on a missing
+    # disk file.
+    removed_paths = []
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.exists",
+        lambda _p: True,
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.remove",
+        lambda p: removed_paths.append(p),
+    )
+    pipeline.delete_atelier_export(project.id, second.id, delete_file=True)
+    assert removed_paths and removed_paths[0].endswith("atelier_seq_second.mp4")
+    assert pipeline.list_atelier_exports(project.id) == []
+
+
+def test_atelier_export_redo_starts_new_job(pipeline, monkeypatch):
+    """v1.1 W: redo_atelier_export resolves the recorded source_entries
+    against the current project state and starts a brand-new export
+    job; the returned id is distinct from the original."""
+    project = pipeline.create_atelier_project("Redo board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            **(video.data or {}),
+            "candidates": [
+                {"id": "c1", "status": "completed", "video_url": "videos/atelier_c1.mp4"},
+            ],
+        },
+    })
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.get_ffmpeg_path",
+        lambda: "/usr/bin/true",
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.exists",
+        lambda _p: True,
+    )
+
+    # Seed a record whose source_entries reference the live candidate.
+    seeded = pipeline._record_atelier_export(
+        project.id,
+        video_url="videos/atelier_seq_orig.mp4",
+        filename="atelier_seq_orig.mp4",
+        size_mb=1.0,
+        clip_count=1,
+        source_entries=[{"parentId": video.id, "candidateId": "c1"}],
+    )
+    assert seeded is not None
+
+    new_job_id = pipeline.redo_atelier_export(project.id, seeded.id)
+    assert isinstance(new_job_id, str) and len(new_job_id) > 0
+    # The new job lives in atelier_export_tasks at status="pending"
+    # until the worker runs — that's exactly what start_atelier_sequence_export_job
+    # guarantees, so we don't need to drive it here.
+    assert new_job_id in pipeline.atelier_export_tasks
+    assert pipeline.atelier_export_tasks[new_job_id]["status"] == "pending"
+
+    # Redo against a missing record → 404-mapped ValueError.
+    with pytest.raises(ValueError, match="not found"):
+        pipeline.redo_atelier_export(project.id, "no-such-record")
+
+
+# ─── v1.1 track U: bounded export worker pool ────────────────────────
+
+
+def test_atelier_sequence_export_pool_caps_concurrency(pipeline, monkeypatch):
+    """v1.1 U: with the pool capped at N, no more than N export workers
+    can be inside ffmpeg at the same time — extras sit in the pool queue
+    as `status='pending'` until a worker frees up.
+
+    We instrument the monkeypatched ffmpeg call so each worker bumps a
+    shared counter on entry, blocks on a shared barrier, and decrements
+    on exit. After scheduling 4 jobs against a 2-worker pool we verify:
+      * exactly 2 workers reach the in-flight section (semaphore acquires
+        only twice — a third would block the assertion-time wait),
+      * the live concurrency counter never observed > 2,
+      * the queue-status DTO surfaces 2 running + 2 queued before the
+        barrier opens.
+    Then we release the barrier, drain to completion, and confirm every
+    job lands at status='completed' with a clean (0,0) queue.
+    """
+    import threading as _t
+
+    # Resize the pool to a known cap. The lazy getter builds a fresh
+    # pool on the next schedule_... call; an existing pool (if a prior
+    # test in the same session warmed one up via this fixture state) is
+    # shut down so it doesn't service these submissions at the old cap.
+    pipeline._atelier_export_pool_size = 2
+    if pipeline._atelier_export_pool is not None:
+        pipeline._atelier_export_pool.shutdown(wait=False)
+        pipeline._atelier_export_pool = None
+
+    project = pipeline.create_atelier_project("Pool board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            **(video.data or {}),
+            "candidates": [
+                {"id": f"c{i}", "status": "completed", "video_url": f"videos/atelier_c{i}.mp4"}
+                for i in range(4)
+            ],
+        },
+    })
+
+    barrier = _t.Event()
+    counter_lock = _t.Lock()
+    state = {"running": 0, "max": 0}
+    arrivals = _t.Semaphore(0)
+
+    def fake_ffmpeg(*_args, **_kwargs):
+        with counter_lock:
+            state["running"] += 1
+            if state["running"] > state["max"]:
+                state["max"] = state["running"]
+        arrivals.release()
+        # Block until the test releases the barrier. The timeout is a
+        # safety net so a regression doesn't hang the test runner; on
+        # timeout we still decrement so the asserts below see a clean
+        # counter.
+        if not barrier.wait(timeout=10.0):
+            with counter_lock:
+                state["running"] -= 1
+            raise RuntimeError("test barrier never released")
+        with counter_lock:
+            state["running"] -= 1
+        return MagicMock(returncode=0, stderr=b"", stdout=b"")
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.get_ffmpeg_path",
+        lambda: "/usr/bin/true",
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.exists",
+        lambda _p: True,
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.getsize",
+        lambda _p: 1024,
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.subprocess.run",
+        fake_ffmpeg,
+    )
+
+    job_ids = []
+    for i in range(4):
+        jid = pipeline.start_atelier_sequence_export_job(project.id, [
+            {"parentId": video.id, "candidateId": f"c{i}"},
+        ])
+        pipeline.schedule_atelier_sequence_export_job(jid)
+        job_ids.append(jid)
+
+    try:
+        # Wait until exactly pool_size workers are inside fake_ffmpeg.
+        # The semaphore acquires once per worker entry — a third would
+        # mean the cap was breached, which we catch by also asserting
+        # the live counter below.
+        for _ in range(2):
+            acquired = arrivals.acquire(timeout=10.0)
+            assert acquired, "expected 2 workers to reach ffmpeg"
+
+        # Settle briefly so a (buggy) third worker would have time to
+        # also enter and bump the counter past 2.
+        time.sleep(0.2)
+        with counter_lock:
+            in_flight = state["running"]
+        assert in_flight == 2, f"expected 2 concurrent workers, observed {in_flight}"
+
+        # Queue-status DTO reflects 2 active + 2 queued for this
+        # project, with the cap echoed back so the frontend can render
+        # "running/cap".
+        info = pipeline.get_atelier_export_queue_status(project.id)
+        assert info["running"] == 2
+        assert info["queued"] == 2
+        assert info["pool_size"] == 2
+
+        # Other-project lookups isolate cleanly: a brand-new project's
+        # snapshot reports zeroes even with 4 jobs in flight elsewhere.
+        other_project = pipeline.create_atelier_project("Sibling board")
+        sibling = pipeline.get_atelier_export_queue_status(other_project.id)
+        assert sibling == {"queued": 0, "running": 0, "pool_size": 2}
+    finally:
+        # Always release the barrier so a failing assertion doesn't
+        # leave worker threads pinned, blocking pytest teardown.
+        barrier.set()
+
+    # Drain to completion. Poll the in-memory dict directly so we don't
+    # depend on the queue-status DTO loop here.
+    deadline = time.time() + 15.0
+    states: list[str] = []
+    while time.time() < deadline:
+        states = [pipeline.atelier_export_tasks[j]["status"] for j in job_ids]
+        if all(s == "completed" for s in states):
+            break
+        time.sleep(0.05)
+    else:  # pragma: no cover — guard against a regression hanging CI
+        pytest.fail(f"jobs never completed within 15s: {states}")
+
+    # Max concurrency ever observed must equal the cap — we sent 4 jobs
+    # so without the cap we'd have seen up to 4 concurrent workers.
+    assert state["max"] == 2
+
+    final = pipeline.get_atelier_export_queue_status(project.id)
+    assert final["queued"] == 0
+    assert final["running"] == 0
+    assert final["pool_size"] == 2
+
+
+def test_atelier_export_pool_size_reads_env_var(pipeline, monkeypatch):
+    """v1.1 U: ATELIER_EXPORT_WORKERS env var overrides the default
+    pool size at module-helper time. We exercise the helper directly so
+    we don't have to spin up another full pipeline."""
+    from src.apps.comic_gen.pipeline import _compute_atelier_export_pool_size
+
+    monkeypatch.setenv("ATELIER_EXPORT_WORKERS", "5")
+    assert _compute_atelier_export_pool_size() == 5
+
+    # Invalid / non-positive values fall back to the default branch.
+    monkeypatch.setenv("ATELIER_EXPORT_WORKERS", "0")
+    assert _compute_atelier_export_pool_size() >= 1
+    monkeypatch.setenv("ATELIER_EXPORT_WORKERS", "not-a-number")
+    assert _compute_atelier_export_pool_size() >= 1
+
+    # Unset → default min(2, cpu_count()) >= 1.
+    monkeypatch.delenv("ATELIER_EXPORT_WORKERS", raising=False)
+    default = _compute_atelier_export_pool_size()
+    assert default >= 1
+    assert default <= 2
+
+
 def test_atelier_structure_planner_explicit_intent_kind_overrides_message(pipeline):
     project = pipeline.create_atelier_project("Board")
 
@@ -2350,3 +2685,474 @@ def test_atelier_agent_stream_route_forwards_harness_events_in_order(pipeline, m
         "canvas.createVideoNode",
         "canvas.createVideoNode",
     ]
+
+
+# ---------------------------------------------------------------------------
+# v1.1 track X — multi-step loop, preview-then-execute, retriable retry
+# ---------------------------------------------------------------------------
+
+
+def test_atelier_agent_loop_runs_two_iterations_until_llm_empties(pipeline, monkeypatch):
+    """v1.1 X (a) MULTI-STEP LOOP: when the LLM returns tool_calls on round 1
+    and an empty tool_calls on round 2, the harness runs exactly 2 iterations
+    and the persisted turn carries both rounds' assistant text in
+    `messages_history` (alternating user / assistant entries)."""
+    from src.apps.comic_gen import atelier_agent as agent_module
+
+    project = pipeline.create_atelier_project("Loop Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    round_calls = {"n": 0}
+    rounds = [
+        {
+            "type": "done",
+            "response": "Drafting the chase shot now.",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"title": "Chase", "prompt": "midnight chase"},
+                }
+            ],
+            "error": None,
+        },
+        {
+            "type": "done",
+            "response": "Done — chase draft is on the canvas.",
+            "tool_calls": [],
+            "error": None,
+        },
+    ]
+
+    def fake_stream(package, user_message, model=None):
+        idx = round_calls["n"]
+        round_calls["n"] += 1
+        payload = rounds[min(idx, len(rounds) - 1)]
+        yield {"type": "delta", "text": payload["response"]}
+        yield payload
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    events = list(harness.run_agent_loop_streaming(
+        project_id=project.id,
+        user_message="Draft a midnight chase shot",
+        max_iterations=3,
+    ))
+
+    # Round-trip the LLM exactly twice (round 1 tool_calls, round 2 empty).
+    assert round_calls["n"] == 2
+
+    llm_done_events = [e for e in events if e.get("type") == "llm_done"]
+    assert len(llm_done_events) == 2
+    assert [e["iteration"] for e in llm_done_events] == [1, 2]
+    assert llm_done_events[0]["tool_calls"][0]["tool_name"] == "canvas.createVideoNode"
+    assert llm_done_events[1]["tool_calls"] == []
+
+    # Exactly one tool ran (round 1's createVideoNode) — its attempt/iteration
+    # stamps tell the panel which LLM bubble to nest it under.
+    tool_start = [e for e in events if e.get("type") == "tool_start"]
+    tool_done = [e for e in events if e.get("type") == "tool_done"]
+    assert len(tool_start) == 1
+    assert len(tool_done) == 1
+    assert tool_start[0]["iteration"] == 1
+    assert tool_start[0]["attempt"] == 1
+    assert tool_done[0]["status"] == "completed"
+
+    # Terminal turn_done carries the persisted turn with iteration_count=2
+    # and a messages_history of [user, assistant, tool, assistant].
+    terminal = events[-1]
+    assert terminal["type"] == "turn_done"
+    assert terminal["status"] == "completed"
+    turn = terminal["turn"]
+    assert turn.iteration_count == 2
+    assert len(turn.messages_history) >= 3
+    roles = [m["role"] for m in turn.messages_history]
+    assert roles[0] == "user"
+    assert "assistant" in roles
+    assert any(m["role"] == "tool" for m in turn.messages_history)
+    # Last assistant turn response wins as the user-visible reply.
+    assert turn.response == "Done — chase draft is on the canvas."
+
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert len(refreshed.nodes) == 1
+    assert refreshed.nodes[0].title == "Chase"
+    assert refreshed.agent_turns[-1].iteration_count == 2
+
+
+def test_atelier_agent_retries_retriable_tool_failure_then_succeeds(pipeline, monkeypatch):
+    """v1.1 X (c) FAILED-TOOL AUTO-RETRY: when the executor raises a
+    retriable error on attempt 1 and succeeds on attempt 2, both
+    tool_start/tool_done pairs fire — the first with attempt:1,retriable:True,
+    the second with attempt:2,completed. Final turn lands `completed`."""
+    from src.apps.comic_gen import atelier_agent as agent_module
+
+    project = pipeline.create_atelier_project("Retry Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    call_state = {"calls": 0}
+    original_create = agent_module._execute_create_video_node
+
+    def flaky_create(project_id, arguments, pipeline_):
+        call_state["calls"] += 1
+        if call_state["calls"] == 1:
+            # Substring "timeout" + "503" matches _is_retriable → loop retries.
+            raise RuntimeError("Upstream provider 503 Service Unavailable (timeout)")
+        return original_create(project_id, arguments, pipeline_)
+
+    # Patch the executor underneath the existing registry entry. The registry
+    # holds tuples of (spec, executor) so we re-register to swap in flaky.
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    spec, _exec = harness.registry.get("canvas.createVideoNode")
+    monkeypatch.setitem(
+        harness.registry._tools, "canvas.createVideoNode", (spec, flaky_create)
+    )
+    # Skip the real time.sleep so the test doesn't actually wait ~0.5s.
+    monkeypatch.setattr("src.apps.comic_gen.atelier_agent.time.sleep", lambda *_a, **_k: None)
+
+    events = list(harness.run_turn_streaming(
+        project_id=project.id,
+        tool_calls=[{
+            "tool_name": "canvas.createVideoNode",
+            "arguments": {"title": "Retry", "prompt": "test retry"},
+        }],
+        user_message="Draft something",
+    ))
+
+    tool_starts = [e for e in events if e.get("type") == "tool_start"]
+    tool_dones = [e for e in events if e.get("type") == "tool_done"]
+    assert [e["attempt"] for e in tool_starts] == [1, 2]
+    # First done — failed + retriable so the rail can show "retrying…".
+    assert tool_dones[0]["attempt"] == 1
+    assert tool_dones[0]["status"] == "failed"
+    assert tool_dones[0].get("retriable") is True
+    # Second done — completed.
+    assert tool_dones[1]["attempt"] == 2
+    assert tool_dones[1]["status"] == "completed"
+
+    # Terminal turn — note the per-call status reflects the LAST attempt only.
+    terminal = events[-1]
+    assert terminal["type"] == "turn_done"
+    assert terminal["status"] == "completed"
+    assert call_state["calls"] == 2
+
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert len(refreshed.nodes) == 1
+
+
+def test_atelier_agent_non_retriable_tool_failure_does_not_retry(pipeline, monkeypatch):
+    """v1.1 X (c): non-retriable executor errors (schema validation,
+    missing nodes, etc.) surface immediately with attempt:1,failed and
+    no retry loop. The terminal status is `failed`."""
+    from src.apps.comic_gen import atelier_agent as agent_module
+
+    project = pipeline.create_atelier_project("NoRetry Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    call_state = {"calls": 0}
+
+    def hard_failing(project_id, arguments, pipeline_):
+        call_state["calls"] += 1
+        raise ValueError("video_node_id must reference a video node")
+
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    spec, _exec = harness.registry.get("canvas.createVideoNode")
+    monkeypatch.setitem(
+        harness.registry._tools, "canvas.createVideoNode", (spec, hard_failing)
+    )
+    monkeypatch.setattr("src.apps.comic_gen.atelier_agent.time.sleep", lambda *_a, **_k: None)
+
+    events = list(harness.run_turn_streaming(
+        project_id=project.id,
+        tool_calls=[{
+            "tool_name": "canvas.createVideoNode",
+            "arguments": {"title": "Bad", "prompt": "x"},
+        }],
+    ))
+
+    tool_starts = [e for e in events if e.get("type") == "tool_start"]
+    tool_dones = [e for e in events if e.get("type") == "tool_done"]
+    # Exactly one attempt — non-retriable errors don't loop.
+    assert len(tool_starts) == 1
+    assert len(tool_dones) == 1
+    assert tool_dones[0]["status"] == "failed"
+    assert tool_dones[0].get("retriable") is None
+    assert call_state["calls"] == 1
+
+    terminal = events[-1]
+    assert terminal["status"] == "failed"
+
+
+def test_atelier_agent_loop_pauses_for_approval_on_untrusted_policy(pipeline, monkeypatch):
+    """v1.1 X (b) PREVIEW-THEN-EXECUTE: under the default `untrusted` policy
+    the loop emits a single `tool_plan` event with the planned calls and
+    halts the turn at `awaiting_approval` instead of executing. The
+    persisted turn carries the `pending_tool_calls` payload so the
+    /continue route can resume."""
+    from src.apps.comic_gen import atelier_agent as agent_module
+
+    project = pipeline.create_atelier_project("Preview Board")
+    # Default policy IS untrusted; assert here to make the intent explicit.
+    assert project.agent_policy.approval_mode.value == "untrusted"
+
+    def fake_stream(package, user_message, model=None):
+        yield {
+            "type": "done",
+            "response": "Planning the moonlit chase shot.",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"title": "Moon", "prompt": "moonlit chase"},
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    events = list(harness.run_agent_loop_streaming(
+        project_id=project.id,
+        user_message="Draft the chase",
+    ))
+
+    plan_events = [e for e in events if e.get("type") == "tool_plan"]
+    assert len(plan_events) == 1
+    plan = plan_events[0]
+    assert plan["iteration"] == 1
+    assert plan["tool_calls"][0]["tool_name"] == "canvas.createVideoNode"
+
+    # No executor side effects.
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert refreshed.nodes == []
+
+    # Loop terminator uses the spec's "awaiting_approval" status; underlying
+    # turn stores the existing "waiting_approval" label for API compat.
+    terminal = events[-1]
+    assert terminal["type"] == "turn_done"
+    assert terminal["status"] == "awaiting_approval"
+    assert terminal["turn"].status == "waiting_approval"
+    assert terminal["turn"].pending_tool_calls == [
+        {
+            "tool_name": "canvas.createVideoNode",
+            "arguments": {"title": "Moon", "prompt": "moonlit chase"},
+        }
+    ]
+
+
+def test_atelier_agent_continue_route_resumes_paused_turn(pipeline, monkeypatch):
+    """v1.1 X: after the loop pauses for preview, the /continue route
+    resumes via the existing approve flow and the pending tool calls
+    actually execute (1 node lands on the canvas, status=completed)."""
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api as api_module
+    from src.apps.comic_gen import atelier_agent as agent_module
+
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+
+    project = pipeline.create_atelier_project("Continue Board")
+
+    def fake_stream(package, user_message, model=None):
+        yield {
+            "type": "done",
+            "response": "Planning the run.",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"title": "Run", "prompt": "run shot"},
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    paused_events = list(harness.run_agent_loop_streaming(
+        project_id=project.id,
+        user_message="Draft a run shot",
+    ))
+    paused_turn = paused_events[-1]["turn"]
+    assert paused_turn.status == "waiting_approval"
+    assert pipeline.get_atelier_project(project.id).nodes == []
+
+    client = TestClient(api_module.app)
+    resp = client.post(
+        f"/atelier/projects/{project.id}/agent/turns/{paused_turn.id}/continue",
+        json={},
+    )
+    assert resp.status_code == 200, resp.text
+    resumed = resp.json()
+    assert resumed["status"] == "completed"
+    assert resumed["pending_tool_calls"] == []
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert len(refreshed.nodes) == 1
+    assert refreshed.nodes[0].title == "Run"
+
+
+def test_atelier_agent_cancel_route_marks_turn_canceled(pipeline, monkeypatch):
+    """v1.1 X: the /cancel route flips a paused turn to `canceled`
+    (distinct from deny's `failed`), denies every APPROVAL_REQUIRED call,
+    and clears pending_tool_calls so the Preview card resolves cleanly."""
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api as api_module
+    from src.apps.comic_gen import atelier_agent as agent_module
+
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+
+    project = pipeline.create_atelier_project("Cancel Board")
+
+    def fake_stream(package, user_message, model=None):
+        yield {
+            "type": "done",
+            "response": "Planning…",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"title": "Skip", "prompt": "to cancel"},
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    paused_events = list(harness.run_agent_loop_streaming(
+        project_id=project.id,
+        user_message="Plan something",
+    ))
+    paused_turn = paused_events[-1]["turn"]
+    assert paused_turn.status == "waiting_approval"
+
+    client = TestClient(api_module.app)
+    resp = client.post(
+        f"/atelier/projects/{project.id}/agent/turns/{paused_turn.id}/cancel",
+        json={},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "canceled"
+    assert body["pending_tool_calls"] == []
+    # The canvas was never mutated.
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert refreshed.nodes == []
+    # APPROVAL_REQUIRED placeholders flip to denied.
+    for c in refreshed.agent_turns[-1].tool_calls:
+        status_value = c.status.value if hasattr(c.status, "value") else str(c.status)
+        assert status_value == "denied"
+
+
+def test_atelier_agent_loop_caps_iterations_via_env(pipeline, monkeypatch):
+    """v1.1 X: ATELIER_AGENT_MAX_ITERATIONS clips the loop. With cap=1 and
+    an LLM that keeps emitting tool_calls, the harness runs exactly one
+    LLM round and exits."""
+    from src.apps.comic_gen import atelier_agent as agent_module
+
+    monkeypatch.setenv("ATELIER_AGENT_MAX_ITERATIONS", "1")
+
+    project = pipeline.create_atelier_project("Cap Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    rounds = {"n": 0}
+
+    def fake_stream(package, user_message, model=None):
+        rounds["n"] += 1
+        yield {
+            "type": "done",
+            "response": f"round {rounds['n']}",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"title": f"R{rounds['n']}", "prompt": "loop"},
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    list(harness.run_agent_loop_streaming(
+        project_id=project.id,
+        user_message="loop forever",
+    ))
+    assert rounds["n"] == 1
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert len(refreshed.nodes) == 1
+
+
+def test_atelier_agent_is_retriable_classifier():
+    """v1.1 X (c): _is_retriable matches the transient categories but
+    rejects terminal validation-style errors."""
+    from src.apps.comic_gen.atelier_agent import _is_retriable
+
+    assert _is_retriable(RuntimeError("Connection timeout after 30s"))
+    assert _is_retriable(RuntimeError("DashScope returned 503 Service Unavailable"))
+    assert _is_retriable(RuntimeError("Rate limit exceeded"))
+    assert _is_retriable(RuntimeError("HTTP 504 Gateway Timeout"))
+    # Terminal errors are not retried.
+    assert not _is_retriable(ValueError("video_node_id is required"))
+    assert not _is_retriable(KeyError("node_id"))
+    assert not _is_retriable(RuntimeError("Atelier project not found"))
+
+
+def test_atelier_agent_loop_stream_route_emits_tool_plan(pipeline, monkeypatch):
+    """v1.1 X end-to-end: /agent/turns/stream_loop streams the multi-step
+    loop. Under untrusted policy the wire emits a `tool_plan` frame and the
+    terminal turn_done is awaiting_approval — the spec's preview pause."""
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api as api_module
+
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+
+    project = pipeline.create_atelier_project("Wire Preview")
+
+    def fake_stream(package, user_message, model=None):
+        yield {"type": "delta", "text": "Planning…"}
+        yield {
+            "type": "done",
+            "response": "Planning…",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"title": "Plan", "prompt": "p"},
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    client = TestClient(api_module.app)
+    with client.stream(
+        "POST",
+        f"/atelier/projects/{project.id}/agent/turns/stream_loop",
+        json={"user_message": "do something"},
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(chunk for chunk in response.iter_text())
+
+    events = _parse_sse_events(body)
+    names = [e for (e, _) in events]
+    assert "turn" in names
+    assert "llm_done" in names
+    assert "tool_plan" in names
+    assert names[-1] == "turn_done"
+    last = events[-1][1]
+    assert last["status"] == "awaiting_approval"
+    # No tools actually ran — preview pause.
+    assert "tool_start" not in names
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert refreshed.nodes == []
