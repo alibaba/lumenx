@@ -200,6 +200,39 @@ export interface BuildAtelierAgentPlannerPackagePayload {
     skill_name?: string | null;
 }
 
+// v0.9 track P — SSE streaming agent turn payload + event shapes. The
+// stream endpoint combines plan + execute in one POST so the panel can
+// render tokens as the LLM emits them.
+export interface StreamAtelierAgentTurnPayload {
+    user_message?: string;
+    selected_node_id?: string | null;
+    skill_name?: string | null;
+    planner_input?: Record<string, unknown>;
+    model?: string | null;
+}
+
+export interface AgentStreamMetadataEvent {
+    planner: string;
+    model?: string | null;
+    turn_id: string;
+}
+
+export interface AgentStreamDoneEvent {
+    status: "completed" | "blocked" | "failed";
+    full_response: string;
+    tool_calls: AtelierAgentToolCallPayload[];
+    turn: AtelierAgentTurn | null;
+    error?: string | null;
+}
+
+export interface AgentStreamHandlers {
+    onMetadata?: (event: AgentStreamMetadataEvent) => void;
+    onDelta?: (text: string) => void;
+    onDone?: (event: AgentStreamDoneEvent) => void;
+    onError?: (message: string) => void;
+    signal?: AbortSignal;
+}
+
 export interface AtelierNode {
     id: string;
     project_id: string;
@@ -1019,17 +1052,262 @@ export const api = {
         const response = await axios.post(`${API_URL}/atelier/projects/${projectId}/agent/turns`, payload);
         return response.data;
     },
-    exportAtelierSequence: async (
+    /**
+     * v0.9 track P — POST to the SSE streaming agent endpoint and dispatch
+     * parsed events to the supplied handlers. Implemented with fetch +
+     * ReadableStream instead of native EventSource because (a) the route
+     * is POST so it can carry the user_message + selected_node_id body,
+     * (b) AbortSignal cleanly cancels the underlying connection, and (c)
+     * the framing carries structured non-text events (metadata/delta/done).
+     *
+     * The returned Promise resolves with the final AgentStreamDoneEvent
+     * once the server emits `event: done`, or rejects if the server
+     * emits `event: error`, the network fails, or the supplied
+     * AbortSignal triggers (DOMException of name "AbortError").
+     */
+    streamAtelierAgentTurn: async (
+        projectId: string,
+        payload: StreamAtelierAgentTurnPayload,
+        handlers: AgentStreamHandlers = {},
+    ): Promise<AgentStreamDoneEvent> => {
+        const response = await fetch(
+            `${API_URL}/atelier/projects/${projectId}/agent/turns/stream`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "text/event-stream",
+                },
+                body: JSON.stringify(payload),
+                signal: handlers.signal,
+            },
+        );
+
+        if (!response.ok || !response.body) {
+            const text = await response.text().catch(() => "");
+            throw new Error(
+                text || `Atelier agent stream failed: HTTP ${response.status}`,
+            );
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+        let finalEvent: AgentStreamDoneEvent | null = null;
+        let errorMessage: string | null = null;
+
+        const processEventBlock = (block: string) => {
+            if (!block.trim()) return;
+            let eventName = "message";
+            const dataLines: string[] = [];
+            for (const rawLine of block.split("\n")) {
+                const line = rawLine.replace(/\r$/, "");
+                if (line.startsWith(":")) continue; // SSE comment
+                if (line.startsWith("event:")) {
+                    eventName = line.slice(6).trim() || "message";
+                } else if (line.startsWith("data:")) {
+                    dataLines.push(line.slice(5).replace(/^\s/, ""));
+                }
+            }
+            if (dataLines.length === 0) return;
+            const data = dataLines.join("\n");
+            let parsed: Record<string, unknown> = {};
+            try {
+                parsed = JSON.parse(data);
+            } catch {
+                parsed = { raw: data };
+            }
+            if (eventName === "metadata") {
+                handlers.onMetadata?.(parsed as unknown as AgentStreamMetadataEvent);
+            } else if (eventName === "delta") {
+                const text =
+                    typeof parsed.text === "string"
+                        ? (parsed.text as string)
+                        : "";
+                if (text) handlers.onDelta?.(text);
+            } else if (eventName === "done") {
+                finalEvent = parsed as unknown as AgentStreamDoneEvent;
+                handlers.onDone?.(finalEvent);
+            } else if (eventName === "error") {
+                const message =
+                    typeof parsed.message === "string"
+                        ? (parsed.message as string)
+                        : "Stream error";
+                errorMessage = message;
+                handlers.onError?.(message);
+            }
+        };
+
+        try {
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let sepIdx = buffer.indexOf("\n\n");
+                while (sepIdx !== -1) {
+                    const block = buffer.slice(0, sepIdx);
+                    buffer = buffer.slice(sepIdx + 2);
+                    processEventBlock(block);
+                    sepIdx = buffer.indexOf("\n\n");
+                }
+            }
+            // Tail flush — any final event without trailing \n\n.
+            const tail = buffer + decoder.decode();
+            if (tail.trim()) processEventBlock(tail);
+        } catch (err) {
+            // Re-throw AbortError so callers can detect cancellation
+            // cleanly; wrap other errors so the message is useful.
+            if (err instanceof DOMException && err.name === "AbortError") {
+                throw err;
+            }
+            throw err instanceof Error
+                ? err
+                : new Error("Atelier agent stream reader failed");
+        }
+
+        if (errorMessage) {
+            throw new Error(errorMessage);
+        }
+        if (!finalEvent) {
+            throw new Error("Atelier agent stream closed without a done event.");
+        }
+        return finalEvent;
+    },
+    // Track O (v0.9) — async export job orchestration.
+    //
+    // POST /sequence/export now returns {job_id} immediately. GET
+    // /sequence/export/{job_id} surfaces {status, progress, ...}. The
+    // legacy synchronous shape ({video_url, filename, size_mb,
+    // clip_count}) is reconstructed by exportAtelierSequence() once
+    // the worker reaches `completed` — preserving the caller's
+    // resolved-value contract verbatim while exposing optional
+    // {signal, onProgress} hooks.
+    startExportAtelierSequence: async (
         projectId: string,
         entries: Array<{ parentId: string; candidateId: string; trimStart?: number; trimEnd?: number }>,
         options?: { signal?: AbortSignal },
-    ): Promise<{ video_url: string; filename: string; size_mb: number; clip_count: number }> => {
+    ): Promise<{ job_id: string; status: string }> => {
         const response = await axios.post(
             `${API_URL}/atelier/projects/${projectId}/sequence/export`,
             { entries },
             { signal: options?.signal },
         );
         return response.data;
+    },
+    pollAtelierExportJob: async (
+        projectId: string,
+        jobId: string,
+        options?: { signal?: AbortSignal },
+    ): Promise<{
+        job_id: string;
+        status: "pending" | "running" | "completed" | "failed";
+        progress: number;
+        video_url?: string;
+        filename?: string;
+        size_mb?: number;
+        clip_count?: number;
+        error?: string;
+    }> => {
+        const response = await axios.get(
+            `${API_URL}/atelier/projects/${projectId}/sequence/export/${jobId}`,
+            { signal: options?.signal },
+        );
+        return response.data;
+    },
+    exportAtelierSequence: async (
+        projectId: string,
+        entries: Array<{ parentId: string; candidateId: string; trimStart?: number; trimEnd?: number }>,
+        options?: { signal?: AbortSignal; onProgress?: (pct: number) => void },
+    ): Promise<{ video_url: string; filename: string; size_mb: number; clip_count: number }> => {
+        const signal = options?.signal;
+        const onProgress = options?.onProgress;
+
+        // Honor an already-aborted signal up-front so we don't even
+        // issue the POST.
+        if (signal?.aborted) {
+            throw new axios.CanceledError("canceled", "ERR_CANCELED");
+        }
+
+        const { job_id: jobId } = await api.startExportAtelierSequence(projectId, entries, { signal });
+
+        return await new Promise((resolve, reject) => {
+            let timer: ReturnType<typeof setInterval> | null = null;
+            let cancelled = false;
+
+            const cleanup = () => {
+                if (timer !== null) {
+                    clearInterval(timer);
+                    timer = null;
+                }
+                if (signal) {
+                    signal.removeEventListener("abort", onAbort);
+                }
+            };
+
+            const onAbort = () => {
+                if (cancelled) return;
+                cancelled = true;
+                cleanup();
+                // Mirror axios cancellation so SequenceStrip's existing
+                // axios.isCancel(err) branch still routes to "canceled".
+                reject(new axios.CanceledError("canceled", "ERR_CANCELED"));
+            };
+
+            if (signal) {
+                signal.addEventListener("abort", onAbort);
+                if (signal.aborted) {
+                    onAbort();
+                    return;
+                }
+            }
+
+            const poll = async () => {
+                if (cancelled) return;
+                try {
+                    const status = await api.pollAtelierExportJob(projectId, jobId);
+                    if (cancelled) return;
+                    if (status.status === "completed") {
+                        cleanup();
+                        // Determinate bar should land at 100 even if the
+                        // server's last broadcast was 95.
+                        if (onProgress) {
+                            try { onProgress(100); } catch { /* swallow consumer error */ }
+                        }
+                        resolve({
+                            video_url: status.video_url ?? "",
+                            filename: status.filename ?? "",
+                            size_mb: status.size_mb ?? 0,
+                            clip_count: status.clip_count ?? 0,
+                        });
+                        return;
+                    }
+                    if (status.status === "failed") {
+                        cleanup();
+                        reject(new Error(status.error ?? "Atelier export failed"));
+                        return;
+                    }
+                    // pending / running — surface the latest pct.
+                    if (onProgress) {
+                        try {
+                            onProgress(typeof status.progress === "number" ? status.progress : 0);
+                        } catch {
+                            /* swallow consumer error */
+                        }
+                    }
+                } catch (err) {
+                    if (axios.isCancel(err)) {
+                        return;
+                    }
+                    cleanup();
+                    reject(err);
+                }
+            };
+
+            // Fire an immediate poll so the first progress event lands
+            // quickly, then settle into the 800 ms cadence.
+            void poll();
+            timer = setInterval(() => { void poll(); }, 800);
+        });
     },
     replaceAtelierSequence: async (
         projectId: string,

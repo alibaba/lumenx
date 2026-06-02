@@ -322,6 +322,11 @@ export function AtelierShellV3() {
   const createProject = useAtelierStore((s) => s.createProject);
   const selectNode = useAtelierStore((s) => s.selectNode);
   const createImageNode = useAtelierStore((s) => s.createImageNode);
+  // Q (v0.9): asset upload pipeline. Action runs the XHR + persists the
+  // node; the active-uploads slice drives AssetLibrary's progress strip.
+  const uploadAsset_Q = useAtelierStore((s) => s.uploadAsset_Q);
+  const cancelUpload_Q = useAtelierStore((s) => s.cancelUpload_Q);
+  const activeUploads_Q = useAtelierStore((s) => s.activeUploads_Q);
   const createIdeaNode = useAtelierStore((s) => s.createIdeaNode);
   const createCommentNode = useAtelierStore((s) => s.createCommentNode);
   const deleteAtelierNode = useAtelierStore((s) => s.deleteAtelierNode);
@@ -3459,6 +3464,27 @@ export function AtelierShellV3() {
         onToggle={() => setActiveRailMode((cur) => (cur === "assets" ? null : "assets"))}
         hideCollapsedHandle
         leftOffsetPx={72}
+        activeUploads={activeUploads_Q}
+        onCancelUpload={(id) => cancelUpload_Q(id)}
+        onUpload={(files) => {
+          // Q (v0.9): per-file try/catch — partial successes are common
+          // when a batch contains mixed mimes or an oversized file. Each
+          // file gets its own toast on failure so the user can tell which
+          // one didn't make it without having to inspect the strip.
+          (async () => {
+            for (const file of files) {
+              try {
+                await uploadAsset_Q(file);
+                pushToast("success", `Uploaded "${file.name}"`);
+              } catch (err: unknown) {
+                pushToast(
+                  "error",
+                  `Upload failed (${file.name}): ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            }
+          })();
+        }}
         onCycleCategory={(nodeId, next) => {
           const node = project?.nodes.find((n) => n.id === nodeId);
           if (!node) return;

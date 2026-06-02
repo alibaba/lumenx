@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Callable, List, Optional, Tuple
 import json
 import os
 import re
@@ -87,6 +87,18 @@ class ComicGenPipeline:
         # Format: { task_id: { status: str, progress: int, error: str, script_id: str, asset_id: str, created_at: float } }
         self.asset_generation_tasks: Dict[str, Dict[str, Any]] = {}
         self.video_generation_tasks: Dict[str, Dict[str, Any]] = {}
+        # Track O (v0.9) — Atelier sequence-export job registry.
+        # Lives in-memory only (same lifecycle reasoning as the *_tasks
+        # dicts above and the explicit comment at the bottom of this
+        # block). Each entry: { status, progress (0-100), error,
+        # project_id, created_at, video_url?, filename?, size_mb?,
+        # clip_count?, resolved (internal: [(rel_url, ts_in, ts_out)]) }.
+        # Worker is process_atelier_sequence_export_job. Concurrent
+        # readers/writers (FastAPI BG-task vs. GET poller) coordinate
+        # through self._atelier_export_lock so a poll never observes a
+        # half-written dict.
+        self.atelier_export_tasks: Dict[str, Dict[str, Any]] = {}
+        self._atelier_export_lock = threading.Lock()
         # Temporary cache for file import previews (import_id -> text)
         self._import_cache: Dict[str, str] = {}
         # Cached model instances for Kling/Vidu (lazily initialized)
@@ -3522,20 +3534,40 @@ class ComicGenPipeline:
             raise ValueError("Atelier node not found")
         return project, node
 
-    def export_atelier_sequence(
+    # ------------------------------------------------------------------
+    # Atelier sequence export (track O — v0.9 async refactor)
+    # ------------------------------------------------------------------
+    # The export pipeline has three layers:
+    #   1. _resolve_atelier_sequence_entries — pure validation. Maps the
+    #      raw entry payload to a list of (rel_url, ts_in, ts_out)
+    #      tuples. Raises ValueError on every schema / data issue. No
+    #      filesystem or ffmpeg side effects. Used by both the sync
+    #      wrapper (export_atelier_sequence) and the async job
+    #      allocator (start_atelier_sequence_export_job) so they share
+    #      identical validation rules.
+    #   2. _run_atelier_export_ffmpeg — the actual work: per-clip trim
+    #      passes + final concat. Takes a `on_progress(done, total)`
+    #      callback so the async worker can update the job state after
+    #      each per-clip ffmpeg finishes. The sync wrapper passes a
+    #      no-op.
+    #   3. export_atelier_sequence — kept as a thin wrapper for any
+    #      synchronous caller (notably tests/test_atelier_core.py).
+    #      Returns the same dict shape it always did.
+    #
+    # The async pair lives below: start_atelier_sequence_export_job
+    # (validation + job allocation) and process_atelier_sequence_export_job
+    # (worker, called via FastAPI BackgroundTasks).
+
+    def _resolve_atelier_sequence_entries(
         self,
         project_id: str,
         entries: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        """Concat sequence entries into a single MP4. Each entry resolves
-        to a candidate's video file under output/; per-entry trim points
-        (trimStart / trimEnd, in seconds) are applied with ffmpeg before
-        concat. Re-encodes everything so the output is uniform.
+    ) -> List[Tuple[str, Optional[float], Optional[float]]]:
+        """Validate entries and resolve them to (rel_url, ts_in, ts_out).
 
-        Returns: {"video_url": "videos/<file>.mp4", "filename": ..., "size_mb": ...}.
-
-        Raises ValueError on schema / data issues, RuntimeError on
-        missing ffmpeg / ffmpeg failure.
+        Pure function with no side effects beyond reading project state.
+        Raises ValueError on every schema/data issue so the POST handler
+        can surface a 4xx before any job is queued.
         """
         if not entries:
             raise ValueError("Sequence is empty — add at least one clip before exporting.")
@@ -3544,14 +3576,6 @@ class ComicGenPipeline:
         if not project:
             raise ValueError("Atelier project not found")
 
-        ffmpeg_path = get_ffmpeg_path()
-        if not ffmpeg_path:
-            raise RuntimeError(
-                "FFmpeg is required for sequence export but was not found.\n\n"
-                f"{get_ffmpeg_install_instructions()}"
-            )
-
-        # Resolve each entry against its parent node's candidate list.
         nodes_by_id = {n.id: n for n in project.nodes}
         resolved: List[Tuple[str, Optional[float], Optional[float]]] = []
         for idx, entry in enumerate(entries):
@@ -3586,12 +3610,33 @@ class ComicGenPipeline:
             if ts is not None and te is not None and te <= ts:
                 raise ValueError(f"Sequence entry #{idx + 1}: trimEnd must be greater than trimStart.")
             resolved.append((str(video_url), ts, te))
+        return resolved
 
-        ts_now = int(time.time())
+    def _run_atelier_export_ffmpeg(
+        self,
+        resolved: List[Tuple[str, Optional[float], Optional[float]]],
+        project_id: str,
+        ts_now: int,
+        on_progress: Optional[Callable[[int, int], None]] = None,
+    ) -> Dict[str, Any]:
+        """Per-clip trim + final concat. `on_progress(done, total)` is
+        called once per per-clip ffmpeg invocation (whether or not the
+        clip needed trimming, so the bar advances even on raw clips).
+        Returns the legacy dict shape: video_url / filename / size_mb /
+        clip_count."""
+        ffmpeg_path = get_ffmpeg_path()
+        if not ffmpeg_path:
+            raise RuntimeError(
+                "FFmpeg is required for sequence export but was not found.\n\n"
+                f"{get_ffmpeg_install_instructions()}"
+            )
+
+        total = len(resolved)
         work_dir = _safe_resolve_path("output", f"atelier_export_{project_id}_{ts_now}")
         os.makedirs(work_dir, exist_ok=True)
 
         clip_paths: List[str] = []
+        list_path = os.path.join(work_dir, "concat.txt")
         try:
             for i, (rel_url, ts_in, ts_out) in enumerate(resolved):
                 # Local files: candidate.video_url is relative to output/
@@ -3603,29 +3648,38 @@ class ComicGenPipeline:
                     # No trim — feed source directly. Re-encode happens in
                     # the concat pass anyway, so we don't lose anything.
                     clip_paths.append(src_path)
-                    continue
-                trimmed = os.path.join(work_dir, f"clip_{i:03d}.mp4")
-                cmd = [ffmpeg_path, "-y"]
-                if ts_in is not None:
-                    cmd += ["-ss", f"{ts_in:.3f}"]
-                if ts_out is not None:
-                    cmd += ["-to", f"{ts_out:.3f}"]
-                cmd += [
-                    "-i", src_path,
-                    "-c:v", "libx264", "-crf", "23", "-preset", "fast",
-                    "-c:a", "aac", "-b:a", "128k",
-                    trimmed,
-                ]
-                try:
-                    subprocess.run(cmd, check=True, capture_output=True, timeout=600)
-                except subprocess.CalledProcessError as e:
-                    stderr = e.stderr.decode() if e.stderr else "no output"
-                    raise RuntimeError(
-                        f"ffmpeg failed trimming clip #{i + 1}: {stderr[-400:]}"
-                    )
-                clip_paths.append(trimmed)
+                else:
+                    trimmed = os.path.join(work_dir, f"clip_{i:03d}.mp4")
+                    cmd = [ffmpeg_path, "-y"]
+                    if ts_in is not None:
+                        cmd += ["-ss", f"{ts_in:.3f}"]
+                    if ts_out is not None:
+                        cmd += ["-to", f"{ts_out:.3f}"]
+                    cmd += [
+                        "-i", src_path,
+                        "-c:v", "libx264", "-crf", "23", "-preset", "fast",
+                        "-c:a", "aac", "-b:a", "128k",
+                        trimmed,
+                    ]
+                    try:
+                        subprocess.run(cmd, check=True, capture_output=True, timeout=600)
+                    except subprocess.CalledProcessError as e:
+                        stderr = e.stderr.decode() if e.stderr else "no output"
+                        raise RuntimeError(
+                            f"ffmpeg failed trimming clip #{i + 1}: {stderr[-400:]}"
+                        )
+                    clip_paths.append(trimmed)
+                # Per-clip granularity: bump after each resolved clip is
+                # ready, whether trimmed or pass-through. Async worker
+                # translates (done, total) → 0-85% range for the
+                # determinate bar.
+                if on_progress is not None:
+                    try:
+                        on_progress(i + 1, total)
+                    except Exception:  # pragma: no cover — never let
+                        # a buggy callback abort the export.
+                        logger.debug("on_progress callback raised; ignoring")
 
-            list_path = os.path.join(work_dir, "concat.txt")
             with open(list_path, "w") as f:
                 for p in clip_paths:
                     # ffmpeg concat list format: paths must be quoted with
@@ -3669,13 +3723,232 @@ class ComicGenPipeline:
                 for p in clip_paths:
                     if p.startswith(work_dir) and os.path.exists(p):
                         os.remove(p)
-                list_path = os.path.join(work_dir, "concat.txt")
                 if os.path.exists(list_path):
                     os.remove(list_path)
                 if os.path.isdir(work_dir):
                     os.rmdir(work_dir)
             except Exception:
                 logger.warning("Failed to clean up atelier export work dir: %s", work_dir)
+
+    def export_atelier_sequence(
+        self,
+        project_id: str,
+        entries: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Synchronous Atelier sequence export — kept for direct callers
+        (notably tests/test_atelier_core.py). The HTTP route uses the
+        async job pair below (start_atelier_sequence_export_job /
+        process_atelier_sequence_export_job) instead.
+
+        Returns: {"video_url": "videos/<file>.mp4", "filename": ..., "size_mb": ..., "clip_count": ...}.
+
+        Raises ValueError on schema / data issues, RuntimeError on
+        missing ffmpeg / ffmpeg failure.
+        """
+        resolved = self._resolve_atelier_sequence_entries(project_id, entries)
+        ts_now = int(time.time())
+        return self._run_atelier_export_ffmpeg(resolved, project_id, ts_now)
+
+    # ---- async job pair (track O) -----------------------------------
+
+    def start_atelier_sequence_export_job(
+        self,
+        project_id: str,
+        entries: List[Dict[str, Any]],
+    ) -> str:
+        """Synchronous validation + job allocation. Returns the new
+        job_id. Validation errors (ValueError) propagate to the HTTP
+        handler so the POST returns 4xx without ever queueing a phantom
+        job. Missing-ffmpeg (RuntimeError) likewise surfaces eagerly so
+        the user doesn't have to poll just to learn ffmpeg is gone.
+        """
+        # Run validation first — both data shape (raises ValueError) and
+        # ffmpeg availability (raises RuntimeError). Failing here means
+        # no job record is ever created.
+        resolved = self._resolve_atelier_sequence_entries(project_id, entries)
+        ffmpeg_path = get_ffmpeg_path()
+        if not ffmpeg_path:
+            raise RuntimeError(
+                "FFmpeg is required for sequence export but was not found.\n\n"
+                f"{get_ffmpeg_install_instructions()}"
+            )
+
+        job_id = str(uuid.uuid4())
+        with self._atelier_export_lock:
+            self.atelier_export_tasks[job_id] = {
+                "status": "pending",
+                "progress": 0,
+                "error": None,
+                "project_id": project_id,
+                "created_at": time.time(),
+                # Internal: the resolved tuples the worker will replay.
+                # Not surfaced through get_atelier_export_job_status.
+                "_resolved": resolved,
+                # Terminal fields filled in on success.
+                "video_url": None,
+                "filename": None,
+                "size_mb": None,
+                "clip_count": None,
+            }
+        return job_id
+
+    def process_atelier_sequence_export_job(self, job_id: str) -> None:
+        """Worker — invoked via FastAPI BackgroundTasks. Reads the
+        resolved entries the allocator stashed on the job dict, runs
+        the ffmpeg pipeline with a progress callback, then writes the
+        terminal status. Exceptions are caught and surfaced via
+        status="failed" + error=str(exc); no exception escapes."""
+        with self._atelier_export_lock:
+            job = self.atelier_export_tasks.get(job_id)
+            if not job:
+                logger.warning("Atelier export worker: job %s not found", job_id)
+                return
+            if job.get("status") not in ("pending",):
+                # Already started or finished — avoid double-execution
+                # if the scheduler somehow fires twice.
+                return
+            job["status"] = "running"
+            job["progress"] = 0
+            resolved = job.get("_resolved") or []
+            project_id = job.get("project_id")
+
+        ts_now = int(time.time())
+
+        def _on_progress(done: int, total: int) -> None:
+            # Per-clip pass maps 0-85%. Final mux bumps to 90 before
+            # the subprocess.run, then we jump to 100 on success.
+            if total <= 0:
+                return
+            pct = int(round(done / total * 85))
+            if pct < 0:
+                pct = 0
+            elif pct > 85:
+                pct = 85
+            with self._atelier_export_lock:
+                latest = self.atelier_export_tasks.get(job_id)
+                if not latest or latest.get("status") not in ("running",):
+                    return
+                latest["progress"] = pct
+
+        try:
+            # Run the ffmpeg trim loop. Each per-clip iteration calls
+            # _on_progress; the final concat happens after the loop and
+            # we bump to 90 right before it runs.
+            result = self._run_atelier_export_with_pre_mux_hook(
+                resolved=resolved,
+                project_id=project_id,
+                ts_now=ts_now,
+                on_progress=_on_progress,
+                pre_mux=lambda: self._set_atelier_export_progress(job_id, 90),
+            )
+        except Exception as exc:
+            logger.exception("Atelier export job %s failed", job_id)
+            with self._atelier_export_lock:
+                job = self.atelier_export_tasks.get(job_id)
+                if job is not None:
+                    job["status"] = "failed"
+                    job["error"] = str(exc)
+            return
+
+        with self._atelier_export_lock:
+            job = self.atelier_export_tasks.get(job_id)
+            if job is None:
+                return
+            job["status"] = "completed"
+            job["progress"] = 100
+            job["video_url"] = result.get("video_url")
+            job["filename"] = result.get("filename")
+            job["size_mb"] = result.get("size_mb")
+            job["clip_count"] = result.get("clip_count")
+            # Drop the cached resolved tuples once the job is terminal —
+            # they reference internal pipeline objects and aren't needed
+            # for polling responses.
+            job.pop("_resolved", None)
+
+    def _set_atelier_export_progress(self, job_id: str, pct: int) -> None:
+        with self._atelier_export_lock:
+            job = self.atelier_export_tasks.get(job_id)
+            if job is None or job.get("status") != "running":
+                return
+            job["progress"] = pct
+
+    def _run_atelier_export_with_pre_mux_hook(
+        self,
+        resolved: List[Tuple[str, Optional[float], Optional[float]]],
+        project_id: str,
+        ts_now: int,
+        on_progress: Callable[[int, int], None],
+        pre_mux: Callable[[], None],
+    ) -> Dict[str, Any]:
+        """Same as _run_atelier_export_ffmpeg but bumps the progress
+        bar to 90% right before the final concat ffmpeg invocation.
+        Done as a sibling rather than threading another arg through
+        _run_atelier_export_ffmpeg so the sync test path stays
+        identical."""
+        # We can't easily slip pre_mux between the per-clip loop and
+        # the concat call without re-implementing the body. The
+        # cheapest approach: wrap on_progress so the LAST per-clip
+        # invocation also triggers pre_mux.
+        total = len(resolved)
+        fired = {"pre_mux": False}
+
+        def wrapped_progress(done: int, t: int) -> None:
+            on_progress(done, t)
+            if done >= t and not fired["pre_mux"]:
+                fired["pre_mux"] = True
+                try:
+                    pre_mux()
+                except Exception:  # pragma: no cover
+                    logger.debug("pre_mux hook raised; ignoring")
+
+        # Edge case: zero-clip jobs shouldn't get here (validation
+        # rejects them), but if they do, fire pre_mux up-front so the
+        # bar still advances.
+        if total == 0 and not fired["pre_mux"]:
+            fired["pre_mux"] = True
+            try:
+                pre_mux()
+            except Exception:  # pragma: no cover
+                pass
+
+        return self._run_atelier_export_ffmpeg(
+            resolved=resolved,
+            project_id=project_id,
+            ts_now=ts_now,
+            on_progress=wrapped_progress,
+        )
+
+    def get_atelier_export_job_status(
+        self,
+        project_id: str,
+        job_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Polling DTO. Returns None if the job_id is unknown OR if it
+        belongs to a different project (prevents probing other
+        projects' job_ids). Caller maps None → 404.
+        """
+        with self._atelier_export_lock:
+            job = self.atelier_export_tasks.get(job_id)
+            if not job:
+                return None
+            if job.get("project_id") != project_id:
+                return None
+            payload: Dict[str, Any] = {
+                "job_id": job_id,
+                "status": job.get("status"),
+                "progress": int(job.get("progress") or 0),
+            }
+            if job.get("error"):
+                payload["error"] = job["error"]
+            if job.get("video_url"):
+                payload["video_url"] = job["video_url"]
+            if job.get("filename"):
+                payload["filename"] = job["filename"]
+            if job.get("size_mb") is not None:
+                payload["size_mb"] = job["size_mb"]
+            if job.get("clip_count") is not None:
+                payload["clip_count"] = job["clip_count"]
+            return payload
 
     def _get_atelier_candidate(self, node: AtelierNode, candidate_id: str) -> Dict[str, Any]:
         node_data = dict(node.data or {})

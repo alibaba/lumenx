@@ -192,6 +192,12 @@ export function SequenceStrip(props: SequenceStripProps): React.JSX.Element | nu
   // the chip survives a remount when `sequenceVisible` toggles off/on.
   const [exporting, setExporting] = React.useState(false);
   const [exportChip, setExportChip] = React.useState<ExportChip | null>(null);
+  // Track O (v0.9): determinate progress for the in-flight bar. `null`
+  // means "no progress event has landed yet" → render the indeterminate
+  // shimmer (matches the `pending` state before the first poll). Any
+  // numeric value → switch to the determinate fill so the user sees the
+  // bar advance through 0-100%.
+  const [exportProgress, setExportProgress] = React.useState<number | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
   // Snapshot the last payload so the "Retry" affordance on the error
   // chip can re-issue the same export.
@@ -204,6 +210,7 @@ export function SequenceStrip(props: SequenceStripProps): React.JSX.Element | nu
     abortRef.current?.abort();
     abortRef.current = null;
     setExporting(false);
+    setExportProgress(null);
     // lastPayloadRef is wiped because the entries belong to the previous
     // project; Retry would point at stale candidates.
     lastPayloadRef.current = null;
@@ -225,12 +232,28 @@ export function SequenceStrip(props: SequenceStripProps): React.JSX.Element | nu
       // Wipe any prior chip — the in-flight progress bar is the live
       // signal now; the chip only re-appears at completion.
       setExportChip(null);
+      // Reset to `null` so the determinate fill restarts at the
+      // indeterminate shimmer until the first GET /sequence/export
+      // poll lands.
+      setExportProgress(null);
       lastPayloadRef.current = payload;
       const controller = new AbortController();
       abortRef.current = controller;
       setExporting(true);
       void api
-        .exportAtelierSequence(projectId, payload, { signal: controller.signal })
+        .exportAtelierSequence(projectId, payload, {
+          signal: controller.signal,
+          // Track O (v0.9): each GET .../sequence/export/{job_id}
+          // poll feeds the determinate progress bar. Wrap in
+          // setExportProgress so React batches updates without
+          // double-rendering.
+          onProgress: (pct) => {
+            setExportProgress((prev) => {
+              if (prev !== null && pct < prev) return prev; // never regress
+              return pct;
+            });
+          },
+        })
         .then((res) => {
           setExportChip({
             kind: "success",
@@ -256,6 +279,7 @@ export function SequenceStrip(props: SequenceStripProps): React.JSX.Element | nu
         })
         .finally(() => {
           setExporting(false);
+          setExportProgress(null);
           // Only clear the controller if it's still the one we created
           // for this export — protects against a stale abort wiping a
           // newer in-flight call started during the .then handler.
@@ -418,21 +442,41 @@ export function SequenceStrip(props: SequenceStripProps): React.JSX.Element | nu
             <ExportChipView chip={exportChip} onRetry={handleRetryClick} onDismiss={handleDismissChip} />
           ) : null}
         </div>
-        {/* Indeterminate progress bar — only while exporting. Since the
-            backend route is synchronous and reports no progress, an
-            indeterminate shimmer is the most honest signal. */}
+        {/* Track O (v0.9): the export route is now an async job with
+            per-clip progress updates streaming over /sequence/export/
+            {job_id}. We render an indeterminate shimmer while
+            exportProgress is null (the `pending` window before the
+            first poll lands) and switch to a determinate fill once a
+            numeric value arrives. */}
         {exporting ? (
-          <span
-            role="progressbar"
-            aria-busy="true"
-            aria-label="Exporting sequence"
-            className="pointer-events-none absolute -bottom-px left-0 right-0 h-[2px] overflow-hidden bg-white/5"
-          >
+          exportProgress === null ? (
             <span
-              aria-hidden="true"
-              className="block h-full w-1/3 animate-atelier-progress-indeterminate bg-atelier-brand-400/70 motion-reduce:animate-none motion-reduce:w-full motion-reduce:opacity-70"
-            />
-          </span>
+              role="progressbar"
+              aria-busy="true"
+              aria-label="Exporting sequence"
+              className="pointer-events-none absolute -bottom-px left-0 right-0 h-[2px] overflow-hidden bg-white/5"
+            >
+              <span
+                aria-hidden="true"
+                className="block h-full w-1/3 animate-atelier-progress-indeterminate bg-atelier-brand-400/70 motion-reduce:animate-none motion-reduce:w-full motion-reduce:opacity-70"
+              />
+            </span>
+          ) : (
+            <span
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.max(0, Math.min(100, Math.round(exportProgress)))}
+              aria-label="Exporting sequence"
+              className="pointer-events-none absolute -bottom-px left-0 right-0 h-[2px] overflow-hidden bg-white/5"
+            >
+              <span
+                aria-hidden="true"
+                className="block h-full bg-atelier-brand-400/85 transition-[width] duration-300 ease-out"
+                style={{ width: `${Math.max(0, Math.min(100, exportProgress))}%` }}
+              />
+            </span>
+          )
         ) : null}
       </div>
 

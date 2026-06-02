@@ -1771,6 +1771,125 @@ def test_atelier_sequence_export_validates_entries(pipeline):
         ])
 
 
+def test_atelier_sequence_export_async_job_lifecycle(pipeline, monkeypatch):
+    """Track O (v0.9): start_atelier_sequence_export_job allocates a
+    job_id without executing; process_atelier_sequence_export_job runs
+    the work in-process, with progress monotonically reaching 100; the
+    polling DTO surfaces the terminal video_url / filename. Cross-
+    project job_ids return None (caller maps to 404)."""
+    project = pipeline.create_atelier_project("Async board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            **(video.data or {}),
+            "candidates": [
+                {"id": "c1", "status": "completed", "video_url": "videos/atelier_c1.mp4"},
+                {"id": "c2", "status": "completed", "video_url": "videos/atelier_c2.mp4"},
+            ],
+        },
+    })
+
+    # Skip the actual ffmpeg invocations + treat any source path as
+    # "exists". We also fake the eventual output file's size so size_mb
+    # comes back as a positive number.
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.get_ffmpeg_path",
+        lambda: "/usr/bin/true",
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.exists",
+        lambda _p: True,
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.getsize",
+        lambda _p: 1024 * 1024,
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.subprocess.run",
+        lambda *args, **kwargs: MagicMock(returncode=0, stderr=b"", stdout=b""),
+    )
+
+    # Allocation. POST handler propagates the returned id verbatim.
+    job_id = pipeline.start_atelier_sequence_export_job(project.id, [
+        {"parentId": video.id, "candidateId": "c1"},
+        {"parentId": video.id, "candidateId": "c2"},
+    ])
+    assert isinstance(job_id, str) and len(job_id) > 0
+
+    # Pre-run polling DTO reflects "pending" / 0%.
+    pre = pipeline.get_atelier_export_job_status(project.id, job_id)
+    assert pre is not None
+    assert pre["status"] == "pending"
+    assert pre["progress"] == 0
+
+    # Cross-project lookup must return None (POST handler maps → 404).
+    other_project = pipeline.create_atelier_project("Other board")
+    assert pipeline.get_atelier_export_job_status(other_project.id, job_id) is None
+
+    # Run the worker synchronously (FastAPI BackgroundTasks normally
+    # invokes this after the response is sent).
+    pipeline.process_atelier_sequence_export_job(job_id)
+
+    post = pipeline.get_atelier_export_job_status(project.id, job_id)
+    assert post is not None
+    assert post["status"] == "completed"
+    assert post["progress"] == 100
+    assert post["video_url"].startswith("videos/atelier_seq_")
+    assert post["filename"].endswith(".mp4")
+    assert post["clip_count"] == 2
+    assert post["size_mb"] == pytest.approx(1.0, abs=0.01)
+    # Internal resolved cache must be dropped on terminal so it can't
+    # leak into a future status payload.
+    raw = pipeline.atelier_export_tasks[job_id]
+    assert "_resolved" not in raw
+
+
+def test_atelier_sequence_export_async_job_marks_failed_on_ffmpeg_error(pipeline, monkeypatch):
+    """If the worker's ffmpeg call raises, the job lands in
+    status='failed' with the error message preserved — progress sticks
+    at the last bump rather than jumping to 100."""
+    import subprocess as _sp
+
+    project = pipeline.create_atelier_project("Failing board")
+    video = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+    pipeline.update_atelier_node(project.id, video.id, {
+        "data": {
+            **(video.data or {}),
+            "candidates": [
+                {"id": "c1", "status": "completed", "video_url": "videos/atelier_c1.mp4"},
+            ],
+        },
+    })
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.get_ffmpeg_path",
+        lambda: "/usr/bin/true",
+    )
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.os.path.exists",
+        lambda _p: True,
+    )
+
+    def _explode(*_args, **_kwargs):
+        raise _sp.CalledProcessError(returncode=1, cmd="ffmpeg", stderr=b"boom")
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.pipeline.subprocess.run",
+        _explode,
+    )
+
+    job_id = pipeline.start_atelier_sequence_export_job(project.id, [
+        {"parentId": video.id, "candidateId": "c1", "trimStart": 0.5, "trimEnd": 2.5},
+    ])
+    pipeline.process_atelier_sequence_export_job(job_id)
+
+    status = pipeline.get_atelier_export_job_status(project.id, job_id)
+    assert status is not None
+    assert status["status"] == "failed"
+    assert "boom" in status.get("error", "")
+    assert status.get("video_url") is None
+
+
 def test_atelier_structure_planner_explicit_intent_kind_overrides_message(pipeline):
     project = pipeline.create_atelier_project("Board")
 
@@ -1862,3 +1981,175 @@ def test_atelier_agent_turn_response_reports_failed_first_error(pipeline):
     assert turn.status == "completed"
     assert turn.response is not None
     assert "Denied" in turn.response
+
+
+# ---------------------------------------------------------------------------
+# v0.9 track P — SSE streaming agent turn route.
+# ---------------------------------------------------------------------------
+
+
+def _parse_sse_events(body_text: str):
+    """Split a captured SSE response body into a list of (event, data) tuples.
+
+    Reused across the streaming-route tests below; intentionally minimal — no
+    multi-line `data:` reassembly is needed because the helper in api.py
+    always serializes a single JSON line per frame.
+    """
+    import json as _j
+
+    out = []
+    for block in body_text.split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        event_name = "message"
+        data_lines = []
+        for line in block.split("\n"):
+            line = line.rstrip("\r")
+            if line.startswith("event:"):
+                event_name = line.split(":", 1)[1].strip() or "message"
+            elif line.startswith("data:"):
+                data_lines.append(line.split(":", 1)[1].lstrip())
+        if not data_lines:
+            continue
+        try:
+            payload = _j.loads("\n".join(data_lines))
+        except Exception:
+            payload = {"raw": "\n".join(data_lines)}
+        out.append((event_name, payload))
+    return out
+
+
+def test_atelier_agent_stream_route_yields_deltas_and_executes(pipeline, monkeypatch):
+    """Track P: POST /agent/turns/stream emits metadata + deltas + a final
+    `done` event carrying the executed turn, and the turn is persisted to
+    the project the same way the sync route would persist it."""
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api as api_module
+
+    # Re-point the module-level pipeline at the test fixture so the route
+    # reads/writes the same in-memory project the assertions inspect.
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+
+    project = pipeline.create_atelier_project("Stream Board")
+    # never-mode policy so the executed canvas.createVideoNode tool call
+    # actually completes (default untrusted would route to waiting_approval).
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    def fake_stream(package, user_message, model=None):
+        # Yield several deltas that, concatenated, form the JSON payload
+        # the route expects from the LLM.
+        yield {"type": "delta", "text": '{"response":"Sure'}
+        yield {"type": "delta", "text": " — drafting"}
+        yield {"type": "delta", "text": ' a moon shot.",'}
+        yield {"type": "delta", "text": '"tool_calls":[{"tool_name":'}
+        yield {"type": "delta", "text": '"canvas.createVideoNode","arguments":{"title":"Moon","prompt":"moonlit chase"}}]}'}
+        yield {
+            "type": "done",
+            "response": "Sure — drafting a moon shot.",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"title": "Moon", "prompt": "moonlit chase"},
+                }
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    client = TestClient(api_module.app)
+    with client.stream(
+        "POST",
+        f"/atelier/projects/{project.id}/agent/turns/stream",
+        json={"user_message": "Draft a moonlit chase shot"},
+    ) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = "".join(chunk for chunk in response.iter_text())
+
+    events = _parse_sse_events(body)
+    assert len(events) >= 3, f"expected metadata + deltas + done, got: {events}"
+
+    # First event is metadata, carrying planner=model_adapter + a turn_id.
+    first_event, first_payload = events[0]
+    assert first_event == "metadata"
+    assert first_payload["planner"] == "model_adapter"
+    assert "turn_id" in first_payload
+
+    # At least 3 delta events whose concatenated text is the JSON the
+    # planner emitted.
+    delta_events = [p for (e, p) in events if e == "delta"]
+    assert len(delta_events) >= 3
+    delta_concat = "".join(d.get("text", "") for d in delta_events)
+    assert "canvas.createVideoNode" in delta_concat
+    assert "moonlit chase" in delta_concat
+
+    # Final event is `done` with completed status + the executed turn.
+    last_event, last_payload = events[-1]
+    assert last_event == "done"
+    assert last_payload["status"] == "completed"
+    assert last_payload["full_response"] == "Sure — drafting a moon shot."
+    assert last_payload["tool_calls"][0]["tool_name"] == "canvas.createVideoNode"
+    assert last_payload["turn"] is not None
+    assert "id" in last_payload["turn"]
+
+    # Persistence side-effect: project now has exactly one node + one
+    # AtelierAgentTurn whose response carries the streamed text.
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert len(refreshed.nodes) == 1
+    assert refreshed.nodes[0].title == "Moon"
+    assert len(refreshed.agent_turns) == 1
+    assert refreshed.agent_turns[0].response == "Sure — drafting a moon shot."
+
+
+def test_atelier_agent_stream_route_blocks_on_invalid_json(pipeline, monkeypatch):
+    """Track P: when the LLM emits non-JSON text the route still streams
+    the deltas but the final `done` event is `blocked` and no turn is
+    persisted (project.nodes stays empty)."""
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api as api_module
+
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+
+    project = pipeline.create_atelier_project("Bad Stream Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    def fake_stream(package, user_message, model=None):
+        yield {"type": "delta", "text": "not json at all"}
+        yield {
+            "type": "done",
+            "response": "not json at all",
+            "tool_calls": [],
+            "error": "parse_failed",
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    client = TestClient(api_module.app)
+    with client.stream(
+        "POST",
+        f"/atelier/projects/{project.id}/agent/turns/stream",
+        json={"user_message": "go"},
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(chunk for chunk in response.iter_text())
+
+    events = _parse_sse_events(body)
+    assert events, "expected at least one SSE event"
+    last_event, last_payload = events[-1]
+    assert last_event == "done"
+    assert last_payload["status"] == "blocked"
+    assert last_payload["turn"] is None
+    assert last_payload["tool_calls"] == []
+    # Error message mentions JSON parse failure so the panel can show why.
+    assert "JSON" in (last_payload.get("error") or "")
+
+    # No persistence on parse failure.
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert refreshed.nodes == []
+    assert refreshed.agent_turns == []

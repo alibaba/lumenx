@@ -6,7 +6,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, Tuple
 
 from .models import (
     AtelierAgentPlan,
@@ -648,6 +648,146 @@ def _extract_first_json_object(text: str) -> Optional[Any]:
                 except json.JSONDecodeError:
                     return None
     return None
+
+
+# --- LLM-backed STREAMING planning helper (v0.9 track P) ------------------
+#
+# Mirrors call_atelier_llm_planner but yields chunks as the LLM emits them so
+# the agent panel can render the response token-by-token instead of waiting
+# for the full payload. Contract (each yielded dict):
+#
+#   { "type": "delta", "text": "<chunk>" }
+#   { "type": "done", "response": "<text>", "tool_calls": [...], "error": str? }
+#
+# A single trailing `done` event is always yielded; on parse failure it carries
+# `error: "parse_failed"` plus the raw buffered text so the caller can decide
+# whether to surface the buffer as a blocked plan or as the assistant's own
+# explanation. Never raises — failures become a `done` event so the SSE route
+# can finish cleanly.
+def stream_atelier_llm_planner(
+    package: AtelierAgentPlannerPackage,
+    user_message: str,
+    model: Optional[str] = None,
+) -> Iterator[Dict[str, Any]]:
+    try:
+        from .llm_adapter import LLMAdapter
+    except Exception as exc:  # pragma: no cover — defensive import guard
+        yield {
+            "type": "done",
+            "response": "",
+            "tool_calls": [],
+            "error": f"LLM adapter unavailable: {exc}",
+        }
+        return
+
+    adapter = LLMAdapter()
+    if not adapter.is_configured:
+        key_name = "OPENAI_API_KEY" if adapter.provider == "openai" else "DASHSCOPE_API_KEY"
+        yield {
+            "type": "done",
+            "response": "",
+            "tool_calls": [],
+            "error": f"LLM not configured — set {key_name} to use the model-backed agent.",
+        }
+        return
+
+    system_prompt = _build_atelier_llm_system_prompt(package)
+    payload_message = user_message.strip() or "(no message — propose a sensible next step)"
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": payload_message},
+    ]
+    model_id = model or os.getenv(_AGENT_LLM_MODEL_ENV) or None
+
+    buffer_parts: List[str] = []
+    try:
+        chunk_iter = adapter.stream_chat(messages, model=model_id, response_format={"type": "json_object"})
+    except Exception as exc:
+        yield {
+            "type": "done",
+            "response": "",
+            "tool_calls": [],
+            "error": f"LLM call failed: {exc}",
+        }
+        return
+
+    try:
+        for chunk in chunk_iter:
+            if not chunk:
+                continue
+            buffer_parts.append(chunk)
+            yield {"type": "delta", "text": chunk}
+    except Exception as exc:
+        # Mid-stream provider exception — fall through to the done event so
+        # the route still emits a clean terminator.
+        yield {
+            "type": "done",
+            "response": "".join(buffer_parts),
+            "tool_calls": [],
+            "error": f"LLM stream interrupted: {exc}",
+        }
+        return
+
+    buffer = "".join(buffer_parts)
+
+    if not buffer.strip():
+        yield {
+            "type": "done",
+            "response": "",
+            "tool_calls": [],
+            "error": "LLM returned empty content.",
+        }
+        return
+
+    parsed_payload: Any
+    try:
+        parsed_payload = json.loads(buffer)
+    except json.JSONDecodeError:
+        recovered = _extract_first_json_object(buffer)
+        if recovered is None:
+            # Surface the buffered text as the response so the UI can show
+            # the model's own (non-JSON) explanation, but mark it as a
+            # parse failure so the route returns it as a blocked plan.
+            yield {
+                "type": "done",
+                "response": buffer,
+                "tool_calls": [],
+                "error": "parse_failed",
+            }
+            return
+        parsed_payload = recovered
+
+    if not isinstance(parsed_payload, dict):
+        yield {
+            "type": "done",
+            "response": buffer,
+            "tool_calls": [],
+            "error": "LLM response must be a JSON object with response + tool_calls.",
+        }
+        return
+
+    response_value = parsed_payload.get("response")
+    if response_value is not None and not isinstance(response_value, str):
+        response_value = str(response_value)
+
+    raw_calls = parsed_payload.get("tool_calls")
+    if raw_calls is None:
+        raw_calls = []
+    if not isinstance(raw_calls, list):
+        yield {
+            "type": "done",
+            "response": response_value or "",
+            "tool_calls": [],
+            "error": "LLM response 'tool_calls' must be an array.",
+        }
+        return
+
+    yield {
+        "type": "done",
+        "response": response_value or "",
+        "tool_calls": raw_calls,
+        "error": None,
+    }
 
 
 class ModelAdapterPlanner:

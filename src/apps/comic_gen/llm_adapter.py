@@ -14,7 +14,7 @@ Configuration via environment variables:
 """
 import os
 import logging
-from typing import Dict, List, Optional, Any
+from typing import Dict, Iterator, List, Optional, Any
 
 from ...utils.endpoints import get_provider_base_url
 
@@ -99,3 +99,69 @@ class LLMAdapter:
         except Exception as e:
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
             raise RuntimeError(f"{provider_label} API error: {e}") from e
+
+    # v0.9 track P: streaming variant of chat(). Yields per-chunk content
+    # deltas (already string-typed, empty string on no-content chunks
+    # filtered out) so the caller can accumulate tokens as they arrive
+    # rather than waiting for the full completion. Tolerates the same
+    # OpenAI-compatible streaming flag for both providers (DashScope honors
+    # it on its OpenAI-compatible endpoint just like OpenAI itself).
+    def stream_chat(
+        self,
+        messages: List[Dict[str, str]],
+        model: Optional[str] = None,
+        response_format: Optional[Dict[str, str]] = None,
+    ) -> Iterator[str]:
+        """Send a streaming chat completion and yield text content deltas.
+
+        Args:
+            messages: Same shape as chat().
+            model: Optional override; falls back to provider default.
+            response_format: Optional {"type": "json_object"} hint — still
+                honored by both providers in stream mode.
+
+        Yields:
+            Non-empty content delta strings. Empty deltas (role-only / tool
+            metadata chunks) are filtered so consumers can concatenate
+            yielded values without extra emptiness checks.
+
+        Raises:
+            RuntimeError: If the API call fails before the iterator is
+                consumed. Exceptions that surface mid-stream propagate as
+                the underlying provider error.
+        """
+        client = self._get_client()
+        model = model or self._get_default_model()
+
+        kwargs: Dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+        }
+        if response_format:
+            kwargs["response_format"] = response_format
+
+        try:
+            stream = client.chat.completions.create(**kwargs)
+        except Exception as e:
+            provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
+            raise RuntimeError(f"{provider_label} streaming API error: {e}") from e
+
+        for chunk in stream:
+            try:
+                choices = getattr(chunk, "choices", None) or []
+                if not choices:
+                    continue
+                delta = getattr(choices[0], "delta", None)
+                if delta is None:
+                    continue
+                # delta may be a pydantic model with .content or a dict.
+                content = getattr(delta, "content", None)
+                if content is None and isinstance(delta, dict):
+                    content = delta.get("content")
+                if not content:
+                    continue
+                yield str(content)
+            except Exception:  # pragma: no cover — defensive per-chunk guard
+                logger.exception("LLM stream_chat: skipping malformed chunk")
+                continue

@@ -7,18 +7,26 @@
 //
 // Per Codex doc §4.7 / §7.7. Open-source local-first; no marketplace,
 // no remote catalog, no auth. Defaults ship in workflowTemplates.ts.
-// User templates (saved from canvas selection) live in localStorage —
-// see useUserWorkflows below.
+// User templates (saved from canvas selection) live in localStorage,
+// keyed per Atelier project. Storage code itself lives in the store
+// (`atelierStore.ts` — `getUserTemplates_R` / `addUserTemplate_R` /
+// `removeUserTemplate_R`); the helpers exported below are thin shims
+// that resolve the active project's id at call time and delegate, so
+// the existing AtelierShellV3 call sites (`appendUserWorkflow(tpl)`,
+// `readUserWorkflows()`) keep working without a per-call projectId arg.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { Sparkles, Trash2 } from "lucide-react";
 import {
   TEMPLATE_CATEGORY_LABELS,
   WORKFLOW_TEMPLATES,
+  type PersistedUserTemplate,
   type TemplateCategory,
   type WorkflowTemplate,
 } from "./workflowTemplates";
 import { TemplateThumbnail } from "./TemplateThumbnail";
+import { ConfirmDialog } from "./Dialogs";
+import { useAtelierStore } from "@/store/atelierStore";
 
 /** Mime type the card emits on drag — shell-side drop handler reads
  *  this and inserts the template at the cursor position. Kept in this
@@ -47,48 +55,41 @@ const ALL_CATEGORIES: Array<TemplateCategory | "all" | "mine"> = [
   "utility",
 ];
 
-const USER_WORKFLOWS_KEY = "atelier-v3-user-workflows";
+// v0.9 (R): the legacy single global key `atelier-v3-user-workflows`
+// is intentionally orphaned. Storage now lives per-project at
+// `atelier-v0.9-user-templates:<projectId>` and the helpers below
+// delegate to `useAtelierStore`'s `getUserTemplates_R` /
+// `addUserTemplate_R`. Kept exported so AtelierShellV3's two save
+// handlers (`appendUserWorkflow(tpl)`) and its workflow-template drop
+// lookup (`readUserWorkflows()`) keep working without taking a
+// projectId arg — the active project is resolved here at call time.
 
-export function readUserWorkflows(): WorkflowTemplate[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(USER_WORKFLOWS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    // Cheap shape filter — drop anything that doesn't have the minimum
-    // surface a template needs. Defensive against schema drift across
-    // versions (the field is in localStorage so it survives upgrades).
-    return parsed.filter(
-      (t): t is WorkflowTemplate =>
-        !!t &&
-        typeof t === "object" &&
-        typeof (t as WorkflowTemplate).id === "string" &&
-        Array.isArray((t as WorkflowTemplate).nodes),
-    );
-  } catch {
-    return [];
-  }
+function resolveActiveProjectId(): string | null {
+  return useAtelierStore.getState().currentProject?.id ?? null;
 }
 
-function writeUserWorkflows(list: WorkflowTemplate[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(USER_WORKFLOWS_KEY, JSON.stringify(list));
-    // Ping any other tab/component that listens. v1 has only one
-    // consumer (this panel) but the helper is cheap.
-    window.dispatchEvent(new CustomEvent("atelier-user-workflows-changed"));
-  } catch {
-    /* ignore quota / private mode */
-  }
+export function readUserWorkflows(): PersistedUserTemplate[] {
+  const projectId = resolveActiveProjectId();
+  if (!projectId) return [];
+  return useAtelierStore.getState().getUserTemplates_R(projectId);
 }
 
 /** Helper exported so the shell's "Save selection as workflow" handler
- *  can append a new template without re-implementing the storage layer. */
+ *  can append a new template without re-implementing the storage layer.
+ *  The shell builds a bare WorkflowTemplate; this shim stamps the
+ *  required v0.9 fields (`origin: "user"`, `savedAt`) before persisting
+ *  so callers don't have to know about them. Silently no-ops when no
+ *  project is loaded (the shell's caller paths run after ensureProject,
+ *  so this is just a safety net). */
 export function appendUserWorkflow(t: WorkflowTemplate): void {
-  const list = readUserWorkflows();
-  list.unshift(t);
-  writeUserWorkflows(list);
+  const projectId = resolveActiveProjectId();
+  if (!projectId) return;
+  const persisted: PersistedUserTemplate = {
+    ...t,
+    origin: "user",
+    savedAt: typeof t.savedAt === "number" ? t.savedAt : Date.now(),
+  };
+  useAtelierStore.getState().addUserTemplate_R(projectId, persisted);
 }
 
 export function WorkflowsPanel({ onInsert, onInsertAt: _onInsertAt }: Props) {
@@ -97,11 +98,26 @@ export function WorkflowsPanel({ onInsert, onInsertAt: _onInsertAt }: Props) {
   // public API. Drop-target ownership lives on the canvas root.
   void _onInsertAt;
 
+  // v0.9 (R): subscribe to the active project id so a project switch
+  // re-runs the Mine tab against the new project's templates without a
+  // remount. `getUserTemplates_R` is dispatched through the store so
+  // tests/migrations that swap implementations don't need to patch this
+  // component.
+  const currentProjectId = useAtelierStore((s) => s.currentProject?.id ?? null);
+  const getUserTemplates = useAtelierStore((s) => s.getUserTemplates_R);
+  const removeUserTemplateAction = useAtelierStore((s) => s.removeUserTemplate_R);
+
   const [filter, setFilter] = useState<TemplateCategory | "all" | "mine">("all");
-  const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => readUserWorkflows());
+  const [userTemplates, setUserTemplates] = useState<PersistedUserTemplate[]>(
+    () => (currentProjectId ? getUserTemplates(currentProjectId) : []),
+  );
   // Which card is currently being dragged — drives the visual feedback
   // (opacity/scale) without needing a per-card useState.
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  // Pending delete-confirmation target (null = dialog closed). Persists
+  // a small snapshot of the row so the dialog can show the name even
+  // after the underlying list re-renders.
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Hidden off-screen mount node that we render TemplateThumbnail into
   // and hand to setDragImage. Browsers screenshot the live DOM node at
@@ -141,18 +157,23 @@ export function WorkflowsPanel({ onInsert, onInsertAt: _onInsertAt }: Props) {
     };
   }, []);
 
-  // Re-read on append events. localStorage doesn't fire for the writer
-  // tab, so we use a custom event from the writer.
+  // Re-sync on write events (custom event from the store's writer + the
+  // browser-native storage event for the cross-tab case). Also re-sync
+  // whenever the active project changes — the store's getter is keyed by
+  // projectId, so swapping projects must trigger a re-read.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onChange = () => setUserTemplates(readUserWorkflows());
+    const onChange = () => {
+      setUserTemplates(currentProjectId ? getUserTemplates(currentProjectId) : []);
+    };
+    onChange();
     window.addEventListener("atelier-user-workflows-changed", onChange);
     window.addEventListener("storage", onChange);
     return () => {
       window.removeEventListener("atelier-user-workflows-changed", onChange);
       window.removeEventListener("storage", onChange);
     };
-  }, []);
+  }, [currentProjectId, getUserTemplates]);
 
   const filtered = useMemo(() => {
     if (filter === "all") return [...userTemplates, ...WORKFLOW_TEMPLATES];
@@ -160,10 +181,26 @@ export function WorkflowsPanel({ onInsert, onInsertAt: _onInsertAt }: Props) {
     return WORKFLOW_TEMPLATES.filter((t) => t.category === filter);
   }, [filter, userTemplates]);
 
-  const removeUser = (id: string) => {
-    const next = userTemplates.filter((t) => t.id !== id);
-    setUserTemplates(next);
-    writeUserWorkflows(next);
+  // Opens the confirm dialog rather than deleting immediately — the
+  // spec calls for explicit user confirmation for user-saved templates
+  // (built-ins are read-only). The actual mutation happens in
+  // `confirmRemoveUser` below once the user clicks the Delete button.
+  const requestRemoveUser = (id: string, name: string) => {
+    setConfirmDelete({ id, name });
+  };
+
+  const confirmRemoveUser = () => {
+    if (!confirmDelete || !currentProjectId) {
+      setConfirmDelete(null);
+      return;
+    }
+    removeUserTemplateAction(currentProjectId, confirmDelete.id);
+    // The store dispatches `atelier-user-workflows-changed` after the
+    // write, which fires the effect above and re-reads — but updating
+    // local state immediately keeps the UI responsive without waiting
+    // on the event loop for the listener.
+    setUserTemplates((prev) => prev.filter((t) => t.id !== confirmDelete.id));
+    setConfirmDelete(null);
   };
 
   const labelFor = (cat: TemplateCategory | "all" | "mine") => {
@@ -211,16 +248,28 @@ export function WorkflowsPanel({ onInsert, onInsertAt: _onInsertAt }: Props) {
           trash affordance that wipes them from localStorage. */}
       <ul className="flex-1 space-y-2 overflow-y-auto p-2.5">
         {filtered.length === 0 ? (
-          <li className="grid place-items-center px-3 py-8 text-center text-text-muted/85">
-            <div className="text-[11px] text-white/45">
-              {filter === "mine"
-                ? "Nothing saved yet · select nodes & use Save as workflow"
-                : "No templates in this category"}
+          <li className="grid place-items-center px-3 py-10 text-center text-text-muted/85">
+            <div className="space-y-1">
+              <div className="text-[12px] text-white/65">
+                {filter === "mine"
+                  ? "Your library is empty"
+                  : "No templates in this category"}
+              </div>
+              {filter === "mine" ? (
+                <div className="text-[11px] leading-[1.55] text-white/45">
+                  Save your selections from the canvas to build your personal library.
+                </div>
+              ) : null}
             </div>
           </li>
         ) : (
           filtered.map((t) => {
-            const isUser = userTemplates.some((u) => u.id === t.id);
+            // Prefer the explicit discriminator (set on persist) and
+            // fall back to membership in the userTemplates list so a
+            // freshly-imported legacy entry without `origin` still
+            // renders the Mine badge + delete affordance.
+            const isUser =
+              t.origin === "user" || userTemplates.some((u) => u.id === t.id);
             return (
               <li key={t.id} className="relative">
                 <button
@@ -321,7 +370,7 @@ export function WorkflowsPanel({ onInsert, onInsertAt: _onInsertAt }: Props) {
                     data-tip="Delete"
                     onClick={(e) => {
                       e.stopPropagation();
-                      removeUser(t.id);
+                      requestRemoveUser(t.id, t.name);
                     }}
                     className="btn-tip absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full text-text-muted opacity-0 transition-opacity hover:bg-red-400/15 hover:text-red-200 group-hover:opacity-100"
                   >
@@ -333,6 +382,24 @@ export function WorkflowsPanel({ onInsert, onInsertAt: _onInsertAt }: Props) {
           })
         )}
       </ul>
+
+      {/* v0.9 (R): explicit confirm before destroying a saved workflow.
+          Built-in templates can't reach this path — only the per-row
+          trash button on user templates opens the dialog. */}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete saved workflow?"
+        body={
+          confirmDelete
+            ? `"${confirmDelete.name}" will be removed from your library. This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={confirmRemoveUser}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

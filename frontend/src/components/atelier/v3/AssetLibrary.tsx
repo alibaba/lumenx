@@ -21,11 +21,24 @@
 // All chrome stays out of the way at rest — the drawer collapses to a
 // 36×36 button on the left edge. Toggle via the same button or the `A`
 // keyboard shortcut.
-import { useMemo, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Image as ImageIcon, Link2, Music, Search, Square, Video, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, FileImage, FileMusic, FileVideoCamera, Image as ImageIcon, Link2, Music, Search, Square, Upload, Video, X } from "lucide-react";
 import type { AtelierNode } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
 import { ATELIER_ASSET_SEEDS, type AssetSeed } from "./assetSeeds";
+
+/** Q (v0.9): mirror of AtelierUploadEntry from atelierStore. Kept as a
+ *  local re-declaration so AssetLibrary doesn't reach into the store
+ *  (the panel stays a pure render layer; AtelierShellV3 lifts the slice
+ *  via a selector and passes it down as a prop). */
+export interface AssetLibraryUpload {
+    id: string;
+    name: string;
+    kind: "image" | "video" | "audio";
+    progress: number;
+    status: "uploading" | "done" | "error";
+    error?: string;
+}
 
 export type AssetKind = "all" | "image" | "video" | "audio";
 // P2 (D'): added "style" so a creator can stamp a reference as
@@ -158,6 +171,20 @@ interface Props {
    *  what" (typically the currently-selected draft, with a fallback
    *  toast). When omitted, multi-select mode is hidden. */
   onBulkAttach?: (imageNodeIds: string[]) => void;
+  /** Q (v0.9): user picked files (file picker or panel drag-drop).
+   *  AssetLibrary doesn't own the upload pipeline — the shell forwards
+   *  to atelierStore.uploadAsset_Q so the upload survives a panel
+   *  collapse and the active list is shared with any other surface
+   *  that might render it. Omit to hide the Upload button entirely
+   *  (e.g. when the store action isn't wired in). */
+  onUpload?: (files: File[]) => void;
+  /** Q (v0.9): live list of in-flight / failed uploads to render in
+   *  the active-uploads strip below the kind filter. Project-scope
+   *  only — Browse mode hides the strip since uploads always target
+   *  the active project. */
+  activeUploads?: AssetLibraryUpload[];
+  /** Q (v0.9): dismiss / abort an entry in `activeUploads`. */
+  onCancelUpload?: (id: string) => void;
 }
 
 export function AssetLibrary({
@@ -168,7 +195,44 @@ export function AssetLibrary({
   hideCollapsedHandle = false,
   leftOffsetPx = 16,
   onBulkAttach,
+  onUpload,
+  activeUploads,
+  onCancelUpload,
 }: Props) {
+  // Q (v0.9): hidden file input drives the header Upload button. The
+  // ref-and-click pattern keeps the visible affordance a real <button>
+  // (focus / data-tip / styling) instead of a styled <label>.
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Q (v0.9): panel-scoped drag-drop overlay. Local because the shell's
+  // canvas overlay only handles image files; ours accepts image/video/
+  // audio and stops propagation so the canvas-wide blue ring doesn't
+  // flicker on top.
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
+  // dragenter / dragleave fire for every child element; counter pattern
+  // is the standard way to debounce nested events so the overlay
+  // doesn't strobe as the cursor crosses interior boundaries.
+  const dragEnterCountRef = useRef(0);
+
+  const partitionAndSubmit = (rawFiles: File[]) => {
+    if (!onUpload || rawFiles.length === 0) return;
+    const accepted: File[] = [];
+    for (const f of rawFiles) {
+      if (f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/")) {
+        accepted.push(f);
+      }
+    }
+    if (accepted.length === 0) return;
+    onUpload(accepted);
+  };
+  const handleFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files;
+    if (!list) return;
+    partitionAndSubmit(Array.from(list));
+    // Reset so re-picking the same file fires onChange again. Without
+    // this, the second pick is silently swallowed by the browser
+    // (input value comparison).
+    e.target.value = "";
+  };
   const [kindFilter, setKindFilter] = useState<AssetKind>("all");
   const [imageCategoryFilter, setImageCategoryFilter] = useState<"all" | Exclude<AssetCategory, null>>("all");
   const [search, setSearch] = useState("");
@@ -252,11 +316,55 @@ export function AssetLibrary({
     );
   }
 
+  // Q (v0.9): OS file drag handlers, scoped to the panel. Only activate
+  // when the drag carries actual files AND we're in project mode (Browse
+  // is a read-only seeds catalog). We stopPropagation so the shell's
+  // canvas-wide `handleDragOver` (which only filters image/* on drop)
+  // does not also fire its blue ring — uploads through the panel
+  // should feel like a panel affordance, not a canvas affordance.
+  const isUploadEligible = viewMode === "project" && !!onUpload;
+  const handleAsideDragEnter = (event: React.DragEvent<HTMLElement>) => {
+    if (!isUploadEligible) return;
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragEnterCountRef.current += 1;
+    setIsFileDragOver(true);
+  };
+  const handleAsideDragOver = (event: React.DragEvent<HTMLElement>) => {
+    if (!isUploadEligible) return;
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  };
+  const handleAsideDragLeave = (event: React.DragEvent<HTMLElement>) => {
+    if (!isUploadEligible) return;
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.stopPropagation();
+    dragEnterCountRef.current = Math.max(0, dragEnterCountRef.current - 1);
+    if (dragEnterCountRef.current === 0) setIsFileDragOver(false);
+  };
+  const handleAsideDrop = (event: React.DragEvent<HTMLElement>) => {
+    if (!isUploadEligible) return;
+    if (!event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragEnterCountRef.current = 0;
+    setIsFileDragOver(false);
+    const files = Array.from(event.dataTransfer.files);
+    partitionAndSubmit(files);
+  };
+
   return (
     <aside
       role="region"
       aria-label="Asset library"
       style={{ left: leftOffsetPx }}
+      onDragEnter={handleAsideDragEnter}
+      onDragOver={handleAsideDragOver}
+      onDragLeave={handleAsideDragLeave}
+      onDrop={handleAsideDrop}
       className="absolute top-4 bottom-4 z-30 flex w-[300px] flex-col overflow-hidden rounded-2xl border border-white/8 atelier-chrome-opaque shadow-[0_18px_36px_-22px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.5),inset_0_1px_0_0_rgba(255,255,255,0.05)]"
     >
       <div aria-hidden="true" className="h-[2px] shrink-0 bg-gradient-to-r from-atelier-brand-400/85 via-atelier-brand-400/35 to-transparent" />
@@ -291,6 +399,22 @@ export function AssetLibrary({
             {counts.all} item{counts.all === 1 ? "" : "s"}
           </div>
         </div>
+        {/* Q (v0.9): Upload action lives left of Select. Project-mode
+            only — Browse is curated read-only seeds where Upload would
+            be a category error. Solid brand fill (vs Select's dashed
+            border) signals "primary action of this header" without
+            stealing the panel-level chrome budget. */}
+        {onUpload && viewMode === "project" ? (
+          <button
+            type="button"
+            data-tip="Upload files (image / video / audio)"
+            onClick={() => fileInputRef.current?.click()}
+            className="btn-tip inline-flex items-center gap-1 rounded-full border border-atelier-brand-400/55 bg-atelier-brand-400/20 px-2 py-[3px] text-[10px] tracking-[0.01em] text-atelier-brand-400 transition-colors hover:bg-atelier-brand-400/30"
+          >
+            <Upload size={10} aria-hidden="true" />
+            <span>Upload</span>
+          </button>
+        ) : null}
         {/* Multi-select only makes sense when each card has a real
             AtelierNode the shell can bulk-attach to a draft. Browse
             seeds don't have nodes yet, so the toggle hides in that mode. */}
@@ -308,6 +432,20 @@ export function AssetLibrary({
             {selectMode ? "Cancel" : "Select"}
           </button>
         ) : null}
+        {/* Q (v0.9): hidden file picker — clicking the Upload button
+            triggers a click() on this. accept="image/*,video/*,audio/*"
+            constrains the OS dialog so unsupported MIMEs are filtered
+            before we ever see them, but we still re-check in
+            partitionAndSubmit because some pickers honour `accept`
+            loosely. */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*,audio/*"
+          multiple
+          className="hidden"
+          onChange={handleFilesChange}
+        />
       </header>
 
       {/* v0.8 (M): Project | Browse view-mode toggle. Underlined
@@ -437,6 +575,78 @@ export function AssetLibrary({
               );
             })}
           </div>
+        </div>
+      ) : null}
+
+      {/* Q (v0.9): active-uploads strip. Renders only in project mode
+          and only when at least one upload is in flight / errored. Each
+          row keeps a 4px progress bar that fills atelier-brand-400 while
+          uploading, flips green on done (briefly — entry auto-prunes in
+          1.5s), or red on error (sticks until the user dismisses).
+          The X dismiss button calls onCancelUpload; for in-flight rows
+          the store-side handler aborts the XHR. */}
+      {viewMode === "project" && activeUploads && activeUploads.length > 0 ? (
+        <div className="shrink-0 border-b border-white/6 px-2.5 py-1.5">
+          <ul className="space-y-1">
+            {activeUploads.map((u) => {
+              const Icon = u.kind === "image" ? FileImage : u.kind === "video" ? FileVideoCamera : FileMusic;
+              const barColor =
+                u.status === "error"
+                  ? "bg-red-400/85"
+                  : u.status === "done"
+                    ? "bg-emerald-400/85"
+                    : "bg-atelier-brand-400/85";
+              const borderColor = u.status === "error"
+                ? "border-red-400/45"
+                : "border-white/8";
+              const pct = u.status === "done" ? 100 : Math.max(2, Math.min(100, u.progress));
+              return (
+                <li
+                  key={u.id}
+                  className={`flex items-center gap-2 rounded-md border bg-black/35 px-2 py-1 ${borderColor}`}
+                >
+                  {u.status === "error" ? (
+                    <AlertTriangle size={11} aria-hidden="true" className="shrink-0 text-red-400/85" />
+                  ) : (
+                    <Icon size={11} aria-hidden="true" className="shrink-0 text-text-muted/85" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="truncate text-[10.5px] leading-[1.3] text-foreground/90" title={u.name}>
+                        {u.name}
+                      </div>
+                      <span className="shrink-0 font-display text-[9.5px] tracking-tight text-text-muted/70">
+                        {u.status === "error" ? "failed" : u.status === "done" ? "done" : `${Math.round(pct)}%`}
+                      </span>
+                    </div>
+                    <div className="mt-[3px] h-[3px] w-full overflow-hidden rounded-full bg-white/8">
+                      <div
+                        aria-hidden="true"
+                        className={`h-full ${barColor} transition-[width] duration-150 ease-out`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    {u.status === "error" && u.error ? (
+                      <div className="mt-[2px] truncate text-[9.5px] leading-[1.3] text-red-300/85" title={u.error}>
+                        {u.error}
+                      </div>
+                    ) : null}
+                  </div>
+                  {onCancelUpload ? (
+                    <button
+                      type="button"
+                      aria-label={`Dismiss ${u.name}`}
+                      data-tip={u.status === "uploading" ? "Cancel upload" : "Dismiss"}
+                      onClick={() => onCancelUpload(u.id)}
+                      className="btn-tip grid h-5 w-5 shrink-0 place-items-center rounded text-text-muted hover:bg-hover-bg hover:text-foreground"
+                    >
+                      <X size={10} aria-hidden="true" />
+                    </button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       ) : null}
 
@@ -654,6 +864,23 @@ export function AssetLibrary({
             <Link2 size={11} aria-hidden="true" />
             Attach {selectedIds.size} ref{selectedIds.size === 1 ? "" : "s"}
           </button>
+        </div>
+      ) : null}
+      {/* Q (v0.9): drag-over overlay. Pointer-events:none so the inner
+          dragenter/leave debounce in handleAsideDrag* keeps tracking
+          accurately (the overlay itself never receives events). Mirrors
+          the shell's canvas overlay styling (brand-400 dashed border +
+          fill) so users experience a consistent visual language no
+          matter where they drop. */}
+      {isFileDragOver ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-40 grid place-items-center rounded-2xl border-2 border-dashed border-atelier-brand-400/55 bg-atelier-brand-400/8"
+        >
+          <div className="flex flex-col items-center gap-1.5 rounded-xl border border-atelier-brand-400/35 bg-black/55 px-3 py-2 text-atelier-brand-400">
+            <Upload size={16} aria-hidden="true" />
+            <span className="text-[11px] tracking-[0.01em]">Drop to add assets</span>
+          </div>
         </div>
       ) : null}
     </aside>

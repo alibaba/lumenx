@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AtSign,
   Bot,
@@ -13,6 +13,7 @@ import {
   ScrollText,
   ShieldCheck,
   Sparkles,
+  Square,
   Wand2,
   Workflow,
   X,
@@ -115,6 +116,37 @@ function ConversationUserBubble({ children }: { children: React.ReactNode }) {
     <div className="flex justify-end">
       <div className="max-w-[88%] rounded-[14px] rounded-tr-[6px] border border-atelier-brand-soft/24 bg-atelier-brand-soft/[0.08] px-3 py-2 text-[13px] italic leading-[1.55] text-atelier-brand-soft shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]" style={{ fontFamily: "'Inter', sans-serif" }}>
         {children}
+      </div>
+    </div>
+  );
+}
+
+// P (v0.9) — incremental streaming bubble. Renders the partial response
+// text plus a blinking caret while `done` is false; once done flips true
+// the same row reads as a finished agent reply (no caret) until the
+// store reconciles with the persisted turn and clears
+// streamingAgentTurn.
+function StreamingAgentBubble({ text, done }: { text: string; done: boolean }) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-atelier-brand-soft/15 text-atelier-brand-soft ring-1 ring-inset ring-atelier-brand-soft/25">
+        <Bot size={13} aria-hidden="true" />
+      </span>
+      <div
+        className="flex-1 rounded-[14px] rounded-tl-[6px] border border-white/6 bg-black/25 px-3 py-2 text-[13px] leading-[1.55] text-foreground/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+        style={{ fontFamily: "'Inter', sans-serif" }}
+      >
+        {text ? (
+          <span className="whitespace-pre-wrap">{text}</span>
+        ) : (
+          <span className="text-text-secondary/85">Thinking…</span>
+        )}
+        {done ? null : (
+          <span
+            aria-hidden="true"
+            className="ml-[2px] inline-block h-[12px] w-[6px] translate-y-[2px] bg-atelier-brand-soft/85 motion-safe:animate-pulse"
+          />
+        )}
       </div>
     </div>
   );
@@ -350,6 +382,16 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
   const isAgentRunning = useAtelierStore((s) => s.isAgentRunning);
   const planAgentTurn  = useAtelierStore((s) => s.planAgentTurn);
   const runAgentTurn   = useAtelierStore((s) => s.runAgentTurn);
+  // P (v0.9) — incremental streaming response slice + stream executor.
+  // streamingAgentTurn is null when no stream is in flight; while non-null
+  // the bubble renders with a blinking caret until done flips true. Reads
+  // are scoped to the panel so other parts of the canvas don't re-render
+  // on every delta.
+  const streamingTurn  = useAtelierStore((s) => s.streamingAgentTurn);
+  const runAgentTurnStreaming_P = useAtelierStore((s) => s.runAgentTurnStreaming_P);
+  // AbortController for the in-flight stream. Replaced on each new run
+  // so a Stop click cancels exactly the request the user is watching.
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const [draft, setDraft] = useState("");
   const [plannedCalls, setPlannedCalls] = useState<AtelierAgentToolCallPayload[]>([]);
@@ -481,6 +523,48 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
     setExecuting(true);
     setPlanError(null);
     try {
+      // P (v0.9) — streaming fast-path for the LLM-backed planner. Only
+      // triggers when the user is on Auto/Free mode (model_adapter) AND
+      // has a fresh draft (no plannedCalls preview to replay AND not
+      // preview-mode). All other paths (Director / preview / re-execute
+      // of a previewed plan) fall through to the existing sync flow.
+      const useStreamingFastPath =
+        !preview
+        && draft.trim().length > 0
+        && plannedCalls.length === 0
+        && resolvePlannerName() === "model_adapter";
+      if (useStreamingFastPath) {
+        const controller = new AbortController();
+        streamAbortRef.current = controller;
+        try {
+          const turn = await runAgentTurnStreaming_P({
+            user_message: draft,
+            selected_node_id: selectedNodeId ?? null,
+            signal: controller.signal,
+          });
+          if (turn) {
+            pushToast?.("success", "Agent turn executed.");
+            setDraft("");
+            setPlannedCalls([]);
+            setPlannedResponse(null);
+            setPlannedPlannerName(null);
+            setPlanError(null);
+            void maybeWrapDirectorOutput(turn, draft);
+          } else {
+            // null = blocked / aborted / failed. Surface store error if any.
+            const storeError = useAtelierStore.getState().error;
+            if (storeError) {
+              setPlanError(storeError);
+            }
+          }
+        } finally {
+          if (streamAbortRef.current === controller) {
+            streamAbortRef.current = null;
+          }
+        }
+        return;
+      }
+
       let toolCallsToRun: AtelierAgentToolCallPayload[] = plannedCalls;
       let assistantResponse: string | null = plannedResponse;
       // v0.8 item L — plan-and-run shortcut. If the user typed and hit Run
@@ -537,6 +621,23 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
       setExecuting(false);
     }
   };
+
+  // P (v0.9) — Stop the in-flight streaming agent turn. Aborts the fetch,
+  // which propagates AbortError up through the store action so it can
+  // clear streamingAgentTurn without persisting a half-applied turn.
+  const handleStopStreaming = () => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+  };
+
+  // P (v0.9) — clean up an in-flight stream on unmount so a panel
+  // collapse / page navigation doesn't leak the fetch.
+  useEffect(() => {
+    return () => {
+      streamAbortRef.current?.abort();
+      streamAbortRef.current = null;
+    };
+  }, []);
 
   // G: collect node IDs created by a completed turn and (if 2+) wrap
   // them in a Director region. We key on plannerMode at call time
@@ -715,6 +816,23 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
           <AgentTurnRow key={turn.id} turn={turn} />
         ))}
 
+        {/* P (v0.9) — live streaming agent bubble. Shows the user message
+            the stream was kicked off with above the incremental response
+            so the conversation reads coherently while tokens arrive.
+            Cleared by the store once the persisted turn lands in
+            agentTurns above. */}
+        {streamingTurn ? (
+          <div className="space-y-2">
+            {draft.trim() ? (
+              <ConversationUserBubble>{draft.trim()}</ConversationUserBubble>
+            ) : null}
+            <StreamingAgentBubble
+              text={streamingTurn.response}
+              done={streamingTurn.done}
+            />
+          </div>
+        ) : null}
+
         {/* Pending approval card */}
         {pendingTurn ? (
           <div
@@ -834,8 +952,12 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
         {/* Currently planning — show a thinking bubble. v0.8 item L expands
             this from "preview-only" to also cover the plan-and-run shortcut
             so the user sees an "agent is thinking" bubble while the LLM
-            call is in-flight (Qwen typically 5-15s). */}
-        {previewing || (executing && plannedCalls.length === 0 && draft.trim()) ? (
+            call is in-flight (Qwen typically 5-15s).
+            P (v0.9) — suppressed when streamingTurn is active because the
+            StreamingAgentBubble above already plays the "Thinking…" placeholder
+            until the first delta arrives. */}
+        {!streamingTurn
+          && (previewing || (executing && plannedCalls.length === 0 && draft.trim())) ? (
           <ConversationAgentBubble thinking />
         ) : null}
 
@@ -1040,21 +1162,37 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
                   same chroma as the canvas's primary-port + generate
                   buttons — one green for "commit & spend" across the
                   product. */}
-              <button
-                type="button"
-                disabled={isLocked || (!hasDraft && plannedCalls.length === 0)}
-                onClick={() => handleExecute(false)}
-                className={`inline-flex h-7 items-center gap-1.5 rounded-full bg-atelier-port-positive/95 px-3.5 text-[11.5px] font-medium text-[#0c1a10] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_4px_14px_-6px_rgba(61,220,132,0.55)] transition-all duration-150 hover:bg-atelier-port-positive hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.30),0_6px_18px_-6px_rgba(61,220,132,0.7)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 ${
-                  hasDraft && !isLocked && !executing
-                    ? "motion-safe:animate-atelier-pulse-soft"
-                    : ""
-                }`}
-              >
-                {executing ? (
-                  <Loader2 size={11} className="animate-spin" aria-hidden="true" />
-                ) : null}
-                Run
-              </button>
+              {/* P (v0.9) — Stop pill replaces Run while a stream is in
+                  flight (streamingTurn?.done === false). Click aborts the
+                  underlying fetch; the store catches AbortError and clears
+                  streamingAgentTurn without persisting a half-applied turn. */}
+              {streamingTurn && !streamingTurn.done ? (
+                <button
+                  type="button"
+                  onClick={handleStopStreaming}
+                  aria-label="Stop streaming response"
+                  className="inline-flex h-7 items-center gap-1.5 rounded-full border border-atelier-failed/40 bg-atelier-failed/10 px-3.5 text-[11.5px] font-medium text-atelier-failed shadow-[inset_0_1px_0_0_rgba(248,113,113,0.18)] transition-all duration-150 hover:bg-atelier-failed/15 active:scale-[0.97]"
+                >
+                  <Square size={10} aria-hidden="true" />
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={isLocked || (!hasDraft && plannedCalls.length === 0)}
+                  onClick={() => handleExecute(false)}
+                  className={`inline-flex h-7 items-center gap-1.5 rounded-full bg-atelier-port-positive/95 px-3.5 text-[11.5px] font-medium text-[#0c1a10] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.25),0_4px_14px_-6px_rgba(61,220,132,0.55)] transition-all duration-150 hover:bg-atelier-port-positive hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.30),0_6px_18px_-6px_rgba(61,220,132,0.7)] active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 ${
+                    hasDraft && !isLocked && !executing
+                      ? "motion-safe:animate-atelier-pulse-soft"
+                      : ""
+                  }`}
+                >
+                  {executing ? (
+                    <Loader2 size={11} className="animate-spin" aria-hidden="true" />
+                  ) : null}
+                  Run
+                </button>
+              )}
             </div>
           </div>
         </div>

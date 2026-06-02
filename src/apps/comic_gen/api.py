@@ -30,7 +30,8 @@ from .models import (
 from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
 from ...utils import setup_logging
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+import json as _json_mod
 from dotenv import load_dotenv, set_key
 
 app = FastAPI(title="AI Comic Gen API")
@@ -429,10 +430,25 @@ class ExportAtelierSequenceRequest(BaseModel):
 
 
 class ExportAtelierSequenceResponse(BaseModel):
-    video_url: str
-    filename: str
-    size_mb: float
-    clip_count: int
+    """Track O (v0.9): the POST response is now `{job_id, status}` —
+    callers must poll GET /sequence/export/{job_id} for the terminal
+    payload (video_url / filename / size_mb / clip_count) and progress
+    updates. The terminal fields are exposed on
+    ExportAtelierSequenceJobStatus below."""
+
+    job_id: str
+    status: str
+
+
+class ExportAtelierSequenceJobStatus(BaseModel):
+    job_id: str
+    status: str  # "pending" | "running" | "completed" | "failed"
+    progress: int = 0
+    video_url: Optional[str] = None
+    filename: Optional[str] = None
+    size_mb: Optional[float] = None
+    clip_count: Optional[int] = None
+    error: Optional[str] = None
 
 
 @app.post("/atelier/projects", response_model=AtelierProject)
@@ -550,17 +566,39 @@ async def replace_atelier_sequence(project_id: str, request: ReplaceAtelierSeque
     "/atelier/projects/{project_id}/sequence/export",
     response_model=ExportAtelierSequenceResponse,
 )
-async def export_atelier_sequence(project_id: str, request: ExportAtelierSequenceRequest):
+async def export_atelier_sequence(
+    project_id: str,
+    request: ExportAtelierSequenceRequest,
+    background_tasks: BackgroundTasks,
+):
+    """Track O (v0.9): start an async export job and return the job_id.
+    The legacy synchronous payload (video_url / filename / size_mb /
+    clip_count) is now served by GET .../sequence/export/{job_id} once
+    the worker reaches `status == "completed"`. Validation and
+    missing-ffmpeg failures still surface as 4xx/5xx eagerly so the
+    client never sees a phantom job_id."""
     try:
-        result = pipeline.export_atelier_sequence(
+        job_id = pipeline.start_atelier_sequence_export_job(
             project_id,
             [entry.model_dump() for entry in request.entries],
         )
-        return signed_response(result)
     except ValueError as e:
         raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    background_tasks.add_task(pipeline.process_atelier_sequence_export_job, job_id)
+    return {"job_id": job_id, "status": "pending"}
+
+
+@app.get(
+    "/atelier/projects/{project_id}/sequence/export/{job_id}",
+    response_model=ExportAtelierSequenceJobStatus,
+)
+async def get_atelier_sequence_export_job(project_id: str, job_id: str):
+    status = pipeline.get_atelier_export_job_status(project_id, job_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Atelier export job not found")
+    return signed_response(status)
 
 
 @app.post("/atelier/projects/{project_id}/agent/turns", response_model=AtelierAgentTurn)
@@ -596,6 +634,318 @@ async def run_atelier_agent_turn(
         return signed_response(turn)
     except ValueError as e:
         raise HTTPException(status_code=404 if "not found" in str(e).lower() else 400, detail=str(e))
+
+
+# v0.9 track P — SSE streaming agent turn. Combines plan + execute in one
+# round-trip so the panel can show tokens as the LLM emits them, then runs
+# the validated tool_calls through the harness once the stream closes. The
+# existing sync route at /agent/turns stays untouched for non-LLM planners,
+# pre-validated tool_call replay, and approval/deny flows.
+class StreamAtelierAgentTurnRequest(BaseModel):
+    user_message: str = ""
+    selected_node_id: Optional[str] = None
+    skill_name: Optional[str] = None
+    planner_input: Dict[str, Any] = Field(default_factory=dict)
+    model: Optional[str] = None
+
+
+def _sse_event(event: str, payload: Dict[str, Any]) -> str:
+    """Format a single Server-Sent Events frame.
+
+    The blank line terminator is part of the SSE wire format and is what
+    fetch+ReadableStream readers split on to identify event boundaries.
+    """
+    return f"event: {event}\ndata: {_json_mod.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+@app.post("/atelier/projects/{project_id}/agent/turns/stream")
+async def stream_atelier_agent_turn(
+    project_id: str,
+    request: StreamAtelierAgentTurnRequest,
+    raw_request: Request,
+    background_tasks: BackgroundTasks,
+):
+    # Validate the project + LLM planner availability synchronously so the
+    # caller gets a real HTTP error instead of an SSE stream that opens
+    # only to immediately deliver a 'done' with error. The streaming body
+    # itself can still surface model-side failures via 'done.error'.
+    project = pipeline.get_atelier_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Atelier project not found")
+
+    from .atelier_agent import (
+        stream_atelier_llm_planner,
+        build_default_atelier_tool_registry,
+    )
+
+    try:
+        package = pipeline.build_atelier_agent_planner_package(
+            project_id=project_id,
+            user_message=request.user_message,
+            selected_node_id=request.selected_node_id,
+            skill_name=request.skill_name,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=404 if "not found" in str(exc).lower() else 400,
+            detail=str(exc),
+        )
+
+    user_message = request.user_message
+    skill_name = request.skill_name
+    selected_node_id = request.selected_node_id
+    model_override = request.model
+    # Built once per request — the registry is stateless/cheap so a fresh
+    # instance avoids cross-request leakage and stays in sync with however
+    # the harness wires its own copy in plan_atelier_agent_turn.
+    tool_registry = build_default_atelier_tool_registry()
+
+    async def event_stream():
+        turn_id = str(uuid.uuid4())
+        # 1) Metadata frame so the frontend can show the planner / model
+        # label before any tokens arrive.
+        yield _sse_event(
+            "metadata",
+            {
+                "planner": "model_adapter",
+                "model": model_override or os.getenv("DASHSCOPE_AGENT_MODEL") or None,
+                "turn_id": turn_id,
+            },
+        )
+
+        buffered_response = ""
+        raw_tool_calls: List[Dict[str, Any]] = []
+        stream_error: Optional[str] = None
+        cancelled = False
+
+        try:
+            # The LLM call is synchronous (OpenAI SDK iterator); we run the
+            # generator in a worker thread and bridge yields back to the
+            # async event loop. asyncio.to_thread for each .send isn't
+            # cleanly supported, so we materialize the iterator in a
+            # background thread and pull dicts off an asyncio.Queue.
+            queue: asyncio.Queue = asyncio.Queue(maxsize=64)
+            sentinel = object()
+
+            def producer():
+                try:
+                    for event in stream_atelier_llm_planner(
+                        package,
+                        user_message,
+                        model=model_override,
+                    ):
+                        # block_put via the loop so we honor backpressure
+                        # without a thread-safe queue dance.
+                        asyncio.run_coroutine_threadsafe(queue.put(event), loop).result()
+                except Exception as exc:  # pragma: no cover — defensive
+                    logger.exception("stream_atelier_agent_turn producer crashed")
+                    asyncio.run_coroutine_threadsafe(
+                        queue.put({"type": "done", "response": "", "tool_calls": [], "error": f"stream crashed: {exc}"}),
+                        loop,
+                    ).result()
+                finally:
+                    asyncio.run_coroutine_threadsafe(queue.put(sentinel), loop).result()
+
+            loop = asyncio.get_event_loop()
+            producer_task = loop.run_in_executor(None, producer)
+
+            try:
+                while True:
+                    # Poll for client disconnect between frames so a cancel
+                    # via AbortController short-circuits the LLM iterator
+                    # rather than letting it run to completion server-side.
+                    if await raw_request.is_disconnected():
+                        cancelled = True
+                        break
+                    try:
+                        event = await asyncio.wait_for(queue.get(), timeout=0.5)
+                    except asyncio.TimeoutError:
+                        continue
+                    if event is sentinel:
+                        break
+                    etype = event.get("type")
+                    if etype == "delta":
+                        text = event.get("text") or ""
+                        if text:
+                            buffered_response += text
+                            yield _sse_event("delta", {"text": text})
+                    elif etype == "done":
+                        # Capture final fields but DON'T yield "done" here —
+                        # we still need to run validation + execution before
+                        # the final done event is emitted to the client.
+                        final_response = event.get("response")
+                        if isinstance(final_response, str) and final_response:
+                            buffered_response = final_response
+                        raw_tool_calls = list(event.get("tool_calls") or [])
+                        stream_error = event.get("error") or None
+                        # Drain remaining sentinel without blocking.
+                    else:
+                        # Unknown frame type — forward as-is for forward compat.
+                        yield _sse_event(etype or "info", event)
+            finally:
+                # Make sure the worker thread finishes even on cancel.
+                try:
+                    await producer_task
+                except Exception:  # pragma: no cover
+                    pass
+        except Exception as exc:
+            logger.exception("stream_atelier_agent_turn: stream loop crashed")
+            yield _sse_event("error", {"message": f"Stream error: {exc}"})
+            return
+
+        if cancelled:
+            # Client aborted mid-stream — DO NOT persist a partial turn.
+            # Backend just closes the connection cleanly without an error
+            # frame (the AbortController will reject the fetch promise
+            # client-side).
+            return
+
+        if stream_error and stream_error != "parse_failed" and not raw_tool_calls:
+            # Hard failure — surface as a done event marked "failed" so the
+            # store can clear state without writing anything to disk. No
+            # turn is persisted on this path.
+            yield _sse_event(
+                "done",
+                {
+                    "status": "failed",
+                    "full_response": buffered_response,
+                    "tool_calls": [],
+                    "turn": None,
+                    "error": stream_error,
+                },
+            )
+            return
+
+        if stream_error == "parse_failed" or not raw_tool_calls:
+            # Model returned text but no actionable tool_calls — blocked,
+            # no persistence. The buffered response is forwarded so the
+            # panel can still render the model's own explanation.
+            yield _sse_event(
+                "done",
+                {
+                    "status": "blocked",
+                    "full_response": buffered_response,
+                    "tool_calls": [],
+                    "turn": None,
+                    "error": (
+                        "Model response was not valid JSON; no tool calls executed."
+                        if stream_error == "parse_failed"
+                        else (buffered_response or "Model produced no actions.")
+                    ),
+                },
+            )
+            return
+
+        # Validate the raw tool_calls through the existing ModelAdapterPlanner
+        # sanitization path so we reject unknown tools / bad shapes BEFORE
+        # invoking the harness. Reuses the same checks the sync planner runs.
+        sanitized_calls: List[Dict[str, Any]] = []
+        validation_error: Optional[str] = None
+        for index, raw_call in enumerate(raw_tool_calls):
+            if not isinstance(raw_call, dict):
+                validation_error = f"tool call #{index + 1} must be an object."
+                break
+            tool_name = str(raw_call.get("tool_name") or raw_call.get("name") or "")
+            if not tool_name or (tool_registry and not tool_registry.get(tool_name)):
+                validation_error = f"unknown Atelier tool: {tool_name or '<empty>'}"
+                break
+            arguments = raw_call.get("arguments") or {}
+            if not isinstance(arguments, dict):
+                validation_error = f"arguments for {tool_name} must be an object."
+                break
+            sanitized_calls.append({"tool_name": tool_name, "arguments": dict(arguments)})
+
+        if validation_error:
+            yield _sse_event(
+                "done",
+                {
+                    "status": "blocked",
+                    "full_response": buffered_response,
+                    "tool_calls": [],
+                    "turn": None,
+                    "error": validation_error,
+                },
+            )
+            return
+
+        # Execute through the harness — same path the sync /agent/turns
+        # route uses, so policy / approval / persistence all behave
+        # identically.
+        try:
+            turn = pipeline.run_atelier_agent_turn(
+                project_id=project_id,
+                tool_calls=sanitized_calls,
+                user_message=user_message,
+                preview=False,
+                approve=False,
+                deny=False,
+                turn_id=None,
+                assistant_response=buffered_response or None,
+            )
+        except ValueError as exc:
+            yield _sse_event(
+                "done",
+                {
+                    "status": "failed",
+                    "full_response": buffered_response,
+                    "tool_calls": sanitized_calls,
+                    "turn": None,
+                    "error": str(exc),
+                },
+            )
+            return
+
+        # Fan out generation candidates to the same background-task hook
+        # the sync route uses, so r2v/i2v processing still kicks off.
+        try:
+            for call in turn.tool_calls:
+                if call.tool_name != "generation.createVideoCandidates" or call.status != "completed":
+                    continue
+                node_id = call.arguments.get("node_id")
+                candidate_ids = (call.result_snapshot or {}).get("candidate_ids") or []
+                for candidate_id in candidate_ids:
+                    background_tasks.add_task(
+                        _safe_run_atelier_candidate,
+                        project_id,
+                        node_id,
+                        candidate_id,
+                    )
+        except Exception:  # pragma: no cover — defensive
+            logger.exception("stream_atelier_agent_turn: background-task fanout failed")
+
+        # Final done event with the executed turn payload (model_dump for
+        # JSON serializability; signed_response is for the response model
+        # path, but SSE streams don't go through that).
+        try:
+            turn_payload = turn.model_dump(mode="json")
+        except Exception:
+            turn_payload = None
+        status_label = "completed" if turn.status == "completed" else (
+            "blocked" if turn.status == "waiting_approval" else "failed"
+        )
+        yield _sse_event(
+            "done",
+            {
+                "status": status_label,
+                "full_response": buffered_response,
+                "tool_calls": [
+                    {"tool_name": c.tool_name, "arguments": c.arguments}
+                    for c in turn.tool_calls
+                ],
+                "turn": turn_payload,
+                "error": None,
+            },
+        )
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.post("/atelier/projects/{project_id}/nodes", response_model=AtelierNode)

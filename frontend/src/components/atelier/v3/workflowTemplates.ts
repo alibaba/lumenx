@@ -57,7 +57,39 @@ export interface WorkflowTemplate {
   tags: string[];
   nodes: TemplateNode[];
   edges: TemplateEdge[];
+  /** Discriminator added in v0.9 (track R). Built-in registry entries
+   *  below stamp this as "builtin"; localStorage-persisted user
+   *  templates stamp it as "user" via PersistedUserTemplate. Optional
+   *  on the surface type so legacy persisted entries (no origin field)
+   *  still type-check on read — the store's defensive parser backfills
+   *  origin: "user" on those. */
+  origin?: "builtin" | "user";
+  /** Wall-clock ms timestamp (Date.now()) when a user template was
+   *  saved. Built-ins leave this undefined; persisted entries always
+   *  carry it. Legacy entries missing the field backfill to 0. */
+  savedAt?: number;
 }
+
+/** Shape persisted to localStorage for user-saved workflows (v0.9 track
+ *  R). Narrower than WorkflowTemplate — `origin` and `savedAt` are
+ *  required at persist-time so we can sort/filter/badge without
+ *  defensive coalescing on every read. */
+export type PersistedUserTemplate = WorkflowTemplate & {
+  origin: "user";
+  savedAt: number;
+};
+
+/** Per-project localStorage key prefix for user-saved templates (v0.9).
+ *  The previous global key (`atelier-v3-user-workflows`) is
+ *  intentionally orphaned — no migration; users re-save into their
+ *  project's slot on the first save after upgrading. */
+export const USER_TEMPLATE_STORAGE_KEY = "atelier-v0.9-user-templates";
+
+/** Build the per-project localStorage key. Pass the active
+ *  `currentProject.id`; callers that lack a project must skip read/write
+ *  (no global fallback bucket). */
+export const userTemplatesKey = (projectId: string): string =>
+  `${USER_TEMPLATE_STORAGE_KEY}:${projectId}`;
 
 const T = (
   id: string,
@@ -67,7 +99,16 @@ const T = (
   tags: string[],
   nodes: TemplateNode[],
   edges: TemplateEdge[],
-): WorkflowTemplate => ({ id, name, category, description, tags, nodes, edges });
+): WorkflowTemplate => ({
+  id,
+  name,
+  category,
+  description,
+  tags,
+  nodes,
+  edges,
+  origin: "builtin",
+});
 
 // Default geometry. A cluster takes ~700-900 px wide, fits 2-3 layers of
 // nodes deep. Cards stack with 320 px horizontal gap, 220 px vertical.
