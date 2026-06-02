@@ -1,0 +1,22 @@
+Placeholder for: flova-hero-YYYY-MM-DD.png
+
+This file is intentionally a text stub instead of a 1×1 transparent PNG so
+that anyone grepping the references dir sees an unmissable plain-text
+reminder. Replace it with the real hero PNG following the capture protocol
+in `SOURCES.md` §1 — BUT FIRST resolve the domain question below.
+
+BLOCKER — domain unverified:
+- The v1.3 brief asserted the domain as `flova.ai`.
+- The internal target spec `docs/design/atelier-flova-target-spec.md`
+  (line 5) refers to "FLORA/Flova slide" as a chat-attached image only,
+  with no live URL recorded.
+- Owner action: confirm the canonical product URL (Flova vs FLORA, .ai
+  vs another TLD) BEFORE recording a hero capture. A wrong-product
+  capture would silently mislead downstream craft work.
+
+Once domain is confirmed AND captured:
+1. Save as `docs/design/references/flova-hero-YYYY-MM-DD.png` (today's date).
+2. Update `docs/design/references/SOURCES.md` §2.3 — fill in the
+   marketing/canvas URL, flip "Domain verification" from PARENT-ASSERTED to
+   DOC-VERIFIED, and point "Hero image" at the new file.
+3. Delete this MISSING.txt placeholder in the same commit.

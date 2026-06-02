@@ -420,6 +420,49 @@ class AtelierAgentPlannerPackage(BaseModel):
     project_snapshot: Dict[str, Any] = Field(default_factory=dict)
     selected_node_snapshot: Optional[Dict[str, Any]] = None
     policy_snapshot: Dict[str, Any] = Field(default_factory=dict)
+    # ── v1.3 BATCH 2 (2a / 2c) — multi-turn memory + prefix stability ─────
+    # `prior_messages` is the OpenAI Chat Completions-shaped history fed
+    # into the LLM between the stable system prefix and the volatile
+    # current user message (Hermes three-tier ordering: stable system →
+    # contextual prior turns → volatile current input). Each entry is one
+    # of:
+    #   {role:"user",      content:str}
+    #   {role:"assistant", content:str, tool_calls?:[{id,type,function:{name,arguments}}]}
+    #   {role:"tool",      tool_call_id:str, name:str, content:str}
+    #   {role:"system",    content:str}      # compaction summary only
+    # Default empty so v1.2 callers and persisted JSON load cleanly.
+    prior_messages: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "OpenAI Chat Completions-shaped history of prior agent turns. "
+            "Threaded between the stable system prefix and the volatile "
+            "current user message so the LLM can chain results across "
+            "iterations and turns. Bounded by ATELIER_AGENT_PRIOR_TURNS "
+            "with overflow folded into a compaction summary by "
+            "atelier_context_compactor.maybe_compact_messages. (v1.3 2a)"
+        ),
+    )
+    # `system_prefix` is the byte-stable portion of the system prompt
+    # (directive + output contract + sorted tool schemas + policy
+    # snapshot) — rebuilt once per turn and reused across iterations so
+    # provider prompt caches actually hit. Tests assert byte-identity
+    # across iterations within the same turn. (v1.3 2c)
+    system_prefix: Optional[str] = Field(
+        None,
+        description=(
+            "Byte-stable system prompt prefix (directive + sorted tool "
+            "schemas + policy). Constant across iterations within a turn "
+            "so prompt caches hit. (v1.3 2c)"
+        ),
+    )
+    volatile_suffix_meta: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Debug metadata describing what's in the volatile suffix this "
+            "iteration (canvas snapshot scope, selected node id, presence "
+            "of last_iter_result). Wire-only — not consumed by the LLM. (v1.3 2c)"
+        ),
+    )
     created_at: float = Field(default_factory=time.time)
 
 
@@ -592,6 +635,30 @@ class AtelierProject(BaseModel):
             "Appended by pipeline._record_atelier_export after the export job "
             "worker reaches status='completed'. Surfaced through GET /atelier/"
             "projects/{id}/exports (newest first) and the left-rail Exports panel."
+        ),
+    )
+    # ── v1.3 BATCH 2 (2b) — context compaction state ─────────────────────
+    # Both fields default None so v1.2 persisted JSON loads cleanly. Set
+    # by atelier_context_compactor.maybe_compact_messages when prior
+    # messages exceed ATELIER_AGENT_COMPACT_LIMIT. Resume paths see them
+    # via build_prior_messages_from_history which prepends the summary as
+    # a synthetic system message; subsequent compaction passes use
+    # `compacted_through_turn_id` to avoid double-folding turns that were
+    # already absorbed into a previous summary.
+    agent_compaction_summary: Optional[str] = Field(
+        None,
+        description=(
+            "Rolling summary of historical Atelier agent turns produced "
+            "by atelier_context_compactor. Replaces the oldest M turns "
+            "when prior_messages exceeds ATELIER_AGENT_COMPACT_LIMIT. (v1.3 2b)"
+        ),
+    )
+    compacted_through_turn_id: Optional[str] = Field(
+        None,
+        description=(
+            "ID of the most recent agent turn included in "
+            "agent_compaction_summary. Resume paths use this to avoid "
+            "re-summarizing already-folded turns. (v1.3 2b)"
         ),
     )
     created_at: float

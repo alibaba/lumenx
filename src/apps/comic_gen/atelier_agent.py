@@ -19,6 +19,12 @@ from .models import (
     AtelierNode,
     AtelierProject,
 )
+from .atelier_context_compactor import (
+    DEFAULT_PRIOR_TURNS,
+    MAX_PROMPT_TOKENS,
+    build_prior_messages_from_history,
+    maybe_compact_messages,
+)
 from ...utils.model_catalog import get_default_model_settings, resolve_r2v_route_model_id, validate_r2v_reference_inputs
 
 logger = logging.getLogger(__name__)
@@ -546,13 +552,21 @@ def _is_retriable(exc: Exception) -> bool:
     return any(token in msg for token in _RETRIABLE_PATTERNS)
 
 
-def _build_atelier_llm_system_prompt(package: AtelierAgentPlannerPackage) -> str:
-    """Compose the system prompt fed to the LLM.
+# PREFIX-STABILITY: any fields read by `_build_atelier_llm_prefix` MUST be
+# deterministically ordered. tool_schemas is sorted by name in
+# build_planner_package; output_contract / policy_snapshot are dicts whose
+# JSON serialization is order-stable in Python 3.7+ (insertion order). The
+# prefix string is rebuilt once per turn and reused byte-identically across
+# every iteration so provider prompt caches actually hit. DO NOT embed
+# `time.time()`, `id(...)`, `hash(...)`, or anything else mutating
+# mid-turn into this builder. Tests assert byte-identity across iterations
+# (see test_prefix_byte_identical_across_iterations). (v1.3 2c)
+def _build_atelier_llm_prefix(package: AtelierAgentPlannerPackage) -> str:
+    """Compose the byte-stable PREFIX of the system prompt.
 
-    Embeds the registered tools (names + schemas), the project snapshot, the
-    selected node (if any), the policy, and the planner output contract. Kept
-    deterministic so identical packages produce identical prompts (useful
-    for caching / replay in the future).
+    Contains: directive + output contract + sorted tool schemas + policy
+    snapshot. Excludes the canvas snapshot, selected node, and last
+    iteration result — those go in the volatile suffix.
     """
     schema_overview = [
         {
@@ -564,7 +578,6 @@ def _build_atelier_llm_system_prompt(package: AtelierAgentPlannerPackage) -> str
         }
         for t in (package.tool_schemas or [])
     ]
-    project_snapshot = package.project_snapshot or {}
     sections: List[str] = [
         "You are the Atelier canvas agent. You help users compose, plan, and generate "
         "video shots on an infinite canvas. Be concise and concrete.",
@@ -589,6 +602,25 @@ def _build_atelier_llm_system_prompt(package: AtelierAgentPlannerPackage) -> str
         "Registered tools:",
         json.dumps(schema_overview, ensure_ascii=False),
         "",
+        "Project policy:",
+        json.dumps(package.policy_snapshot or {}, ensure_ascii=False),
+    ]
+    return "\n".join(sections)
+
+
+def _build_atelier_llm_suffix(
+    package: AtelierAgentPlannerPackage,
+    last_iter_result: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Compose the VOLATILE SUFFIX of the system prompt.
+
+    Contains the canvas snapshot (mutates as tools fire), the currently
+    selected node (may shift), and an optional `Last iteration result:`
+    block fed by the loop after each round so iteration N+1 sees what
+    iteration N produced. Rebuilt every iteration; never cached.
+    """
+    project_snapshot = package.project_snapshot or {}
+    sections: List[str] = [
         f"Canvas snapshot (scope={project_snapshot.get('scope', 'full')}, "
         f"node_count={project_snapshot.get('node_count', 0)}):",
         json.dumps(project_snapshot, ensure_ascii=False),
@@ -599,12 +631,29 @@ def _build_atelier_llm_system_prompt(package: AtelierAgentPlannerPackage) -> str
             "Currently selected node:",
             json.dumps(package.selected_node_snapshot, ensure_ascii=False),
         ])
-    sections.extend([
-        "",
-        "Project policy:",
-        json.dumps(package.policy_snapshot or {}, ensure_ascii=False),
-    ])
+    if last_iter_result:
+        try:
+            serialized_iter = json.dumps(last_iter_result, ensure_ascii=False, default=str)
+        except Exception:  # pragma: no cover — defensive
+            serialized_iter = str(last_iter_result)
+        sections.extend([
+            "",
+            "Last iteration result:",
+            serialized_iter,
+        ])
     return "\n".join(sections)
+
+
+def _build_atelier_llm_system_prompt(package: AtelierAgentPlannerPackage) -> str:
+    """Back-compat single-string builder kept for callers that want the
+    full prompt (e.g. tests that monkey-checked the legacy shape).
+    Internally now `prefix + "\n\n" + suffix`. New code paths should use
+    the split prefix/suffix system messages directly so prompt caches
+    hit. (v1.3 2c)
+    """
+    prefix = _build_atelier_llm_prefix(package)
+    suffix = _build_atelier_llm_suffix(package)
+    return f"{prefix}\n\n{suffix}"
 
 
 def call_atelier_llm_planner(
@@ -639,12 +688,22 @@ def call_atelier_llm_planner(
             "error": f"LLM not configured — set {key_name} to use the model-backed agent.",
         }
 
-    system_prompt = _build_atelier_llm_system_prompt(package)
+    # v1.3 2a + 2c — split prompt into a stable PREFIX (rebuilt once
+    # per turn; persisted on package.system_prefix when build_planner_package
+    # ran) and a volatile SUFFIX rebuilt per iteration. Wrap the suffix in
+    # its own `system` message so the DashScope OpenAI compat layer treats
+    # it as context, not the literal user turn. Prior messages slot
+    # between the prefix and the current user message (Hermes
+    # three-tier ordering: stable system → contextual prior turns →
+    # volatile current input).
+    system_prefix = package.system_prefix or _build_atelier_llm_prefix(package)
+    system_suffix = _build_atelier_llm_suffix(package)
     payload_message = user_message.strip() or "(no message — propose a sensible next step)"
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": payload_message},
-    ]
+    messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prefix}]
+    if package.prior_messages:
+        messages.extend(list(package.prior_messages))
+    messages.append({"role": "system", "content": system_suffix})
+    messages.append({"role": "user", "content": payload_message})
     model_id = model or os.getenv(_AGENT_LLM_MODEL_ENV) or None
     try:
         raw = adapter.chat(messages, model=model_id, response_format={"type": "json_object"})
@@ -768,12 +827,23 @@ def stream_atelier_llm_planner(
         }
         return
 
-    system_prompt = _build_atelier_llm_system_prompt(package)
+    # v1.3 2a + 2c — split into stable PREFIX (cached on the package by
+    # build_planner_package, byte-identical across iterations within the
+    # same turn so DashScope/OpenAI prompt caches hit) and a fresh
+    # VOLATILE SUFFIX rebuilt every iteration. prior_messages threads the
+    # OpenAI-shaped history of completed turns + intra-turn tool results
+    # between them so iteration N+1 sees iteration N's results. Wrap the
+    # suffix in its own `system` message — the DashScope OpenAI compat
+    # layer treats anything in `user` as the literal turn input, which we
+    # don't want for canvas-state context.
+    system_prefix = package.system_prefix or _build_atelier_llm_prefix(package)
+    system_suffix = _build_atelier_llm_suffix(package)
     payload_message = user_message.strip() or "(no message — propose a sensible next step)"
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": payload_message},
-    ]
+    messages: List[Dict[str, Any]] = [{"role": "system", "content": system_prefix}]
+    if package.prior_messages:
+        messages.extend(list(package.prior_messages))
+    messages.append({"role": "system", "content": system_suffix})
+    messages.append({"role": "user", "content": payload_message})
     model_id = model or os.getenv(_AGENT_LLM_MODEL_ENV) or None
 
     buffer_parts: List[str] = []
@@ -1559,6 +1629,8 @@ class AtelierAgentHarness:
         user_message: str = "",
         selected_node_id: Optional[str] = None,
         skill_name: Optional[str] = None,
+        prior_messages: Optional[List[Dict[str, Any]]] = None,
+        last_iter_result: Optional[Dict[str, Any]] = None,
     ) -> AtelierAgentPlannerPackage:
         project = self.pipeline.get_atelier_project(project_id)
         if not project:
@@ -1577,7 +1649,39 @@ class AtelierAgentHarness:
         nodes_for_snapshot, scope = _select_planner_snapshot_nodes(
             project.nodes, selected_node
         )
-        return AtelierAgentPlannerPackage(
+        # v1.3 2c — sort tool schemas by name for prompt-cache prefix
+        # stability. The registry currently returns dict-insertion order,
+        # which silently churns when new tools register. Isolate the sort
+        # to the prompt-building path so non-prompt callers (the
+        # /agent/tools route, tests that introspect ordering, etc.) keep
+        # the registration order intact. PREFIX-STABILITY: this is the
+        # single sort site — see `_build_atelier_llm_prefix` for the
+        # constraint.
+        sorted_tool_schemas = sorted(
+            self.list_tool_specs(),
+            key=lambda spec: str(spec.get("name") or ""),
+        )
+        # v1.3 2a — derive prior_messages from project.agent_turns when the
+        # caller didn't pass anything explicit. Bound by
+        # ATELIER_AGENT_PRIOR_TURNS env (DEFAULT_PRIOR_TURNS) — older turns
+        # fold into project.agent_compaction_summary which we prepend as a
+        # synthetic system message inside build_prior_messages_from_history.
+        if prior_messages is None and getattr(project, "agent_turns", None):
+            try:
+                prior_messages = build_prior_messages_from_history(
+                    project,
+                    n_turns=DEFAULT_PRIOR_TURNS,
+                    compaction_summary=getattr(project, "agent_compaction_summary", None),
+                )
+            except Exception:  # pragma: no cover — defensive
+                logger.exception("build_prior_messages_from_history failed")
+                prior_messages = []
+        elif prior_messages is None:
+            prior_messages = []
+        # Build the package proto with the full prefix-stable inputs first
+        # so we can compute the prefix string deterministically before the
+        # volatile inputs (canvas snapshot etc.) factor in.
+        package = AtelierAgentPlannerPackage(
             project_id=project.id,
             user_message=user_message,
             selected_node_id=selected_node_id,
@@ -1585,7 +1689,7 @@ class AtelierAgentHarness:
             planner_schema_version=PLANNER_SCHEMA_VERSION,
             tool_schema_version=TOOL_SCHEMA_VERSION,
             output_contract=dict(PLANNER_OUTPUT_CONTRACT),
-            tool_schemas=self.list_tool_specs(),
+            tool_schemas=sorted_tool_schemas,
             project_snapshot={
                 "id": project.id,
                 "title": project.title,
@@ -1596,7 +1700,40 @@ class AtelierAgentHarness:
             },
             selected_node_snapshot=_compact_node(selected_node) if selected_node else None,
             policy_snapshot=project.agent_policy.model_dump(mode="json"),
+            prior_messages=list(prior_messages),
+            volatile_suffix_meta={
+                "scope": scope,
+                "node_count": len(project.nodes),
+                "selected_node_id": selected_node_id,
+                "has_last_iter_result": bool(last_iter_result),
+            },
         )
+        # v1.3 2c — compute the byte-stable PREFIX once per turn and
+        # persist it on the package so per-iteration callers
+        # (call_atelier_llm_planner / stream_atelier_llm_planner) reuse
+        # the same string verbatim and prompt caches hit.
+        prefix_str = _build_atelier_llm_prefix(package)
+        package.system_prefix = prefix_str
+
+        # v1.3 2b — compaction. If the assembled prior_messages exceeds the
+        # token budget (default 8000, env ATELIER_AGENT_COMPACT_LIMIT),
+        # fold the oldest entries into a single system summary message and
+        # persist the rolling summary onto the project. maybe_compact_messages
+        # is idempotent and returns (messages, None) on no-op.
+        try:
+            compacted_messages, new_summary = maybe_compact_messages(
+                list(package.prior_messages), prefix_str, project
+            )
+        except Exception:  # pragma: no cover — defensive
+            logger.exception("maybe_compact_messages crashed; using uncompacted prior_messages")
+            compacted_messages, new_summary = list(package.prior_messages), None
+        if new_summary is not None:
+            package.prior_messages = compacted_messages
+            try:
+                self.pipeline._save_atelier_data()
+            except Exception:  # pragma: no cover — defensive; persistence
+                logger.exception("compaction summary persist failed")
+        return package
 
     def plan_turn(
         self,
@@ -2302,16 +2439,27 @@ class AtelierAgentHarness:
             messages_history.extend(tool_results_messages)
             turn.messages_history = list(messages_history)
 
+        # v1.3 2a — track the last iteration's terminal tool_done so
+        # iteration N+1 sees iteration N's result_snapshot in the
+        # volatile suffix. Reset per-loop, NOT per-iteration.
+        last_iter_done_event: Optional[Dict[str, Any]] = None
+
         while iteration < cap:
             iteration += 1
             # Build the planner package fresh per iteration so the LLM sees
             # the latest canvas state (each tool call may have mutated it).
+            # Thread the running messages_history into prior_messages so
+            # within-turn iterations inherit the prior tool results, and
+            # the last iteration's terminal tool_done becomes the volatile
+            # suffix's `Last iteration result` block.
             try:
                 package = self.build_planner_package(
                     project_id=project_id,
                     user_message=user_message or turn.user_message,
                     selected_node_id=selected_node_id,
                     skill_name=skill_name,
+                    prior_messages=list(messages_history) if messages_history else None,
+                    last_iter_result=last_iter_done_event,
                 )
             except ValueError as exc:
                 loop_error = str(exc)
@@ -2437,6 +2585,14 @@ class AtelierAgentHarness:
             # iteration N+1 sees them (OpenAI-style {"role":"tool", ...}).
             for done_event in iter_tool_done_events:
                 messages_history.append(_build_tool_message_from_done_event(done_event))
+            # v1.3 2a — remember the last terminal tool_done so the next
+            # iteration's volatile suffix can include a `Last iteration
+            # result:` block. Picking the last event in this iteration
+            # rather than the messages_history tail keeps the structured
+            # status/error shape (the messages_history entry is the
+            # OpenAI tool-message string).
+            if iter_tool_done_events:
+                last_iter_done_event = iter_tool_done_events[-1]
 
             if paused:
                 turn.messages_history = list(messages_history)

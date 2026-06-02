@@ -938,6 +938,24 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
           </>
         ) : null}
 
+        {/* v1.3 BATCH 2 (2b) — small caption surfaced above the turn
+            timeline when the backend has folded older turns into a
+            rolling compaction summary. Non-load-bearing UI cue: the
+            actual summary is system-side and consumed by the LLM. */}
+        {project?.agent_compaction_summary ? (
+          <div
+            className="flex items-center gap-1.5 px-1 pb-1 text-[11px] text-white/40 animate-atelier-popover-in"
+            title={project.agent_compaction_summary}
+            aria-label="Earlier turns compacted into a rolling summary"
+          >
+            <span
+              aria-hidden="true"
+              className="h-1 w-1 rounded-full bg-white/30"
+            />
+            Earlier turns compacted
+          </div>
+        ) : null}
+
         {recentTurns.map((turn) => (
           <AgentTurnRow key={turn.id} turn={turn} />
         ))}

@@ -120,6 +120,35 @@ export interface AtelierAgentPlannerPackage {
     };
     selected_node_snapshot?: AtelierNode | null;
     policy_snapshot: AtelierAgentPolicy;
+    /**
+     * v1.3 BATCH 2 (2a) — OpenAI Chat Completions-shaped history of prior
+     * agent turns, threaded between the stable system prefix and the
+     * current user message (Hermes three-tier). The frontend only reads
+     * this for diagnostics/replay; the LLM call itself happens server-side.
+     */
+    prior_messages?: Array<{
+        role: "user" | "assistant" | "tool" | "system";
+        content?: string | null;
+        tool_call_id?: string;
+        name?: string;
+        tool_calls?: Array<{
+            id: string;
+            type: "function";
+            function: { name: string; arguments: string };
+        }>;
+    }>;
+    /**
+     * v1.3 BATCH 2 (2c) — byte-stable system prompt prefix (directive +
+     * sorted tool schemas + policy). Reused across iterations within the
+     * same turn so DashScope/OpenAI prompt caches actually hit.
+     */
+    system_prefix?: string | null;
+    /**
+     * v1.3 BATCH 2 (2c) — debug metadata describing what's in the volatile
+     * suffix this iteration (canvas snapshot scope, selected node id,
+     * presence of last_iter_result). Wire-only; not consumed by the LLM.
+     */
+    volatile_suffix_meta?: Record<string, unknown>;
     created_at: number;
 }
 
@@ -423,6 +452,20 @@ export interface AtelierProject {
     agent_turns?: AtelierAgentTurn[];
     sequence?: AtelierSequenceEntry[];
     exports?: AtelierExportRecord[];
+    /**
+     * v1.3 BATCH 2 (2b) — rolling text summary of older agent turns folded
+     * by atelier_context_compactor.maybe_compact_messages when
+     * prior_messages exceeds ATELIER_AGENT_COMPACT_LIMIT. Resume paths see
+     * it via build_prior_messages_from_history. The agent panel shows a
+     * small "Compacted" caption when this is set.
+     */
+    agent_compaction_summary?: string | null;
+    /**
+     * v1.3 BATCH 2 (2b) — id of the most recent agent turn folded into
+     * `agent_compaction_summary`. Used by the backend to avoid double-
+     * folding turns already absorbed into a previous summary.
+     */
+    compacted_through_turn_id?: string | null;
     created_at: number;
     updated_at: number;
 }

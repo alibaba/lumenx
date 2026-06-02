@@ -1,0 +1,21 @@
+Placeholder for: rhtv-hero-YYYY-MM-DD.png
+
+This file is intentionally a text stub instead of a 1×1 transparent PNG so
+that anyone grepping the references dir sees an unmissable plain-text
+reminder. Replace it with the real hero PNG following the capture protocol
+in `SOURCES.md` §1.
+
+Capture target:
+- URL: https://rhtv.runninghub.cn/projects/canvas/2056256964232486914
+- Logical viewport: 1920×1200 @ 2× DPR (3840×2400 physical PNG)
+- Signed-in video-gen project with nodes wired (parent video → take
+  spokes), beam glow visible on the focal node, no modal/popover overlays
+- Note: the parent v1.3 brief called this domain `rht.video`. The doc
+  evidence (`docs/agents/deliverables/atelier-competitive-research-libtv-rhtv-2026-05-19.md`
+  line 11) uses `rhtv.runninghub.cn`. Capture from the latter.
+
+Once captured:
+1. Save as `docs/design/references/rhtv-hero-YYYY-MM-DD.png` (today's date).
+2. Update `docs/design/references/SOURCES.md` §2.2 "Hero image" row to
+   point at the new file and bump "Last verified".
+3. Delete this MISSING.txt placeholder in the same commit.

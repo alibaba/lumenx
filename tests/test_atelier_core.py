@@ -3156,3 +3156,274 @@ def test_atelier_agent_loop_stream_route_emits_tool_plan(pipeline, monkeypatch):
     assert "tool_start" not in names
     refreshed = pipeline.get_atelier_project(project.id)
     assert refreshed.nodes == []
+
+
+# ── v1.3 BATCH 2 — multi-turn memory + compaction + prefix stability ─────
+#
+# These tests cover the three co-shipped sub-items (2a/2b/2c). Each test
+# is intentionally small and seam-narrow so the existing 95-test corpus
+# stays untouched.
+
+def test_b2_prior_messages_threaded_into_llm_call(pipeline, monkeypatch):
+    """v1.3 2a: when the project has completed prior agent_turns,
+    `build_prior_messages_from_history` serializes them into OpenAI Chat
+    Completions shape and the harness threads them into the LLM call
+    (the Hermes-style middle tier between the stable system prefix and
+    the current user message)."""
+    from src.apps.comic_gen import atelier_agent as agent_module
+    from src.apps.comic_gen.models import (
+        AtelierAgentToolCall,
+        AtelierAgentToolStatus,
+        AtelierAgentTurn,
+    )
+
+    project = pipeline.create_atelier_project("History Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    # Seed two completed prior turns directly on the project so the
+    # serializer has shape to walk. tool_calls carries a known
+    # result_snapshot so the tool-message branch fires.
+    prior_turn_1 = AtelierAgentTurn(
+        project_id=project.id,
+        user_message="first user ask",
+        status="completed",
+        response="first assistant reply",
+        tool_calls=[
+            AtelierAgentToolCall(
+                tool_name="canvas.createVideoNode",
+                arguments={"title": "T1", "prompt": "p1"},
+                status=AtelierAgentToolStatus.COMPLETED,
+                result_snapshot={"node_id": "n-1", "title": "T1"},
+            )
+        ],
+    )
+    prior_turn_2 = AtelierAgentTurn(
+        project_id=project.id,
+        user_message="second user ask",
+        status="completed",
+        response="second assistant reply",
+        tool_calls=[],
+    )
+    project.agent_turns.extend([prior_turn_1, prior_turn_2])
+    pipeline._save_atelier_data()
+
+    captured: Dict[str, Any] = {}
+
+    def fake_stream(package, user_message, model=None):
+        captured["prior_messages"] = list(package.prior_messages)
+        captured["system_prefix"] = package.system_prefix
+        yield {
+            "type": "done",
+            "response": "done",
+            "tool_calls": [],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    list(
+        harness.run_agent_loop_streaming(
+            project_id=project.id,
+            user_message="next step",
+            max_iterations=1,
+        )
+    )
+
+    prior = captured.get("prior_messages")
+    assert prior is not None and prior, "prior_messages should be populated"
+    roles = [m.get("role") for m in prior]
+    # Ordering is: optional compaction summary (none here), then per turn:
+    # user → assistant (with tool_calls? if any) → tool result(s).
+    assert roles[0] == "user"
+    assert "assistant" in roles
+    assert "tool" in roles
+    # The two user turns from agent_turns must appear in chronological order.
+    user_msgs = [m["content"] for m in prior if m.get("role") == "user"]
+    assert user_msgs == ["first user ask", "second user ask"]
+    # And the tool result for prior_turn_1 should ride a tool_call_id back
+    # to its assistant tool_calls entry.
+    tool_msgs = [m for m in prior if m.get("role") == "tool"]
+    assert tool_msgs and tool_msgs[0]["name"] == "canvas.createVideoNode"
+    # Prefix must be set (2c) so the call_atelier_llm_planner path
+    # reuses it byte-identically across iterations.
+    assert isinstance(captured.get("system_prefix"), str)
+    assert "Atelier canvas agent" in captured["system_prefix"]
+
+
+def test_b2_compaction_triggers_at_threshold_and_replaces_oldest(monkeypatch):
+    """v1.3 2b: when token estimate exceeds MAX_PROMPT_TOKENS,
+    `maybe_compact_messages` folds the oldest entries into a single
+    `{role:"system", content:"<compaction summary>: ..."}` message and
+    persists the rolling summary onto the project."""
+    from src.apps.comic_gen import atelier_context_compactor as compactor
+    from src.apps.comic_gen.models import AtelierAgentTurn
+
+    # Build 10 messages to fold. Shape doesn't matter for this test —
+    # only count + ordering.
+    messages = []
+    for i in range(10):
+        role = "user" if i % 2 == 0 else "assistant"
+        messages.append({"role": role, "content": f"msg-{i}"})
+
+    # Force the threshold to fire, replace the summarizer with a fixed
+    # fingerprint so the assertion is deterministic.
+    monkeypatch.setattr(
+        compactor, "estimate_tokens", lambda _msgs, _sys="": 9000
+    )
+    monkeypatch.setattr(
+        compactor, "summarize_messages", lambda _msgs, _project: "FOLDED"
+    )
+
+    # Synthetic project shim — only the two new fields plus an
+    # agent_turns list are touched by maybe_compact_messages.
+    class _ProjectShim:
+        def __init__(self) -> None:
+            self.agent_compaction_summary = None
+            self.compacted_through_turn_id = None
+            self.agent_turns = [
+                AtelierAgentTurn(
+                    project_id="proj-1",
+                    user_message="u",
+                    status="completed",
+                )
+            ]
+
+    project = _ProjectShim()
+    out_messages, summary = compactor.maybe_compact_messages(
+        messages, "<sys>", project
+    )
+
+    # KEEP_RECENT_TURNS recent verbatim + 1 synthetic system summary.
+    assert len(out_messages) == compactor.KEEP_RECENT_TURNS + 1
+    assert out_messages[0]["role"] == "system"
+    assert "FOLDED" in out_messages[0]["content"]
+    # Tail is preserved in original order.
+    tail_contents = [m["content"] for m in out_messages[1:]]
+    assert tail_contents == [
+        f"msg-{i}" for i in range(10 - compactor.KEEP_RECENT_TURNS, 10)
+    ]
+    # Persistence side-effects on the project shim.
+    assert summary == "FOLDED"
+    assert project.agent_compaction_summary == "FOLDED"
+    assert project.compacted_through_turn_id == project.agent_turns[-1].id
+
+
+def test_b2_prefix_byte_identical_across_iterations(pipeline):
+    """v1.3 2c: `build_planner_package` produces a byte-identical
+    `system_prefix` regardless of prior_messages / last_iter_result, so
+    DashScope/OpenAI prompt caches actually hit across iterations within
+    the same turn. Tool schemas must come back sorted by name."""
+    from src.apps.comic_gen import atelier_agent as agent_module
+
+    project = pipeline.create_atelier_project("Prefix Stability Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    harness = agent_module.AtelierAgentHarness(pipeline)
+    pkg1 = harness.build_planner_package(
+        project_id=project.id,
+        user_message="hello",
+    )
+    # Iteration 2 — same project, mid-flight prior_messages and a
+    # last_iter_result that previously drove the volatile suffix to
+    # mutate. The prefix must be unaffected.
+    pkg2 = harness.build_planner_package(
+        project_id=project.id,
+        user_message="hello",
+        prior_messages=[
+            {"role": "user", "content": "earlier"},
+            {"role": "assistant", "content": "earlier reply"},
+            {
+                "role": "tool",
+                "tool_call_id": "abc",
+                "name": "canvas.createVideoNode",
+                "content": "{}",
+            },
+        ],
+        last_iter_result={"status": "completed", "node_id": "n-1"},
+    )
+    assert pkg1.system_prefix is not None
+    assert pkg2.system_prefix is not None
+    assert pkg1.system_prefix == pkg2.system_prefix, (
+        "system_prefix must be byte-identical across iterations within a "
+        "turn so prompt caches hit"
+    )
+    # tool_schemas sort lock — sorted by name, both packages agree.
+    names_1 = [t.get("name") for t in pkg1.tool_schemas]
+    assert names_1 == sorted(names_1)
+    assert names_1 == [t.get("name") for t in pkg2.tool_schemas]
+
+
+def test_b2_compaction_summary_persists_across_reload(pipeline, tmp_path):
+    """v1.3 2b: agent_compaction_summary + compacted_through_turn_id
+    round-trip through the persisted JSON. v1.2 fixtures (no new fields)
+    also load cleanly with both defaults None — backward-compat."""
+    from src.apps.comic_gen.pipeline import ComicGenPipeline
+
+    project = pipeline.create_atelier_project("Reload Board")
+    project.agent_compaction_summary = "SUMMARY-TEST"
+    project.compacted_through_turn_id = "t-3"
+    pipeline._save_atelier_data()
+
+    # Fresh pipeline pointed at the same JSON — simulates a process
+    # restart / web-server reload.
+    with patch("src.apps.comic_gen.pipeline.ScriptProcessor"), \
+         patch("src.apps.comic_gen.pipeline.AssetGenerator"), \
+         patch("src.apps.comic_gen.pipeline.StoryboardGenerator"), \
+         patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
+         patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
+         patch("src.apps.comic_gen.pipeline.ExportManager"):
+        pipeline2 = ComicGenPipeline()
+    pipeline2.data_file = pipeline.data_file
+    pipeline2.series_data_file = pipeline.series_data_file
+    pipeline2.atelier_data_file = pipeline.atelier_data_file
+    pipeline2.atelier_projects = pipeline2._load_atelier_data()
+    reloaded = pipeline2.get_atelier_project(project.id)
+    assert reloaded.agent_compaction_summary == "SUMMARY-TEST"
+    assert reloaded.compacted_through_turn_id == "t-3"
+
+    # Backward-compat: a v1.2-shaped fixture (no new fields) loads with
+    # both defaults None. Write a fresh atelier_projects.json carrying
+    # only the legacy keys so the loader has to backfill defaults.
+    legacy_path = tmp_path / "legacy_atelier_projects.json"
+    legacy_payload = {
+        "legacy-1": {
+            "id": "legacy-1",
+            "title": "Legacy Board",
+            "description": "",
+            "source_project_id": None,
+            "agent_policy": {
+                "approval_mode": "untrusted",
+                "allowed_tools": [],
+                "max_nodes_per_action": 8,
+            },
+            "nodes": [],
+            "edges": [],
+            "agent_turns": [],
+            "skills": [],
+            "preview": None,
+            "exports": [],
+            "created_at": time.time(),
+            "updated_at": time.time(),
+        }
+    }
+    import json as _json
+
+    legacy_path.write_text(_json.dumps(legacy_payload))
+    with patch("src.apps.comic_gen.pipeline.ScriptProcessor"), \
+         patch("src.apps.comic_gen.pipeline.AssetGenerator"), \
+         patch("src.apps.comic_gen.pipeline.StoryboardGenerator"), \
+         patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
+         patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
+         patch("src.apps.comic_gen.pipeline.ExportManager"):
+        pipeline3 = ComicGenPipeline()
+    pipeline3.data_file = pipeline.data_file
+    pipeline3.series_data_file = pipeline.series_data_file
+    pipeline3.atelier_data_file = str(legacy_path)
+    pipeline3.atelier_projects = pipeline3._load_atelier_data()
+    legacy_project = pipeline3.get_atelier_project("legacy-1")
+    assert legacy_project is not None
+    assert legacy_project.agent_compaction_summary is None
+    assert legacy_project.compacted_through_turn_id is None

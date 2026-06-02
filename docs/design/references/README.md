@@ -5,6 +5,10 @@ Each batch lives in a dated subdirectory and ships with a notes file
 that records the analysis output (observation → terminology → canvas
 fit) for every reference.
 
+For the **canonical per-product URL + capture-state index** (LibTV,
+RHTV, Flova), see [`SOURCES.md`](./SOURCES.md). That file is
+product-scoped; the dated subdirectories below are theme-scoped.
+
 ## Layout
 
 ```

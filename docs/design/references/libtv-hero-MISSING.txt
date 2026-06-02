@@ -1,0 +1,18 @@
+Placeholder for: libtv-hero-YYYY-MM-DD.png
+
+This file is intentionally a text stub instead of a 1×1 transparent PNG so
+that anyone grepping the references dir sees an unmissable plain-text
+reminder. Replace it with the real hero PNG following the capture protocol
+in `SOURCES.md` §1.
+
+Capture target:
+- URL: https://www.liblib.tv/canvas?projectId=e24b1278ab524420b0a817394b5c897c
+- Logical viewport: 1920×1200 @ 2× DPR (3840×2400 physical PNG)
+- Signed-in board with multiple media nodes visible (mix image + video)
+- No modal/popover overlays at capture time
+
+Once captured:
+1. Save as `docs/design/references/libtv-hero-YYYY-MM-DD.png` (today's date).
+2. Update `docs/design/references/SOURCES.md` §2.1 "Hero image" row to
+   point at the new file and bump "Last verified".
+3. Delete this MISSING.txt placeholder in the same commit.
