@@ -9,14 +9,20 @@ describe("v3 IdeaNode", () => {
     expect(screen.getByText(/protagonist stops/)).toBeInTheDocument();
   });
 
-  it("uses amber tinted edge by default", () => {
+  it("uses warm-ochre tinted edge by default", () => {
+    // v0.5+ Flova skin: the IdeaNode category wash uses the muted
+    // `atelier-ochre` token instead of raw tailwind `amber` (see
+    // IdeaNode.tsx — `border-atelier-ochre/15`).
     const { container } = render(<IdeaNode id="i2" body="x" x={0} y={0} />);
-    expect(container.firstElementChild?.className).toMatch(/amber/);
+    expect(container.firstElementChild?.className).toMatch(/ochre/);
   });
 
   it("switches to primary ring when selected", () => {
     const { container } = render(<IdeaNode id="i3" body="x" selected x={0} y={0} />);
-    expect(container.firstElementChild?.className).toMatch(/ring-primary/);
+    // v0.5+ Flova skin: cobalt is reserved for selection — but the soft
+    // selection ring is rendered as `ring-1 ring-white/25 border-white/20`,
+    // not the literal tailwind `ring-primary` token.
+    expect(container.firstElementChild?.className).toMatch(/ring-1.*ring-white/);
   });
 
   it("calls onSelect on pointerDown", () => {

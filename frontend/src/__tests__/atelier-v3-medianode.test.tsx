@@ -43,15 +43,17 @@ describe("v3 MediaNode", () => {
   });
 
   it("clamps width to <= 240 for video takes even if larger requested", () => {
-    // Image+src now renders the unified 244-wide card chrome (no
-    // user-supplied dimensions); the clamp test is therefore moved to
-    // a video take, which keeps the legacy width-prop behavior.
+    // Image+src and video+src+completed now render the unified preview-card
+    // chrome (fixed w-[260px], no user-supplied dimensions). The clamp test
+    // is therefore moved to a pending video take, which still flows through
+    // the legacy width-prop branch (the preview-card branch only kicks in on
+    // status="completed").
     const { container } = render(
       <MediaNode
         id="n4"
         kind="video"
         src="https://example.com/v.mp4"
-        status="completed"
+        status="pending"
         width={400}
         height={400}
         x={0}
@@ -62,6 +64,13 @@ describe("v3 MediaNode", () => {
     expect(parseInt(root.style.width)).toBeLessThanOrEqual(240);
   });
 
+  // For these onSelect / propagation tests we use status="pending" instead
+  // of "completed". A completed image+src now renders the preview-card
+  // chrome which contains 5 inner action buttons (expand/bookmark/copy/
+  // refresh/download) in addition to the outer role="button", making
+  // getByRole("button") ambiguous. The pending variant flows through the
+  // image-card branch which has exactly one role="button" (the card itself).
+
   it("calls onSelect with id on pointerDown", () => {
     const onSelect = vi.fn();
     render(
@@ -69,7 +78,7 @@ describe("v3 MediaNode", () => {
         id="n5"
         kind="image"
         src="https://example.com/a.png"
-        status="completed"
+        status="pending"
         x={0}
         y={0}
         onSelect={onSelect}
@@ -86,7 +95,7 @@ describe("v3 MediaNode", () => {
         id="n6"
         kind="image"
         src="https://example.com/a.png"
-        status="completed"
+        status="pending"
         x={0}
         y={0}
         onSelect={onSelect}
@@ -103,7 +112,7 @@ describe("v3 MediaNode", () => {
         id="n7"
         kind="image"
         src="https://example.com/a.png"
-        status="completed"
+        status="pending"
         x={0}
         y={0}
         onSelect={onSelect}
@@ -121,7 +130,7 @@ describe("v3 MediaNode", () => {
           id="n8"
           kind="image"
           src="https://example.com/a.png"
-          status="completed"
+          status="pending"
           x={0}
           y={0}
         />
@@ -132,14 +141,16 @@ describe("v3 MediaNode", () => {
   });
 
   it("clamps negative width and height to a positive minimum (video kind)", () => {
-    // Same reason as above: image+src is now a fixed-width card without
-    // a height attribute, so we test the clamp on a video take.
+    // Same reason as the clamp-max test above: a completed video+src now
+    // renders the preview-card chrome (fixed w-[260px], no inline width /
+    // height), so the clamp test uses a pending video to flow through the
+    // legacy width-prop branch.
     const { container } = render(
       <MediaNode
         id="n9"
         kind="video"
         src="https://example.com/v.mp4"
-        status="completed"
+        status="pending"
         x={0}
         y={0}
         width={-50}
@@ -151,21 +162,31 @@ describe("v3 MediaNode", () => {
     expect(parseInt(root.style.height)).toBeGreaterThanOrEqual(24);
   });
 
-  it("renders an image as a 244-wide card with stamped Img caption", () => {
+  it("renders an image card with stamped image caption + id suffix", () => {
+    // v0.5+ Flova skin: the image card grew to w-[260px] and split the
+    // single "Image · No 123" caption into a sentence-case "image" pill at
+    // the header trailing edge and a separate "Image" + stampNum row in
+    // the footer. We use status="pending" to hit the image-card branch
+    // deterministically — the completed branch now renders the preview-
+    // card chrome which doesn't expose the same caption row.
     const { container } = render(
       <MediaNode
         id="n10abc123"
         kind="image"
         src="https://example.com/a.png"
         filename="hero.png"
-        status="completed"
+        status="pending"
         x={0}
         y={0}
       />,
     );
     const root = container.firstElementChild as HTMLElement;
-    expect(root.className).toMatch(/w-\[244px\]/);
-    expect(screen.getByText(/^Img$/i)).toBeInTheDocument();
-    expect(screen.getByText(/Image · No 123/i)).toBeInTheDocument();
+    expect(root.className).toMatch(/w-\[260px\]/);
+    // Header trailing-edge type pill (lowercase "image" per §9.1) and the
+    // footer caption ("Image") are different spans. Match case-sensitively
+    // so the two assertions don't collapse onto each other.
+    expect(screen.getByText(/^image$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Image$/)).toBeInTheDocument();
+    expect(screen.getByText("123")).toBeInTheDocument();
   });
 });

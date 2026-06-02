@@ -28,7 +28,10 @@ describe("PlanNode", () => {
 
   it("uses primary ring when selected", () => {
     const { container } = render(<PlanNode id="p4" title="x" bullets={[]} selected x={0} y={0} />);
-    expect(container.firstElementChild?.className).toMatch(/ring-primary/);
+    // v0.5+ Flova skin: cobalt is reserved for selection — but the selection
+    // chrome is rendered as `ring-1 ring-white/25 border-white/20`, not the
+    // literal tailwind `ring-primary` token. Assert the actual ring shape.
+    expect(container.firstElementChild?.className).toMatch(/ring-1.*ring-white/);
   });
 
   it("calls onSelect on pointerDown", () => {

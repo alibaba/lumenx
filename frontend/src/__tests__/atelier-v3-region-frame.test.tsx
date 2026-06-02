@@ -40,7 +40,10 @@ describe("RegionFrame", () => {
     const { container } = render(
       <RegionFrame id="r1" x={0} y={0} width={400} height={300} title="X" selected />,
     );
-    expect(container.firstElementChild?.className).toMatch(/ring-primary|ring-2/);
+    // v0.5+ Flova skin: cobalt is reserved for selection — but the soft
+    // selection ring is rendered as `ring-1 ring-white/25`, not the literal
+    // tailwind `ring-primary` token. Assert the actual ring shape instead.
+    expect(container.firstElementChild?.className).toMatch(/ring-1.*ring-white/);
   });
 
   it("calls onSelect on body pointerDown", () => {

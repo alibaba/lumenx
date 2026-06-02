@@ -1,7 +1,18 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, fireEvent } from "@testing-library/react";
 import { TakeTimeline } from "@/components/atelier/v3/TakeTimeline";
+
+// v4 ④ "celebrate output" pile design: each take tile carries an aria-label of
+// `Take {i+1}` (1-based position), not `Take {id}`. The take id lives on the
+// `data-take-id` attribute. The lookup helpers below resolve a take from the
+// rendered tree by id via the data attribute so the tests stay decoupled from
+// the visible label format.
+function getTakeById(container: HTMLElement, id: string): HTMLElement {
+  const el = container.querySelector(`[data-take-id="${id}"]`) as HTMLElement | null;
+  if (!el) throw new Error(`Take with data-take-id="${id}" not found`);
+  return el;
+}
 
 describe("TakeTimeline", () => {
   const takes = [
@@ -12,17 +23,17 @@ describe("TakeTimeline", () => {
   ];
 
   it("renders one tile per take", () => {
-    render(<TakeTimeline takes={takes} onPickTake={vi.fn()} />);
+    const { container } = render(<TakeTimeline takes={takes} onPickTake={vi.fn()} />);
     for (const t of takes) {
-      expect(screen.getByLabelText(new RegExp(`take ${t.id}`, "i"))).toBeInTheDocument();
+      expect(getTakeById(container, t.id)).toBeInTheDocument();
     }
   });
 
   it("marks the selected take with aria-pressed=true", () => {
-    render(<TakeTimeline takes={takes} onPickTake={vi.fn()} />);
-    const selected = screen.getByLabelText(/take t2/i);
+    const { container } = render(<TakeTimeline takes={takes} onPickTake={vi.fn()} />);
+    const selected = getTakeById(container, "t2");
     expect(selected.getAttribute("aria-pressed")).toBe("true");
-    const other = screen.getByLabelText(/take t1/i);
+    const other = getTakeById(container, "t1");
     expect(other.getAttribute("aria-pressed")).toBe("false");
   });
 
@@ -37,8 +48,8 @@ describe("TakeTimeline", () => {
 
   it("fires onPickTake with the take id on click", () => {
     const onPickTake = vi.fn();
-    render(<TakeTimeline takes={takes} onPickTake={onPickTake} />);
-    fireEvent.click(screen.getByLabelText(/take t3/i));
+    const { container } = render(<TakeTimeline takes={takes} onPickTake={onPickTake} />);
+    fireEvent.click(getTakeById(container, "t3"));
     expect(onPickTake).toHaveBeenCalledWith("t3");
   });
 
@@ -48,22 +59,22 @@ describe("TakeTimeline", () => {
   });
 
   it("renders a status placeholder when thumbUrl missing (processing / failed)", () => {
-    render(<TakeTimeline takes={takes} onPickTake={vi.fn()} />);
+    const { container } = render(<TakeTimeline takes={takes} onPickTake={vi.fn()} />);
     // Both t3 (processing) and t4 (failed) lack a thumbUrl — they should
     // each carry a data-take-status attribute so the visual placeholder
     // can be styled by status tone.
-    expect(screen.getByLabelText(/take t3/i).getAttribute("data-take-status")).toBe("processing");
-    expect(screen.getByLabelText(/take t4/i).getAttribute("data-take-status")).toBe("failed");
+    expect(getTakeById(container, "t3").getAttribute("data-take-status")).toBe("processing");
+    expect(getTakeById(container, "t4").getAttribute("data-take-status")).toBe("failed");
   });
 
   it("stops propagation on pointerDown so canvas drag doesn't fire", () => {
     const parent = vi.fn();
-    render(
+    const { container } = render(
       <div onPointerDown={parent}>
         <TakeTimeline takes={takes} onPickTake={vi.fn()} />
       </div>,
     );
-    fireEvent.pointerDown(screen.getByLabelText(/take t1/i));
+    fireEvent.pointerDown(getTakeById(container, "t1"));
     expect(parent).not.toHaveBeenCalled();
   });
 });

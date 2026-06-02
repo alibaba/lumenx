@@ -21,8 +21,12 @@ describe("DraftNode", () => {
     expect(screen.getByText(/1280×720/)).toBeInTheDocument();
   });
 
-  it("uses amber border when status=draft", () => {
-    const { container } = render(
+  it("surfaces status=draft via the StatusDot, not a border tint", () => {
+    // Per ornaments.tsx STATUS_TOKEN comment: lifecycle status is no longer
+    // painted on the body/border/rail — it lives solely on the StatusDot
+    // (top-right) + the muted footer caption, so the node reads identically
+    // collapsed and expanded. Assert the StatusDot accessible name.
+    render(
       <DraftNode
         id="d2"
         status="draft"
@@ -33,11 +37,15 @@ describe("DraftNode", () => {
         y={0}
       />,
     );
-    expect(container.firstElementChild?.className).toMatch(/amber/);
+    expect(
+      screen.getByRole("status", { name: /awaiting approval/i }),
+    ).toBeInTheDocument();
   });
 
-  it("uses primary border when status=approved", () => {
-    const { container } = render(
+  it("surfaces status=approved via the StatusDot, not a border tint", () => {
+    // Same as above: approved is signaled by the StatusDot caption
+    // ("Approved" per STATUS_TOKEN), not by tinting the card border.
+    render(
       <DraftNode
         id="d3"
         status="approved"
@@ -48,8 +56,9 @@ describe("DraftNode", () => {
         y={0}
       />,
     );
-    // Approved → primary tint somewhere on the box (border or rail).
-    expect(container.firstElementChild?.className).toMatch(/primary/);
+    expect(
+      screen.getByRole("status", { name: /approved/i }),
+    ).toBeInTheDocument();
   });
 
   it("renders ref thumbnails when refs provided", () => {
@@ -69,8 +78,13 @@ describe("DraftNode", () => {
     expect(screen.getByText("3 ref")).toBeInTheDocument();
   });
 
-  it("shows running spinner when status=running", () => {
-    const { container } = render(
+  it("shows running pulse on the StatusDot when status=running", () => {
+    // The old draft chrome painted a spinner inside the card body. The new
+    // Flova design dropped the spinner: a running draft carries a soft
+    // motion-safe pulse on the StatusDot (STATUS_TOKEN.running.pulse=true)
+    // plus the "Generating takes" footer caption. Assert the pulse class
+    // + the data-status attribute on the StatusDot.
+    render(
       <DraftNode
         id="d5"
         status="running"
@@ -81,7 +95,9 @@ describe("DraftNode", () => {
         y={0}
       />,
     );
-    expect(container.querySelector(".animate-spin")).not.toBeNull();
+    const dot = screen.getByRole("status", { name: /generating takes/i });
+    expect(dot.getAttribute("data-status")).toBe("running");
+    expect(dot.className).toMatch(/animate-pulse/);
   });
 
   it("calls onSelect on pointerDown", () => {
