@@ -2021,9 +2021,15 @@ def _parse_sse_events(body_text: str):
 
 
 def test_atelier_agent_stream_route_yields_deltas_and_executes(pipeline, monkeypatch):
-    """Track P: POST /agent/turns/stream emits metadata + deltas + a final
-    `done` event carrying the executed turn, and the turn is persisted to
-    the project the same way the sync route would persist it."""
+    """v1.0 track T: POST /agent/turns/stream emits the renamed wire frames
+    (turn / llm_delta / llm_done / tool_start / tool_done / turn_done) in
+    order, and the final turn_done carries the persisted turn payload.
+
+    The harness's per-call streaming generator is bridged through the
+    route, so a single canvas.createVideoNode planner call surfaces as
+    a tool_start / tool_done pair sandwiched between llm_done and the
+    terminal turn_done.
+    """
     from fastapi.testclient import TestClient
     from src.apps.comic_gen import api as api_module
 
@@ -2071,25 +2077,55 @@ def test_atelier_agent_stream_route_yields_deltas_and_executes(pipeline, monkeyp
         body = "".join(chunk for chunk in response.iter_text())
 
     events = _parse_sse_events(body)
-    assert len(events) >= 3, f"expected metadata + deltas + done, got: {events}"
+    event_names = [e for (e, _) in events]
+    # Required v1.0 wire-frame ordering: turn -> llm_delta(s) -> llm_done
+    # -> tool_start -> tool_done -> turn_done.
+    assert event_names[0] == "turn"
+    assert event_names[-1] == "turn_done"
+    assert "llm_done" in event_names
+    assert "tool_start" in event_names
+    assert "tool_done" in event_names
+    # llm_done must precede tool_start (the LLM phase is over before the
+    # harness starts firing executor frames).
+    assert event_names.index("llm_done") < event_names.index("tool_start")
+    # And tool_done must precede the terminal turn_done.
+    assert event_names.index("tool_done") < event_names.index("turn_done")
 
-    # First event is metadata, carrying planner=model_adapter + a turn_id.
+    # First event is `turn` (renamed from metadata), carrying planner +
+    # turn_id so the panel can stamp the bubble before any tokens arrive.
     first_event, first_payload = events[0]
-    assert first_event == "metadata"
+    assert first_event == "turn"
     assert first_payload["planner"] == "model_adapter"
     assert "turn_id" in first_payload
 
-    # At least 3 delta events whose concatenated text is the JSON the
+    # At least 3 llm_delta events whose concatenated text is the JSON the
     # planner emitted.
-    delta_events = [p for (e, p) in events if e == "delta"]
+    delta_events = [p for (e, p) in events if e == "llm_delta"]
     assert len(delta_events) >= 3
     delta_concat = "".join(d.get("text", "") for d in delta_events)
     assert "canvas.createVideoNode" in delta_concat
     assert "moonlit chase" in delta_concat
 
-    # Final event is `done` with completed status + the executed turn.
+    # Single llm_done frame carrying buffered text + raw tool_calls.
+    llm_done = next(p for (e, p) in events if e == "llm_done")
+    assert llm_done["response"] == "Sure — drafting a moon shot."
+    assert llm_done["tool_calls"][0]["tool_name"] == "canvas.createVideoNode"
+
+    # One tool_start / tool_done pair for the executor call.
+    tool_start = next(p for (e, p) in events if e == "tool_start")
+    assert tool_start["tool_name"] == "canvas.createVideoNode"
+    assert tool_start["arguments"]["title"] == "Moon"
+    assert tool_start["call_id"]
+    tool_done = next(p for (e, p) in events if e == "tool_done")
+    assert tool_done["tool_name"] == "canvas.createVideoNode"
+    assert tool_done["status"] == "completed"
+    assert tool_done["call_id"] == tool_start["call_id"]
+    assert tool_done["error"] is None
+
+    # Final turn_done — completed status, full_response, tool_calls, and
+    # the persisted turn payload.
     last_event, last_payload = events[-1]
-    assert last_event == "done"
+    assert last_event == "turn_done"
     assert last_payload["status"] == "completed"
     assert last_payload["full_response"] == "Sure — drafting a moon shot."
     assert last_payload["tool_calls"][0]["tool_name"] == "canvas.createVideoNode"
@@ -2106,9 +2142,9 @@ def test_atelier_agent_stream_route_yields_deltas_and_executes(pipeline, monkeyp
 
 
 def test_atelier_agent_stream_route_blocks_on_invalid_json(pipeline, monkeypatch):
-    """Track P: when the LLM emits non-JSON text the route still streams
-    the deltas but the final `done` event is `blocked` and no turn is
-    persisted (project.nodes stays empty)."""
+    """v1.0 track T: when the LLM emits non-JSON text the route still streams
+    the deltas + an llm_done frame, but the terminal `turn_done` event is
+    `blocked` and no turn is persisted (project.nodes stays empty)."""
     from fastapi.testclient import TestClient
     from src.apps.comic_gen import api as api_module
 
@@ -2141,8 +2177,16 @@ def test_atelier_agent_stream_route_blocks_on_invalid_json(pipeline, monkeypatch
 
     events = _parse_sse_events(body)
     assert events, "expected at least one SSE event"
+    event_names = [e for (e, _) in events]
+    # The llm_done frame fires even on parse failure so the panel can
+    # render the model's raw output before the turn_done blocks the run.
+    assert "llm_done" in event_names
+    # No tool_start / tool_done should be emitted when no actionable
+    # tool_calls were parsed.
+    assert "tool_start" not in event_names
+    assert "tool_done" not in event_names
     last_event, last_payload = events[-1]
-    assert last_event == "done"
+    assert last_event == "turn_done"
     assert last_payload["status"] == "blocked"
     assert last_payload["turn"] is None
     assert last_payload["tool_calls"] == []
@@ -2153,3 +2197,156 @@ def test_atelier_agent_stream_route_blocks_on_invalid_json(pipeline, monkeypatch
     refreshed = pipeline.get_atelier_project(project.id)
     assert refreshed.nodes == []
     assert refreshed.agent_turns == []
+
+
+def test_atelier_agent_stream_route_forwards_harness_events_in_order(pipeline, monkeypatch):
+    """v1.0 track T: when `AtelierAgentHarness.run_turn_streaming` is
+    monkeypatched to a fixed event sequence, the SSE route forwards each
+    yielded harness event to the wire in order and the terminal turn_done
+    carries the harness's persisted turn payload (model_dumped).
+
+    Exercises the bridge path end-to-end without depending on tool
+    executor side effects, so the assertion is purely about the wire
+    plumbing (event names + ordering + payload pass-through).
+    """
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api as api_module
+    from src.apps.comic_gen import atelier_agent as agent_module
+    from src.apps.comic_gen.models import AtelierAgentTurn, AtelierAgentToolCall
+
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+
+    project = pipeline.create_atelier_project("Bridge Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    def fake_stream(package, user_message, model=None):
+        # Two-call planner output so we can assert the bridge forwards
+        # multiple tool_start/tool_done pairs and that the discriminated
+        #-union ordering survives the queue round-trip.
+        yield {
+            "type": "done",
+            "response": "Drafting two takes.",
+            "tool_calls": [
+                {"tool_name": "canvas.createVideoNode", "arguments": {"title": "A", "prompt": "p1"}},
+                {"tool_name": "canvas.createVideoNode", "arguments": {"title": "B", "prompt": "p2"}},
+            ],
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner", fake_stream
+    )
+
+    # Monkeypatch the harness's streaming generator to a fixed event
+    # sequence so we don't depend on executor side effects. The terminal
+    # turn_done carries a real AtelierAgentTurn so the api-layer can
+    # model_dump it onto the wire.
+    fixed_turn = AtelierAgentTurn(
+        project_id=project.id,
+        user_message="bridge",
+        preview=False,
+        status="completed",
+        tool_calls=[
+            AtelierAgentToolCall(tool_name="canvas.createVideoNode", arguments={"title": "A"}),
+            AtelierAgentToolCall(tool_name="canvas.createVideoNode", arguments={"title": "B"}),
+        ],
+        response="Drafting two takes.",
+    )
+
+    def fake_run_turn_streaming(self, **kwargs):
+        yield {
+            "type": "tool_start",
+            "call_id": "c1",
+            "tool_name": "canvas.createVideoNode",
+            "arguments": {"title": "A"},
+        }
+        yield {
+            "type": "tool_done",
+            "call_id": "c1",
+            "tool_name": "canvas.createVideoNode",
+            "status": "completed",
+            "result_snapshot": {"node": {"id": "n1"}},
+            "error": None,
+        }
+        yield {
+            "type": "tool_start",
+            "call_id": "c2",
+            "tool_name": "canvas.createVideoNode",
+            "arguments": {"title": "B"},
+        }
+        yield {
+            "type": "tool_done",
+            "call_id": "c2",
+            "tool_name": "canvas.createVideoNode",
+            "status": "failed",
+            "result_snapshot": None,
+            "error": "boom",
+        }
+        yield {
+            "type": "turn_done",
+            "turn": fixed_turn,
+            "status": fixed_turn.status,
+            "error": None,
+        }
+
+    monkeypatch.setattr(
+        agent_module.AtelierAgentHarness,
+        "run_turn_streaming",
+        fake_run_turn_streaming,
+    )
+
+    client = TestClient(api_module.app)
+    with client.stream(
+        "POST",
+        f"/atelier/projects/{project.id}/agent/turns/stream",
+        json={"user_message": "bridge"},
+    ) as response:
+        assert response.status_code == 200
+        body = "".join(chunk for chunk in response.iter_text())
+
+    events = _parse_sse_events(body)
+    event_names = [e for (e, _) in events]
+    # Required ordering — each harness frame should appear once in
+    # this exact relative order, sandwiched by the surrounding
+    # turn / llm_done / turn_done wrappers.
+    assert event_names[0] == "turn"
+    assert event_names[-1] == "turn_done"
+    expected_subsequence = [
+        "llm_done",
+        "tool_start",
+        "tool_done",
+        "tool_start",
+        "tool_done",
+        "turn_done",
+    ]
+    # Walk the wire events and confirm the expected sequence appears in
+    # order (allowing other frames in between, e.g. the initial `turn`).
+    iterator = iter(event_names)
+    for expected in expected_subsequence:
+        assert any(name == expected for name in iterator), (
+            f"missing {expected} in wire order; got {event_names}"
+        )
+
+    # Bridge fidelity: tool_start payloads carry the harness's verbatim
+    # call_id + arguments, and tool_done payloads carry the harness's
+    # status + error pass-through.
+    tool_starts = [p for (e, p) in events if e == "tool_start"]
+    tool_dones = [p for (e, p) in events if e == "tool_done"]
+    assert [t["call_id"] for t in tool_starts] == ["c1", "c2"]
+    assert [t["arguments"] for t in tool_starts] == [{"title": "A"}, {"title": "B"}]
+    assert [t["call_id"] for t in tool_dones] == ["c1", "c2"]
+    assert [t["status"] for t in tool_dones] == ["completed", "failed"]
+    assert tool_dones[1]["error"] == "boom"
+
+    # Final turn_done carries the persisted turn (model_dumped) and the
+    # api-layer status label.
+    last_event, last_payload = events[-1]
+    assert last_event == "turn_done"
+    assert last_payload["status"] == "completed"
+    assert last_payload["turn"] is not None
+    assert last_payload["turn"]["status"] == "completed"
+    assert last_payload["turn"]["response"] == "Drafting two takes."
+    assert [c["tool_name"] for c in last_payload["tool_calls"]] == [
+        "canvas.createVideoNode",
+        "canvas.createVideoNode",
+    ]

@@ -658,6 +658,37 @@ def _sse_event(event: str, payload: Dict[str, Any]) -> str:
     return f"event: {event}\ndata: {_json_mod.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _bridge_sync_iter(loop: asyncio.AbstractEventLoop, sync_iter_fn):
+    """Run a synchronous iterator in a worker thread and surface its items
+    through an `asyncio.Queue`. Returns `(queue, sentinel, future)`.
+
+    Used by the streaming agent route to bridge two sync iterators (the LLM
+    planner SDK iterator + the harness `run_turn_streaming` generator) into
+    the async event loop without duplicating the queue/sentinel/thread
+    plumbing per call site. Producer exceptions are surfaced via a special
+    `{"__exception__": exc}` envelope so callers can distinguish a model
+    crash from a clean close.
+    """
+    queue: asyncio.Queue = asyncio.Queue(maxsize=64)
+    sentinel = object()
+
+    def producer():
+        try:
+            for item in sync_iter_fn():
+                asyncio.run_coroutine_threadsafe(queue.put(item), loop).result()
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.exception("stream_atelier_agent_turn: bridged producer crashed")
+            asyncio.run_coroutine_threadsafe(
+                queue.put({"__exception__": exc}),
+                loop,
+            ).result()
+        finally:
+            asyncio.run_coroutine_threadsafe(queue.put(sentinel), loop).result()
+
+    future = loop.run_in_executor(None, producer)
+    return queue, sentinel, future
+
+
 @app.post("/atelier/projects/{project_id}/agent/turns/stream")
 async def stream_atelier_agent_turn(
     project_id: str,
@@ -702,11 +733,21 @@ async def stream_atelier_agent_turn(
 
     async def event_stream():
         turn_id = str(uuid.uuid4())
-        # 1) Metadata frame so the frontend can show the planner / model
-        # label before any tokens arrive.
+        # v1.0 track T — wire event names switch from
+        # (metadata/delta/done) to (turn/llm_delta/llm_done/tool_start/
+        # tool_done/turn_done) so the panel can render a tool-progress
+        # timeline below the streamed LLM bubble. The shape change is
+        # additive: there are now two terminal phases (llm_done after
+        # the LLM finishes, turn_done after the harness finishes) and
+        # one tool_start/tool_done pair per executor call.
+        #
+        # 1) `turn` frame — planner / model / turn_id metadata, sent
+        #    before any tokens arrive so the panel can decorate the
+        #    bubble with the chosen planner label.
         yield _sse_event(
-            "metadata",
+            "turn",
             {
+                "type": "turn",
                 "planner": "model_adapter",
                 "model": model_override or os.getenv("DASHSCOPE_AGENT_MODEL") or None,
                 "turn_id": turn_id,
@@ -717,37 +758,18 @@ async def stream_atelier_agent_turn(
         raw_tool_calls: List[Dict[str, Any]] = []
         stream_error: Optional[str] = None
         cancelled = False
+        loop = asyncio.get_event_loop()
 
+        # 2) Drain the LLM planner generator → llm_delta frames.
         try:
-            # The LLM call is synchronous (OpenAI SDK iterator); we run the
-            # generator in a worker thread and bridge yields back to the
-            # async event loop. asyncio.to_thread for each .send isn't
-            # cleanly supported, so we materialize the iterator in a
-            # background thread and pull dicts off an asyncio.Queue.
-            queue: asyncio.Queue = asyncio.Queue(maxsize=64)
-            sentinel = object()
-
-            def producer():
-                try:
-                    for event in stream_atelier_llm_planner(
-                        package,
-                        user_message,
-                        model=model_override,
-                    ):
-                        # block_put via the loop so we honor backpressure
-                        # without a thread-safe queue dance.
-                        asyncio.run_coroutine_threadsafe(queue.put(event), loop).result()
-                except Exception as exc:  # pragma: no cover — defensive
-                    logger.exception("stream_atelier_agent_turn producer crashed")
-                    asyncio.run_coroutine_threadsafe(
-                        queue.put({"type": "done", "response": "", "tool_calls": [], "error": f"stream crashed: {exc}"}),
-                        loop,
-                    ).result()
-                finally:
-                    asyncio.run_coroutine_threadsafe(queue.put(sentinel), loop).result()
-
-            loop = asyncio.get_event_loop()
-            producer_task = loop.run_in_executor(None, producer)
+            queue, sentinel, producer_task = _bridge_sync_iter(
+                loop,
+                lambda: stream_atelier_llm_planner(
+                    package,
+                    user_message,
+                    model=model_override,
+                ),
+            )
 
             try:
                 while True:
@@ -763,22 +785,25 @@ async def stream_atelier_agent_turn(
                         continue
                     if event is sentinel:
                         break
+                    if isinstance(event, dict) and "__exception__" in event:
+                        stream_error = f"stream crashed: {event['__exception__']}"
+                        break
                     etype = event.get("type")
                     if etype == "delta":
                         text = event.get("text") or ""
                         if text:
                             buffered_response += text
-                            yield _sse_event("delta", {"text": text})
+                            yield _sse_event("llm_delta", {"type": "llm_delta", "text": text})
                     elif etype == "done":
-                        # Capture final fields but DON'T yield "done" here —
-                        # we still need to run validation + execution before
-                        # the final done event is emitted to the client.
+                        # Capture final fields but DON'T yield turn_done
+                        # here — we still need to run validation +
+                        # execution before the final terminal event is
+                        # emitted to the client.
                         final_response = event.get("response")
                         if isinstance(final_response, str) and final_response:
                             buffered_response = final_response
                         raw_tool_calls = list(event.get("tool_calls") or [])
                         stream_error = event.get("error") or None
-                        # Drain remaining sentinel without blocking.
                     else:
                         # Unknown frame type — forward as-is for forward compat.
                         yield _sse_event(etype or "info", event)
@@ -800,13 +825,28 @@ async def stream_atelier_agent_turn(
             # client-side).
             return
 
+        # 3) Single llm_done frame carrying the planner's final text +
+        # raw tool_calls + parse/stream error (if any). Emitted BEFORE
+        # validation so the panel can use it as the "LLM phase done,
+        # tool phase starts now" pivot.
+        yield _sse_event(
+            "llm_done",
+            {
+                "type": "llm_done",
+                "response": buffered_response,
+                "tool_calls": list(raw_tool_calls),
+                "error": stream_error,
+            },
+        )
+
+        # 4) Validation — hard LLM errors / parse failure / empty
+        # tool_calls all surface as a single terminal turn_done frame
+        # marked blocked/failed, no harness invocation, no persistence.
         if stream_error and stream_error != "parse_failed" and not raw_tool_calls:
-            # Hard failure — surface as a done event marked "failed" so the
-            # store can clear state without writing anything to disk. No
-            # turn is persisted on this path.
             yield _sse_event(
-                "done",
+                "turn_done",
                 {
+                    "type": "turn_done",
                     "status": "failed",
                     "full_response": buffered_response,
                     "tool_calls": [],
@@ -817,12 +857,10 @@ async def stream_atelier_agent_turn(
             return
 
         if stream_error == "parse_failed" or not raw_tool_calls:
-            # Model returned text but no actionable tool_calls — blocked,
-            # no persistence. The buffered response is forwarded so the
-            # panel can still render the model's own explanation.
             yield _sse_event(
-                "done",
+                "turn_done",
                 {
+                    "type": "turn_done",
                     "status": "blocked",
                     "full_response": buffered_response,
                     "tool_calls": [],
@@ -836,9 +874,9 @@ async def stream_atelier_agent_turn(
             )
             return
 
-        # Validate the raw tool_calls through the existing ModelAdapterPlanner
-        # sanitization path so we reject unknown tools / bad shapes BEFORE
-        # invoking the harness. Reuses the same checks the sync planner runs.
+        # Sanitize the raw tool_calls through the same shape-checks the
+        # sync planner runs so we reject unknown tools / bad shapes
+        # BEFORE invoking the harness.
         sanitized_calls: List[Dict[str, Any]] = []
         validation_error: Optional[str] = None
         for index, raw_call in enumerate(raw_tool_calls):
@@ -857,8 +895,9 @@ async def stream_atelier_agent_turn(
 
         if validation_error:
             yield _sse_event(
-                "done",
+                "turn_done",
                 {
+                    "type": "turn_done",
                     "status": "blocked",
                     "full_response": buffered_response,
                     "tool_calls": [],
@@ -868,24 +907,101 @@ async def stream_atelier_agent_turn(
             )
             return
 
-        # Execute through the harness — same path the sync /agent/turns
-        # route uses, so policy / approval / persistence all behave
-        # identically.
+        # 5) Execute through the streaming harness — bridges each
+        # tool_start / tool_done / turn_done yield to its SSE frame.
+        # Persistence still fires inside the harness generator BEFORE
+        # the terminal turn_done event, so the turn payload the route
+        # forwards is the same on-disk turn the sync /agent/turns route
+        # would have produced.
+        executed_turn: Optional[AtelierAgentTurn] = None
         try:
-            turn = pipeline.run_atelier_agent_turn(
-                project_id=project_id,
-                tool_calls=sanitized_calls,
-                user_message=user_message,
-                preview=False,
-                approve=False,
-                deny=False,
-                turn_id=None,
-                assistant_response=buffered_response or None,
+            tool_queue, tool_sentinel, tool_task = _bridge_sync_iter(
+                loop,
+                lambda: pipeline.run_atelier_agent_turn_streaming(
+                    project_id=project_id,
+                    tool_calls=sanitized_calls,
+                    user_message=user_message,
+                    preview=False,
+                    approve=False,
+                    deny=False,
+                    turn_id=None,
+                    assistant_response=buffered_response or None,
+                ),
             )
+
+            try:
+                while True:
+                    if await raw_request.is_disconnected():
+                        # Harness already started — let it finish on its
+                        # own thread so the on-disk turn is consistent;
+                        # we just stop forwarding frames. The terminal
+                        # turn_done from the harness will land in the
+                        # queue and be drained by the await below.
+                        cancelled = True
+                        break
+                    try:
+                        event = await asyncio.wait_for(tool_queue.get(), timeout=0.5)
+                    except asyncio.TimeoutError:
+                        continue
+                    if event is tool_sentinel:
+                        break
+                    if isinstance(event, dict) and "__exception__" in event:
+                        exc = event["__exception__"]
+                        yield _sse_event(
+                            "turn_done",
+                            {
+                                "type": "turn_done",
+                                "status": "failed",
+                                "full_response": buffered_response,
+                                "tool_calls": sanitized_calls,
+                                "turn": None,
+                                "error": str(exc),
+                            },
+                        )
+                        return
+                    etype = event.get("type")
+                    if etype == "tool_start":
+                        yield _sse_event(
+                            "tool_start",
+                            {
+                                "type": "tool_start",
+                                "call_id": event.get("call_id"),
+                                "tool_name": event.get("tool_name"),
+                                "arguments": event.get("arguments") or {},
+                            },
+                        )
+                    elif etype == "tool_done":
+                        yield _sse_event(
+                            "tool_done",
+                            {
+                                "type": "tool_done",
+                                "call_id": event.get("call_id"),
+                                "tool_name": event.get("tool_name"),
+                                "status": event.get("status"),
+                                "result_snapshot": event.get("result_snapshot"),
+                                "error": event.get("error"),
+                            },
+                        )
+                    elif etype == "turn_done":
+                        turn = event.get("turn")
+                        if isinstance(turn, AtelierAgentTurn):
+                            executed_turn = turn
+                        # Don't break — the harness emits turn_done
+                        # immediately followed by the sentinel, and
+                        # we want to let the queue drain naturally.
+                    else:
+                        # Forward unknown frames for forward compat.
+                        yield _sse_event(etype or "info", event)
+            finally:
+                try:
+                    await tool_task
+                except Exception:  # pragma: no cover
+                    pass
         except ValueError as exc:
             yield _sse_event(
-                "done",
+                "turn_done",
                 {
+                    "type": "turn_done",
                     "status": "failed",
                     "full_response": buffered_response,
                     "tool_calls": sanitized_calls,
@@ -895,10 +1011,30 @@ async def stream_atelier_agent_turn(
             )
             return
 
+        if cancelled:
+            # Client gave up mid-execution. The turn is still persisted
+            # (harness owns that side effect), but we don't emit the
+            # terminal frame because the reader is gone.
+            return
+
+        if executed_turn is None:
+            yield _sse_event(
+                "turn_done",
+                {
+                    "type": "turn_done",
+                    "status": "failed",
+                    "full_response": buffered_response,
+                    "tool_calls": sanitized_calls,
+                    "turn": None,
+                    "error": "Harness closed without a turn_done event.",
+                },
+            )
+            return
+
         # Fan out generation candidates to the same background-task hook
         # the sync route uses, so r2v/i2v processing still kicks off.
         try:
-            for call in turn.tool_calls:
+            for call in executed_turn.tool_calls:
                 if call.tool_name != "generation.createVideoCandidates" or call.status != "completed":
                     continue
                 node_id = call.arguments.get("node_id")
@@ -913,24 +1049,24 @@ async def stream_atelier_agent_turn(
         except Exception:  # pragma: no cover — defensive
             logger.exception("stream_atelier_agent_turn: background-task fanout failed")
 
-        # Final done event with the executed turn payload (model_dump for
-        # JSON serializability; signed_response is for the response model
-        # path, but SSE streams don't go through that).
+        # Final turn_done frame with the persisted turn payload. The
+        # harness's own turn_done has already been consumed above to
+        # extract the AtelierAgentTurn; here we re-emit with the
+        # api-level shape the frontend's discriminated union expects
+        # ({type, status, full_response, turn, tool_calls, error}).
         try:
-            turn_payload = turn.model_dump(mode="json")
+            turn_payload = executed_turn.model_dump(mode="json")
         except Exception:
             turn_payload = None
-        status_label = "completed" if turn.status == "completed" else (
-            "blocked" if turn.status == "waiting_approval" else "failed"
-        )
         yield _sse_event(
-            "done",
+            "turn_done",
             {
-                "status": status_label,
+                "type": "turn_done",
+                "status": executed_turn.status,
                 "full_response": buffered_response,
                 "tool_calls": [
                     {"tool_name": c.tool_name, "arguments": c.arguments}
-                    for c in turn.tool_calls
+                    for c in executed_turn.tool_calls
                 ],
                 "turn": turn_payload,
                 "error": None,

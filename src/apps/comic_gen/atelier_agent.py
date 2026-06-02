@@ -1587,6 +1587,60 @@ class AtelierAgentHarness:
         turn_id: Optional[str] = None,
         assistant_response: Optional[str] = None,
     ) -> AtelierAgentTurn:
+        """Synchronous facade — drains the streaming generator and returns the
+        persisted turn carried by the terminal `turn_done` event. Kept so the
+        sync /agent/turns route and existing callers (approval/deny flows,
+        preview replays, tests) keep their `-> AtelierAgentTurn` shape.
+        """
+        for event in self.run_turn_streaming(
+            project_id=project_id,
+            tool_calls=tool_calls,
+            user_message=user_message,
+            preview=preview,
+            approve=approve,
+            deny=deny,
+            turn_id=turn_id,
+            assistant_response=assistant_response,
+        ):
+            if event.get("type") == "turn_done":
+                turn = event.get("turn")
+                if isinstance(turn, AtelierAgentTurn):
+                    return turn
+                raise RuntimeError(
+                    "run_turn_streaming yielded a turn_done event without an AtelierAgentTurn payload"
+                )
+        raise RuntimeError("run_turn_streaming closed without a turn_done event")
+
+    # v1.0 track T — per-tool-call streaming generator. Yields one dict per
+    # event so the SSE route can flush a `tool_start` chip to the panel the
+    # moment an executor is invoked and a `tool_done` chip when it returns
+    # (success or fail). The terminal `turn_done` carries the persisted
+    # AtelierAgentTurn. Failing tool calls do NOT abort the loop — downstream
+    # consumer calls that depended on the failed producer's alias surface as
+    # their own `tool_done(status="failed")` via the existing alias-resolution
+    # path. Event shapes:
+    #
+    #   {"type": "tool_start", "call_id", "tool_name", "arguments"}
+    #   {"type": "tool_done",  "call_id", "tool_name", "status",
+    #                            "result_snapshot": dict|None, "error": str|None}
+    #   {"type": "turn_done",  "turn": AtelierAgentTurn, "status": str,
+    #                            "error": str|None}
+    #
+    # Non-executor branches (denied / approval_required / preview / unresolved
+    # alias) emit a single `tool_done` with the matching status and no
+    # `tool_start` — nothing actually ran for them, so the wire timeline stays
+    # truthful.
+    def run_turn_streaming(
+        self,
+        project_id: str,
+        tool_calls: List[Dict[str, Any]],
+        user_message: str = "",
+        preview: bool = False,
+        approve: bool = False,
+        deny: bool = False,
+        turn_id: Optional[str] = None,
+        assistant_response: Optional[str] = None,
+    ) -> Iterator[Dict[str, Any]]:
         project = self.pipeline.get_atelier_project(project_id)
         if not project:
             raise ValueError("Atelier project not found")
@@ -1628,7 +1682,25 @@ class AtelierAgentHarness:
             turn.response = _build_turn_response(turn.tool_calls, turn.status, preview=False)
             project.updated_at = time.time()
             self.pipeline._save_atelier_data()
-            return turn
+            # Emit one tool_done per denied call so the streaming UI can
+            # flip the corresponding chips to "denied" without needing a
+            # separate event channel for the user-initiated denial.
+            for call in denied_calls:
+                yield {
+                    "type": "tool_done",
+                    "call_id": call.call_id,
+                    "tool_name": call.tool_name,
+                    "status": call.status.value if hasattr(call.status, "value") else str(call.status),
+                    "result_snapshot": None,
+                    "error": call.error,
+                }
+            yield {
+                "type": "turn_done",
+                "turn": turn,
+                "status": turn.status,
+                "error": None,
+            }
+            return
 
         source_tool_calls: List[Tuple[Dict[str, Any], Optional[AtelierAgentToolCall]]] = [
             (raw_call, None) for raw_call in tool_calls
@@ -1700,6 +1772,17 @@ class AtelierAgentHarness:
                 call.completed_at = time.time()
                 if existing_call is None:
                     turn.tool_calls.append(call)
+                # No tool_start was emitted — the policy gate rejected
+                # before any executor ran. The chip rail still needs a
+                # terminal status, so emit tool_done with status="denied".
+                yield {
+                    "type": "tool_done",
+                    "call_id": call.call_id,
+                    "tool_name": tool_name,
+                    "status": AtelierAgentToolStatus.DENIED.value,
+                    "result_snapshot": None,
+                    "error": reason,
+                }
                 continue
 
             if policy_status == AtelierAgentToolStatus.APPROVAL_REQUIRED.value and not approve:
@@ -1707,6 +1790,14 @@ class AtelierAgentHarness:
                 call.approval_required = True
                 if existing_call is None:
                     turn.tool_calls.append(call)
+                yield {
+                    "type": "tool_done",
+                    "call_id": call.call_id,
+                    "tool_name": tool_name,
+                    "status": AtelierAgentToolStatus.APPROVAL_REQUIRED.value,
+                    "result_snapshot": None,
+                    "error": None,
+                }
                 continue
 
             if preview:
@@ -1720,6 +1811,14 @@ class AtelierAgentHarness:
                     alias_map[preview_alias] = f"<preview:{preview_alias}>"
                 if existing_call is None:
                     turn.tool_calls.append(call)
+                yield {
+                    "type": "tool_done",
+                    "call_id": call.call_id,
+                    "tool_name": tool_name,
+                    "status": AtelierAgentToolStatus.PROPOSED.value,
+                    "result_snapshot": None,
+                    "error": None,
+                }
                 continue
 
             assert entry is not None
@@ -1737,7 +1836,35 @@ class AtelierAgentHarness:
                 call.completed_at = time.time()
                 if existing_call is None:
                     turn.tool_calls.append(call)
+                # Alias resolution failure happens BEFORE executor invocation,
+                # so emit a synthetic tool_start so the chip lands on the rail
+                # and immediately resolve it with the failure reason. Keeps the
+                # start/done pairing invariant the frontend relies on.
+                yield {
+                    "type": "tool_start",
+                    "call_id": call.call_id,
+                    "tool_name": tool_name,
+                    "arguments": dict(arguments),
+                }
+                yield {
+                    "type": "tool_done",
+                    "call_id": call.call_id,
+                    "tool_name": tool_name,
+                    "status": AtelierAgentToolStatus.FAILED.value,
+                    "result_snapshot": None,
+                    "error": call.error,
+                }
                 continue
+            # Executor branch — emit tool_start, run, then tool_done. Failure
+            # is caught and emitted as tool_done(status="failed") so the loop
+            # keeps walking downstream calls (their unresolved-alias errors
+            # surface on their own chips).
+            yield {
+                "type": "tool_start",
+                "call_id": call.call_id,
+                "tool_name": tool_name,
+                "arguments": dict(resolved_arguments),
+            }
             try:
                 result = executor(project_id, resolved_arguments, self.pipeline)
                 call.status = AtelierAgentToolStatus.COMPLETED
@@ -1752,10 +1879,26 @@ class AtelierAgentHarness:
                         node_id = node_payload.get("id")
                         if isinstance(node_id, str) and node_id:
                             alias_map[produced_alias] = node_id
+                yield {
+                    "type": "tool_done",
+                    "call_id": call.call_id,
+                    "tool_name": tool_name,
+                    "status": AtelierAgentToolStatus.COMPLETED.value,
+                    "result_snapshot": result if isinstance(result, dict) else None,
+                    "error": None,
+                }
             except Exception as exc:
                 call.status = AtelierAgentToolStatus.FAILED
                 call.error = str(exc)
                 call.completed_at = time.time()
+                yield {
+                    "type": "tool_done",
+                    "call_id": call.call_id,
+                    "tool_name": tool_name,
+                    "status": AtelierAgentToolStatus.FAILED.value,
+                    "result_snapshot": None,
+                    "error": str(exc),
+                }
             if existing_call is None:
                 turn.tool_calls.append(call)
 
@@ -1782,7 +1925,12 @@ class AtelierAgentHarness:
             project.agent_turns.append(turn)
         project.updated_at = time.time()
         self.pipeline._save_atelier_data()
-        return turn
+        yield {
+            "type": "turn_done",
+            "turn": turn,
+            "status": turn.status,
+            "error": None,
+        }
 
 
 def _compact_node(node: AtelierNode) -> Dict[str, Any]:

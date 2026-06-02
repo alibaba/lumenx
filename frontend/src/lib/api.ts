@@ -218,14 +218,80 @@ export interface AgentStreamMetadataEvent {
 }
 
 export interface AgentStreamDoneEvent {
-    status: "completed" | "blocked" | "failed";
+    status: "completed" | "waiting_approval" | "blocked" | "failed";
     full_response: string;
     tool_calls: AtelierAgentToolCallPayload[];
     turn: AtelierAgentTurn | null;
     error?: string | null;
 }
 
+// v1.0 track T — discriminated stream event union. The backend rebadges
+// the previous (metadata/delta/done) wire format to a richer
+// (turn/llm_delta/llm_done/tool_start/tool_done/turn_done) sequence so
+// the panel can render a tool-progress timeline below the streamed LLM
+// bubble. Each frame's JSON payload carries `type` matching the event
+// name; the union below is what the parser hands to onEvent.
+export interface AtelierAgentStreamTurnEvent {
+    type: "turn";
+    planner: string;
+    model?: string | null;
+    turn_id: string;
+}
+
+export interface AtelierAgentStreamLlmDeltaEvent {
+    type: "llm_delta";
+    text: string;
+}
+
+export interface AtelierAgentStreamLlmDoneEvent {
+    type: "llm_done";
+    response: string;
+    tool_calls: Array<Record<string, unknown>>;
+    error?: string | null;
+}
+
+export interface AtelierAgentStreamToolStartEvent {
+    type: "tool_start";
+    call_id: string;
+    tool_name: string;
+    arguments: Record<string, unknown>;
+}
+
+export interface AtelierAgentStreamToolDoneEvent {
+    type: "tool_done";
+    call_id: string;
+    tool_name: string;
+    status: string;
+    result_snapshot?: Record<string, unknown> | null;
+    error?: string | null;
+}
+
+export interface AtelierAgentStreamTurnDoneEvent {
+    type: "turn_done";
+    status: "completed" | "waiting_approval" | "blocked" | "failed";
+    full_response: string;
+    tool_calls: AtelierAgentToolCallPayload[];
+    turn: AtelierAgentTurn | null;
+    error?: string | null;
+}
+
+export type AtelierAgentStreamEvent =
+    | AtelierAgentStreamTurnEvent
+    | AtelierAgentStreamLlmDeltaEvent
+    | AtelierAgentStreamLlmDoneEvent
+    | AtelierAgentStreamToolStartEvent
+    | AtelierAgentStreamToolDoneEvent
+    | AtelierAgentStreamTurnDoneEvent;
+
 export interface AgentStreamHandlers {
+    /** v1.0 track T — single sink for every parsed stream frame. Stores
+     *  use this with a switch on `event.type` to update the streaming
+     *  slice + tool_progress timeline. */
+    onEvent?: (event: AtelierAgentStreamEvent) => void;
+    /** Legacy aliases retained so any v0.9 caller still gets called the
+     *  same way. New code should prefer `onEvent`. The parser calls both
+     *  the legacy handler AND `onEvent` for matching frames, so opting
+     *  into `onEvent` does not break callers that opted out. */
     onMetadata?: (event: AgentStreamMetadataEvent) => void;
     onDelta?: (text: string) => void;
     onDone?: (event: AgentStreamDoneEvent) => void;
@@ -1117,17 +1183,82 @@ export const api = {
             } catch {
                 parsed = { raw: data };
             }
-            if (eventName === "metadata") {
-                handlers.onMetadata?.(parsed as unknown as AgentStreamMetadataEvent);
-            } else if (eventName === "delta") {
+            // v1.0 track T — wire format switched from
+            // (metadata/delta/done) to (turn/llm_delta/llm_done/
+            // tool_start/tool_done/turn_done). The parser dispatches
+            // each new frame to `onEvent` with the discriminated union;
+            // legacy onMetadata/onDelta/onDone aliases stay wired so
+            // pre-v1.0 callers keep working.
+            if (eventName === "turn" || eventName === "metadata") {
+                const metaEvent = parsed as unknown as AgentStreamMetadataEvent;
+                handlers.onMetadata?.(metaEvent);
+                handlers.onEvent?.({
+                    type: "turn",
+                    planner: metaEvent.planner,
+                    model: metaEvent.model ?? null,
+                    turn_id: metaEvent.turn_id,
+                });
+            } else if (eventName === "llm_delta" || eventName === "delta") {
                 const text =
                     typeof parsed.text === "string"
                         ? (parsed.text as string)
                         : "";
-                if (text) handlers.onDelta?.(text);
-            } else if (eventName === "done") {
+                if (text) {
+                    handlers.onDelta?.(text);
+                    handlers.onEvent?.({ type: "llm_delta", text });
+                }
+            } else if (eventName === "llm_done") {
+                handlers.onEvent?.({
+                    type: "llm_done",
+                    response:
+                        typeof parsed.response === "string"
+                            ? (parsed.response as string)
+                            : "",
+                    tool_calls: Array.isArray(parsed.tool_calls)
+                        ? (parsed.tool_calls as Array<Record<string, unknown>>)
+                        : [],
+                    error:
+                        typeof parsed.error === "string"
+                            ? (parsed.error as string)
+                            : null,
+                });
+            } else if (eventName === "tool_start") {
+                handlers.onEvent?.({
+                    type: "tool_start",
+                    call_id: String(parsed.call_id ?? ""),
+                    tool_name: String(parsed.tool_name ?? ""),
+                    arguments:
+                        parsed.arguments && typeof parsed.arguments === "object"
+                            ? (parsed.arguments as Record<string, unknown>)
+                            : {},
+                });
+            } else if (eventName === "tool_done") {
+                handlers.onEvent?.({
+                    type: "tool_done",
+                    call_id: String(parsed.call_id ?? ""),
+                    tool_name: String(parsed.tool_name ?? ""),
+                    status: String(parsed.status ?? ""),
+                    result_snapshot:
+                        parsed.result_snapshot &&
+                        typeof parsed.result_snapshot === "object"
+                            ? (parsed.result_snapshot as Record<string, unknown>)
+                            : null,
+                    error:
+                        typeof parsed.error === "string"
+                            ? (parsed.error as string)
+                            : null,
+                });
+            } else if (eventName === "turn_done" || eventName === "done") {
                 finalEvent = parsed as unknown as AgentStreamDoneEvent;
                 handlers.onDone?.(finalEvent);
+                handlers.onEvent?.({
+                    type: "turn_done",
+                    status: finalEvent.status,
+                    full_response: finalEvent.full_response ?? "",
+                    tool_calls: finalEvent.tool_calls ?? [],
+                    turn: finalEvent.turn ?? null,
+                    error: finalEvent.error ?? null,
+                });
             } else if (eventName === "error") {
                 const message =
                     typeof parsed.message === "string"
@@ -1233,6 +1364,15 @@ export const api = {
         return await new Promise((resolve, reject) => {
             let timer: ReturnType<typeof setInterval> | null = null;
             let cancelled = false;
+            // FIX-8: safety cap. If the backend export job hangs (stuck in
+            // ffmpeg, lost worker, etc.) we don't want to poll forever.
+            // 30 minutes is generous for the longest realistic Atelier
+            // sequence; anything longer is a backend bug surface to the
+            // user.
+            const startedAt = typeof performance !== "undefined" && typeof performance.now === "function"
+                ? performance.now()
+                : Date.now();
+            const MAX_POLL_MS = 30 * 60 * 1000;
 
             const cleanup = () => {
                 if (timer !== null) {
@@ -1263,8 +1403,23 @@ export const api = {
 
             const poll = async () => {
                 if (cancelled) return;
+                // FIX-8: single guard at the head of poll() so we bail
+                // exactly once when the cap is exceeded.
+                const elapsed = (typeof performance !== "undefined" && typeof performance.now === "function"
+                    ? performance.now()
+                    : Date.now()) - startedAt;
+                if (elapsed > MAX_POLL_MS) {
+                    cancelled = true;
+                    cleanup();
+                    reject(new Error("Export timed out after 30 min — backend may be stuck."));
+                    return;
+                }
                 try {
-                    const status = await api.pollAtelierExportJob(projectId, jobId);
+                    // FIX-7: forward the AbortSignal to the GET so a user
+                    // cancel actually tears down the in-flight axios
+                    // request instead of leaving an orphan in the network
+                    // queue.
+                    const status = await api.pollAtelierExportJob(projectId, jobId, { signal });
                     if (cancelled) return;
                     if (status.status === "completed") {
                         cleanup();

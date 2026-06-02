@@ -22,6 +22,20 @@ import {
     type WorkflowTemplate,
 } from "@/components/atelier/v3/workflowTemplates";
 
+// v1.0 track T — per-tool-call timeline entry surfaced under the live
+// streaming bubble in AgentPanelV3. The store appends one entry on
+// every tool_start frame (status "running"), then patches the matching
+// call_id when the harness emits tool_done. Status uses the harness's
+// AtelierAgentToolStatus enum values verbatim ("completed" / "failed" /
+// "denied" / "approval_required" / "proposed") so the chip rail can
+// render a single icon per state without extra mapping.
+export interface ToolProgress {
+    call_id: string;
+    tool_name: string;
+    status: "running" | "completed" | "failed" | string;
+    error?: string;
+}
+
 // Q (v0.9): per-file upload entry surfaced by AssetLibrary's
 // active-uploads strip. Lives on the store so the panel can re-render on
 // XHR progress events and so the upload survives a panel collapse /
@@ -89,7 +103,13 @@ interface AtelierStore {
      *  so it can render a partial response bubble with a blinking cursor.
      *  Intentionally NOT reusing `pendingAgentTurn` — that slice carries
      *  waiting_approval turns and a name collision would break the
-     *  approval card render. Reset on stream end / abort / error. */
+     *  approval card render. Reset on stream end / abort / error.
+     *
+     *  v1.0 track T — extended with `tool_progress` so the panel can
+     *  render a chip rail under the streamed bubble showing each tool
+     *  call as it transitions from running -> completed/failed. The
+     *  array is initialised lazily on the first tool_start event so
+     *  the LLM-only phase has no extra slot to render. */
     streamingAgentTurn: {
         response: string;
         done: boolean;
@@ -97,6 +117,7 @@ interface AtelierStore {
         turnId?: string | null;
         toolCalls?: AtelierAgentToolCallPayload[];
         error?: string | null;
+        tool_progress?: ToolProgress[];
     } | null;
     /** P (v0.9): execute a turn via the SSE streaming endpoint. Replaces
      *  the two-step planAgentTurn+runAgentTurn pair for model_adapter
@@ -312,6 +333,30 @@ let createProjectRequest: Promise<AtelierProject> | null = null;
 const Q_UPLOAD_XHRS = new Map<string, XMLHttpRequest>();
 const Q_UPLOAD_TICKERS = new Map<string, number>();
 
+// FIX-1/FIX-4: per-target-node serialisation lock for reference attachments.
+// Two rapid-fire attachReferenceNode / uploadReferenceImage calls against the
+// SAME video node were racing on the closure-captured `videoNode` snapshot,
+// each reading the pre-mutation reference_node_ids and the second call's
+// PUT overwrote the first. By chaining promises per nodeId we make the
+// later call wait for the earlier one, so it re-reads the latest project
+// state inside the chain.
+const REF_ATTACH_CHAIN = new Map<string, Promise<unknown>>();
+
+function chainReferenceAttach<T>(nodeId: string, task: () => Promise<T>): Promise<T> {
+    const previous = REF_ATTACH_CHAIN.get(nodeId) ?? Promise.resolve();
+    const next = previous.then(() => task(), () => task());
+    REF_ATTACH_CHAIN.set(
+        nodeId,
+        next.finally(() => {
+            // Only clear if no further task has chained onto us.
+            if (REF_ATTACH_CHAIN.get(nodeId) === next) {
+                REF_ATTACH_CHAIN.delete(nodeId);
+            }
+        }),
+    );
+    return next;
+}
+
 function qPruneUploadHandles(id: string): void {
     const xhr = Q_UPLOAD_XHRS.get(id);
     if (xhr) {
@@ -517,34 +562,106 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
                 streamPayload,
                 {
                     signal,
-                    onMetadata: (event) => {
-                        set((state) => ({
-                            streamingAgentTurn: state.streamingAgentTurn
-                                ? {
-                                      ...state.streamingAgentTurn,
-                                      planner: event.planner,
-                                      turnId: event.turn_id,
-                                  }
-                                : {
-                                      response: "",
-                                      done: false,
-                                      planner: event.planner,
-                                      turnId: event.turn_id,
-                                  },
-                        }));
-                    },
-                    onDelta: (text) => {
+                    // v1.0 track T — single sink for the new
+                    // (turn/llm_delta/llm_done/tool_start/tool_done/
+                    // turn_done) wire format. Keeps the response
+                    // buffer + tool_progress timeline in sync with the
+                    // backend's streaming view.
+                    onEvent: (event) => {
                         set((state) => {
                             const current = state.streamingAgentTurn ?? {
                                 response: "",
                                 done: false,
                             };
-                            return {
-                                streamingAgentTurn: {
-                                    ...current,
-                                    response: current.response + text,
-                                },
-                            };
+                            switch (event.type) {
+                                case "turn":
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            planner: event.planner,
+                                            turnId: event.turn_id,
+                                        },
+                                    };
+                                case "llm_delta":
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            response: current.response + event.text,
+                                        },
+                                    };
+                                case "llm_done":
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            response:
+                                                event.response && event.response.length > current.response.length
+                                                    ? event.response
+                                                    : current.response,
+                                        },
+                                    };
+                                case "tool_start": {
+                                    const progress = current.tool_progress ?? [];
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            tool_progress: [
+                                                ...progress,
+                                                {
+                                                    call_id: event.call_id,
+                                                    tool_name: event.tool_name,
+                                                    status: "running",
+                                                },
+                                            ],
+                                        },
+                                    };
+                                }
+                                case "tool_done": {
+                                    const progress = current.tool_progress ?? [];
+                                    const nextStatus: ToolProgress["status"] =
+                                        event.status === "completed"
+                                            ? "completed"
+                                            : event.status === "failed"
+                                              ? "failed"
+                                              : event.status;
+                                    let matched = false;
+                                    const updated = progress.map((entry) => {
+                                        if (entry.call_id !== event.call_id) return entry;
+                                        matched = true;
+                                        return {
+                                            ...entry,
+                                            status: nextStatus,
+                                            error: event.error ?? undefined,
+                                        };
+                                    });
+                                    if (!matched) {
+                                        updated.push({
+                                            call_id: event.call_id,
+                                            tool_name: event.tool_name,
+                                            status: nextStatus,
+                                            error: event.error ?? undefined,
+                                        });
+                                    }
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            tool_progress: updated,
+                                        },
+                                    };
+                                }
+                                case "turn_done":
+                                    // Flip `done` so the bubble drops its
+                                    // blinking cursor; the slice itself is
+                                    // cleared by the post-stream reconciliation
+                                    // below once the persisted turn is hydrated.
+                                    return {
+                                        streamingAgentTurn: {
+                                            ...current,
+                                            done: true,
+                                        },
+                                    };
+                                default:
+                                    return {};
+                            }
                         });
                     },
                 },
@@ -733,7 +850,11 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             };
             xhr.onabort = () => {
                 qPruneUploadHandles(id);
-                reject(new Error("Upload cancelled"));
+                // FIX-3: reject with a DOMException 'AbortError' so the
+                // outer .catch + AssetLibrary onUpload loop can distinguish
+                // user-initiated cancels from genuine upload failures and
+                // skip the error toast.
+                reject(new DOMException("Upload cancelled", "AbortError"));
             };
 
             const form = new FormData();
@@ -741,11 +862,18 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             xhr.send(form);
         }).catch((err: unknown) => {
             const message = err instanceof Error ? err.message : String(err);
-            set((state) => ({
-                activeUploads_Q: state.activeUploads_Q.map((e) =>
-                    e.id === id ? { ...e, status: "error", error: message } : e,
-                ),
-            }));
+            // FIX-3: when cancelUpload_Q already removed the entry we must
+            // NOT re-insert a synthetic "error" row — leave activeUploads_Q
+            // alone if the row is gone.
+            set((state) => {
+                const exists = state.activeUploads_Q.some((e) => e.id === id);
+                if (!exists) return state;
+                return {
+                    activeUploads_Q: state.activeUploads_Q.map((e) =>
+                        e.id === id ? { ...e, status: "error", error: message } : e,
+                    ),
+                };
+            });
             throw err instanceof Error ? err : new Error(message);
         });
 
@@ -1187,32 +1315,48 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
         }));
     },
 
-    uploadReferenceImage: async (nodeId, file) => {
+    uploadReferenceImage: async (nodeId, file) => chainReferenceAttach(nodeId, async () => {
         const project = await get().ensureProject();
         const node = project.nodes.find((candidate) => candidate.id === nodeId);
         if (!node) throw new Error("Atelier node not found");
         const upload = await api.uploadFile(file);
         const url = upload.url as string;
-        const nextIndex = getReferenceImageUrls(node).length;
+        // FIX-4: re-read the parent node AFTER the upload completes so a
+        // concurrent attachReferenceNode that landed during the network
+        // round-trip doesn't get its reference_node_ids stomped.
+        const freshProjectAfterUpload = get().currentProject;
+        const latestNodeAfterUpload =
+            freshProjectAfterUpload?.id === project.id
+                ? freshProjectAfterUpload.nodes.find((candidate) => candidate.id === nodeId) ?? node
+                : node;
+        const nextIndex = getReferenceImageUrls(latestNodeAfterUpload).length;
         const referenceNode = await api.createAtelierNode(project.id, {
             type: "image",
             title: file.name || `Reference ${nextIndex + 1}`,
             status: "completed",
-            x: node.x - 260,
-            y: node.y + nextIndex * 150,
+            x: latestNodeAfterUpload.x - 260,
+            y: latestNodeAfterUpload.y + nextIndex * 150,
             width: 220,
             height: 136,
             media_urls: [url],
             data: {
-                parent_node_id: node.id,
+                parent_node_id: latestNodeAfterUpload.id,
                 reference_role: "video_reference_image",
             },
         });
-        const nextRefs = [...getReferenceImageUrls(node), url];
-        const nextReferenceNodeIds = [...getReferenceNodeIds(node), referenceNode.id];
+        // FIX-4: re-read once more after the createAtelierNode round-trip
+        // before computing the merged ref arrays — otherwise the stale
+        // pre-upload node still owns the data passed to updateAtelierNode.
+        const freshProjectAfterCreate = get().currentProject;
+        const latestNode =
+            freshProjectAfterCreate?.id === project.id
+                ? freshProjectAfterCreate.nodes.find((candidate) => candidate.id === nodeId) ?? latestNodeAfterUpload
+                : latestNodeAfterUpload;
+        const nextRefs = [...getReferenceImageUrls(latestNode), url];
+        const nextReferenceNodeIds = [...getReferenceNodeIds(latestNode), referenceNode.id];
         const updatedNode = await api.updateAtelierNode(project.id, nodeId, {
             data: {
-                ...(node.data ?? {}),
+                ...(latestNode.data ?? {}),
                 reference_image_urls: nextRefs,
                 reference_node_ids: nextReferenceNodeIds,
             },
@@ -1229,12 +1373,19 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             };
         });
         return updatedNode;
-    },
+    }),
 
-    attachReferenceNode: async (videoNodeId, imageNodeId) => {
+    attachReferenceNode: async (videoNodeId, imageNodeId) => chainReferenceAttach(videoNodeId, async () => {
         const project = await get().ensureProject();
-        const videoNode = project.nodes.find((node) => node.id === videoNodeId);
-        const imageNode = project.nodes.find((node) => node.id === imageNodeId);
+        // FIX-1: re-read videoNode + imageNode from get().currentProject
+        // IMMEDIATELY BEFORE computing nextRefs / nextReferenceNodeIds so a
+        // concurrent attach against the same target node sees the latest
+        // reference_node_ids list instead of the pre-mutation snapshot.
+        const freshProject = get().currentProject ?? project;
+        const videoNode = freshProject.nodes.find((node) => node.id === videoNodeId)
+            ?? project.nodes.find((node) => node.id === videoNodeId);
+        const imageNode = freshProject.nodes.find((node) => node.id === imageNodeId)
+            ?? project.nodes.find((node) => node.id === imageNodeId);
         if (!videoNode) throw new Error("Atelier video node not found");
         if (!imageNode) throw new Error("Atelier reference node not found");
         const referenceUrl = imageNode.media_urls[0];
@@ -1272,7 +1423,7 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
             selectedNodeId: updatedVideoNode.id,
         }));
         return updatedVideoNode;
-    },
+    }),
 
     detachReferenceNode: async (videoNodeId, referenceUrl, imageNodeId) => {
         const project = await get().ensureProject();

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Callable, List, Optional, Tuple
+from typing import Dict, Any, Callable, Iterator, List, Optional, Tuple
 import json
 import os
 import re
@@ -3039,6 +3039,34 @@ class ComicGenPipeline:
         assistant_response: Optional[str] = None,
     ) -> AtelierAgentTurn:
         return AtelierAgentHarness(self).run_turn(
+            project_id=project_id,
+            tool_calls=tool_calls,
+            user_message=user_message,
+            preview=preview,
+            approve=approve,
+            deny=deny,
+            turn_id=turn_id,
+            assistant_response=assistant_response,
+        )
+
+    # v1.0 track T — thin streaming adapter that mirrors run_atelier_agent_turn
+    # and delegates to AtelierAgentHarness.run_turn_streaming. Yields one dict
+    # per harness event (tool_start / tool_done / turn_done). Persistence still
+    # fires inside the generator at turn_done (the harness writes to disk
+    # before yielding the terminal event), so no locking changes are needed
+    # here — callers just iterate.
+    def run_atelier_agent_turn_streaming(
+        self,
+        project_id: str,
+        tool_calls: List[Dict[str, Any]],
+        user_message: str = "",
+        preview: bool = False,
+        approve: bool = False,
+        deny: bool = False,
+        turn_id: Optional[str] = None,
+        assistant_response: Optional[str] = None,
+    ) -> Iterator[Dict[str, Any]]:
+        yield from AtelierAgentHarness(self).run_turn_streaming(
             project_id=project_id,
             tool_calls=tool_calls,
             user_message=user_message,

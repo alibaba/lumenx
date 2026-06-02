@@ -739,6 +739,12 @@ export function AtelierShellV3() {
   // them in viewport. One-shot per browser session — user is in control of
   // pan/zoom after the first paint.
   const didInitialFitRef = useRef(false);
+  // FIX-6: reset the "did fit" latch on every project switch so each new
+  // project gets its own one-shot auto-fit, instead of inheriting the
+  // previous project's latch and skipping fit entirely.
+  useEffect(() => {
+    didInitialFitRef.current = false;
+  }, [project?.id]);
   useEffect(() => {
     if (didInitialFitRef.current) return;
     if (!project || project.nodes.length === 0) return;
@@ -2405,6 +2411,17 @@ export function AtelierShellV3() {
       if (adv.movementAmplitude) advParams.movement_amplitude = adv.movementAmplitude;
       if (typeof adv.sound === "boolean") advParams.sound = adv.sound;
 
+      // FIX-5: short-circuit before the backend round-trip when there are
+      // no reference images attached. createVideoCandidates would 400 with
+      // a cryptic backend message; this preempts it with an actionable
+      // instruction.
+      if (finalRefs.length === 0) {
+        pushToast(
+          "info",
+          "Attach a reference image first — drag one onto this draft, or use the Composer ref slot.",
+        );
+        return;
+      }
       void useAtelierStore.getState()
         .createVideoCandidates(node.id, {
           prompt: payload.prompt,
@@ -3030,6 +3047,11 @@ export function AtelierShellV3() {
   // cheap, fastest recovery if the user reloads), and a debounced PUT
   // to the server (T2.5 — survives device / browser change). Debounce
   // prevents trim-handle keystrokes from spamming the server.
+  // FIX-2: track the latest debounced payload so a project switch can
+  // flush whatever was in-flight before we move on. Without this, a quick
+  // edit + project switch (faster than the 500ms debounce) silently
+  // dropped the most recent sequence change on the floor.
+  const pendingSeqRef = useRef<{ projectId: string; sequence: SequenceEntry[] } | null>(null);
   useEffect(() => {
     if (!project?.id) return;
     if (typeof window !== "undefined") {
@@ -3040,9 +3062,21 @@ export function AtelierShellV3() {
       }
     }
     const projectId = project.id;
+    pendingSeqRef.current = { projectId, sequence };
     const handle = window.setTimeout(() => {
       void api
         .replaceAtelierSequence(projectId, sequence)
+        .then(() => {
+          // FIX-2: successful PUT means we're caught up; clear the
+          // pending marker so the project-switch flush doesn't double-fire.
+          if (
+            pendingSeqRef.current &&
+            pendingSeqRef.current.projectId === projectId &&
+            pendingSeqRef.current.sequence === sequence
+          ) {
+            pendingSeqRef.current = null;
+          }
+        })
         .catch((err: unknown) => {
           // Don't toast on every failure — could be flaky during a
           // disconnect. Console it; localStorage already covers this
@@ -3052,6 +3086,26 @@ export function AtelierShellV3() {
     }, 500);
     return () => window.clearTimeout(handle);
   }, [project?.id, sequence]);
+
+  // FIX-2: cleanup-only effect keyed on project id. When the user switches
+  // projects we flush whatever debounced payload is still pending so the
+  // about-to-unmount sequence makes it to the server before the new
+  // project's loader replaces local state.
+  useEffect(() => {
+    return () => {
+      const pending = pendingSeqRef.current;
+      if (!pending) return;
+      pendingSeqRef.current = null;
+      void api
+        .replaceAtelierSequence(pending.projectId, pending.sequence)
+        .catch((err: unknown) => {
+          console.warn(
+            "Sequence flush on project switch failed:",
+            err instanceof Error ? err.message : err,
+          );
+        });
+    };
+  }, [project?.id]);
 
   // Resolve sequence entries against current project candidates so we can
   // render thumbnails + handle stale entries (parent or candidate gone).
@@ -3477,9 +3531,19 @@ export function AtelierShellV3() {
                 await uploadAsset_Q(file);
                 pushToast("success", `Uploaded "${file.name}"`);
               } catch (err: unknown) {
+                // FIX-3: user-initiated cancels (cancelUpload_Q) reject
+                // with DOMException 'AbortError'. Don't toast those as
+                // failures — the user already knows they hit cancel.
+                const msg = err instanceof Error ? err.message : String(err);
+                const isAbort =
+                  (typeof DOMException !== "undefined" &&
+                    err instanceof DOMException &&
+                    err.name === "AbortError") ||
+                  /cancell?ed/i.test(msg);
+                if (isAbort) continue;
                 pushToast(
                   "error",
-                  `Upload failed (${file.name}): ${err instanceof Error ? err.message : String(err)}`,
+                  `Upload failed (${file.name}): ${msg}`,
                 );
               }
             }

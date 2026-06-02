@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AtSign,
   Bot,
+  Check,
   Clapperboard,
   ImagePlus,
   Loader2,
@@ -19,7 +20,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useAtelierStore } from "@/store/atelierStore";
+import { useAtelierStore, type ToolProgress } from "@/store/atelierStore";
 import type {
   AtelierAgentTurn,
   AtelierAgentToolCallPayload,
@@ -126,28 +127,113 @@ function ConversationUserBubble({ children }: { children: React.ReactNode }) {
 // the same row reads as a finished agent reply (no caret) until the
 // store reconciles with the persisted turn and clears
 // streamingAgentTurn.
-function StreamingAgentBubble({ text, done }: { text: string; done: boolean }) {
+//
+// v1.0 track T — appends a tool-progress timeline below the bubble text
+// once the harness starts emitting tool_start frames. Each chip flips
+// from a spinner to a check / x when the matching tool_done lands.
+function StreamingAgentBubble({
+  text,
+  done,
+  toolProgress,
+}: {
+  text: string;
+  done: boolean;
+  toolProgress?: ToolProgress[];
+}) {
   return (
     <div className="flex items-start gap-2">
       <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md bg-atelier-brand-soft/15 text-atelier-brand-soft ring-1 ring-inset ring-atelier-brand-soft/25">
         <Bot size={13} aria-hidden="true" />
       </span>
-      <div
-        className="flex-1 rounded-[14px] rounded-tl-[6px] border border-white/6 bg-black/25 px-3 py-2 text-[13px] leading-[1.55] text-foreground/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
-        style={{ fontFamily: "'Inter', sans-serif" }}
-      >
-        {text ? (
-          <span className="whitespace-pre-wrap">{text}</span>
-        ) : (
-          <span className="text-text-secondary/85">Thinking…</span>
-        )}
-        {done ? null : (
-          <span
-            aria-hidden="true"
-            className="ml-[2px] inline-block h-[12px] w-[6px] translate-y-[2px] bg-atelier-brand-soft/85 motion-safe:animate-pulse"
-          />
-        )}
+      <div className="flex-1">
+        <div
+          className="rounded-[14px] rounded-tl-[6px] border border-white/6 bg-black/25 px-3 py-2 text-[13px] leading-[1.55] text-foreground/95 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
+          style={{ fontFamily: "'Inter', sans-serif" }}
+        >
+          {text ? (
+            <span className="whitespace-pre-wrap">{text}</span>
+          ) : (
+            <span className="text-text-secondary/85">Thinking…</span>
+          )}
+          {done ? null : (
+            <span
+              aria-hidden="true"
+              className="ml-[2px] inline-block h-[12px] w-[6px] translate-y-[2px] bg-atelier-brand-soft/85 motion-safe:animate-pulse"
+            />
+          )}
+        </div>
+        {toolProgress && toolProgress.length > 0 ? (
+          <ToolProgressTimeline progress={toolProgress} />
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+// v1.0 track T — tool-progress chip rail rendered under the streaming
+// bubble. Maps the harness tool_name to a human verb (Updating prompt,
+// Generating takes, …) so the user reads a sentence instead of an api
+// id. Status icon follows the harness's terminal status: running shows
+// a spinner, completed flips to a green check, failed flips to a red X
+// with the executor's error message exposed via a hover tooltip.
+function toolProgressVerb(toolName: string): string {
+  switch (toolName) {
+    case "canvas.createVideoNode":
+      return "Creating video draft";
+    case "canvas.attachReferenceNode":
+      return "Attaching reference";
+    case "canvas.updateNodePrompt":
+      return "Updating prompt";
+    case "canvas.createReferenceImageNode":
+      return "Adding reference image";
+    case "canvas.readProject":
+      return "Reading canvas";
+    case "generation.createVideoCandidates":
+      return "Generating takes";
+    default:
+      return toolName;
+  }
+}
+
+function ToolProgressTimeline({ progress }: { progress: ToolProgress[] }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {progress.map((entry) => {
+        const verb = toolProgressVerb(entry.tool_name);
+        const isRunning = entry.status === "running";
+        const isCompleted = entry.status === "completed";
+        const isFailed = entry.status === "failed";
+        return (
+          <span
+            key={entry.call_id}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-2 py-1 text-[11px] text-foreground/80 animate-atelier-popover-in"
+            title={isFailed ? entry.error || "Tool call failed" : undefined}
+          >
+            {isRunning ? (
+              <Loader2
+                size={11}
+                className="animate-spin text-atelier-port-positive/85"
+                aria-hidden="true"
+              />
+            ) : isCompleted ? (
+              <Check
+                size={11}
+                className="text-atelier-port-positive"
+                aria-hidden="true"
+              />
+            ) : isFailed ? (
+              <X size={11} className="text-red-300" aria-hidden="true" />
+            ) : (
+              <Sparkles
+                size={11}
+                className="text-foreground/55"
+                aria-hidden="true"
+              />
+            )}
+            <span>{verb}</span>
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -829,6 +915,7 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
             <StreamingAgentBubble
               text={streamingTurn.response}
               done={streamingTurn.done}
+              toolProgress={streamingTurn.tool_progress}
             />
           </div>
         ) : null}
