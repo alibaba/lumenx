@@ -2377,7 +2377,7 @@ def test_atelier_agent_stream_route_yields_deltas_and_executes(pipeline, monkeyp
     # actually completes (default untrusted would route to waiting_approval).
     pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         # Yield several deltas that, concatenated, form the JSON payload
         # the route expects from the LLM.
         yield {"type": "delta", "text": '{"response":"Sure'}
@@ -2488,7 +2488,7 @@ def test_atelier_agent_stream_route_blocks_on_invalid_json(pipeline, monkeypatch
     project = pipeline.create_atelier_project("Bad Stream Board")
     pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         yield {"type": "delta", "text": "not json at all"}
         yield {
             "type": "done",
@@ -2554,7 +2554,7 @@ def test_atelier_agent_stream_route_forwards_harness_events_in_order(pipeline, m
     project = pipeline.create_atelier_project("Bridge Board")
     pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         # Two-call planner output so we can assert the bridge forwards
         # multiple tool_start/tool_done pairs and that the discriminated
         #-union ordering survives the queue round-trip.
@@ -2723,7 +2723,7 @@ def test_atelier_agent_loop_runs_two_iterations_until_llm_empties(pipeline, monk
         },
     ]
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         idx = round_calls["n"]
         round_calls["n"] += 1
         payload = rounds[min(idx, len(rounds) - 1)]
@@ -2896,7 +2896,7 @@ def test_atelier_agent_loop_pauses_for_approval_on_untrusted_policy(pipeline, mo
     # Default policy IS untrusted; assert here to make the intent explicit.
     assert project.agent_policy.approval_mode.value == "untrusted"
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         yield {
             "type": "done",
             "response": "Planning the moonlit chase shot.",
@@ -2955,7 +2955,7 @@ def test_atelier_agent_continue_route_resumes_paused_turn(pipeline, monkeypatch)
 
     project = pipeline.create_atelier_project("Continue Board")
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         yield {
             "type": "done",
             "response": "Planning the run.",
@@ -3007,7 +3007,7 @@ def test_atelier_agent_cancel_route_marks_turn_canceled(pipeline, monkeypatch):
 
     project = pipeline.create_atelier_project("Cancel Board")
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         yield {
             "type": "done",
             "response": "Planning…",
@@ -3063,7 +3063,7 @@ def test_atelier_agent_loop_caps_iterations_via_env(pipeline, monkeypatch):
 
     rounds = {"n": 0}
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         rounds["n"] += 1
         yield {
             "type": "done",
@@ -3117,7 +3117,7 @@ def test_atelier_agent_loop_stream_route_emits_tool_plan(pipeline, monkeypatch):
 
     project = pipeline.create_atelier_project("Wire Preview")
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         yield {"type": "delta", "text": "Planning…"}
         yield {
             "type": "done",
@@ -3209,7 +3209,7 @@ def test_b2_prior_messages_threaded_into_llm_call(pipeline, monkeypatch):
 
     captured: Dict[str, Any] = {}
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         captured["prior_messages"] = list(package.prior_messages)
         captured["system_prefix"] = package.system_prefix
         yield {
@@ -3427,3 +3427,220 @@ def test_b2_compaction_summary_persists_across_reload(pipeline, tmp_path):
     assert legacy_project is not None
     assert legacy_project.agent_compaction_summary is None
     assert legacy_project.compacted_through_turn_id is None
+
+
+# ---------------------------------------------------------------------------
+# v1.5 #10: is_cancelled reaches tool executors + max_tokens cap
+# ---------------------------------------------------------------------------
+
+
+def test_atelier_agent_loop_is_cancelled_stops_before_tool_execution(
+    pipeline, monkeypatch
+):
+    """v1.5 #10: when is_cancelled returns True before the first tool_call
+    execution, the loop should terminate with status='canceled' and no
+    tool calls should have been executed (no nodes created). The
+    cancellation fires after the LLM round (so llm_done is still
+    emitted) but before the tool execution phase.
+    """
+    project = pipeline.create_atelier_project("Cancel Board")
+    pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
+
+    call_count = 0
+
+    def fake_stream(package, user_message, model=None, max_tokens=None):
+        nonlocal call_count
+        call_count += 1
+        yield {"type": "delta", "text": '{"response":"ok"'}
+        yield {"type": "delta", "text": ',"tool_calls":[{"tool_name":"canvas.createVideoNode","arguments":{"title":"X","prompt":"test"}}]}'}
+        yield {
+            "type": "done",
+            "response": "ok",
+            "tool_calls": [
+                {
+                    "tool_name": "canvas.createVideoNode",
+                    "arguments": {"title": "X", "prompt": "test"},
+                }
+            ],
+            "error": None,
+            "usage": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner",
+        fake_stream,
+    )
+
+    # The cancellation callable fires True after the first LLM round. We
+    # use a counter so the first call (before the LLM round) returns False
+    # and the second call (before tool execution) returns True.
+    cancel_checks = {"count": 0}
+
+    def is_cancelled():
+        cancel_checks["count"] += 1
+        # First check (before LLM round): not cancelled yet.
+        # Second check (before tool execution): cancelled.
+        return cancel_checks["count"] >= 2
+
+    events = list(
+        pipeline.run_atelier_agent_loop_streaming(
+            project_id=project.id,
+            user_message="make something",
+            is_cancelled=is_cancelled,
+        )
+    )
+
+    # The loop should have emitted a turn_done with status "canceled".
+    turn_done_events = [e for e in events if e.get("type") == "turn_done"]
+    assert len(turn_done_events) == 1
+    assert turn_done_events[0]["status"] == "canceled"
+
+    # No nodes should have been created (tools never executed).
+    refreshed = pipeline.get_atelier_project(project.id)
+    assert len(refreshed.nodes) == 0
+
+    # The turn should be persisted with canceled status.
+    assert len(refreshed.agent_turns) == 1
+    assert refreshed.agent_turns[0].status == "canceled"
+
+    # LLM was called exactly once.
+    assert call_count == 1
+
+
+def test_atelier_agent_policy_max_tokens_per_turn_passed_to_llm(
+    pipeline, monkeypatch
+):
+    """v1.5 #10: the max_tokens_per_turn from AtelierAgentPolicy should be
+    passed through to stream_atelier_llm_planner so the provider enforces
+    a token cap on the LLM response. We monkeypatch the streaming planner
+    to capture the kwarg and verify it matches the policy value.
+    """
+    project = pipeline.create_atelier_project("MaxTokens Board")
+    pipeline.update_atelier_agent_policy(
+        project.id,
+        {"approval_mode": "never", "max_tokens_per_turn": 512},
+    )
+
+    captured_max_tokens = {"value": None}
+
+    def fake_stream(package, user_message, model=None, max_tokens=None):
+        captured_max_tokens["value"] = max_tokens
+        yield {
+            "type": "done",
+            "response": "No actions needed.",
+            "tool_calls": [],
+            "error": None,
+            "usage": None,
+        }
+
+    monkeypatch.setattr(
+        "src.apps.comic_gen.atelier_agent.stream_atelier_llm_planner",
+        fake_stream,
+    )
+
+    # Drain the generator so the loop actually runs.
+    list(
+        pipeline.run_atelier_agent_loop_streaming(
+            project_id=project.id,
+            user_message="hello",
+        )
+    )
+
+    # The policy's max_tokens_per_turn (512) should have been forwarded.
+    assert captured_max_tokens["value"] == 512
+
+
+# ---------------------------------------------------------------------------
+# v1.5 #11 — Reviewer agent for generation_write tools
+# ---------------------------------------------------------------------------
+
+
+def test_atelier_reviewer_denies_duplicate_generation(pipeline):
+    """v1.5 #11: when enable_reviewer is True, the reviewer detects a
+    duplicate generation request (same prompt + model + refs) and denies
+    the tool call with a human-readable reason. The node gains no new
+    candidates and the turn's tool_call surfaces as failed."""
+    project = pipeline.create_atelier_project("Reviewer Board")
+    pipeline.update_atelier_agent_policy(project.id, {
+        "approval_mode": "never",
+        "enable_reviewer": True,
+    })
+    node = pipeline.create_atelier_node(project.id, {"type": "video", "title": "Shot"})
+
+    # Seed an existing candidate with a known fingerprint.
+    pipeline.create_atelier_video_candidates(
+        project_id=project.id,
+        node_id=node.id,
+        prompt="A cinematic rooftop reveal",
+        model="wan2.7-i2v",
+        reference_image_urls=["uploads/ref.png"],
+        batch_size=1,
+        params={},
+    )
+
+    # Now attempt the same generation again via the agent — should be denied.
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [{
+            "tool_name": "generation.createVideoCandidates",
+            "arguments": {
+                "node_id": node.id,
+                "prompt": "A cinematic rooftop reveal",
+                "model": "wan2.7-i2v",
+                "reference_image_urls": ["uploads/ref.png"],
+                "batch_size": 1,
+            },
+        }],
+    )
+
+    assert turn.status == "failed"
+    assert turn.tool_calls[0].status == "failed"
+    assert "Reviewer denied" in turn.tool_calls[0].error
+    assert "Duplicate" in turn.tool_calls[0].error
+    # No new candidates beyond the original batch.
+    refreshed_node = next(n for n in pipeline.get_atelier_project(project.id).nodes if n.id == node.id)
+    assert len(refreshed_node.data.get("candidates", [])) == 1
+
+
+def test_atelier_reviewer_escalates_over_budget_generation(pipeline):
+    """v1.5 #11: when enable_reviewer is True and the estimated cost exceeds
+    max_generation_cost_per_turn, the reviewer escalates to
+    APPROVAL_REQUIRED. The turn pauses at waiting_approval rather than
+    executing, even in never-approval policy mode."""
+    project = pipeline.create_atelier_project("Budget Board")
+    pipeline.update_atelier_agent_policy(project.id, {
+        "approval_mode": "never",
+        "enable_reviewer": True,
+        # Set a very low threshold so a 3-candidate batch of kling triggers.
+        "max_generation_cost_per_turn": 0.50,
+    })
+    node = pipeline.create_atelier_node(project.id, {
+        "type": "video",
+        "title": "Expensive Shot",
+        "data": {
+            "reference_image_urls": ["uploads/ref.png"],
+        },
+    })
+
+    turn = pipeline.run_atelier_agent_turn(
+        project.id,
+        [{
+            "tool_name": "generation.createVideoCandidates",
+            "arguments": {
+                "node_id": node.id,
+                "prompt": "A cinematic chase",
+                "model": "kling-1.6-i2v",
+                "reference_image_urls": ["uploads/ref.png"],
+                "batch_size": 3,
+            },
+        }],
+    )
+
+    # kling-1.6-i2v * 3 = 3.60 CNY >> 0.50 threshold → escalate.
+    assert turn.status == "waiting_approval"
+    assert turn.tool_calls[0].status == "approval_required"
+    assert "Reviewer escalated" in (turn.tool_calls[0].error or "")
+    assert "exceeds threshold" in (turn.tool_calls[0].error or "")
+    # No candidates created — the executor never ran.
+    refreshed_node = next(n for n in pipeline.get_atelier_project(project.id).nodes if n.id == node.id)
+    assert not refreshed_node.data.get("candidates")

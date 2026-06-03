@@ -12,6 +12,8 @@ import {
     type AtelierGenerationConfig,
     type AtelierNode,
     type AtelierProject,
+    type AtelierAgentModelOption,
+    type AtelierSkillSpec,
     type RunAtelierAgentTurnPayload,
     type StreamAtelierAgentTurnPayload,
     type StreamAtelierAgentLoopPayload,
@@ -317,6 +319,47 @@ interface AtelierStore {
      *  a refresh resolves it elsewhere, and by the SSE parser when a
      *  fresh stream supersedes the previous one. */
     clearAgentPreview_X: () => void;
+    // ── v1.4 BATCH 3 (Skills layer) ──────────────────────────────────────
+    // Discovered Skill catalog backing the AgentPanelV3 empty-state cards
+    // and the dispatchSkillTurn action that fires a synthetic agent turn
+    // pre-loaded with the skill's prompt_template + brief.
+    skillRegistry_B3: AtelierSkillSpec[];
+    skillRegistryLoaded_B3: boolean;
+    /** Lazy-load + cache the skill catalog. Idempotent — safe to call from
+     *  AgentPanelV3 mount. Errors are toasted by callers via the returned
+     *  promise rejection so a missing /atelier/skills route just renders
+     *  the legacy hardcoded card list. */
+    loadSkills_B3: () => Promise<AtelierSkillSpec[]>;
+    /** Fire an agent turn synthesised from a SkillSpec. Slug-translates
+     *  the empty-state card id (e.g. compose_shortfilm → compose-short-film),
+     *  resolves the spec, validates `requires_inputs` against the current
+     *  selection, expands placeholders, and kicks runAgentTurnLoop_X. */
+    dispatchSkillTurn_B3: (payload: {
+        skill_id: string;
+        selected_node_id?: string | null;
+    }) => Promise<AtelierAgentTurn | null>;
+
+    // ── v1.4 BATCH 4 (Provider + Observability) ──────────────────────────
+    // Active model picker for the AgentPanelV3 model-pill. Default reads
+    // localStorage `atelier-agent-model-v1.4` and falls back to
+    // {provider:'dashscope', model_id:'qwen-plus'} (matches backend
+    // resolve_default()). The runAgentTurnLoop_X action threads
+    // {provider, model} into the SSE payload so the backend resolves the
+    // exact ProviderConfig the user selected. setAgentModel_B4 persists
+    // both Zustand state + localStorage in a single action.
+    agentModel_B4: { provider: string; model_id: string };
+    /** Catalog from GET /atelier/agent/models. Lazy-loaded once on
+     *  AgentPanelV3 mount; the popover lists configured rows enabled
+     *  and unconfigured rows dimmed with a tooltip. */
+    agentModelOptions_B4: AtelierAgentModelOption[];
+    agentModelOptionsLoaded_B4: boolean;
+    /** Persist a (provider, model_id) selection to Zustand + localStorage.
+     *  No network call — the active model is wire-protocol only. */
+    setAgentModel_B4: (provider: string, model_id: string) => void;
+    /** Lazy-load the model catalog (GET /atelier/agent/models). Idempotent.
+     *  Soft-fails like loadSkills_B3 so a missing route falls back to a
+     *  static dashscope-only list. */
+    loadAgentModels_B4: () => Promise<AtelierAgentModelOption[]>;
     // ── Track R (v0.9): user-saved workflow templates ────────────────
     // Per-project localStorage round-trip. Suffix `_R` keeps the action
     // names unique across the v0.9 parallel tracks (O / P / Q / R all
@@ -994,6 +1037,16 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
     runAgentTurnLoop_X: async (payload) => {
         const project = await get().ensureProject();
         const { signal, ...streamPayload } = payload;
+        // v1.4 Batch 4 — auto-thread the active model selection. Caller-
+        // supplied {provider, model} on the payload always wins (e.g. the
+        // /model slash command sets a per-turn override before dispatch).
+        const activeModel = get().agentModel_B4;
+        if (!streamPayload.provider && activeModel?.provider) {
+            streamPayload.provider = activeModel.provider;
+        }
+        if (!streamPayload.model && activeModel?.model_id) {
+            streamPayload.model = activeModel.model_id;
+        }
         set({
             isAgentRunning: true,
             error: null,
@@ -2209,6 +2262,136 @@ export const useAtelierStore = create<AtelierStore>((set, get) => ({
     },
     clearAgentPreview_X: () => {
         set({ agentPreview_X: null });
+    },
+
+    // ── v1.4 BATCH 3 (Skills layer) ─────────────────────────────────────
+    // The skill registry slice is lazy-loaded once on AgentPanelV3 mount
+    // and cached for the session; fresh project switches do NOT refetch
+    // because the catalog is project-scoped only via per-project
+    // overrides (rare). dispatchSkillTurn_B3 routes the empty-state card
+    // click through runAgentTurnLoop_X with the skill_name attached so
+    // the backend's _build_atelier_llm_prefix splices the SkillSpec
+    // brief into the system prompt.
+    skillRegistry_B3: [],
+    skillRegistryLoaded_B3: false,
+    loadSkills_B3: async () => {
+        if (get().skillRegistryLoaded_B3) {
+            return get().skillRegistry_B3;
+        }
+        try {
+            const skills = await api.fetchAtelierSkills();
+            set({ skillRegistry_B3: skills, skillRegistryLoaded_B3: true });
+            return skills;
+        } catch (err) {
+            // Soft-fail: leave the slice empty so AgentPanelV3 can fall
+            // back to the legacy hardcoded card list. Caller can retry.
+            set({ skillRegistryLoaded_B3: false });
+            throw err;
+        }
+    },
+    dispatchSkillTurn_B3: async ({ skill_id, selected_node_id }) => {
+        const project = await get().ensureProject();
+        // Slug-translate the empty-state card id (snake_case) to the
+        // SKILL.md directory slug (kebab-case).
+        const skillName = skill_id.replace(/_/g, "-");
+        // Make sure the registry is warm — if loadSkills_B3 hasn't been
+        // called yet (e.g. dispatch fired before the panel mount effect
+        // ran) we kick it now so the validation below has data to work
+        // with. Errors propagate so the panel can toast.
+        let registry = get().skillRegistry_B3;
+        if (!get().skillRegistryLoaded_B3) {
+            try {
+                registry = await get().loadSkills_B3();
+            } catch {
+                registry = [];
+            }
+        }
+        const spec = registry.find((s) => s.name === skillName);
+        if (!spec) {
+            // Unknown skill: still kick the loop with skill_name so the
+            // backend either resolves it (via personal/workspace stage
+            // not visible to the frontend) or skips the splice cleanly.
+        }
+        // Validate requires_inputs against current state.
+        const requiredInputs = spec?.requires_inputs ?? [];
+        if (requiredInputs.includes("selected_node") && !selected_node_id) {
+            throw new Error("Pick a node first.");
+        }
+        // Expand placeholders in the prompt_template.
+        const projectTitle = project.title || "Untitled project";
+        const expandedPrompt =
+            spec?.prompt_template
+                ? spec.prompt_template
+                    .replace(/{selected_node_id}/g, selected_node_id ?? "(none)")
+                    .replace(/{project_title}/g, projectTitle)
+                : `Use skill ${skillName}.`;
+        return get().runAgentTurnLoop_X({
+            user_message: expandedPrompt,
+            selected_node_id: selected_node_id ?? null,
+            skill_name: skillName,
+            max_iterations: spec?.default_iteration_cap ?? null,
+        });
+    },
+
+    // ── v1.4 BATCH 4 (Provider + Observability) ─────────────────────────
+    // localStorage-backed model picker slice. Default reads
+    // `atelier-agent-model-v1.4` once at store-construction time so the
+    // pill renders the right active row on first paint without a network
+    // round-trip. `loadAgentModels_B4` populates the popover catalog.
+    agentModel_B4: (() => {
+        if (typeof window === "undefined") {
+            return { provider: "dashscope", model_id: "qwen-plus" };
+        }
+        try {
+            const raw = window.localStorage.getItem("atelier-agent-model-v1.4");
+            if (!raw) return { provider: "dashscope", model_id: "qwen-plus" };
+            const parsed = JSON.parse(raw);
+            if (
+                parsed &&
+                typeof parsed.provider === "string" &&
+                typeof parsed.model_id === "string"
+            ) {
+                return { provider: parsed.provider, model_id: parsed.model_id };
+            }
+        } catch {
+            // Corrupt localStorage entry — fall through to default.
+        }
+        return { provider: "dashscope", model_id: "qwen-plus" };
+    })(),
+    agentModelOptions_B4: [],
+    agentModelOptionsLoaded_B4: false,
+    setAgentModel_B4: (provider, model_id) => {
+        set({ agentModel_B4: { provider, model_id } });
+        if (typeof window !== "undefined") {
+            try {
+                window.localStorage.setItem(
+                    "atelier-agent-model-v1.4",
+                    JSON.stringify({ provider, model_id }),
+                );
+            } catch {
+                // Quota exceeded / private mode — store update still happened
+                // in-memory so the current session works. Next reload will
+                // fall back to the default.
+            }
+        }
+    },
+    loadAgentModels_B4: async () => {
+        if (get().agentModelOptionsLoaded_B4) {
+            return get().agentModelOptions_B4;
+        }
+        try {
+            const options = await api.fetchAtelierAgentModels();
+            set({
+                agentModelOptions_B4: options,
+                agentModelOptionsLoaded_B4: true,
+            });
+            return options;
+        } catch (err) {
+            // Soft-fail: leave empty so the popover renders only the
+            // currently-selected pill without a list. Caller can retry.
+            set({ agentModelOptionsLoaded_B4: false });
+            throw err;
+        }
     },
 
     // ── Track R (v0.9): user-saved workflow templates ────────────────

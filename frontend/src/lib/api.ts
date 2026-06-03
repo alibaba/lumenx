@@ -172,6 +172,27 @@ export interface AtelierAgentPlan {
     response?: string | null;
 }
 
+/**
+ * v1.4 Batch 4 — per-iteration LLM round metrics persisted on
+ * AtelierAgentTurn.iterations. The AgentPanelV3 row renderer shows one
+ * caption row per record under the turn timestamp ("qwen-plus · 1240 in
+ * / 380 out · 1.4s") and aggregates totals into the turn header tooltip.
+ * Optional fields default to zero so pre-v1.4 turns load cleanly.
+ */
+export interface AtelierAgentIterationRecord {
+    idx: number;
+    provider: string;
+    model_id: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    latency_ms: number;
+    tool_call_ids: string[];
+    started_at: number;
+    completed_at?: number | null;
+    error?: string | null;
+}
+
 export interface AtelierAgentTurn {
     id: string;
     project_id: string;
@@ -188,6 +209,9 @@ export interface AtelierAgentTurn {
     messages_history?: Array<Record<string, unknown>>;
     max_iterations?: number;
     pending_tool_calls?: AtelierAgentToolCallPayload[];
+    // v1.4 Batch 4 — per-iteration LLM usage. Empty for pre-v1.4 persisted
+    // turns; populated by run_agent_loop_streaming on every LLM round.
+    iterations?: AtelierAgentIterationRecord[];
 }
 
 export interface AtelierAgentToolSpec {
@@ -198,6 +222,30 @@ export interface AtelierAgentToolSpec {
     mutates_canvas: boolean;
     max_count_cost: number;
     requires_approval: boolean;
+}
+
+/**
+ * v1.4 Batch 3 — discovered Atelier Skill descriptor returned by
+ * GET /atelier/skills. The empty-state catalog in AgentPanelV3 reads
+ * this list to render its 8 cards (instead of hardcoding them) and
+ * the store's dispatchSkillTurn action uses the spec's
+ * `prompt_template` + `requires_inputs` to validate the turn before
+ * kicking off SSE.
+ */
+export interface AtelierSkillSpec {
+    name: string;
+    description: string;
+    prompt_template: string;
+    body: string;
+    expected_tools: string[];
+    default_iteration_cap: number | null;
+    requires_inputs: string[];
+    category: string | null;
+    icon: string | null;
+    title: string | null;
+    subtitle: string | null;
+    source_stage: string;
+    source_path: string;
 }
 
 export interface AtelierAgentToolCallPayload {
@@ -257,9 +305,34 @@ export interface StreamAtelierAgentLoopPayload {
     selected_node_id?: string | null;
     skill_name?: string | null;
     model?: string | null;
+    /**
+     * v1.4 Batch 4 — explicit provider override. When omitted, the
+     * backend resolves via ATELIER_AGENT_PROVIDER env (default
+     * 'dashscope'). The model-pill in AgentPanelV3 always sets both
+     * provider + model so resolution is unambiguous.
+     */
+    provider?: string | null;
     max_iterations?: number | null;
     turn_id?: string | null;
     resume?: boolean;
+}
+
+/**
+ * v1.4 Batch 4 — model picker option. GET /atelier/agent/models returns
+ * one entry per registered ProviderConfig. `configured` is true when the
+ * provider's key_env is set on the server (the frontend disables and
+ * tooltips un-configured rows). `fallback_model` is the next-tier
+ * fallback the runtime layer uses on rate-limit / timeout retry — useful
+ * for the popover footer caption ("falls back to {fallback_model}").
+ */
+export interface AtelierAgentModelOption {
+    provider: string;
+    model_id: string;
+    label: string;
+    key_env: string;
+    configured: boolean;
+    fallback_model?: string | null;
+    api_mode: "chat_completions" | "anthropic_messages" | "codex_responses";
 }
 
 export interface AgentStreamMetadataEvent {
@@ -286,6 +359,10 @@ export interface AtelierAgentStreamTurnEvent {
     type: "turn";
     planner: string;
     model?: string | null;
+    /** v1.4 Batch 4 — provider id resolved by the runtime layer
+     *  (dashscope/openai/anthropic). Pairs with `model` to identify the
+     *  exact ProviderConfig that drove this iteration. */
+    provider?: string | null;
     turn_id: string;
     iteration?: number;
 }
@@ -296,12 +373,30 @@ export interface AtelierAgentStreamLlmDeltaEvent {
     iteration?: number;
 }
 
+/**
+ * v1.4 Batch 4 — wire-shape for per-iteration usage carried on llm_done.
+ * Mirrors UsageRecord on the Python side. Optional fields at zero when
+ * the streaming planner couldn't surface usage (legacy LLMAdapter path).
+ */
+export interface AtelierAgentStreamUsage {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    latency_ms: number;
+    model_id: string;
+    provider?: string | null;
+}
+
 export interface AtelierAgentStreamLlmDoneEvent {
     type: "llm_done";
     response: string;
     tool_calls: Array<Record<string, unknown>>;
     error?: string | null;
     iteration?: number;
+    /** v1.4 Batch 4 — per-iteration usage. Null on rare error paths
+     *  (provider-unconfigured, mid-stream crash) so the UI can fall back
+     *  to a "—" caption rather than asserting numbers. */
+    usage?: AtelierAgentStreamUsage | null;
 }
 
 export interface AtelierAgentStreamToolStartEvent {
@@ -1196,6 +1291,26 @@ export const api = {
         const response = await axios.get(`${API_URL}/atelier/projects/${projectId}/agent/tools`);
         return response.data;
     },
+    /**
+     * v1.4 Batch 3 — discovered Skill catalog (declarative SKILL.md
+     * library). Backed by atelier_skill_registry's 6-stage precedence
+     * chain (bundled → managed → personal → project → workspace → extra).
+     * The empty-state cards in AgentPanelV3 are rendered from this list.
+     */
+    fetchAtelierSkills: async (): Promise<AtelierSkillSpec[]> => {
+        const response = await axios.get(`${API_URL}/atelier/skills`);
+        return response.data;
+    },
+    /**
+     * v1.4 Batch 4 — provider+model catalog for the AgentPanelV3 model-pill.
+     * Reads atelier_runtime_provider's built-in registry and surfaces a
+     * `configured` boolean per row (true when the key_env env var is set
+     * on the server). Disabled rows tooltip with the missing key name.
+     */
+    fetchAtelierAgentModels: async (): Promise<AtelierAgentModelOption[]> => {
+        const response = await axios.get(`${API_URL}/atelier/agent/models`);
+        return response.data;
+    },
     buildAtelierAgentPlannerPackage: async (
         projectId: string,
         payload: BuildAtelierAgentPlannerPackagePayload
@@ -1535,12 +1650,13 @@ export const api = {
             // llm_done, tool_start, tool_done, tool_plan, turn_done)
             // and adds the iteration stamp to every frame.
             if (eventName === "turn" || eventName === "metadata") {
-                const metaEvent = parsed as unknown as AgentStreamMetadataEvent & { iteration?: number };
+                const metaEvent = parsed as unknown as AgentStreamMetadataEvent & { iteration?: number; provider?: string | null };
                 handlers.onMetadata?.(metaEvent);
                 handlers.onEvent?.({
                     type: "turn",
                     planner: metaEvent.planner,
                     model: metaEvent.model ?? null,
+                    provider: metaEvent.provider ?? null,
                     turn_id: metaEvent.turn_id,
                     iteration:
                         typeof parsed.iteration === "number"
@@ -1564,6 +1680,23 @@ export const api = {
                     });
                 }
             } else if (eventName === "llm_done") {
+                // v1.4 Batch 4 — usage on llm_done is opt-in. Older
+                // backends (or fakes that don't surface usage) leave
+                // it null/undefined; the renderer falls back to "—".
+                const rawUsage = parsed.usage as Record<string, unknown> | null | undefined;
+                const usage: AtelierAgentStreamUsage | null = rawUsage
+                    ? {
+                          prompt_tokens: Number(rawUsage.prompt_tokens ?? 0),
+                          completion_tokens: Number(rawUsage.completion_tokens ?? 0),
+                          total_tokens: Number(rawUsage.total_tokens ?? 0),
+                          latency_ms: Number(rawUsage.latency_ms ?? 0),
+                          model_id: String(rawUsage.model_id ?? ""),
+                          provider:
+                              typeof rawUsage.provider === "string"
+                                  ? (rawUsage.provider as string)
+                                  : null,
+                      }
+                    : null;
                 handlers.onEvent?.({
                     type: "llm_done",
                     response:
@@ -1581,6 +1714,7 @@ export const api = {
                         typeof parsed.iteration === "number"
                             ? (parsed.iteration as number)
                             : undefined,
+                    usage,
                 });
             } else if (eventName === "tool_start") {
                 handlers.onEvent?.({

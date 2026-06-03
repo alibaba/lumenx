@@ -3025,7 +3025,8 @@ class ComicGenPipeline:
             if not project:
                 raise ValueError("Atelier project not found")
             current = project.agent_policy.model_dump()
-            for key in ("approval_mode", "allowed_tools", "max_nodes_per_action"):
+            for key in ("approval_mode", "allowed_tools", "max_nodes_per_action",
+                        "max_tokens_per_turn", "enable_reviewer", "max_generation_cost_per_turn"):
                 if key in updates and updates[key] is not None:
                     current[key] = updates[key]
             current["updated_at"] = time.time()
@@ -3036,6 +3037,19 @@ class ComicGenPipeline:
 
     def list_atelier_agent_tools(self) -> List[Dict[str, Any]]:
         return AtelierAgentHarness(self).list_tool_specs()
+
+    # v1.4 Batch 3 — surface the discovered Skill registry to the API.
+    # Walks the precedence chain (bundled → managed → personal → project →
+    # workspace → extra) and returns SkillSpec dicts so the frontend's
+    # empty-state catalog can be data-driven. The pipeline forwards its
+    # own atelier_data_file so the project stage anchors next to the
+    # persisted JSON file (tests override via fixtures / env).
+    def list_atelier_skills(self) -> List[Dict[str, Any]]:
+        from .atelier_skill_registry import discover_skills
+        return [
+            spec.to_dict()
+            for spec in discover_skills(atelier_data_file=self.atelier_data_file)
+        ]
 
     def build_atelier_agent_planner_package(
         self,
@@ -3136,9 +3150,11 @@ class ComicGenPipeline:
         selected_node_id: Optional[str] = None,
         skill_name: Optional[str] = None,
         model: Optional[str] = None,
+        provider: Optional[str] = None,
         max_iterations: Optional[int] = None,
         turn_id: Optional[str] = None,
         resume: bool = False,
+        is_cancelled: Optional[Callable[[], bool]] = None,
     ) -> Iterator[Dict[str, Any]]:
         yield from AtelierAgentHarness(self).run_agent_loop_streaming(
             project_id=project_id,
@@ -3146,9 +3162,11 @@ class ComicGenPipeline:
             selected_node_id=selected_node_id,
             skill_name=skill_name,
             model=model,
+            provider=provider,
             max_iterations=max_iterations,
             turn_id=turn_id,
             resume=resume,
+            is_cancelled=is_cancelled,
         )
 
     def cancel_atelier_agent_turn(

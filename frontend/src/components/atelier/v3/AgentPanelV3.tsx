@@ -22,9 +22,12 @@ import {
 } from "lucide-react";
 import { useAtelierStore, type ToolProgress } from "@/store/atelierStore";
 import type {
+  AtelierAgentIterationRecord,
+  AtelierAgentModelOption,
   AtelierAgentTurn,
   AtelierAgentToolCallPayload,
 } from "@/lib/api";
+import { estimateCostUSD, formatCostUSD } from "@/lib/agentPricing";
 
 interface Toast { kind: "info" | "success" | "error"; text: string }
 
@@ -418,6 +421,195 @@ function turnResponseText(turn: AtelierAgentTurn): string {
   }
 }
 
+// v1.4 Batch 4 — humanize an IterationRecord into a single caption line:
+//   "qwen-plus · 1240 in / 380 out · 1.4s · ≈ $0.001"
+// Tokens fall back to "—" when usage didn't arrive (legacy LLMAdapter
+// path on the streaming planner doesn't surface it). Cost uses the
+// hard-coded V1_4 price table; unknown models render "—".
+function formatIterationCaption(rec: AtelierAgentIterationRecord): string {
+  const tokensCaption =
+    rec.prompt_tokens || rec.completion_tokens
+      ? `${rec.prompt_tokens} in / ${rec.completion_tokens} out`
+      : "tokens —";
+  const latencyCaption =
+    rec.latency_ms > 0
+      ? `${(rec.latency_ms / 1000).toFixed(1)}s`
+      : "—";
+  const cost = estimateCostUSD(
+    rec.model_id,
+    rec.prompt_tokens,
+    rec.completion_tokens,
+  );
+  return `${rec.model_id || "model —"} · ${tokensCaption} · ${latencyCaption} · ${formatCostUSD(cost)}`;
+}
+
+function aggregateTurnUsage(rows: AtelierAgentIterationRecord[]) {
+  let prompt = 0;
+  let completion = 0;
+  let latency = 0;
+  let cost = 0;
+  for (const r of rows) {
+    prompt += r.prompt_tokens || 0;
+    completion += r.completion_tokens || 0;
+    latency += r.latency_ms || 0;
+    cost += estimateCostUSD(r.model_id, r.prompt_tokens, r.completion_tokens);
+  }
+  return { prompt, completion, latency, cost };
+}
+
+// v1.4 Batch 4 — model-pill subcomponent. Renders a compact "<provider> ·
+// <short_model>" pill in the composer footer; click opens an inline
+// dropdown listing available ProviderConfigs grouped by provider with a
+// check icon on the active row. Click outside closes; Esc cancels.
+// Disabled rows render dimmed with the missing key_env name in the title
+// attribute (acts as a tooltip without pulling in an extra Radix import).
+//
+// The pill width is unconstrained but caps via tabular-num + max-w so a
+// long model id like "claude-3-5-sonnet-20241022" doesn't push the AUTO
+// toggle off-screen. Width matches the height-7 sibling cluster so it
+// reads as a peer of AUTO/PLAN, not a header band.
+function shortModelLabel(modelId: string): string {
+  // Drop common provider prefixes for compactness on the pill face.
+  // Matches the GET /atelier/agent/models `model_id` slugs.
+  if (modelId.startsWith("qwen-")) return modelId.slice(5);
+  if (modelId.startsWith("gpt-")) return modelId.slice(4);
+  if (modelId.startsWith("claude-3-5-")) return modelId.slice(11).split("-")[0];
+  return modelId;
+}
+
+interface ModelPillProps {
+  provider: string;
+  modelId: string;
+  options: AtelierAgentModelOption[];
+  onSelect: (provider: string, modelId: string) => void;
+  disabled?: boolean;
+  openSignal?: number;
+}
+
+function ModelPill({
+  provider,
+  modelId,
+  options,
+  onSelect,
+  disabled,
+  openSignal,
+}: ModelPillProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  // External open trigger (for /model with no arg). Listening to a number
+  // signal lets the parent force-open without exposing imperative refs.
+  useEffect(() => {
+    if (openSignal && openSignal > 0) {
+      setOpen(true);
+    }
+  }, [openSignal]);
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (
+        containerRef.current
+        && !containerRef.current.contains(ev.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("mousedown", onDocClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  // Group options by provider preserving registry order.
+  const grouped = useMemo(() => {
+    const groups = new Map<string, AtelierAgentModelOption[]>();
+    for (const opt of options) {
+      const arr = groups.get(opt.provider) ?? [];
+      arr.push(opt);
+      groups.set(opt.provider, arr);
+    }
+    return Array.from(groups.entries());
+  }, [options]);
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Active model: ${provider} ${modelId}. Click to change.`}
+        onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
+        className="btn-tip inline-flex h-7 max-w-[140px] items-center gap-1 rounded-md bg-white/[0.04] px-2 text-[10.5px] font-medium tracking-tight text-text-muted ring-1 ring-inset ring-white/8 transition-colors hover:bg-white/[0.06] hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        data-tip={`${provider} · ${modelId}`}
+      >
+        <span className="truncate font-mono text-[10.5px]">
+          {provider} · {shortModelLabel(modelId)}
+        </span>
+      </button>
+      {open ? (
+        <div
+          role="listbox"
+          aria-label="Atelier agent models"
+          className="absolute bottom-[calc(100%+6px)] right-0 z-30 w-[260px] overflow-hidden rounded-md border border-white/10 bg-[rgba(10,12,18,0.95)] shadow-xl backdrop-blur"
+        >
+          <div className="max-h-72 overflow-y-auto py-1.5">
+            {grouped.length === 0 ? (
+              <div className="px-3 py-2 text-[11px] text-white/45">
+                No models available.
+              </div>
+            ) : (
+              grouped.map(([providerName, rows]) => (
+                <div key={providerName}>
+                  <div className="px-3 py-1 text-[9.5px] font-semibold uppercase tracking-[0.08em] text-white/35">
+                    {providerName}
+                  </div>
+                  {rows.map((opt) => {
+                    const isActive =
+                      opt.provider === provider && opt.model_id === modelId;
+                    const tooltip = opt.configured
+                      ? opt.fallback_model
+                        ? `Falls back to ${opt.fallback_model} on rate-limit/timeout`
+                        : opt.label
+                      : `Set ${opt.key_env} to enable`;
+                    return (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        key={`${opt.provider}-${opt.model_id}`}
+                        disabled={!opt.configured}
+                        title={tooltip}
+                        onClick={() => {
+                          if (!opt.configured) return;
+                          onSelect(opt.provider, opt.model_id);
+                          setOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-[11.5px] transition-colors ${
+                          isActive
+                            ? "bg-white/[0.06] text-foreground"
+                            : "text-text-secondary hover:bg-white/[0.04] hover:text-foreground"
+                        } ${opt.configured ? "" : "cursor-not-allowed opacity-50"}`}
+                      >
+                        <span className="truncate">{opt.label}</span>
+                        {isActive ? (
+                          <Check size={11} aria-hidden="true" className="shrink-0 text-atelier-port-positive" />
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function AgentTurnRow({ turn }: { turn: AtelierAgentTurn }) {
   const [showTools, setShowTools] = useState(false);
   const toolCount = turn.tool_calls.length;
@@ -427,6 +619,13 @@ function AgentTurnRow({ turn }: { turn: AtelierAgentTurn }) {
   });
   const statusCaption = turnStatusCaption(turn.status);
   const responseText = turnResponseText(turn);
+  const iterations = turn.iterations ?? [];
+  const aggregate = iterations.length > 0 ? aggregateTurnUsage(iterations) : null;
+  const aggregateTooltip = aggregate
+    ? `${iterations.length} round${iterations.length === 1 ? "" : "s"} · ${
+        aggregate.prompt + aggregate.completion
+      } tokens · ${formatCostUSD(aggregate.cost)} · ${(aggregate.latency / 1000).toFixed(1)}s`
+    : "";
   return (
     <div className="space-y-2">
       {turn.user_message ? (
@@ -468,9 +667,29 @@ function AgentTurnRow({ turn }: { turn: AtelierAgentTurn }) {
               ) : null}
             </div>
           ) : null}
-          <div className="text-[11px] text-white/40">
+          <div
+            className="text-[11px] text-white/40"
+            title={aggregateTooltip || undefined}
+          >
             {statusCaption} · {time}
+            {aggregate ? (
+              <span className="ml-1.5 text-white/35">
+                · {iterations.length} round{iterations.length === 1 ? "" : "s"} · {formatCostUSD(aggregate.cost)}
+              </span>
+            ) : null}
           </div>
+          {iterations.length > 0 ? (
+            <ul
+              className="space-y-0.5 text-[10.5px] leading-[1.4] text-white/35"
+              aria-label="Per-iteration LLM usage"
+            >
+              {iterations.map((rec) => (
+                <li key={`${turn.id}-iter-${rec.idx}`} className="font-mono tracking-tight">
+                  #{rec.idx} {formatIterationCaption(rec)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       </div>
     </div>
@@ -589,6 +808,28 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
   useEffect(() => {
     setRejectedCallIds(new Set());
   }, [pendingTurnId]);
+
+  // v1.4 Batch 3 — warm the skill registry on first mount so
+  // dispatchSkillTurn_B3 has data ready before the user clicks. Soft-fail:
+  // if the catalog endpoint is unavailable, the empty-state still renders
+  // the legacy hardcoded card list (the store falls back gracefully).
+  useEffect(() => {
+    void useAtelierStore.getState().loadSkills_B3().catch(() => {
+      /* swallow — empty-state cards still render */
+    });
+    // v1.4 Batch 4 — also warm the model catalog so the model-pill popover
+    // has rows ready before the user clicks. Same soft-fail pattern: if the
+    // route is unavailable, the popover renders only the active row.
+    void useAtelierStore.getState().loadAgentModels_B4().catch(() => {
+      /* swallow — pill still renders the active selection */
+    });
+  }, []);
+  // v1.4 Batch 4 — model-pill state. Reads the persisted active model from
+  // the store and writes selections back via setAgentModel_B4.
+  const agentModel = useAtelierStore((s) => s.agentModel_B4);
+  const agentModelOptions = useAtelierStore((s) => s.agentModelOptions_B4);
+  const setAgentModel = useAtelierStore((s) => s.setAgentModel_B4);
+  const [modelPillOpenSignal, setModelPillOpenSignal] = useState(0);
   const toggleCallRejection = (callId: string) => {
     setRejectedCallIds((prev) => {
       const next = new Set(prev);
@@ -642,6 +883,52 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
   };
 
   const handleExecute = async (preview: boolean) => {
+    // v1.4 Batch 4 — `/model <provider>:<model_id>` or `/model <model_id>`
+    // slash command. Parsed BEFORE dispatch so the next manually-typed turn
+    // picks up the new model. Bare `/model` opens the pill popover.
+    const draftTrim = draft.trim();
+    if (draftTrim.startsWith("/model")) {
+      const arg = draftTrim.slice("/model".length).trim();
+      if (!arg) {
+        // No arg — open the popover (Cursor-like behavior).
+        setModelPillOpenSignal(Date.now());
+        setDraft("");
+        return;
+      }
+      let nextProvider: string | null = null;
+      let nextModel: string | null = null;
+      if (arg.includes(":")) {
+        const [p, m] = arg.split(":", 2);
+        nextProvider = p.trim() || null;
+        nextModel = m.trim() || null;
+      } else {
+        nextModel = arg;
+      }
+      // Resolve via the loaded options when present so unknown models
+      // (typos) don't silently set bad state. Fall back to {dashscope, arg}
+      // when the catalog hasn't loaded yet.
+      const matched = agentModelOptions.find((o) => {
+        if (nextProvider && nextModel) {
+          return o.provider === nextProvider && o.model_id === nextModel;
+        }
+        return o.model_id === nextModel;
+      });
+      if (matched) {
+        setAgentModel(matched.provider, matched.model_id);
+        pushToast?.(
+          "info",
+          `Model set to ${matched.provider} · ${matched.model_id}`,
+        );
+      } else if (nextModel) {
+        const provider = nextProvider || agentModel.provider;
+        setAgentModel(provider, nextModel);
+        pushToast?.("info", `Model set to ${provider} · ${nextModel}`);
+      } else {
+        pushToast?.("error", "Usage: /model <provider>:<model_id> or /model <model_id>");
+      }
+      setDraft("");
+      return;
+    }
     if (!draft.trim() && plannedCalls.length === 0) {
       pushToast?.("info", "Nothing to execute.");
       return;
@@ -912,9 +1199,37 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
                     key={card.id}
                     type="button"
                     role="listitem"
-                    onClick={() => {
-                      if (onSkillCardClick) onSkillCardClick(card.id);
-                      else pushToast?.("info", `${card.title} coming soon`);
+                    onClick={async () => {
+                      // v1.4 Batch 3 — empty-state card now dispatches a
+                      // real agent turn via dispatchSkillTurn_B3. The
+                      // store resolves the SkillSpec, validates
+                      // `requires_inputs` (toasts a nudge when a
+                      // selected_node is required but missing), and
+                      // kicks runAgentTurnLoop_X with skill_name set so
+                      // the backend splices the brief into the prompt.
+                      // The legacy onSkillCardClick path still wins when
+                      // a parent passes one, so storybook / standalone
+                      // contexts can opt out without dispatching real
+                      // turns.
+                      if (onSkillCardClick) {
+                        onSkillCardClick(card.id);
+                        return;
+                      }
+                      try {
+                        await useAtelierStore
+                          .getState()
+                          .dispatchSkillTurn_B3({
+                            skill_id: card.id,
+                            selected_node_id: selectedNodeId ?? null,
+                          });
+                      } catch (err) {
+                        pushToast?.(
+                          "error",
+                          err instanceof Error
+                            ? err.message
+                            : `${card.title} failed to start`,
+                        );
+                      }
                     }}
                     className="group flex flex-col items-start gap-1.5 rounded-md px-3 py-2.5 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-atelier-brand-400/45"
                   >
@@ -1342,6 +1657,18 @@ export function AgentPanelV3({ pushToast, onSkillCardClick }: Props) {
               </button>
             </div>
             <div className="flex items-center gap-1.5">
+              {/* v1.4 Batch 4 — model-pill. Shows the active provider+model
+                  and opens a grouped popover on click. Always rendered
+                  (even on empty-state) so the user can pick a model before
+                  typing the first message. */}
+              <ModelPill
+                provider={agentModel.provider}
+                modelId={agentModel.model_id}
+                options={agentModelOptions}
+                onSelect={(p, m) => setAgentModel(p, m)}
+                disabled={isLocked}
+                openSignal={modelPillOpenSignal}
+              />
               {/* AUTO / PLAN toggle. Single button cycles between the
                   existing planner modes — Free (= Auto, deterministic
                   single-action) and Director (= Plan, structured

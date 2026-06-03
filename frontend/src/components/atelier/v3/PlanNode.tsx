@@ -6,10 +6,31 @@ import { TearLine, StampBadge } from "./ornaments";
 
 const VISIBLE_BULLETS = 5;
 
+// v1.4 Batch 3 — agent.updatePlan optionally writes a structured
+// `data.steps` array alongside the legacy `data.bullets`. When present,
+// PlanNode renders one entry per step with a status glyph; when absent,
+// the legacy bullet list renders unchanged so v1.0-v1.3 plan nodes load
+// without a re-render diff.
+export interface PlanStep {
+  id: string;
+  title: string;
+  status: "pending" | "in_progress" | "completed";
+  notes?: string;
+}
+
+const STEP_GLYPH: Record<PlanStep["status"], string> = {
+  pending: "○",
+  in_progress: "◐",
+  completed: "●",
+};
+
 interface Props {
   id: string;
   title: string;
   bullets: string[];
+  /** v1.4 Batch 3 — structured plan steps from agent.updatePlan. When
+   *  present, supersedes `bullets` for rendering. */
+  steps?: PlanStep[];
   selected?: boolean;
   x: number;
   y: number;
@@ -19,7 +40,7 @@ interface Props {
   onTitleCommit?: (next: string) => void;
 }
 
-export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitleCommit }: Props) {
+export function PlanNode({ id, title, bullets, steps, selected, x, y, onSelect, onTitleCommit }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -44,6 +65,9 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
     ? "ring-1 ring-white/25 border-white/20"
     : "border-glass-border";
 
+  const useSteps = Array.isArray(steps) && steps.length > 0;
+  const visibleSteps = useSteps ? steps!.slice(0, VISIBLE_BULLETS) : [];
+  const overflowSteps = useSteps ? Math.max(0, steps!.length - VISIBLE_BULLETS) : 0;
   const visibleBullets = bullets.slice(0, VISIBLE_BULLETS);
   const overflowBullets = Math.max(0, bullets.length - VISIBLE_BULLETS);
   // Stamp index from id tail. Stable across re-renders without a real index.
@@ -114,16 +138,38 @@ export function PlanNode({ id, title, bullets, selected, x, y, onSelect, onTitle
         </div>
 
         {/* Bullets — vertical hairline indent in lieu of dots. Reads as a
-            quiet typographic device, not a list-item marker. */}
+            quiet typographic device, not a list-item marker.
+            v1.4 Batch 3 — when structured `steps` are supplied (agent
+            wrote them via agent.updatePlan), render the status glyph
+            ahead of each title. Otherwise fall back to the legacy
+            bullet list (the strings already carry the glyph since the
+            executor derives bullets from steps with the same glyph
+            map). */}
         <ul className="space-y-1 border-l border-border-subtle pl-3 text-[11.5px] leading-[1.5] text-text-secondary/90">
-          {visibleBullets.map((b, i) => (
-            <li key={i} className="line-clamp-2">
-              {b}
-            </li>
-          ))}
-          {overflowBullets > 0 ? (
-            <li className="text-text-muted">+{overflowBullets} more</li>
-          ) : null}
+          {useSteps
+            ? visibleSteps.map((step) => (
+                <li key={step.id} className="line-clamp-2">
+                  <span aria-hidden="true" className="mr-1.5 text-text-muted">
+                    {STEP_GLYPH[step.status] ?? "○"}
+                  </span>
+                  <span>{step.title}</span>
+                  {step.notes ? (
+                    <span className="text-text-muted"> — {step.notes}</span>
+                  ) : null}
+                </li>
+              ))
+            : visibleBullets.map((b, i) => (
+                <li key={i} className="line-clamp-2">
+                  {b}
+                </li>
+              ))}
+          {useSteps
+            ? overflowSteps > 0 && (
+                <li className="text-text-muted">+{overflowSteps} more</li>
+              )
+            : overflowBullets > 0 && (
+                <li className="text-text-muted">+{overflowBullets} more</li>
+              )}
         </ul>
 
         {/* Tear-stamp footer: dashed perforation flanking the agent

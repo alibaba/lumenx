@@ -94,7 +94,7 @@ def test_atelier_agent_loop_records_per_iteration_usage(pipeline, monkeypatch):
     project = pipeline.create_atelier_project("Usage Board")
     pipeline.update_atelier_agent_policy(project.id, {"approval_mode": "never"})
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         # Single round, no tool calls — loop terminates after this.
         yield {"type": "delta", "text": '{"response":"Done.","tool_calls":[]}'}
         yield {
@@ -176,7 +176,7 @@ def test_atelier_agent_loop_honors_planner_package_model_override(pipeline, monk
     # The agent module imports resolve via `from . import atelier_runtime_provider`,
     # so patching the attribute on the module re-routes both call sites.
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         # Assert the resolved model id actually flowed through to the
         # streaming planner via the package.
         assert package.model_id == "qwen-max"
@@ -236,7 +236,7 @@ def test_atelier_agent_writes_structured_events_to_jsonl(pipeline, monkeypatch, 
         project.id, {"approval_mode": "never", "allowed_tools": ["canvas.readProject"]}
     )
 
-    def fake_stream(package, user_message, model=None):
+    def fake_stream(package, user_message, model=None, max_tokens=None):
         yield {
             "type": "done",
             "response": "Reading canvas.",

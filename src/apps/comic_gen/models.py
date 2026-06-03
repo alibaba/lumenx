@@ -375,6 +375,36 @@ class AtelierAgentPolicy(BaseModel):
         le=50,
         description="Upper bound for nodes an agent may create in one action",
     )
+    max_tokens_per_turn: int = Field(
+        2048,
+        ge=128,
+        le=16384,
+        description=(
+            "Maximum completion tokens the LLM may emit per turn. Passed "
+            "through to the ProviderClient so provider-side truncation "
+            "applies. Default 2048 — enough for a 6-tool plan with "
+            "response text but not unbounded. (v1.5 #10)"
+        ),
+    )
+    # v1.5 #11 — reviewer agent for generation calls
+    enable_reviewer: bool = Field(
+        False,
+        description=(
+            "When True, tools with mutation_scope='generation_write' are "
+            "screened by the AtelierReviewer guardian before execution. "
+            "Guardian checks: budget_blowup, duplicate_with_existing_take, "
+            "prompt_violates_policy (safety). Default False — opt-in. (v1.5 #11)"
+        ),
+    )
+    max_generation_cost_per_turn: float = Field(
+        5.0,
+        ge=0.0,
+        description=(
+            "Budget threshold in CNY per turn for generation calls. The "
+            "reviewer escalates to user when estimated cost exceeds this. "
+            "(v1.5 #11)"
+        ),
+    )
     updated_at: float = Field(default_factory=time.time)
 
 
@@ -384,6 +414,37 @@ class AtelierAgentToolStatus(str, Enum):
     COMPLETED = "completed"
     DENIED = "denied"
     FAILED = "failed"
+
+
+class AtelierAgentIterationRecord(BaseModel):
+    """Per-iteration LLM round metrics + linkage (v1.4 Batch 4 / item 4g).
+
+    Captured by run_agent_loop_streaming around each LLM call and persisted
+    on AtelierAgentTurn.iterations so the AgentPanelV3 row renderer can
+    show `qwen-plus · 1240 in / 380 out · 1.4s` per round and aggregate to
+    the turn header. tool_call_ids link the iteration to the tool calls
+    that fired in the same round (filtered out of turn.tool_calls).
+    Optional fields default so v1.0–v1.3 turns load cleanly via
+    model_validate_json.
+    """
+
+    idx: int = Field(..., description="1-based iteration index within the turn")
+    provider: str = Field("", description="Provider id (dashscope/openai/anthropic) used this round")
+    model_id: str = Field("", description="Concrete model id resolved post-fallback for this round")
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    latency_ms: float = 0.0
+    tool_call_ids: List[str] = Field(
+        default_factory=list,
+        description="call_ids of AtelierAgentToolCall entries that fired in this iteration",
+    )
+    started_at: float = Field(default_factory=time.time)
+    completed_at: Optional[float] = None
+    error: Optional[str] = Field(
+        None,
+        description="Optional human-readable error if this iteration's LLM call failed",
+    )
 
 
 class AtelierAgentToolCall(BaseModel):
@@ -461,6 +522,44 @@ class AtelierAgentPlannerPackage(BaseModel):
             "Debug metadata describing what's in the volatile suffix this "
             "iteration (canvas snapshot scope, selected node id, presence "
             "of last_iter_result). Wire-only — not consumed by the LLM. (v1.3 2c)"
+        ),
+    )
+    # ── v1.4 BATCH 3 (Skills layer) ──────────────────────────────────────
+    # When `skill_name` resolves to a registered SkillSpec, this carries
+    # the SkillSpec.to_dict() payload so `_build_atelier_llm_prefix` can
+    # splice the `prompt_template` + body into the directive section.
+    # Locked at turn creation so the prefix stays byte-identical across
+    # iterations of the same turn (prefix-stability invariant).
+    skill_spec: Optional[Dict[str, Any]] = Field(
+        None,
+        description=(
+            "Optional resolved SkillSpec payload for the active skill. Set "
+            "by build_planner_package when skill_name matches a registered "
+            "skill; consumed by _build_atelier_llm_prefix. (v1.4 Batch 3)"
+        ),
+    )
+    # ── v1.4 BATCH 4 (Provider + Observability) ──────────────────────────
+    # Resolved (provider, model_id) pair for the iteration that this
+    # package will drive. build_planner_package calls
+    # atelier_runtime_provider.resolve(provider, model) and writes the
+    # result here so run_agent_loop_streaming can stamp IterationRecord +
+    # structured events with the same model id the LLM call ran under.
+    # Optional/default-empty so v1.0–v1.3 callers and persisted JSON loads
+    # don't break.
+    provider_id: Optional[str] = Field(
+        None,
+        description=(
+            "Resolved provider id (dashscope/openai/anthropic) for this "
+            "iteration's LLM call. Set by build_planner_package via "
+            "atelier_runtime_provider.resolve. (v1.4 Batch 4)"
+        ),
+    )
+    model_id: Optional[str] = Field(
+        None,
+        description=(
+            "Resolved concrete model id (e.g. qwen-plus, gpt-4o, "
+            "claude-3-5-sonnet-20241022) for this iteration's LLM call. "
+            "(v1.4 Batch 4)"
         ),
     )
     created_at: float = Field(default_factory=time.time)
@@ -541,6 +640,32 @@ class AtelierAgentTurn(BaseModel):
             "Populated when the multi-step loop emits a `tool_plan` event "
             "and pauses; consumed by POST /agent/turns/{id}/continue to "
             "resume execution. Cleared once execution proceeds (v1.1 X)."
+        ),
+    )
+    # ── v1.4 BATCH 3 (Skills layer) ──────────────────────────────────────
+    # The skill name (matches a SkillSpec.name discovered by
+    # atelier_skill_registry) the user invoked when this turn was created.
+    # Optional so v1.0-v1.3 turns load cleanly. Used by the loop to
+    # re-fetch the SkillSpec on resumed turns.
+    skill_name: Optional[str] = Field(
+        None,
+        description=(
+            "Optional name of the Atelier skill the user invoked when this "
+            "turn started. Resolved against atelier_skill_registry to "
+            "splice the skill brief into the LLM prompt prefix. (v1.4 Batch 3)"
+        ),
+    )
+    # ── v1.4 BATCH 4 (Provider + Observability) ──────────────────────────
+    # Per-iteration usage + model + latency capture. Empty for pre-1.4
+    # persisted turns; populated by run_agent_loop_streaming on every LLM
+    # round. AgentPanelV3 renders one caption row per record under the
+    # turn timestamp, then aggregates token totals + cost into the header.
+    iterations: List[AtelierAgentIterationRecord] = Field(
+        default_factory=list,
+        description=(
+            "Per-iteration LLM round metrics (model, provider, prompt/"
+            "completion tokens, latency, tool linkage). Empty for pre-1.4 "
+            "persisted turns. (v1.4 Batch 4 / item 4g)"
         ),
     )
 

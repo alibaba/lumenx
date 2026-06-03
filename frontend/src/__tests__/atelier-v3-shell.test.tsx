@@ -106,6 +106,16 @@ vi.mock("@/store/atelierStore", () => {
     regenerateVideoCandidates: ReturnType<typeof vi.fn>;
     retryCandidate: ReturnType<typeof vi.fn>;
     deleteCandidate: ReturnType<typeof vi.fn>;
+    // v1.4 Batch 3 / Batch 4 — slices warmed by AgentPanelV3 mount effect.
+    skillRegistry_B3: unknown[];
+    skillRegistryLoaded_B3: boolean;
+    loadSkills_B3: ReturnType<typeof vi.fn>;
+    dispatchSkillTurn_B3: ReturnType<typeof vi.fn>;
+    agentModel_B4: { provider: string; model_id: string };
+    agentModelOptions_B4: unknown[];
+    agentModelOptionsLoaded_B4: boolean;
+    setAgentModel_B4: ReturnType<typeof vi.fn>;
+    loadAgentModels_B4: ReturnType<typeof vi.fn>;
   } = {
     currentProject: null,
     selectedNodeId: null,
@@ -124,6 +134,17 @@ vi.mock("@/store/atelierStore", () => {
     regenerateVideoCandidates: vi.fn(),
     retryCandidate: vi.fn(),
     deleteCandidate: vi.fn(),
+    // v1.4 Batch 3 / Batch 4 — defaults so AgentPanelV3 (rendered by the
+    // shell's right rail) doesn't crash dereferencing undefined slices.
+    skillRegistry_B3: [],
+    skillRegistryLoaded_B3: true,
+    loadSkills_B3: vi.fn().mockResolvedValue([]),
+    dispatchSkillTurn_B3: vi.fn().mockResolvedValue(null),
+    agentModel_B4: { provider: "dashscope", model_id: "qwen-plus" },
+    agentModelOptions_B4: [],
+    agentModelOptionsLoaded_B4: true,
+    setAgentModel_B4: vi.fn(),
+    loadAgentModels_B4: vi.fn().mockResolvedValue([]),
   };
   state.ensureProject.mockImplementation(async () => state.currentProject);
   // All store actions return resolved Promises by default so chain `.then()` /

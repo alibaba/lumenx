@@ -5,10 +5,14 @@ import logging
 import os
 import re
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterator, List, Optional, Protocol, Tuple
 
+import jsonschema
+
 from .models import (
+    AtelierAgentIterationRecord,
     AtelierAgentPlan,
     AtelierAgentPlanContext,
     AtelierAgentPlannerPackage,
@@ -25,6 +29,15 @@ from .atelier_context_compactor import (
     build_prior_messages_from_history,
     maybe_compact_messages,
 )
+from .atelier_skill_registry import (
+    SkillSpec,
+    discover_skills,
+    expand_prompt_template,
+    get_skill,
+)
+from . import atelier_runtime_provider
+from .atelier_event_log import emit_event as _emit_agent_event
+from .atelier_reviewer import AtelierReviewer, ReviewerAction
 from ...utils.model_catalog import get_default_model_settings, resolve_r2v_route_model_id, validate_r2v_reference_inputs
 
 logger = logging.getLogger(__name__)
@@ -104,6 +117,43 @@ def _resolve_argument_aliases(
     return out, produced, unresolved
 
 
+# v1.5 #9 — Schema validation + reprompt-on-error constants and helper.
+_SCHEMA_VALIDATION_MAX_RETRIES = 2  # 2 retries = 3 total attempts
+
+
+def _validate_tool_call_schemas(
+    tool_calls: List[Dict[str, Any]],
+    registry: "AtelierToolRegistry",
+) -> List[Dict[str, Any]]:
+    """Validate each tool_call's arguments against the tool's input_schema.
+
+    Returns a list of ``{"index": int, "tool_name": str, "error": str}``
+    for every call that fails validation.  An empty list means all valid.
+    """
+    errors: List[Dict[str, Any]] = []
+    for idx, tc in enumerate(tool_calls):
+        tool_name = tc.get("tool_name") or ""
+        entry = registry.get(tool_name)
+        if entry is None:
+            # Unknown tools are caught by the permission enforcer later;
+            # skip here so we don't double-report.
+            continue
+        spec, _ = entry
+        schema = spec.input_schema
+        if not schema:
+            continue
+        arguments = tc.get("arguments") or {}
+        try:
+            jsonschema.validate(instance=arguments, schema=schema)
+        except jsonschema.ValidationError as ve:
+            errors.append({
+                "index": idx,
+                "tool_name": tool_name,
+                "error": ve.message,
+            })
+    return errors
+
+
 def _redact_planner_context_input(
     planner_input: Dict[str, Any],
     tool_calls: Optional[List[Dict[str, Any]]] = None,
@@ -127,6 +177,9 @@ class AtelierToolSpec:
     mutates_canvas: bool = False
     max_count_cost: int = 0
     requires_approval: bool = False
+    # v1.5 #11 — reviewer-agent scope tag. Tools marked 'generation_write'
+    # are screened by AtelierReviewer when policy.enable_reviewer is True.
+    mutation_scope: Optional[str] = None
 
 
 ToolExecutor = Callable[[str, Dict[str, Any], Any], Dict[str, Any]]
@@ -581,6 +634,32 @@ def _build_atelier_llm_prefix(package: AtelierAgentPlannerPackage) -> str:
     sections: List[str] = [
         "You are the Atelier canvas agent. You help users compose, plan, and generate "
         "video shots on an infinite canvas. Be concise and concrete.",
+    ]
+    # v1.4 Batch 3 — skill splice. Inserted AFTER the directive sentence and
+    # BEFORE OUTPUT FORMAT so the JSON contract stays closest to model output.
+    # PREFIX-STABILITY: skill_spec on the package is set at turn-creation
+    # time and locked for the duration of the turn, so the spliced text is
+    # byte-identical across iterations.
+    skill_spec_payload = getattr(package, "skill_spec", None)
+    if isinstance(skill_spec_payload, dict):
+        skill_name = skill_spec_payload.get("name") or package.skill_name or ""
+        skill_template = skill_spec_payload.get("prompt_template") or ""
+        skill_body = skill_spec_payload.get("body") or ""
+        if skill_name and skill_template:
+            sections.extend([
+                "",
+                f"Active skill: {skill_name}",
+                "",
+                "Skill brief:",
+                skill_template,
+            ])
+            if skill_body.strip():
+                sections.extend([
+                    "",
+                    "Skill notes:",
+                    skill_body,
+                ])
+    sections.extend([
         "",
         "OUTPUT FORMAT — respond ONLY with a single JSON object:",
         '  { "response": "<short assistant text, 1-2 sentences>", '
@@ -604,7 +683,7 @@ def _build_atelier_llm_prefix(package: AtelierAgentPlannerPackage) -> str:
         "",
         "Project policy:",
         json.dumps(package.policy_snapshot or {}, ensure_ascii=False),
-    ]
+    ])
     return "\n".join(sections)
 
 
@@ -804,6 +883,7 @@ def stream_atelier_llm_planner(
     package: AtelierAgentPlannerPackage,
     user_message: str,
     model: Optional[str] = None,
+    max_tokens: Optional[int] = None,
 ) -> Iterator[Dict[str, Any]]:
     try:
         from .llm_adapter import LLMAdapter
@@ -824,6 +904,7 @@ def stream_atelier_llm_planner(
             "response": "",
             "tool_calls": [],
             "error": f"LLM not configured — set {key_name} to use the model-backed agent.",
+            "usage": None,
         }
         return
 
@@ -844,17 +925,33 @@ def stream_atelier_llm_planner(
         messages.extend(list(package.prior_messages))
     messages.append({"role": "system", "content": system_suffix})
     messages.append({"role": "user", "content": payload_message})
-    model_id = model or os.getenv(_AGENT_LLM_MODEL_ENV) or None
+    # v1.4 Batch 4 — prefer the package-resolved model id (set by
+    # build_planner_package via runtime_provider.resolve) over the legacy
+    # env fallback. Keeps streaming planner consistent with what the loop
+    # already wrote into IterationRecord + structured events.
+    model_id = (
+        model
+        or getattr(package, "model_id", None)
+        or os.getenv(_AGENT_LLM_MODEL_ENV)
+        or None
+    )
 
     buffer_parts: List[str] = []
+    started = time.time()
     try:
-        chunk_iter = adapter.stream_chat(messages, model=model_id, response_format={"type": "json_object"})
+        chunk_iter = adapter.stream_chat(
+            messages,
+            model=model_id,
+            response_format={"type": "json_object"},
+            max_tokens=max_tokens,
+        )
     except Exception as exc:
         yield {
             "type": "done",
             "response": "",
             "tool_calls": [],
             "error": f"LLM call failed: {exc}",
+            "usage": None,
         }
         return
 
@@ -872,6 +969,7 @@ def stream_atelier_llm_planner(
             "response": "".join(buffer_parts),
             "tool_calls": [],
             "error": f"LLM stream interrupted: {exc}",
+            "usage": _build_usage_dict(0, 0, model_id, started),
         }
         return
 
@@ -883,6 +981,7 @@ def stream_atelier_llm_planner(
             "response": "",
             "tool_calls": [],
             "error": "LLM returned empty content.",
+            "usage": _build_usage_dict(0, 0, model_id, started),
         }
         return
 
@@ -900,6 +999,7 @@ def stream_atelier_llm_planner(
                 "response": buffer,
                 "tool_calls": [],
                 "error": "parse_failed",
+                "usage": _build_usage_dict(0, 0, model_id, started),
             }
             return
         parsed_payload = recovered
@@ -910,6 +1010,7 @@ def stream_atelier_llm_planner(
             "response": buffer,
             "tool_calls": [],
             "error": "LLM response must be a JSON object with response + tool_calls.",
+            "usage": _build_usage_dict(0, 0, model_id, started),
         }
         return
 
@@ -926,6 +1027,7 @@ def stream_atelier_llm_planner(
             "response": response_value or "",
             "tool_calls": [],
             "error": "LLM response 'tool_calls' must be an array.",
+            "usage": _build_usage_dict(0, 0, model_id, started),
         }
         return
 
@@ -934,6 +1036,27 @@ def stream_atelier_llm_planner(
         "response": response_value or "",
         "tool_calls": raw_calls,
         "error": None,
+        "usage": _build_usage_dict(0, 0, model_id, started),
+    }
+
+
+def _build_usage_dict(
+    prompt_tokens: int,
+    completion_tokens: int,
+    model_id: Optional[str],
+    started_at: float,
+) -> Dict[str, Any]:
+    """Best-effort UsageRecord-shaped dict for the streaming planner's done
+    event. The legacy LLMAdapter shim doesn't surface usage, so prompt /
+    completion tokens are 0 in production until the streaming planner is
+    rewired through atelier_runtime_provider directly. Latency_ms is always
+    accurate (wall-clock from request issue to final yield)."""
+    return {
+        "prompt_tokens": int(prompt_tokens or 0),
+        "completion_tokens": int(completion_tokens or 0),
+        "total_tokens": int(prompt_tokens or 0) + int(completion_tokens or 0),
+        "latency_ms": max(0.0, (time.time() - started_at) * 1000.0),
+        "model_id": str(model_id or ""),
     }
 
 
@@ -1608,6 +1731,7 @@ class AtelierAgentHarness:
         self.registry = build_default_atelier_tool_registry()
         self.planner_registry = build_default_atelier_planner_registry(self.registry)
         self.enforcer = AtelierPermissionEnforcer()
+        self.reviewer = AtelierReviewer()  # v1.5 #11
 
     def list_tool_specs(self) -> List[Dict[str, Any]]:
         return [
@@ -1631,6 +1755,8 @@ class AtelierAgentHarness:
         skill_name: Optional[str] = None,
         prior_messages: Optional[List[Dict[str, Any]]] = None,
         last_iter_result: Optional[Dict[str, Any]] = None,
+        provider: Optional[str] = None,
+        model_override: Optional[str] = None,
     ) -> AtelierAgentPlannerPackage:
         project = self.pipeline.get_atelier_project(project_id)
         if not project:
@@ -1678,6 +1804,36 @@ class AtelierAgentHarness:
                 prior_messages = []
         elif prior_messages is None:
             prior_messages = []
+        # v1.4 Batch 3 — resolve the skill spec once at turn creation. The
+        # registry hits a TTL-bound mtime cache so repeated turns within a
+        # session don't re-walk the filesystem. atelier_data_file is
+        # threaded through so the project-stage subdir resolves correctly.
+        skill_spec_payload: Optional[Dict[str, Any]] = None
+        if skill_name:
+            try:
+                resolved_skill = get_skill(
+                    skill_name,
+                    atelier_data_file=getattr(self.pipeline, "atelier_data_file", None),
+                )
+            except Exception:  # pragma: no cover — defensive
+                logger.exception("atelier_skill_registry: skill lookup failed for %s", skill_name)
+                resolved_skill = None
+            if resolved_skill is not None:
+                skill_spec_payload = resolved_skill.to_dict()
+        # v1.4 Batch 4 — resolve (provider, model_id) once at package-build
+        # time so the iteration sees a stable view of which client to use.
+        # The resolved cfg is persisted on the package so the agent loop
+        # can stamp IterationRecord + structured events with the same
+        # (provider, model_id) pair the streaming planner dispatched.
+        resolved_provider_id: Optional[str] = None
+        resolved_model_id: Optional[str] = None
+        try:
+            resolved_cfg = atelier_runtime_provider.resolve(provider, model_override)
+            resolved_provider_id = resolved_cfg.provider
+            resolved_model_id = resolved_cfg.model_id
+        except Exception:  # pragma: no cover — defensive; resolve has env fallback
+            logger.exception("atelier_runtime_provider.resolve failed for build_planner_package")
+
         # Build the package proto with the full prefix-stable inputs first
         # so we can compute the prefix string deterministically before the
         # volatile inputs (canvas snapshot etc.) factor in.
@@ -1706,7 +1862,13 @@ class AtelierAgentHarness:
                 "node_count": len(project.nodes),
                 "selected_node_id": selected_node_id,
                 "has_last_iter_result": bool(last_iter_result),
+                "has_skill_spec": skill_spec_payload is not None,
+                "provider_id": resolved_provider_id,
+                "model_id": resolved_model_id,
             },
+            skill_spec=skill_spec_payload,
+            provider_id=resolved_provider_id,
+            model_id=resolved_model_id,
         )
         # v1.3 2c — compute the byte-stable PREFIX once per turn and
         # persist it on the package so per-iteration callers
@@ -2169,6 +2331,71 @@ class AtelierAgentHarness:
                     "error": call.error,
                 }
                 continue
+            # v1.5 #11 — reviewer gate for generation_write tools. Runs AFTER
+            # policy enforcement + alias resolution and BEFORE the executor so
+            # the guardian can inspect the fully-resolved arguments. Only
+            # fires when the spec carries mutation_scope='generation_write'
+            # AND policy.enable_reviewer is True.
+            if (
+                spec.mutation_scope == "generation_write"
+                and getattr(project.agent_policy, "enable_reviewer", False)
+            ):
+                try:
+                    review_result = self.reviewer.review(
+                        tool_name=tool_name,
+                        arguments=resolved_arguments,
+                        policy=project.agent_policy,
+                        project=project,
+                    )
+                except Exception as rev_exc:  # pragma: no cover — defensive
+                    logger.exception("AtelierReviewer crashed; defaulting to approve")
+                    review_result = None
+                if review_result is not None:
+                    if review_result.action == ReviewerAction.DENY:
+                        call.status = AtelierAgentToolStatus.FAILED
+                        call.error = review_result.reason
+                        call.completed_at = time.time()
+                        if existing_call is None:
+                            turn.tool_calls.append(call)
+                        yield {
+                            "type": "tool_done",
+                            "call_id": call.call_id,
+                            "tool_name": tool_name,
+                            "status": AtelierAgentToolStatus.FAILED.value,
+                            "result_snapshot": None,
+                            "error": review_result.reason,
+                            "reviewer": {
+                                "action": review_result.action.value,
+                                "checks": [
+                                    {"name": c.check_name, "passed": c.passed, "reason": c.reason}
+                                    for c in review_result.checks
+                                ],
+                            },
+                        }
+                        continue
+                    elif review_result.action == ReviewerAction.ESCALATE:
+                        call.status = AtelierAgentToolStatus.APPROVAL_REQUIRED
+                        call.approval_required = True
+                        call.error = review_result.reason
+                        if existing_call is None:
+                            turn.tool_calls.append(call)
+                        yield {
+                            "type": "tool_done",
+                            "call_id": call.call_id,
+                            "tool_name": tool_name,
+                            "status": AtelierAgentToolStatus.APPROVAL_REQUIRED.value,
+                            "result_snapshot": None,
+                            "error": review_result.reason,
+                            "reviewer": {
+                                "action": review_result.action.value,
+                                "checks": [
+                                    {"name": c.check_name, "passed": c.passed, "reason": c.reason}
+                                    for c in review_result.checks
+                                ],
+                            },
+                        }
+                        continue
+                    # ReviewerAction.APPROVE → fall through to executor.
             # Executor branch — emit tool_start, run, then tool_done. Failure
             # is caught and emitted as tool_done(status="failed") so the loop
             # keeps walking downstream calls (their unresolved-alias errors
@@ -2323,15 +2550,40 @@ class AtelierAgentHarness:
         selected_node_id: Optional[str] = None,
         skill_name: Optional[str] = None,
         model: Optional[str] = None,
+        provider: Optional[str] = None,
         max_iterations: Optional[int] = None,
         turn_id: Optional[str] = None,
         resume: bool = False,
+        is_cancelled: Optional[Callable[[], bool]] = None,
     ) -> Iterator[Dict[str, Any]]:
         project = self.pipeline.get_atelier_project(project_id)
         if not project:
             raise ValueError("Atelier project not found")
 
-        cap = max_iterations if max_iterations is not None else _get_agent_max_iterations()
+        # v1.4 Batch 3 — when the caller didn't pin max_iterations and a
+        # SkillSpec advertises a default_iteration_cap, prefer the skill
+        # value over the env default. Caller-supplied caps still win.
+        skill_iteration_cap: Optional[int] = None
+        if max_iterations is None and skill_name:
+            try:
+                resolved_skill = get_skill(
+                    skill_name,
+                    atelier_data_file=getattr(self.pipeline, "atelier_data_file", None),
+                )
+            except Exception:  # pragma: no cover — defensive
+                logger.exception(
+                    "atelier_skill_registry: iteration_cap lookup failed for %s", skill_name,
+                )
+                resolved_skill = None
+            if resolved_skill is not None and resolved_skill.default_iteration_cap is not None:
+                skill_iteration_cap = resolved_skill.default_iteration_cap
+
+        if max_iterations is not None:
+            cap = max_iterations
+        elif skill_iteration_cap is not None:
+            cap = skill_iteration_cap
+        else:
+            cap = _get_agent_max_iterations()
         cap = max(1, min(10, int(cap)))
 
         # Locate or create the turn. The loop owns the turn lifecycle:
@@ -2360,6 +2612,7 @@ class AtelierAgentHarness:
                 preview=False,
                 status="pending",
                 max_iterations=cap,
+                skill_name=skill_name,
             )
             project.agent_turns.append(turn)
 
@@ -2444,8 +2697,56 @@ class AtelierAgentHarness:
         # volatile suffix. Reset per-loop, NOT per-iteration.
         last_iter_done_event: Optional[Dict[str, Any]] = None
 
+        # v1.4 Batch 4 — emit conversation_starts at the top of the loop.
+        # Best-effort; emit_event swallows IO errors so a full disk doesn't
+        # crash the agent turn. Resolve cfg once so the conversation event
+        # carries the same (provider, model_id) pair the loop will use as
+        # its default for build_planner_package.
+        try:
+            _conversation_cfg = atelier_runtime_provider.resolve(provider, model)
+            _conversation_provider = _conversation_cfg.provider
+            _conversation_model = _conversation_cfg.model_id
+        except Exception:  # pragma: no cover — defensive
+            _conversation_provider = "unknown"
+            _conversation_model = ""
+        _conversation_started_at = time.time()
+        _emit_agent_event(
+            "atelier.conversation_starts",
+            {
+                "turn_id": turn.id,
+                "project_id": project_id,
+                "user_message_len": len(user_message or turn.user_message or ""),
+                "model_id": _conversation_model,
+                "provider": _conversation_provider,
+                "max_iterations": cap,
+                "skill_name": skill_name,
+            },
+        )
+        _conversation_total_prompt_tokens = 0
+        _conversation_total_completion_tokens = 0
+
         while iteration < cap:
             iteration += 1
+            # v1.5 #10 — cancellation gate. Check before each LLM round so
+            # a frontend Stop click (AbortController.abort → SSE close →
+            # threading.Event.set) short-circuits before we spend money on
+            # a provider call. The check is also repeated before tool
+            # execution below.
+            if is_cancelled is not None and is_cancelled():
+                turn.status = "canceled"
+                turn.completed_at = time.time()
+                turn.response = turn.response or "Turn canceled."
+                turn.iteration_count = max(turn.iteration_count, iteration)
+                turn.messages_history = list(messages_history)
+                project.updated_at = time.time()
+                self.pipeline._save_atelier_data()
+                yield {
+                    "type": "turn_done",
+                    "turn": turn,
+                    "status": "canceled",
+                    "error": None,
+                }
+                return
             # Build the planner package fresh per iteration so the LLM sees
             # the latest canvas state (each tool call may have mutated it).
             # Thread the running messages_history into prior_messages so
@@ -2460,22 +2761,49 @@ class AtelierAgentHarness:
                     skill_name=skill_name,
                     prior_messages=list(messages_history) if messages_history else None,
                     last_iter_result=last_iter_done_event,
+                    provider=provider,
+                    model_override=model,
                 )
             except ValueError as exc:
                 loop_error = str(exc)
                 break
+
+            # v1.4 Batch 4 — IterationRecord seed + structured api_request
+            # event. Provider/model_id come off the package which already
+            # called runtime_provider.resolve() — single source of truth.
+            iter_provider_id = package.provider_id or _conversation_provider
+            iter_model_id = package.model_id or _conversation_model or (model or "")
+            iter_record = AtelierAgentIterationRecord(
+                idx=iteration,
+                provider=iter_provider_id,
+                model_id=iter_model_id,
+                started_at=time.time(),
+            )
 
             yield {
                 "type": "turn",
                 "turn_id": turn.id,
                 "iteration": iteration,
                 "planner": "model_adapter",
-                "model": model,
+                "model": iter_model_id or model,
+                "provider": iter_provider_id,
             }
+
+            _emit_agent_event(
+                "atelier.api_request",
+                {
+                    "turn_id": turn.id,
+                    "iteration": iteration,
+                    "model_id": iter_model_id,
+                    "provider": iter_provider_id,
+                    "message_count": len(package.prior_messages or []) + 2,
+                },
+            )
 
             buffered_response = ""
             iter_tool_calls: List[Dict[str, Any]] = []
             iter_error: Optional[str] = None
+            iter_usage: Optional[Dict[str, Any]] = None
             try:
                 # NOTE: stream_atelier_llm_planner is the test seam — keep
                 # this call site narrow so monkeypatching one module-level
@@ -2483,7 +2811,8 @@ class AtelierAgentHarness:
                 for event in stream_atelier_llm_planner(
                     package,
                     user_message or turn.user_message,
-                    model=model,
+                    model=iter_model_id or model,
+                    max_tokens=project.agent_policy.max_tokens_per_turn,
                 ):
                     ev_type = event.get("type")
                     if ev_type == "delta":
@@ -2501,9 +2830,68 @@ class AtelierAgentHarness:
                             buffered_response = final_response
                         iter_tool_calls = list(event.get("tool_calls") or [])
                         iter_error = event.get("error") or None
+                        # v1.4 Batch 4 — usage is opt-in. fake_streams that
+                        # don't surface it leave IterationRecord at zeros.
+                        iter_usage = event.get("usage") or None
             except Exception as exc:  # pragma: no cover — defensive
                 logger.exception("run_agent_loop_streaming: LLM round %d crashed", iteration)
                 iter_error = f"LLM round crashed: {exc}"
+
+            # v1.4 Batch 4 — fold usage onto IterationRecord. Accept either a
+            # dict (preferred wire shape) or a UsageRecord-like object so
+            # both the streaming planner and tests can return whatever's
+            # convenient.
+            iter_record.completed_at = time.time()
+            iter_record.latency_ms = max(
+                0.0, (iter_record.completed_at - iter_record.started_at) * 1000.0
+            )
+            if iter_usage is not None:
+                if isinstance(iter_usage, dict):
+                    iter_record.prompt_tokens = int(iter_usage.get("prompt_tokens") or 0)
+                    iter_record.completion_tokens = int(iter_usage.get("completion_tokens") or 0)
+                    iter_record.total_tokens = int(
+                        iter_usage.get("total_tokens")
+                        or (iter_record.prompt_tokens + iter_record.completion_tokens)
+                    )
+                    if iter_usage.get("latency_ms"):
+                        iter_record.latency_ms = float(iter_usage.get("latency_ms"))
+                    if iter_usage.get("model_id"):
+                        iter_record.model_id = str(iter_usage.get("model_id"))
+                else:
+                    iter_record.prompt_tokens = int(getattr(iter_usage, "prompt_tokens", 0) or 0)
+                    iter_record.completion_tokens = int(
+                        getattr(iter_usage, "completion_tokens", 0) or 0
+                    )
+                    iter_record.total_tokens = int(
+                        getattr(iter_usage, "total_tokens", 0)
+                        or (iter_record.prompt_tokens + iter_record.completion_tokens)
+                    )
+                    latency_attr = getattr(iter_usage, "latency_ms", None)
+                    if latency_attr:
+                        iter_record.latency_ms = float(latency_attr)
+                    model_attr = getattr(iter_usage, "model_id", None)
+                    if model_attr:
+                        iter_record.model_id = str(model_attr)
+            if iter_error:
+                iter_record.error = str(iter_error)
+
+            _conversation_total_prompt_tokens += iter_record.prompt_tokens
+            _conversation_total_completion_tokens += iter_record.completion_tokens
+
+            _emit_agent_event(
+                "atelier.api_response",
+                {
+                    "turn_id": turn.id,
+                    "iteration": iteration,
+                    "prompt_tokens": iter_record.prompt_tokens,
+                    "completion_tokens": iter_record.completion_tokens,
+                    "total_tokens": iter_record.total_tokens,
+                    "latency_ms": iter_record.latency_ms,
+                    "model_id": iter_record.model_id,
+                    "provider": iter_record.provider,
+                    "error": iter_record.error,
+                },
+            )
 
             yield {
                 "type": "llm_done",
@@ -2511,7 +2899,19 @@ class AtelierAgentHarness:
                 "response": buffered_response,
                 "tool_calls": list(iter_tool_calls),
                 "error": iter_error,
+                "usage": {
+                    "prompt_tokens": iter_record.prompt_tokens,
+                    "completion_tokens": iter_record.completion_tokens,
+                    "total_tokens": iter_record.total_tokens,
+                    "latency_ms": iter_record.latency_ms,
+                    "model_id": iter_record.model_id,
+                    "provider": iter_record.provider,
+                } if iter_usage or iter_record.latency_ms else None,
             }
+
+            # v1.4 Batch 4 — append IterationRecord BEFORE tool execution so
+            # iteration usage persists even if tool execution paused/failed.
+            turn.iterations.append(iter_record)
 
             # Record this LLM round into messages_history for the next
             # iteration. We seed the user message on the first round so
@@ -2537,6 +2937,26 @@ class AtelierAgentHarness:
                 loop_error = "Model response was not valid JSON; no tool calls executed."
                 break
 
+            # v1.5 #10 — cancellation gate before tool execution. Checked
+            # again here because the LLM call above may have taken seconds
+            # and the user may have clicked Stop in the meantime. Catching
+            # it here avoids executing (and paying for) tool calls that the
+            # user no longer wants.
+            if is_cancelled is not None and is_cancelled():
+                turn.status = "canceled"
+                turn.completed_at = time.time()
+                turn.response = turn.response or "Turn canceled."
+                turn.iteration_count = max(turn.iteration_count, iteration)
+                turn.messages_history = list(messages_history)
+                project.updated_at = time.time()
+                self.pipeline._save_atelier_data()
+                yield {
+                    "type": "turn_done",
+                    "turn": turn,
+                    "status": "canceled",
+                    "error": None,
+                }
+                return
             # Defer to the per-call harness so we get retries + alias
             # resolution + policy enforcement + preview_on_approval gating
             # for free. existing_turn=turn so the inner generator mutates
@@ -2549,6 +2969,24 @@ class AtelierAgentHarness:
             preview_gate = policy_mode in {"untrusted", "on_request"}
             paused = False
             iter_tool_done_events: List[Dict[str, Any]] = []
+            # v1.4 Batch 4 — structured tool_decision event (just tool names
+            # + arg keys, never full args, so the log doesn't leak prompts).
+            _emit_agent_event(
+                "atelier.tool_decision",
+                {
+                    "turn_id": turn.id,
+                    "iteration": iteration,
+                    "tool_calls": [
+                        {
+                            "tool_name": str(call.get("tool_name") or ""),
+                            "argument_keys": sorted(
+                                k for k in (call.get("arguments") or {}).keys()
+                            ),
+                        }
+                        for call in iter_tool_calls
+                    ],
+                },
+            )
             for event in self.run_turn_streaming(
                 project_id=project_id,
                 tool_calls=iter_tool_calls,
@@ -2571,6 +3009,24 @@ class AtelierAgentHarness:
                     yield event
                 elif ev_type == "tool_done":
                     iter_tool_done_events.append(event)
+                    # v1.4 Batch 4 — link tool call_id back onto the
+                    # IterationRecord so the panel can correlate chip rows
+                    # to the iteration that proposed them.
+                    call_id = event.get("call_id")
+                    if call_id and call_id not in iter_record.tool_call_ids:
+                        iter_record.tool_call_ids.append(str(call_id))
+                    _emit_agent_event(
+                        "atelier.tool_result",
+                        {
+                            "turn_id": turn.id,
+                            "iteration": iteration,
+                            "call_id": event.get("call_id"),
+                            "tool_name": event.get("tool_name"),
+                            "status": event.get("status"),
+                            "retriable": event.get("retriable"),
+                            "error": event.get("error"),
+                        },
+                    )
                     yield event
                 elif ev_type == "turn_done":
                     inner_turn = event.get("turn")
@@ -2600,6 +3056,18 @@ class AtelierAgentHarness:
                 # by run_turn_streaming's preview gate. Just persist and exit.
                 project.updated_at = time.time()
                 self.pipeline._save_atelier_data()
+                _emit_agent_event(
+                    "atelier.conversation_ends",
+                    {
+                        "turn_id": turn.id,
+                        "status": "awaiting_approval",
+                        "total_prompt_tokens": _conversation_total_prompt_tokens,
+                        "total_completion_tokens": _conversation_total_completion_tokens,
+                        "total_tokens": _conversation_total_prompt_tokens + _conversation_total_completion_tokens,
+                        "total_latency_ms": (time.time() - _conversation_started_at) * 1000.0,
+                        "iteration_count": iteration,
+                    },
+                )
                 yield {
                     "type": "turn_done",
                     "turn": turn,
@@ -2644,6 +3112,19 @@ class AtelierAgentHarness:
                 turn.response = _build_turn_response(turn.tool_calls, turn.status, preview=False)
         project.updated_at = time.time()
         self.pipeline._save_atelier_data()
+        _emit_agent_event(
+            "atelier.conversation_ends",
+            {
+                "turn_id": turn.id,
+                "status": turn.status,
+                "total_prompt_tokens": _conversation_total_prompt_tokens,
+                "total_completion_tokens": _conversation_total_completion_tokens,
+                "total_tokens": _conversation_total_prompt_tokens + _conversation_total_completion_tokens,
+                "total_latency_ms": (time.time() - _conversation_started_at) * 1000.0,
+                "iteration_count": iteration,
+                "error": loop_error,
+            },
+        )
         yield {
             "type": "turn_done",
             "turn": turn,
@@ -2905,6 +3386,140 @@ def _execute_detach_from_region(project_id: str, arguments: Dict[str, Any], pipe
     return {"node": _compact_node(updated)}
 
 
+# v1.4 Batch 3 — agent.updatePlan tool. Codex-style update_plan port. The
+# planner emits one of these per turn (early) to commit a multi-step plan
+# the user can see on the canvas as a real PlanNode. On first call (no
+# `node_id` supplied) creates the node; on subsequent calls with the same
+# `node_id` it updates the existing one in place, bumping data.steps and
+# rederiving data.bullets so PlanNode (back-compat) keeps rendering even
+# without the new `steps` prop.
+
+_UPDATE_PLAN_VALID_STATUSES = ("pending", "in_progress", "completed")
+
+
+def _coerce_plan_steps(raw: Any) -> List[Dict[str, Any]]:
+    """Validate + normalize the `steps` argument for agent.updatePlan.
+
+    Raises ValueError on any of:
+      * non-list / empty / oversized list
+      * duplicate step ids
+      * missing or non-string id / title
+      * unknown status (coerced to 'pending' when empty, rejected otherwise)
+    """
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("agent.updatePlan: `steps` must be a non-empty list")
+    if len(raw) > 12:
+        raise ValueError("agent.updatePlan: `steps` cannot exceed 12 entries")
+    seen_ids: set = set()
+    out: List[Dict[str, Any]] = []
+    for idx, step in enumerate(raw):
+        if not isinstance(step, dict):
+            raise ValueError(f"agent.updatePlan: step #{idx} is not an object")
+        step_id = step.get("id")
+        title = step.get("title")
+        status = step.get("status") or "pending"
+        if not isinstance(step_id, str) or not step_id.strip():
+            raise ValueError(f"agent.updatePlan: step #{idx} missing string `id`")
+        if step_id in seen_ids:
+            raise ValueError(f"agent.updatePlan: duplicate step id {step_id!r}")
+        seen_ids.add(step_id)
+        if not isinstance(title, str) or not title.strip():
+            raise ValueError(f"agent.updatePlan: step #{idx} missing string `title`")
+        if status not in _UPDATE_PLAN_VALID_STATUSES:
+            raise ValueError(
+                f"agent.updatePlan: step #{idx} has invalid status {status!r}"
+            )
+        norm: Dict[str, Any] = {
+            "id": step_id,
+            "title": title.strip(),
+            "status": status,
+        }
+        notes = step.get("notes")
+        if isinstance(notes, str) and notes.strip():
+            norm["notes"] = notes.strip()
+        out.append(norm)
+    return out
+
+
+def _derive_plan_bullets(steps: List[Dict[str, Any]]) -> List[str]:
+    """Render a back-compat `bullets` list from canonical steps. PlanNode's
+    legacy renderer reads `data.bullets` and does not understand the
+    structured `steps` shape; the bullet glyph encodes status so the user
+    can read state without a UI upgrade.
+    """
+    glyphs = {"pending": "○", "in_progress": "◐", "completed": "●"}
+    out: List[str] = []
+    for step in steps:
+        glyph = glyphs.get(step.get("status") or "pending", "○")
+        text = step.get("title") or ""
+        notes = step.get("notes")
+        if notes:
+            text = f"{text} — {notes}"
+        out.append(f"{glyph} {text}".strip())
+    return out
+
+
+def _default_spawn_x(project: Any) -> float:
+    return 160.0 + 36.0 * len(getattr(project, "nodes", []) or [])
+
+
+def _default_spawn_y(project: Any) -> float:
+    return 160.0 + 28.0 * len(getattr(project, "nodes", []) or [])
+
+
+def _execute_update_plan(project_id: str, arguments: Dict[str, Any], pipeline: Any) -> Dict[str, Any]:
+    raw_steps = arguments.get("steps")
+    steps = _coerce_plan_steps(raw_steps)
+    bullets = _derive_plan_bullets(steps)
+    node_id = arguments.get("node_id")
+    title_arg = arguments.get("title")
+    if isinstance(title_arg, str):
+        title_arg = title_arg.strip()
+    project = pipeline.get_atelier_project(project_id)
+    if project is None:
+        raise ValueError("Atelier project not found")
+
+    if node_id:
+        # Update existing — must be a plan node.
+        existing = next((n for n in project.nodes if n.id == node_id), None)
+        if existing is None:
+            raise ValueError("agent.updatePlan: node_id does not reference an existing node")
+        if existing.type != "plan":
+            raise ValueError("agent.updatePlan target is not a plan node")
+        next_data = {**dict(existing.data or {}), "steps": steps, "bullets": bullets}
+        payload: Dict[str, Any] = {"data": next_data}
+        if title_arg:
+            payload["title"] = title_arg
+        updated = pipeline.update_atelier_node(project_id, node_id, payload)
+        return {
+            "node": _compact_node(updated),
+            "created": False,
+            "step_count": len(steps),
+        }
+
+    title = title_arg or "Plan"
+    x_value = arguments.get("x")
+    y_value = arguments.get("y")
+    spawn_x = float(x_value) if isinstance(x_value, (int, float)) else _default_spawn_x(project)
+    spawn_y = float(y_value) if isinstance(y_value, (int, float)) else _default_spawn_y(project)
+    node = pipeline.create_atelier_node(
+        project_id,
+        {
+            "type": "plan",
+            "title": title,
+            "x": spawn_x,
+            "y": spawn_y,
+            "data": {"steps": steps, "bullets": bullets},
+            "created_by": "agent",
+        },
+    )
+    return {
+        "node": _compact_node(node),
+        "created": True,
+        "step_count": len(steps),
+    }
+
+
 def _execute_create_video_candidates(project_id: str, arguments: Dict[str, Any], pipeline: Any) -> Dict[str, Any]:
     node_id = arguments.get("node_id")
     if not node_id:
@@ -3056,8 +3671,62 @@ def build_default_atelier_tool_registry() -> AtelierToolRegistry:
             required_permission=GENERATION_PERMISSION,
             mutates_canvas=True,
             requires_approval=True,
+            mutation_scope="generation_write",  # v1.5 #11 — reviewer gate
         ),
         _execute_create_video_candidates,
+    )
+    # v1.4 Batch 3 — agent.updatePlan (Codex update_plan port). Registered
+    # AT THE END of the registry so the existing prefix-stability tests
+    # that pin the sorted-by-name tool order still hold (sort happens in
+    # build_planner_package, not registration order).
+    registry.register(
+        AtelierToolSpec(
+            name="agent.updatePlan",
+            description=(
+                "Commit a multi-step plan as a canvas plan node. Creates the "
+                "node when node_id is omitted, otherwise updates the named node "
+                "in place. Each step has {id, title, status: pending|in_progress|"
+                "completed, notes?}. Limit: 12 steps per call."
+            ),
+            input_schema={
+                "type": "object",
+                "required": ["steps"],
+                "properties": {
+                    "node_id": {
+                        "type": "string",
+                        "description": "Existing plan node to update; if absent, creates new.",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Plan title; falls back to existing or 'Plan'.",
+                    },
+                    "steps": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 12,
+                        "items": {
+                            "type": "object",
+                            "required": ["id", "title", "status"],
+                            "properties": {
+                                "id": {"type": "string"},
+                                "title": {"type": "string"},
+                                "status": {
+                                    "type": "string",
+                                    "enum": list(_UPDATE_PLAN_VALID_STATUSES),
+                                },
+                                "notes": {"type": "string"},
+                            },
+                        },
+                    },
+                    "x": {"type": "number"},
+                    "y": {"type": "number"},
+                },
+            },
+            required_permission=CANVAS_WRITE_PERMISSION,
+            mutates_canvas=True,
+            max_count_cost=1,
+        ),
+        _execute_update_plan,
     )
     return registry
 

@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List, Any
 import asyncio
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -335,6 +336,7 @@ class UpdateAtelierAgentPolicyRequest(BaseModel):
     approval_mode: Optional[str] = None
     allowed_tools: Optional[List[str]] = None
     max_nodes_per_action: Optional[int] = None
+    max_tokens_per_turn: Optional[int] = None
 
 
 class CreateAtelierNodeRequest(BaseModel):
@@ -512,6 +514,30 @@ async def list_atelier_agent_tools(project_id: str):
     if not pipeline.get_atelier_project(project_id):
         raise HTTPException(status_code=404, detail="Atelier project not found")
     return pipeline.list_atelier_agent_tools()
+
+
+# v1.4 Batch 3 — discovered Skill catalog for the AgentPanelV3 empty-state
+# cards. Project-scoped so per-project skill overrides resolve correctly,
+# but the response shape is portable (no project_id leak in payload).
+@app.get("/atelier/skills")
+async def list_atelier_skills():
+    return pipeline.list_atelier_skills()
+
+
+# v1.4 Batch 4 — provider+model catalog for the AgentPanelV3 model-pill
+# popover. Reads atelier_runtime_provider's built-in registry and surfaces
+# `configured: bool` for each entry (true when the provider's key_env is
+# set, honoring the DashScope ALIBABA_API_KEY alias). The frontend
+# disables un-configured rows and shows a tooltip with the missing key
+# name. No auth gating — keys themselves never leave the server.
+@app.get("/atelier/agent/models")
+async def list_atelier_agent_models():
+    from . import atelier_runtime_provider
+
+    return [
+        atelier_runtime_provider.to_wire_dict(cfg)
+        for cfg in atelier_runtime_provider.list_all()
+    ]
 
 
 @app.post("/atelier/projects/{project_id}/agent/planner_package", response_model=AtelierAgentPlannerPackage)
@@ -1324,6 +1350,11 @@ class StreamAtelierAgentLoopRequest(BaseModel):
     selected_node_id: Optional[str] = None
     skill_name: Optional[str] = None
     model: Optional[str] = None
+    # v1.4 Batch 4 — explicit provider override (dashscope/openai/anthropic).
+    # When None, atelier_runtime_provider.resolve_default() picks based on
+    # ATELIER_AGENT_PROVIDER env. The frontend's model-pill writes both
+    # `provider` and `model` so the resolution is unambiguous server-side.
+    provider: Optional[str] = None
     max_iterations: Optional[int] = None
     turn_id: Optional[str] = None  # set when resuming a paused turn
     resume: bool = False  # set with turn_id to fold approved tools into round N+1
@@ -1344,6 +1375,13 @@ async def stream_atelier_agent_loop(
         loop = asyncio.get_event_loop()
         executed_turn: Optional[AtelierAgentTurn] = None
         cancelled = False
+        # v1.5 #10 — cancellation threading.Event. When the SSE poll loop
+        # detects a client disconnect (AbortController.abort on the frontend)
+        # it sets this event. The harness's is_cancelled callable reads it
+        # before each LLM call and before each tool_call execution so the
+        # server-side loop short-circuits without spending money on provider
+        # calls the user no longer wants.
+        cancel_event = threading.Event()
         try:
             queue, sentinel, task = _bridge_sync_iter(
                 loop,
@@ -1353,15 +1391,18 @@ async def stream_atelier_agent_loop(
                     selected_node_id=request.selected_node_id,
                     skill_name=request.skill_name,
                     model=request.model,
+                    provider=request.provider,
                     max_iterations=request.max_iterations,
                     turn_id=request.turn_id,
                     resume=request.resume,
+                    is_cancelled=cancel_event.is_set,
                 ),
             )
             try:
                 while True:
                     if await raw_request.is_disconnected():
                         cancelled = True
+                        cancel_event.set()
                         break
                     try:
                         event = await asyncio.wait_for(queue.get(), timeout=0.5)
@@ -1391,6 +1432,7 @@ async def stream_atelier_agent_loop(
                                 "type": "turn",
                                 "planner": event.get("planner") or "model_adapter",
                                 "model": event.get("model"),
+                                "provider": event.get("provider"),
                                 "turn_id": event.get("turn_id"),
                                 "iteration": event.get("iteration"),
                             },
@@ -1413,6 +1455,7 @@ async def stream_atelier_agent_loop(
                                 "tool_calls": event.get("tool_calls") or [],
                                 "error": event.get("error"),
                                 "iteration": event.get("iteration"),
+                                "usage": event.get("usage"),
                             },
                         )
                     elif etype == "tool_plan":

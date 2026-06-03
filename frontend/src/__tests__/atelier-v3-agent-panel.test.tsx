@@ -72,6 +72,17 @@ vi.mock("@/store/atelierStore", () => {
     isAgentRunning: false,
     planAgentTurn: vi.fn(),
     runAgentTurn: vi.fn().mockResolvedValue(undefined),
+    // v1.4 Batch 3 — skill registry slice (warmed on AgentPanelV3 mount).
+    skillRegistry_B3: [] as unknown[],
+    skillRegistryLoaded_B3: true,
+    loadSkills_B3: vi.fn().mockResolvedValue([]),
+    dispatchSkillTurn_B3: vi.fn().mockResolvedValue(null),
+    // v1.4 Batch 4 — model picker slice (warmed on AgentPanelV3 mount).
+    agentModel_B4: { provider: "dashscope", model_id: "qwen-plus" },
+    agentModelOptions_B4: [] as unknown[],
+    agentModelOptionsLoaded_B4: true,
+    setAgentModel_B4: vi.fn(),
+    loadAgentModels_B4: vi.fn().mockResolvedValue([]),
   };
   return {
     useAtelierStore: Object.assign(

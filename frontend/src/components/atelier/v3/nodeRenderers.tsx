@@ -214,12 +214,33 @@ export function renderNode(
   if (node.type === "plan") {
     const title = node.title || "Plan";
     const bullets = readStringArray((node.data as { bullets?: unknown })?.bullets);
+    // v1.4 Batch 3 — agent.updatePlan persists structured `data.steps`
+    // alongside the legacy bullets array. PlanNode prefers steps when
+    // present; nodes from older turns still render fine via bullets.
+    const rawSteps = (node.data as { steps?: unknown })?.steps;
+    type RawStep = { id?: unknown; title?: unknown; status?: unknown; notes?: unknown };
+    const steps =
+      Array.isArray(rawSteps)
+        ? (rawSteps as RawStep[])
+            .map((s) => ({
+              id: typeof s?.id === "string" ? s.id : "",
+              title: typeof s?.title === "string" ? s.title : "",
+              status:
+                s?.status === "completed" || s?.status === "in_progress"
+                  ? s.status
+                  : "pending",
+              notes: typeof s?.notes === "string" ? s.notes : undefined,
+            }))
+            .filter((s) => s.id && s.title)
+            .map((s) => ({ ...s, status: s.status as "pending" | "in_progress" | "completed" }))
+        : undefined;
     return (
       <PlanNode
         key={node.id}
         id={node.id}
         title={title}
         bullets={bullets}
+        steps={steps}
         selected={isSelected}
         x={node.x}
         y={node.y}
