@@ -361,7 +361,9 @@
     "workspace": "Workspace",
     "library": "Library",
     "playground": "Playground",
-    "settings": "Settings"
+    "settings": "Settings",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar"
   },
   "workspace": {
     "title": "My Workspace",
