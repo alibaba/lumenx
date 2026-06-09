@@ -157,9 +157,9 @@ export default function ResultGallery() {
   if (history.length === 0) {
     return (
       <div className="flex flex-col flex-1 overflow-hidden min-w-0 items-center justify-center">
-        <Sparkles className="w-12 h-12 text-white/40 opacity-40 mb-4" />
-        <p className="text-sm text-white/40 mb-1">暂无生成结果</p>
-        <p className="text-xs text-white/25">输入提示词并点击生成，结果将展示在这里</p>
+        <Sparkles className="w-12 h-12 text-text-secondary opacity-40 mb-4" />
+        <p className="text-sm text-text-secondary mb-1">暂无生成结果</p>
+        <p className="text-xs text-text-muted">输入提示词并点击生成，结果将展示在这里</p>
       </div>
     );
   }
@@ -167,26 +167,26 @@ export default function ResultGallery() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden min-w-0">
       {/* Header */}
-      <div className="px-7 py-4 flex items-center justify-between border-b border-white/[0.04] shrink-0">
+      <div className="px-7 py-4 flex items-center justify-between border-b border-glass-border shrink-0">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-text-secondary">
             生成结果
           </span>
-          <span className="font-mono text-[10px] bg-white/[0.06] text-white/50 rounded px-[6px] py-[1px]">
+          <span className="font-mono text-[10px] bg-glass text-text-secondary rounded px-[6px] py-[1px]">
             {filtered.length}
           </span>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 rounded-md bg-white/[0.04] p-[3px]">
+          <div className="flex items-center gap-1 rounded-md bg-glass p-[3px]">
             {filters.map((f) => (
               <button
                 key={f.key}
                 onClick={() => setActiveFilter(f.key)}
                 className={`rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
                   activeFilter === f.key
-                    ? 'bg-white/[0.08] text-white/80'
-                    : 'text-white/40 hover:text-white/60'
+                    ? 'bg-hover-bg text-foreground'
+                    : 'text-text-secondary hover:text-foreground'
                 }`}
               >
                 {f.label}
@@ -194,13 +194,13 @@ export default function ResultGallery() {
             ))}
           </div>
 
-          <div className="flex items-center gap-0.5 rounded-md bg-white/[0.04] p-[3px]">
+          <div className="flex items-center gap-0.5 rounded-md bg-glass p-[3px]">
             <button
               onClick={() => setViewMode('grid')}
               className={`rounded p-1.5 transition-colors ${
                 viewMode === 'grid'
-                  ? 'bg-white/[0.08] text-white'
-                  : 'text-white/30 hover:text-white/50'
+                  ? 'bg-hover-bg text-foreground'
+                  : 'text-text-muted hover:text-text-secondary'
               }`}
               title="Grid view"
             >
@@ -210,8 +210,8 @@ export default function ResultGallery() {
               onClick={() => setViewMode('gallery')}
               className={`rounded p-1.5 transition-colors ${
                 viewMode === 'gallery'
-                  ? 'bg-white/[0.08] text-white'
-                  : 'text-white/30 hover:text-white/50'
+                  ? 'bg-hover-bg text-foreground'
+                  : 'text-text-muted hover:text-text-secondary'
               }`}
               title="Gallery view"
             >
@@ -238,11 +238,11 @@ export default function ResultGallery() {
                     key={item.key}
                     className="col-span-full flex items-center gap-3 py-2"
                   >
-                    <div className="flex-1 h-px bg-white/[0.06]" />
-                    <span className="font-mono text-[9px] text-white/40 uppercase tracking-wider whitespace-nowrap">
+                    <div className="flex-1 h-px bg-border-subtle" />
+                    <span className="font-mono text-[9px] text-text-secondary uppercase tracking-wider whitespace-nowrap">
                       {item.label}
                     </span>
-                    <div className="flex-1 h-px bg-white/[0.06]" />
+                    <div className="flex-1 h-px bg-border-subtle" />
                   </div>
                 );
               }
