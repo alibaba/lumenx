@@ -21,22 +21,22 @@ export default function LumenXBranding({ size = "md", showSlogan = true }: Lumen
         </div>
         <div className="flex flex-col justify-center">
           <div className="flex items-baseline gap-0">
-            <span className={`font-mono ${titleSize} font-bold tracking-tight text-white`}>
+            <span className={`font-mono ${titleSize} font-bold tracking-normal text-foreground`}>
               LUMEN
             </span>
-            <span className={`font-mono ${titleSize} font-black tracking-tight text-[#646cff]`}>
+            <span className={`font-mono ${titleSize} font-black tracking-normal text-primary`}>
               X
             </span>
           </div>
           {size !== "sm" && (
-            <span className="font-mono text-[10px] text-white/30 tracking-[0.2em] uppercase -mt-0.5">
+            <span className="font-mono text-[10px] text-text-muted tracking-[0.2em] uppercase -mt-0.5">
               Studio
             </span>
           )}
         </div>
       </div>
       {showSlogan && (
-        <p className="font-mono text-[8px] text-white/20 tracking-[0.15em] text-center mt-2.5 uppercase">
+        <p className="font-mono text-[8px] text-text-muted tracking-[0.15em] text-center mt-2.5 uppercase">
           Render Noise into Narrative
         </p>
       )}

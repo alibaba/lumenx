@@ -203,9 +203,9 @@ export default function DetailPanel({
       />
 
       {/* Container */}
-      <div className="fixed inset-4 md:inset-8 z-50 bg-[#0e0e11] border border-white/[0.06] rounded-2xl shadow-2xl flex overflow-hidden">
+      <div className="fixed inset-4 md:inset-8 z-50 bg-elevated border border-glass-border rounded-2xl shadow-2xl flex overflow-hidden">
         {/* ─── LEFT SIDE (Media) ─────────────────────────────────────────── */}
-        <div className="relative w-[60%] h-full bg-[#080809] flex items-center justify-center">
+        <div className="relative w-[60%] h-full bg-surface-inset flex items-center justify-center">
           {mediaUrl ? (
             isVideo ? (
               <video
@@ -221,7 +221,7 @@ export default function DetailPanel({
               />
             )
           ) : (
-            <div className="flex flex-col items-center gap-2 text-white/20">
+            <div className="flex flex-col items-center gap-2 text-text-muted">
               <Video className="w-12 h-12" />
               <span className="font-mono text-xs">No media</span>
             </div>
@@ -247,29 +247,29 @@ export default function DetailPanel({
         </div>
 
         {/* ─── RIGHT SIDE (Details) ──────────────────────────────────────── */}
-        <div className="relative w-[40%] h-full overflow-y-auto p-6 border-l border-white/[0.06]">
+        <div className="relative w-[40%] h-full overflow-y-auto p-6 border-l border-glass-border">
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center hover:bg-white/[0.10] transition-colors"
+            className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-glass border border-glass-border flex items-center justify-center hover:bg-hover-bg transition-colors"
           >
-            <X className="w-4 h-4 text-white/60" />
+            <X className="w-4 h-4 text-text-secondary" />
           </button>
 
           {/* Section 1: Title */}
           <div className="mb-6 pr-10">
-            <h2 className="text-lg font-semibold text-white mb-1">
+            <h2 className="text-lg font-semibold text-foreground mb-1">
               {generation.model_id}
             </h2>
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-[10px] bg-white/[0.06] text-white/60 rounded px-[6px] py-[2px] uppercase">
+              <span className="font-mono text-[10px] bg-glass text-text-secondary rounded px-[6px] py-[2px] uppercase">
                 {MODE_LABELS[generation.mode] || generation.mode}
               </span>
-              <span className="font-mono text-[10px] text-white/30">
+              <span className="font-mono text-[10px] text-text-muted">
                 {generation.id.slice(0, 8)}
               </span>
             </div>
-            <p className="font-mono text-[11px] text-white/30">
+            <p className="font-mono text-[11px] text-text-muted">
               {formatTimestamp(generation.created_at)}
             </p>
           </div>
@@ -279,7 +279,7 @@ export default function DetailPanel({
             {mediaUrl && (
               <button
                 onClick={handleDownload}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white/[0.06] border border-white/[0.08] text-white/80 text-sm font-medium hover:bg-white/[0.10] transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-glass border border-glass-border text-text-secondary text-sm font-medium hover:bg-hover-bg hover:text-foreground transition-colors"
               >
                 <Download className="w-4 h-4" />
                 Download
@@ -291,8 +291,8 @@ export default function DetailPanel({
                 disabled={saving}
                 className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait ${
                   saved
-                    ? 'bg-white/[0.04] border-green-500/20 text-green-400 hover:border-white/[0.12] hover:text-white/60'
-                    : 'bg-white/[0.06] border-white/[0.08] text-white/80 hover:bg-white/[0.10]'
+                    ? 'bg-green-500/10 border-green-500/25 text-green-500 hover:bg-green-500/15'
+                    : 'bg-glass border-glass-border text-text-secondary hover:bg-hover-bg hover:text-foreground'
                 }`}
               >
                 <Star
@@ -304,7 +304,7 @@ export default function DetailPanel({
             {!isVideo && output?.media_path && onGenerateVideo && (
               <button
                 onClick={() => onGenerateVideo(output.media_path)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#646cff]/10 border border-[#646cff]/20 text-[#646cff] text-sm font-medium hover:bg-[#646cff]/20 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-primary/10 border border-primary/20 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
               >
                 <Video className="w-4 h-4" />
                 Generate Video
@@ -337,14 +337,14 @@ export default function DetailPanel({
               </h3>
               <button
                 onClick={handleCopyPrompt}
-                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-white/40 hover:text-white/60 hover:bg-white/[0.06] transition-colors"
+                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] text-text-secondary hover:text-foreground hover:bg-hover-bg transition-colors"
               >
                 <Copy className="w-3 h-3" />
                 {copied ? 'Copied' : 'Copy'}
               </button>
             </div>
-            <div className="max-h-40 overflow-y-auto rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
-              <p className="text-[12px] text-white/70 leading-relaxed whitespace-pre-wrap break-words">
+            <div className="max-h-40 overflow-y-auto rounded-lg bg-input-bg border border-glass-border p-3">
+              <p className="text-[12px] text-text-secondary leading-relaxed whitespace-pre-wrap break-words">
                 {generation.prompt || '(empty)'}
               </p>
             </div>
@@ -359,8 +359,8 @@ export default function DetailPanel({
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 {paramEntries.map(([label, value]) => (
                   <div key={label}>
-                    <p className="text-[10px] text-white/40 mb-0.5">{label}</p>
-                    <p className="text-[12px] text-white font-mono truncate">
+                    <p className="text-[10px] text-text-secondary mb-0.5">{label}</p>
+                    <p className="text-[12px] text-foreground font-mono truncate">
                       {value}
                     </p>
                   </div>
@@ -375,8 +375,8 @@ export default function DetailPanel({
               <h3 className="font-mono text-[10px] uppercase tracking-[0.18em] text-amber-500/80 mb-2">
                 NEGATIVE PROMPT
               </h3>
-              <div className="max-h-28 overflow-y-auto rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
-                <p className="text-[12px] text-white/50 leading-relaxed whitespace-pre-wrap break-words">
+              <div className="max-h-28 overflow-y-auto rounded-lg bg-input-bg border border-glass-border p-3">
+                <p className="text-[12px] text-text-secondary leading-relaxed whitespace-pre-wrap break-words">
                   {generation.negative_prompt}
                 </p>
               </div>

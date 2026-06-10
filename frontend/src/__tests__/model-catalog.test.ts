@@ -69,6 +69,16 @@ describe('model catalog selectors', () => {
         expect(GLOBAL_I2V_MODELS.some((model) => model.id === 'wan2.6-r2v')).toBe(false);
         expect(GLOBAL_I2V_MODELS.some((model) => model.id === 'pixverse-v4-i2v')).toBe(false);
     });
+
+    it('exposes Seedance 2.0 480p across video modes', () => {
+        for (const modelId of ['seedance-2.0-t2v', 'seedance-2.0-i2v', 'seedance-2.0-r2v']) {
+            expect((rawCatalog as any).models[modelId].params.resolution.options).toEqual([
+                '480p',
+                '720p',
+                '1080p',
+            ]);
+        }
+    });
 });
 
 describe('model catalog fallbacks', () => {

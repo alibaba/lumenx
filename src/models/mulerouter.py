@@ -46,6 +46,12 @@ GPT_IMAGE_VALID_SIZES = {
     "2048x2048", "2048x1152", "3840x2160", "2160x3840", "auto",
 }
 
+SEEDANCE_CLI_RESOLUTION_SIZES = {
+    "480p": "832*480",
+    "720p": "1280*720",
+    "1080p": "1920*1080",
+}
+
 
 def _normalize_gpt_image_size(size: str) -> str:
     """Convert DashScope-style size (e.g. 1024*768) to GPT-Image-2 format."""
@@ -343,7 +349,7 @@ class MuleRouterVideoModel(VideoGenModel):
 
         args = ["--prompt", prompt, "--duration", str(duration)]
         if resolution:
-            size = "1920*1080" if resolution == "1080p" else "1280*720"
+            size = SEEDANCE_CLI_RESOLUTION_SIZES.get(str(resolution).lower(), "1280*720")
             args += ["--size", size]
         if seed is not None:
             args += ["--seed", str(seed)]
