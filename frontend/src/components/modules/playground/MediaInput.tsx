@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback } from 'react';
 import { ImagePlus, Film, X } from 'lucide-react';
-import { playgroundApi } from '@/lib/api';
+import { API_URL, playgroundApi } from '@/lib/api';
 import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
 import AssetPickerModal from './AssetPickerModal';
 
@@ -73,6 +73,20 @@ function getFileName(path: string): string {
 
 function isVideoPath(path: string): boolean {
   return /\.(mp4|mov|webm|avi|mkv)$/i.test(path);
+}
+
+function getPreviewUrl(path: string): string {
+  const normalized = path.replace(/\\/g, '/');
+  if (/^(https?:|blob:|data:)/i.test(normalized)) return normalized;
+  if (normalized.startsWith('/files/')) return API_URL + normalized;
+  if (normalized.startsWith('files/')) return API_URL + '/' + normalized;
+  if (normalized.startsWith('/output/')) {
+    return API_URL + '/files/' + normalized.slice('/output/'.length);
+  }
+  if (normalized.startsWith('output/')) {
+    return API_URL + '/files/' + normalized.slice('output/'.length);
+  }
+  return normalized;
 }
 
 // ---------------------------------------------------------------------------
@@ -319,13 +333,13 @@ export default function MediaInput() {
             >
               {isVideoPath(path) ? (
                 <video
-                  src={path}
+                  src={getPreviewUrl(path)}
                   className="w-full h-full object-cover"
                   muted
                 />
               ) : (
                 <img
-                  src={path}
+                  src={getPreviewUrl(path)}
                   alt=""
                   className="w-full h-full object-cover"
                 />
