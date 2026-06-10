@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback } from 'react';
 import { ImagePlus, Film, X } from 'lucide-react';
-import { playgroundApi } from '@/lib/api';
+import { API_URL, playgroundApi } from '@/lib/api';
 import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
 import AssetPickerModal from './AssetPickerModal';
 
@@ -73,6 +73,20 @@ function getFileName(path: string): string {
 
 function isVideoPath(path: string): boolean {
   return /\.(mp4|mov|webm|avi|mkv)$/i.test(path);
+}
+
+function getPreviewUrl(path: string): string {
+  const normalized = path.replace(/\\/g, '/');
+  if (/^(https?:|blob:|data:)/i.test(normalized)) return normalized;
+  if (normalized.startsWith('/files/')) return API_URL + normalized;
+  if (normalized.startsWith('files/')) return API_URL + '/' + normalized;
+  if (normalized.startsWith('/output/')) {
+    return API_URL + '/files/' + normalized.slice('/output/'.length);
+  }
+  if (normalized.startsWith('output/')) {
+    return API_URL + '/files/' + normalized.slice('output/'.length);
+  }
+  return normalized;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,7 +238,7 @@ export default function MediaInput() {
   if (!hasMedia) {
     return (
       <div className="space-y-2">
-        <label className="block text-xs font-medium text-white/70">
+        <label className="block text-xs font-medium text-text-secondary">
           {config.label}
         </label>
 
@@ -239,23 +253,23 @@ export default function MediaInput() {
             transition-colors
             ${
               dragOver
-                ? 'border-[#646cff]/50 bg-[#646cff]/5'
-                : 'border-white/[0.08] hover:border-white/15 hover:bg-white/[0.02]'
+                ? 'border-primary/50 bg-primary/5'
+                : 'border-glass-border hover:border-primary/40 hover:bg-hover-bg'
             }
             ${uploading ? 'pointer-events-none opacity-60' : ''}
           `}
         >
           {config.icon === 'video' ? (
-            <Film className="w-8 h-8 text-white/40" />
+            <Film className="w-8 h-8 text-text-secondary" />
           ) : (
-            <ImagePlus className="w-8 h-8 text-white/40" />
+            <ImagePlus className="w-8 h-8 text-text-secondary" />
           )}
 
-          <span className="text-xs text-white/60">
+          <span className="text-xs text-text-secondary">
             {uploading ? '上传中...' : '拖拽或点击上传'}
           </span>
 
-          <span className="text-[11px] text-white/40">{config.hint}</span>
+          <span className="text-[11px] text-text-muted">{config.hint}</span>
         </div>
 
         {/* Action buttons */}
@@ -266,8 +280,8 @@ export default function MediaInput() {
             disabled={uploading}
             className="
               flex-1 px-3 py-1.5 rounded-lg text-xs
-              border border-white/[0.08] text-white/70
-              hover:bg-white/[0.04] hover:text-white/90
+              border border-glass-border text-text-secondary
+              hover:bg-hover-bg hover:text-foreground
               transition-colors disabled:opacity-40
             "
           >
@@ -278,8 +292,8 @@ export default function MediaInput() {
             onClick={() => setShowAssetPicker(true)}
             className="
               flex-1 px-3 py-1.5 rounded-lg text-xs
-              border border-[#646cff]/30 text-[#646cff]
-              hover:bg-[#646cff]/10
+              border border-primary/30 text-primary
+              hover:bg-primary/10
               transition-colors
             "
           >
@@ -305,27 +319,27 @@ export default function MediaInput() {
 
   return (
     <div className="space-y-2">
-      <label className="block text-xs font-medium text-white/70">
+      <label className="block text-xs font-medium text-text-secondary">
         {config.label}
       </label>
 
-      <div className="border border-solid border-white/[0.08] rounded-xl p-3 space-y-3">
+      <div className="border border-solid border-glass-border rounded-xl p-3 space-y-3 bg-glass">
         {/* Thumbnail row */}
         <div className="flex flex-wrap gap-2">
           {inputMedia.map((path, index) => (
             <div
               key={path + index}
-              className="group relative w-20 h-[60px] rounded-lg overflow-hidden bg-white/[0.04] border border-white/[0.06]"
+              className="group relative w-20 h-[60px] rounded-lg overflow-hidden bg-input-bg border border-glass-border"
             >
               {isVideoPath(path) ? (
                 <video
-                  src={path}
+                  src={getPreviewUrl(path)}
                   className="w-full h-full object-cover"
                   muted
                 />
               ) : (
                 <img
-                  src={path}
+                  src={getPreviewUrl(path)}
                   alt=""
                   className="w-full h-full object-cover"
                 />
@@ -362,9 +376,9 @@ export default function MediaInput() {
               disabled={uploading}
               className="
                 w-20 h-[60px] rounded-lg
-                border border-dashed border-white/[0.08]
+                border border-dashed border-glass-border
                 flex items-center justify-center
-                text-white/30 hover:text-white/50 hover:border-white/15
+                text-text-muted hover:text-text-secondary hover:border-primary/40
                 transition-colors disabled:opacity-40
               "
             >
@@ -375,7 +389,7 @@ export default function MediaInput() {
 
         {/* File count for r2v */}
         {config.multiple && (
-          <div className="text-[11px] text-white/40">
+          <div className="text-[11px] text-text-secondary">
             {inputMedia.length} / {config.maxFiles} 张
           </div>
         )}
@@ -389,8 +403,8 @@ export default function MediaInput() {
           disabled={uploading}
           className="
             flex-1 px-3 py-1.5 rounded-lg text-xs
-            border border-white/[0.08] text-white/70
-            hover:bg-white/[0.04] hover:text-white/90
+            border border-glass-border text-text-secondary
+            hover:bg-hover-bg hover:text-foreground
             transition-colors disabled:opacity-40
           "
         >
@@ -401,8 +415,8 @@ export default function MediaInput() {
           onClick={() => setShowAssetPicker(true)}
           className="
             flex-1 px-3 py-1.5 rounded-lg text-xs
-            border border-[#646cff]/30 text-[#646cff]
-            hover:bg-[#646cff]/10
+            border border-primary/30 text-primary
+            hover:bg-primary/10
             transition-colors
           "
         >

@@ -190,19 +190,19 @@ export default function PlaygroundPage() {
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#050508] text-white">
+    <div className="flex h-full flex-col overflow-hidden bg-background text-foreground">
       {/* ═══ PAGE HEADER ═══ */}
-      <header className="flex shrink-0 items-center justify-between border-b border-white/[0.04] px-7 py-5">
+      <header className="flex shrink-0 items-center justify-between border-b border-glass-border px-7 py-5">
         <div className="flex items-center">
-          <h1 className="font-['Space_Grotesk',sans-serif] text-xl font-semibold tracking-tight text-white">
+          <h1 className="font-['Space_Grotesk',sans-serif] text-xl font-semibold tracking-tight text-foreground">
             创作台
           </h1>
-          <span className="ml-[10px] font-mono text-[11px] uppercase tracking-[0.1em] text-white/40">
+          <span className="ml-[10px] font-mono text-[11px] uppercase tracking-[0.1em] text-text-secondary">
             {resultCount} results
           </span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="rounded border border-white/[0.08] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">
+          <span className="rounded border border-glass-border bg-glass px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-text-secondary">
             {MODE_LABELS[mode]}
           </span>
         </div>
@@ -211,18 +211,18 @@ export default function PlaygroundPage() {
       {/* ═══ SPLIT LAYOUT ═══ */}
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* ─── LEFT: INPUT PANEL ─── */}
-        <aside className="flex w-[420px] shrink-0 flex-col overflow-y-auto border-r border-white/[0.08] bg-white/[0.02] scrollbar-thin">
+        <aside className="flex w-[420px] shrink-0 flex-col overflow-y-auto border-r border-glass-border bg-surface scrollbar-thin">
           {/* Mode */}
           <section className="px-6 py-5">
-            <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white/40">
+            <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-secondary">
               生成模式
             </div>
             <ModeSelector />
           </section>
 
           {/* Model */}
-          <section className="border-t border-white/[0.04] px-6 py-5">
-            <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white/40">
+          <section className="border-t border-glass-border px-6 py-5">
+            <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-secondary">
               模型
             </div>
             <ModelSelector />
@@ -230,8 +230,8 @@ export default function PlaygroundPage() {
 
           {/* Media Input (conditional) */}
           {showMediaInput && (
-            <section className="border-t border-white/[0.04] px-6 py-5">
-              <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white/40">
+            <section className="border-t border-glass-border px-6 py-5">
+              <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-secondary">
                 {mode === 'v2v' ? '源视频' : mode === 'r2v' ? '参考素材' : '首帧图片'}
               </div>
               <MediaInput />
@@ -239,16 +239,16 @@ export default function PlaygroundPage() {
           )}
 
           {/* Prompt */}
-          <section className="border-t border-white/[0.04] px-6 py-5">
-            <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white/40">
+          <section className="border-t border-glass-border px-6 py-5">
+            <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-secondary">
               Prompt
             </div>
             <PromptInput />
           </section>
 
           {/* Parameters */}
-          <section className="border-t border-white/[0.04] px-6 py-5">
-            <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-white/40">
+          <section className="border-t border-glass-border px-6 py-5">
+            <div className="mb-3 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-secondary">
               参数
             </div>
             <ParameterBar />
@@ -258,22 +258,22 @@ export default function PlaygroundPage() {
           <div className="flex-1" />
 
           {/* Generate CTA (sticky) */}
-          <div className="sticky bottom-0 border-t border-white/[0.08] bg-[#050508] px-6 py-5">
+          <div className="sticky bottom-0 border-t border-glass-border bg-surface px-6 py-5">
             <button
               type="button"
               onClick={handleGenerate}
               disabled={!canGenerate}
               className={[
-                'relative w-full overflow-hidden rounded-lg px-6 py-[14px]',
+                'group relative w-full overflow-hidden rounded-lg px-6 py-[14px]',
                 "font-['Space_Grotesk',sans-serif] text-sm font-semibold tracking-[0.02em] text-white",
                 'transition-all duration-150',
                 canGenerate
-                  ? 'bg-[#646cff] hover:bg-[#535bf2] hover:shadow-[0_4px_20px_rgba(100,108,255,0.35)] active:scale-[0.98] cursor-pointer'
-                  : 'bg-[#646cff]/40 cursor-not-allowed',
+                  ? 'bg-primary hover:bg-secondary hover:shadow-[0_4px_20px_rgba(100,108,255,0.35)] active:scale-[0.98] cursor-pointer'
+                  : 'bg-primary/40 cursor-not-allowed',
               ].join(' ')}
             >
               {/* Glow overlay */}
-              <span className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-600/20 via-[#646cff]/10 to-pink-500/15 opacity-0 transition-opacity duration-250 group-hover:opacity-100" />
+              <span className="pointer-events-none absolute inset-0 bg-gradient-to-br from-purple-600/20 via-primary/10 to-pink-500/15 opacity-0 transition-opacity duration-250 group-hover:opacity-100" />
               <span className="relative">{generateLabel}</span>
             </button>
           </div>

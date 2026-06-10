@@ -28,7 +28,7 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
   };
 
   return (
-    <aside className="w-56 flex-shrink-0 h-full border-r border-glass-border bg-surface backdrop-blur-xl flex flex-col">
+    <aside className="w-56 flex-shrink-0 h-full border-r border-glass-border bg-glass backdrop-blur-xl flex flex-col">
       {/* Branding */}
       <div className="p-5 border-b border-glass-border">
         <LumenXBranding size="sm" />

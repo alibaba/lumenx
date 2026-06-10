@@ -222,7 +222,7 @@ export default function AssetPickerModal({
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
           variants={overlayVariants}
           initial="hidden"
           animate="visible"
@@ -233,7 +233,7 @@ export default function AssetPickerModal({
           <motion.div
             className="
               w-[640px] max-h-[80vh]
-              bg-[#141416] border border-white/[0.08]
+              bg-elevated border border-glass-border
               rounded-2xl shadow-2xl
               flex flex-col overflow-hidden
             "
@@ -248,7 +248,7 @@ export default function AssetPickerModal({
             {/* Header                                                          */}
             {/* -------------------------------------------------------------- */}
             <div className="flex items-center justify-between px-5 pt-5 pb-3">
-              <h2 className="text-sm font-semibold text-white/90">
+              <h2 className="text-sm font-semibold text-foreground">
                 选择素材
               </h2>
 
@@ -257,7 +257,7 @@ export default function AssetPickerModal({
                 onClick={onClose}
                 className="
                   w-7 h-7 rounded-lg flex items-center justify-center
-                  text-white/40 hover:text-white/80 hover:bg-white/[0.06]
+                  text-text-secondary hover:text-foreground hover:bg-hover-bg
                   transition-colors
                 "
               >
@@ -278,8 +278,8 @@ export default function AssetPickerModal({
                       transition-colors
                       ${
                         activeTab === tab.key
-                          ? 'bg-[#646cff]/15 text-[#646cff] border border-[#646cff]/30'
-                          : 'text-white/50 hover:text-white/70 hover:bg-white/[0.04] border border-transparent'
+                          ? 'bg-primary/15 text-primary border border-primary/30'
+                          : 'text-text-secondary hover:text-foreground hover:bg-hover-bg border border-transparent'
                       }
                     `}
                   >
@@ -296,8 +296,8 @@ export default function AssetPickerModal({
             <div className="flex-1 overflow-y-auto px-5 pb-2 min-h-0">
               {loading && (
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <Loader2 className="w-6 h-6 text-white/30 animate-spin" />
-                  <span className="text-xs text-white/40">加载中...</span>
+                  <Loader2 className="w-6 h-6 text-text-secondary animate-spin" />
+                  <span className="text-xs text-text-secondary">加载中...</span>
                 </div>
               )}
 
@@ -307,7 +307,7 @@ export default function AssetPickerModal({
                   <button
                     type="button"
                     onClick={fetchAssets}
-                    className="text-xs text-[#646cff] hover:underline"
+                    className="text-xs text-primary hover:underline"
                   >
                     重试
                   </button>
@@ -316,11 +316,11 @@ export default function AssetPickerModal({
 
               {!loading && !error && filteredAssets.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 gap-2">
-                  <Image className="w-8 h-8 text-white/20" />
-                  <span className="text-xs text-white/40">
+                  <Image className="w-8 h-8 text-text-muted" />
+                  <span className="text-xs text-text-secondary">
                     暂无可用素材
                   </span>
-                  <span className="text-[11px] text-white/25">
+                  <span className="text-[11px] text-text-muted">
                     在 Playground 中生成内容后，输出将出现在这里
                   </span>
                 </div>
@@ -343,12 +343,12 @@ export default function AssetPickerModal({
                         }
                         className={`
                           relative aspect-square rounded-lg overflow-hidden
-                          bg-white/[0.04] cursor-pointer
+                          bg-input-bg cursor-pointer
                           transition-all duration-150
                           ${
                             isSelected
-                              ? 'border-2 border-[#646cff] ring-2 ring-[#646cff]/30'
-                              : 'border border-white/[0.04] hover:border-[#646cff]/50'
+                              ? 'border-2 border-primary ring-2 ring-primary/30'
+                              : 'border border-glass-border hover:border-primary/50'
                           }
                         `}
                       >
@@ -378,7 +378,7 @@ export default function AssetPickerModal({
 
                         {/* Selected checkmark */}
                         {isSelected && (
-                          <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-[#646cff] flex items-center justify-center">
+                          <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
                             <Check className="w-3 h-3 text-white" />
                           </div>
                         )}
@@ -399,14 +399,14 @@ export default function AssetPickerModal({
             {/* -------------------------------------------------------------- */}
             {/* Footer                                                          */}
             {/* -------------------------------------------------------------- */}
-            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-white/[0.06]">
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-glass-border">
               <button
                 type="button"
                 onClick={onClose}
                 className="
                   px-4 py-2 rounded-lg text-xs
-                  text-white/60 hover:text-white/80
-                  hover:bg-white/[0.04]
+                  text-text-secondary hover:text-foreground
+                  hover:bg-hover-bg
                   transition-colors
                 "
               >
@@ -421,8 +421,8 @@ export default function AssetPickerModal({
                   transition-all
                   ${
                     selected
-                      ? 'bg-[#646cff] text-white hover:bg-[#545ae0] shadow-lg shadow-[#646cff]/20'
-                      : 'bg-white/[0.06] text-white/30 cursor-not-allowed'
+                      ? 'bg-primary text-white hover:bg-secondary shadow-lg shadow-primary/20'
+                      : 'bg-glass text-text-muted cursor-not-allowed'
                   }
                 `}
               >
