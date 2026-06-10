@@ -23,6 +23,7 @@ export interface PlaygroundModelOption {
     ratio?: { options: string[]; default: string };
     size?: { options: string[]; default: string };
     quality?: { options: string[]; default: string };
+    prompt?: { maxLength?: number };
     seed?: boolean;
     negativePrompt?: boolean;
     promptExtend?: boolean;
@@ -194,6 +195,14 @@ function normalizeParams(
   }
 
   // boolean flags
+  const prompt = raw.prompt;
+  if (prompt && typeof prompt === 'object' && 'maxLength' in (prompt as object)) {
+    const p = prompt as { maxLength?: number };
+    if (Number.isFinite(p.maxLength) && p.maxLength! > 0) {
+      result.prompt = { maxLength: Math.floor(p.maxLength!) };
+    }
+  }
+
   if (typeof raw.seed === 'boolean') result.seed = raw.seed;
   if (typeof raw.negativePrompt === 'boolean') result.negativePrompt = raw.negativePrompt;
   if (typeof raw.promptExtend === 'boolean') result.promptExtend = raw.promptExtend;

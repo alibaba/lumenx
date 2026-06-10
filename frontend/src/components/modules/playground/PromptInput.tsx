@@ -1,14 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Copy, Clock } from 'lucide-react';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
+import { getModelParams } from './playgroundModels';
 
-const MAX_LENGTH = 2000;
+const DEFAULT_PROMPT_MAX_LENGTH = 2000;
 
 export default function PromptInput() {
+  const modelId = usePlaygroundStore((s) => s.modelId);
   const prompt = usePlaygroundStore((s) => s.prompt);
   const negativePrompt = usePlaygroundStore((s) => s.negativePrompt);
   const setPrompt = usePlaygroundStore((s) => s.setPrompt);
@@ -17,13 +19,25 @@ export default function PromptInput() {
   const setShowHistoryDrawer = usePlaygroundStore((s) => s.setShowHistoryDrawer);
 
   const [showNegPrompt, setShowNegPrompt] = useState(false);
+  const promptMaxLength = useMemo(() => {
+    const maxLength = getModelParams(modelId)?.prompt?.maxLength;
+    return Number.isFinite(maxLength) && maxLength! > 0
+      ? Math.floor(maxLength!)
+      : DEFAULT_PROMPT_MAX_LENGTH;
+  }, [modelId]);
+
+  useEffect(() => {
+    if (prompt.length > promptMaxLength) {
+      setPrompt(prompt.slice(0, promptMaxLength));
+    }
+  }, [prompt, promptMaxLength, setPrompt]);
 
   return (
     <div>
       {/* Main prompt textarea */}
       <textarea
         value={prompt}
-        onChange={(e) => setPrompt(e.target.value.slice(0, MAX_LENGTH))}
+        onChange={(e) => setPrompt(e.target.value.slice(0, promptMaxLength))}
         placeholder="描述你想生成的内容..."
         className="w-full min-h-[120px] max-h-[280px] resize-y p-[14px] border border-glass-border rounded-xl bg-input-bg text-foreground text-[13px] leading-relaxed placeholder:text-text-muted focus:border-primary/60 focus:ring-[3px] focus:ring-primary/15 outline-none"
       />
@@ -47,7 +61,7 @@ export default function PromptInput() {
           历史
         </button>
         <span className="ml-auto font-mono text-[10px] text-text-muted">
-          {prompt.length} / {MAX_LENGTH}
+          {prompt.length} / {promptMaxLength}
         </span>
       </div>
 

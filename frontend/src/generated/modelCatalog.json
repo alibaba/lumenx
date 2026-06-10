@@ -2260,6 +2260,9 @@
       },
       "params": {
         "negativePrompt": true,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": true,
         "resolution": {
           "default": "1080p",
@@ -2343,6 +2346,9 @@
       },
       "params": {
         "negativePrompt": true,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": true,
         "resolution": {
           "default": "1080p",
@@ -2414,6 +2420,9 @@
       "inputs": {},
       "params": {
         "negativePrompt": true,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": true,
         "resolution": {
           "default": "1080p",
@@ -2480,6 +2489,9 @@
       "inputs": {},
       "params": {
         "negativePrompt": true,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": true,
         "resolution": {
           "default": "1080p",
@@ -2768,6 +2780,9 @@
       "params": {
         "audio": true,
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
           "default": "720p",
@@ -2853,6 +2868,9 @@
       },
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
           "default": "720p",
@@ -2991,6 +3009,9 @@
       },
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
           "default": "720p",
@@ -3075,6 +3096,9 @@
       "params": {
         "audio": true,
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
           "default": "720p",
@@ -3321,9 +3345,12 @@
       },
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
-          "default": "1080p",
+          "default": "720p",
           "options": [
             "720p",
             "1080p"
@@ -3406,9 +3433,12 @@
       },
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
-          "default": "1080p",
+          "default": "720p",
           "options": [
             "720p",
             "1080p"
@@ -3486,9 +3516,12 @@
       "inputs": {},
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
-          "default": "1080p",
+          "default": "720p",
           "options": [
             "720p",
             "1080p"
@@ -5300,6 +5333,9 @@
       "model_line_id": "happyhorse/happyhorse-1.0-t2v",
       "params": {
         "negativePrompt": true,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": true,
         "resolution": {
           "default": "1080p",
@@ -5380,6 +5416,9 @@
       "model_line_id": "happyhorse/happyhorse-1.0-video",
       "params": {
         "negativePrompt": true,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": true,
         "resolution": {
           "default": "1080p",
@@ -5471,6 +5510,9 @@
       "model_line_id": "happyhorse/happyhorse-1.0-video",
       "params": {
         "negativePrompt": true,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": true,
         "resolution": {
           "default": "1080p",
@@ -5550,6 +5592,9 @@
       "model_line_id": "happyhorse/happyhorse-1.0-video-edit",
       "params": {
         "negativePrompt": true,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": true,
         "resolution": {
           "default": "1080p",
@@ -5866,6 +5911,9 @@
       "params": {
         "audio": true,
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
           "default": "720p",
@@ -5960,6 +6008,9 @@
       "model_line_id": "pixverse/pixverse-c1-video",
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
           "default": "720p",
@@ -6111,6 +6162,9 @@
       "model_line_id": "pixverse/pixverse-v5.6-r2v",
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
           "default": "720p",
@@ -6204,6 +6258,9 @@
       "params": {
         "audio": true,
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
           "default": "720p",
@@ -6477,9 +6534,12 @@
       "model_line_id": "seedance/seedance-2.0-video",
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
-          "default": "1080p",
+          "default": "720p",
           "options": [
             "720p",
             "1080p"
@@ -6570,9 +6630,12 @@
       "model_line_id": "seedance/seedance-2.0-video",
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
-          "default": "1080p",
+          "default": "720p",
           "options": [
             "720p",
             "1080p"
@@ -6658,9 +6721,12 @@
       "model_line_id": "seedance/seedance-2.0-video",
       "params": {
         "negativePrompt": false,
+        "prompt": {
+          "maxLength": 2000
+        },
         "promptExtend": false,
         "resolution": {
-          "default": "1080p",
+          "default": "720p",
           "options": [
             "720p",
             "1080p"
