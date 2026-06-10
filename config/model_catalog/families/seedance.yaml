@@ -55,7 +55,7 @@ models:
           default: 5
         params:
           resolution:
-            options: [720p, 1080p]
+            options: [480p, 720p, 1080p]
             default: 1080p
           seed: true
           negativePrompt: false
@@ -79,7 +79,7 @@ models:
           default: 5
         params:
           resolution:
-            options: [720p, 1080p]
+            options: [480p, 720p, 1080p]
             default: 1080p
           seed: true
           negativePrompt: false
@@ -107,7 +107,7 @@ models:
           default: 5
         params:
           resolution:
-            options: [720p, 1080p]
+            options: [480p, 720p, 1080p]
             default: 1080p
           seed: true
           negativePrompt: false

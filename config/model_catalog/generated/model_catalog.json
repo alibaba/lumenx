@@ -3325,6 +3325,7 @@
         "resolution": {
           "default": "1080p",
           "options": [
+            "480p",
             "720p",
             "1080p"
           ]
@@ -3410,6 +3411,7 @@
         "resolution": {
           "default": "1080p",
           "options": [
+            "480p",
             "720p",
             "1080p"
           ]
@@ -3490,6 +3492,7 @@
         "resolution": {
           "default": "1080p",
           "options": [
+            "480p",
             "720p",
             "1080p"
           ]
@@ -6481,6 +6484,7 @@
         "resolution": {
           "default": "1080p",
           "options": [
+            "480p",
             "720p",
             "1080p"
           ]
@@ -6574,6 +6578,7 @@
         "resolution": {
           "default": "1080p",
           "options": [
+            "480p",
             "720p",
             "1080p"
           ]
@@ -6662,6 +6667,7 @@
         "resolution": {
           "default": "1080p",
           "options": [
+            "480p",
             "720p",
             "1080p"
           ]
