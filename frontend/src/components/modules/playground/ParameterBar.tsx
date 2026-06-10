@@ -64,24 +64,24 @@ function ParamDropdown({
 
   return (
     <div className="flex flex-col gap-[6px]">
-      <span className="text-[11px] font-medium text-white/40">{label}</span>
+      <span className="text-[11px] font-medium text-text-secondary">{label}</span>
       <div ref={containerRef} className="relative">
         <button
           type="button"
           disabled={disabled}
           onClick={() => !disabled && setOpen((o) => !o)}
-          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white text-xs font-medium transition cursor-pointer ${
+          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-input-bg border border-glass-border text-foreground text-xs font-medium transition cursor-pointer ${
             disabled
               ? 'opacity-50 cursor-not-allowed'
-              : 'hover:border-white/[0.15]'
+              : 'hover:border-primary/40'
           }`}
         >
           <span>{display(value)}</span>
-          {!disabled && <ChevronDown className={`w-3 h-3 text-white/40 transition-transform ${open ? 'rotate-180' : ''}`} />}
+          {!disabled && <ChevronDown className={`w-3 h-3 text-text-secondary transition-transform ${open ? 'rotate-180' : ''}`} />}
         </button>
 
         {open && (
-          <div className="absolute top-full mt-1 w-full bg-[#141416] border border-white/[0.08] rounded-lg shadow-xl z-30 max-h-48 overflow-y-auto">
+          <div className="absolute top-full mt-1 w-full bg-elevated border border-glass-border rounded-lg shadow-xl z-30 max-h-48 overflow-y-auto">
             {options.map((opt) => (
               <div
                 key={opt}
@@ -89,12 +89,12 @@ function ParamDropdown({
                   onChange(opt);
                   setOpen(false);
                 }}
-                className="px-3 py-2 text-xs flex items-center justify-between hover:bg-white/[0.06] cursor-pointer"
+                className="px-3 py-2 text-xs flex items-center justify-between hover:bg-hover-bg cursor-pointer"
               >
-                <span className={opt === value ? 'text-white' : 'text-white/60'}>
+                <span className={opt === value ? 'text-foreground' : 'text-text-secondary'}>
                   {display(opt)}
                 </span>
-                {opt === value && <Check className="w-3 h-3 text-[#646cff]" />}
+                {opt === value && <Check className="w-3 h-3 text-primary" />}
               </div>
             ))}
           </div>
@@ -126,15 +126,15 @@ function PillToggle({
 }) {
   return (
     <div className="flex flex-col gap-[6px]">
-      <span className="text-[11px] font-medium text-white/40">{label}</span>
-      <div className="flex gap-0 p-[2px] bg-white/[0.03] rounded-lg border border-white/[0.04]">
+      <span className="text-[11px] font-medium text-text-secondary">{label}</span>
+      <div className="flex gap-0 p-[2px] bg-glass rounded-lg border border-glass-border">
         <button
           type="button"
           onClick={() => onChange(true)}
           className={`flex-1 px-3 py-[6px] rounded-md text-[11px] font-medium text-center cursor-pointer transition-all ${
             value
-              ? 'bg-[#646cff] text-white shadow-[0_1px_4px_rgba(100,108,255,0.3)]'
-              : 'text-white/40 hover:text-white/60'
+              ? 'bg-primary text-white shadow-[0_1px_4px_rgba(100,108,255,0.3)]'
+              : 'text-text-secondary hover:text-foreground'
           }`}
         >
           ON
@@ -144,8 +144,8 @@ function PillToggle({
           onClick={() => onChange(false)}
           className={`flex-1 px-3 py-[6px] rounded-md text-[11px] font-medium text-center cursor-pointer transition-all ${
             !value
-              ? 'bg-[#646cff] text-white shadow-[0_1px_4px_rgba(100,108,255,0.3)]'
-              : 'text-white/40 hover:text-white/60'
+              ? 'bg-primary text-white shadow-[0_1px_4px_rgba(100,108,255,0.3)]'
+              : 'text-text-secondary hover:text-foreground'
           }`}
         >
           OFF
@@ -185,13 +185,13 @@ function DurationStepper({
 
   return (
     <div className="flex flex-col gap-[6px]">
-      <span className="text-[11px] font-medium text-white/40">时长</span>
-      <div className="flex items-center gap-0 rounded-lg border border-white/[0.08] bg-white/[0.04] overflow-hidden">
+      <span className="text-[11px] font-medium text-text-secondary">时长</span>
+      <div className="flex items-center gap-0 rounded-lg border border-glass-border bg-input-bg overflow-hidden">
         <button
           type="button"
           disabled={value <= min}
           onClick={() => onChange(Math.max(min, value - step))}
-          className="px-3 py-2.5 text-white/60 hover:text-white hover:bg-white/[0.06] transition disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shrink-0"
+          className="px-3 py-2.5 text-text-secondary hover:text-foreground hover:bg-hover-bg transition disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shrink-0"
         >
           −
         </button>
@@ -202,22 +202,22 @@ function DurationStepper({
             value={value}
             onChange={handleInputChange}
             onBlur={handleBlur}
-            className="w-8 bg-transparent text-center font-mono text-xs font-medium text-white outline-none"
+            className="w-8 bg-transparent text-center font-mono text-xs font-medium text-foreground outline-none"
           />
-          <span className="text-[10px] text-white/40 font-mono">s</span>
+          <span className="text-[10px] text-text-secondary font-mono">s</span>
         </div>
         <button
           type="button"
           disabled={value >= max}
           onClick={() => onChange(Math.min(max, value + step))}
-          className="px-3 py-2.5 text-white/60 hover:text-white hover:bg-white/[0.06] transition disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shrink-0"
+          className="px-3 py-2.5 text-text-secondary hover:text-foreground hover:bg-hover-bg transition disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium shrink-0"
         >
           +
         </button>
       </div>
       <div className="flex justify-between px-1">
-        <span className="text-[9px] text-white/20 font-mono">{min}s</span>
-        <span className="text-[9px] text-white/20 font-mono">{max}s</span>
+        <span className="text-[9px] text-text-muted font-mono">{min}s</span>
+        <span className="text-[9px] text-text-muted font-mono">{max}s</span>
       </div>
     </div>
   );
@@ -315,8 +315,8 @@ export default function ParameterBar() {
   // Batch pill renderer (reused for both image and video)
   const batchPills = (
     <div className="flex flex-col gap-[6px]">
-      <span className="text-[11px] font-medium text-white/40">批量生成</span>
-      <div className="flex gap-0 p-[2px] bg-white/[0.03] rounded-lg border border-white/[0.04]">
+      <span className="text-[11px] font-medium text-text-secondary">批量生成</span>
+      <div className="flex gap-0 p-[2px] bg-glass rounded-lg border border-glass-border">
         {BATCH_OPTIONS.map((n) => (
           <button
             key={n}
@@ -324,8 +324,8 @@ export default function ParameterBar() {
             onClick={() => setBatchSize(n)}
             className={`flex-1 py-[6px] rounded-md font-mono text-xs font-medium cursor-pointer transition-all text-center ${
               batchSize === n
-                ? 'text-white bg-[#646cff] shadow-[0_1px_4px_rgba(100,108,255,0.3)]'
-                : 'text-white/40 hover:text-white/60'
+                ? 'text-white bg-primary shadow-[0_1px_4px_rgba(100,108,255,0.3)]'
+                : 'text-text-secondary hover:text-foreground'
             }`}
           >
             x{n}
@@ -414,15 +414,15 @@ export default function ParameterBar() {
             {/* Duration */}
             {durationFixed ? (
               <div className="flex flex-col gap-[6px]">
-                <span className="text-[11px] font-medium text-white/40">时长</span>
-                <div className="w-full flex items-center px-3 py-2.5 rounded-lg bg-white/[0.04] border border-white/[0.08] text-white/40 text-xs font-medium">
+                <span className="text-[11px] font-medium text-text-secondary">时长</span>
+                <div className="w-full flex items-center px-3 py-2.5 rounded-lg bg-input-bg border border-glass-border text-text-secondary text-xs font-medium">
                   {durationValue}s (固定)
                 </div>
               </div>
             ) : modelDuration?.type === 'buttons' ? (
               <div className="flex flex-col gap-[6px]">
-                <span className="text-[11px] font-medium text-white/40">时长</span>
-                <div className="flex gap-0 p-[2px] bg-white/[0.03] rounded-lg border border-white/[0.04]">
+                <span className="text-[11px] font-medium text-text-secondary">时长</span>
+                <div className="flex gap-0 p-[2px] bg-glass rounded-lg border border-glass-border">
                   {modelDuration.options.map((n) => (
                     <button
                       key={n}
@@ -430,8 +430,8 @@ export default function ParameterBar() {
                       onClick={() => updateParam('duration', n)}
                       className={`flex-1 py-[6px] rounded-md font-mono text-xs font-medium cursor-pointer transition-all text-center ${
                         durationValue === n
-                          ? 'text-white bg-[#646cff] shadow-[0_1px_4px_rgba(100,108,255,0.3)]'
-                          : 'text-white/40 hover:text-white/60'
+                          ? 'text-white bg-primary shadow-[0_1px_4px_rgba(100,108,255,0.3)]'
+                          : 'text-text-secondary hover:text-foreground'
                       }`}
                     >
                       {n}s
@@ -461,7 +461,7 @@ export default function ParameterBar() {
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="text-[11px] font-medium text-white/40 hover:text-white/60 transition-colors cursor-pointer"
+            className="text-[11px] font-medium text-text-secondary hover:text-foreground transition-colors cursor-pointer"
           >
             {showAdvanced ? '▾' : '▸'} 高级参数
           </button>
@@ -470,11 +470,11 @@ export default function ParameterBar() {
             <div className="grid grid-cols-2 gap-3 mt-3">
               {supportsSeed && (
                 <div className="flex flex-col gap-[6px]">
-                  <span className="text-[11px] font-medium text-white/40">Seed</span>
+                  <span className="text-[11px] font-medium text-text-secondary">Seed</span>
                   <input
                     type="number"
                     placeholder="随机"
-                    className="bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2.5 text-xs text-white font-mono w-full outline-none focus:border-white/[0.15] transition placeholder:text-white/20"
+                    className="bg-input-bg border border-glass-border rounded-lg px-3 py-2.5 text-xs text-foreground font-mono w-full outline-none focus:border-primary/40 transition placeholder:text-text-muted"
                     value={parameters.seed ?? ''}
                     onChange={(e) => {
                       const val = e.target.value;

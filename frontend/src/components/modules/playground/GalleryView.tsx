@@ -89,7 +89,7 @@ export default function GalleryView({
   if (generations.length === 0) {
     return (
       <div className="flex flex-col h-full items-center justify-center">
-        <p className="text-sm text-white/30">No results to display</p>
+        <p className="text-sm text-text-muted">No results to display</p>
       </div>
     );
   }
@@ -106,7 +106,7 @@ export default function GalleryView({
     <div className="flex flex-col h-full">
       {/* Main media area */}
       <div
-        className="flex-1 flex items-center justify-center p-6 bg-[#050508]"
+        className="flex-1 flex items-center justify-center p-6 bg-surface-inset"
         onClick={handleClick}
       >
         {current.status === 'completed' && mediaUrl ? (
@@ -115,14 +115,14 @@ export default function GalleryView({
               key={current.id}
               src={mediaUrl}
               controls
-              className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-[#646cff]/30 transition-all duration-200"
+              className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all duration-200"
             />
           ) : (
             <img
               key={current.id}
               src={mediaUrl}
               alt={current.prompt}
-              className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:scale-[1.01] hover:ring-2 hover:ring-[#646cff]/30 transition-all duration-200"
+              className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:scale-[1.01] hover:ring-2 hover:ring-primary/30 transition-all duration-200"
             />
           )
         ) : current.status === 'failed' ? (
@@ -130,22 +130,22 @@ export default function GalleryView({
             <AlertCircle className="w-10 h-10" />
             <p className="font-mono text-xs">Generation failed</p>
             {current.error && (
-              <p className="text-[10px] text-white/30 max-w-xs text-center line-clamp-3">
+              <p className="text-[10px] text-text-muted max-w-xs text-center line-clamp-3">
                 {current.error}
               </p>
             )}
             {onRetry && (
               <button
                 onClick={() => onRetry(current)}
-                className="mt-2 px-3 py-1.5 rounded text-xs font-medium text-[#646cff] bg-[#646cff]/10 hover:bg-[#646cff]/20 transition-colors"
+                className="mt-2 px-3 py-1.5 rounded text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
               >
                 Retry
               </button>
             )}
           </div>
         ) : (
-          <div className="flex flex-col items-center gap-3 text-white/30">
-            <div className="w-8 h-8 border-2 border-white/10 border-t-[#646cff] rounded-full animate-spin" />
+          <div className="flex flex-col items-center gap-3 text-text-muted">
+            <div className="w-8 h-8 border-2 border-glass-border border-t-primary rounded-full animate-spin" />
             <p className="font-mono text-xs">
               {current.status === 'pending' ? 'Queued...' : 'Generating...'}
             </p>
@@ -154,32 +154,32 @@ export default function GalleryView({
       </div>
 
       {/* Info bar */}
-      <div className="px-6 py-3 bg-[#0a0a0d] space-y-1.5">
-        <p className="text-xs text-white/50 line-clamp-2 leading-relaxed cursor-pointer hover:text-white/70 transition-colors" onClick={handleClick} title="点击查看详情">
+      <div className="px-6 py-3 bg-surface space-y-1.5">
+        <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed cursor-pointer hover:text-foreground transition-colors" onClick={handleClick} title="点击查看详情">
           {current.prompt || '(no prompt)'}
         </p>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[9px] bg-white/[0.06] text-white/40 rounded px-[6px] py-[2px]">
+          <span className="font-mono text-[9px] bg-glass text-text-secondary rounded px-[6px] py-[2px]">
             {current.model_id || current.mode}
           </span>
           {current.parameters.size && (
-            <span className="font-mono text-[9px] bg-white/[0.04] text-white/30 rounded px-[6px] py-[2px]">
+            <span className="font-mono text-[9px] bg-glass text-text-muted rounded px-[6px] py-[2px]">
               {(current.parameters.size as string).replace('*', '×').replace('x', '×')}
             </span>
           )}
           {current.parameters.resolution && !current.parameters.size && (
-            <span className="font-mono text-[9px] bg-white/[0.04] text-white/30 rounded px-[6px] py-[2px]">
+            <span className="font-mono text-[9px] bg-glass text-text-muted rounded px-[6px] py-[2px]">
               {current.parameters.resolution as string}
             </span>
           )}
-          <span className="font-mono text-[9px] text-white/30 ml-auto">
+          <span className="font-mono text-[9px] text-text-muted ml-auto">
             {formatTime(current.created_at)}
           </span>
         </div>
       </div>
 
       {/* Thumbnail strip */}
-      <div className="h-20 shrink-0 px-4 py-2 border-t border-white/[0.06] overflow-x-auto">
+      <div className="h-20 shrink-0 px-4 py-2 border-t border-glass-border overflow-x-auto">
         <div
           ref={thumbnailStripRef}
           className="flex gap-2 h-full items-center"
@@ -200,8 +200,8 @@ export default function GalleryView({
                 onClick={() => setSelectedIndex(idx)}
                 className={`w-14 h-14 rounded-md overflow-hidden border-2 cursor-pointer shrink-0 transition-colors ${
                   isSelected
-                    ? 'border-[#646cff]'
-                    : 'border-transparent hover:border-white/20'
+                    ? 'border-primary'
+                    : 'border-transparent hover:border-primary/30'
                 }`}
               >
                 {isFailed ? (
@@ -209,8 +209,8 @@ export default function GalleryView({
                     <AlertCircle className="w-4 h-4 text-red-400/60" />
                   </div>
                 ) : genIsVideo ? (
-                  <div className="w-full h-full bg-gradient-to-br from-[#1a1a2e] to-[#0f0f1a] flex items-center justify-center">
-                    <Video className="w-4 h-4 text-white/30" />
+                  <div className="w-full h-full bg-surface-inset flex items-center justify-center">
+                    <Video className="w-4 h-4 text-text-muted" />
                   </div>
                 ) : genMediaUrl ? (
                   <img
@@ -219,8 +219,8 @@ export default function GalleryView({
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-white/[0.04] flex items-center justify-center">
-                    <div className="w-3 h-3 border border-white/10 border-t-[#646cff] rounded-full animate-spin" />
+                  <div className="w-full h-full bg-surface-inset flex items-center justify-center">
+                    <div className="w-3 h-3 border border-glass-border border-t-primary rounded-full animate-spin" />
                   </div>
                 )}
               </button>

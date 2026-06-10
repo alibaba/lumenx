@@ -55,6 +55,8 @@ models:
           step: 1
           default: 5
         params:
+          prompt:
+            maxLength: 2000
           resolution:
             options: [720p, 1080p]
             default: 1080p
@@ -81,6 +83,8 @@ models:
           step: 1
           default: 5
         params:
+          prompt:
+            maxLength: 2000
           resolution:
             options: [720p, 1080p]
             default: 1080p
@@ -105,6 +109,8 @@ models:
       selection_group: i2v
       visible_in: []
     params:
+      prompt:
+        maxLength: 2000
       resolution:
         options: [720p, 1080p]
         default: 1080p
@@ -126,6 +132,8 @@ models:
       selection_group: i2v
       visible_in: []
     params:
+      prompt:
+        maxLength: 2000
       resolution:
         options: [720p, 1080p]
         default: 1080p

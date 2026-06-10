@@ -9,7 +9,7 @@ import os
 import shutil
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 from .models import (
     GenerateRequest,
@@ -19,6 +19,7 @@ from .models import (
 )
 from .storage import PlaygroundStorage
 from ...utils import get_logger
+from ...utils.model_catalog import CatalogAccessor, load_generated_model_catalog
 
 logger = get_logger(__name__)
 
@@ -27,6 +28,29 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 IMAGE_OUTPUT_DIR = os.path.join("output", "playground", "images")
 VIDEO_OUTPUT_DIR = os.path.join("output", "playground", "videos")
+DEFAULT_PROMPT_MAX_LENGTH = 2000
+MODEL_CATALOG = load_generated_model_catalog()
+MODEL_CATALOG_ACCESSOR = CatalogAccessor(MODEL_CATALOG)
+
+
+def _get_prompt_max_length(model_id: str) -> int:
+    flat_model_id = MODEL_CATALOG_ACCESSOR.resolve_to_flat(model_id)
+    model = MODEL_CATALOG.get("models", {}).get(flat_model_id)
+    params = model.get("params", {}) if isinstance(model, Mapping) else {}
+    prompt = params.get("prompt", {}) if isinstance(params, Mapping) else {}
+    max_length: Any = prompt.get("maxLength") if isinstance(prompt, Mapping) else None
+
+    if isinstance(max_length, (int, float)) and max_length > 0:
+        return int(max_length)
+    return DEFAULT_PROMPT_MAX_LENGTH
+
+
+def _validate_prompt_length(model_id: str, prompt: str) -> None:
+    max_length = _get_prompt_max_length(model_id)
+    if len(prompt) > max_length:
+        raise ValueError(
+            f"Prompt exceeds {max_length} characters for model '{model_id}'."
+        )
 
 
 class PlaygroundService:
@@ -50,6 +74,8 @@ class PlaygroundService:
     def create_generation(self, request: GenerateRequest) -> PlaygroundGeneration:
         """Create a :class:`PlaygroundGeneration` record with *status=pending*,
         persist it via storage, and return it."""
+        _validate_prompt_length(request.model_id, request.prompt)
+
         gen = PlaygroundGeneration(
             id=str(uuid.uuid4()),
             mode=request.mode,

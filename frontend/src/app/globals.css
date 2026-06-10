@@ -61,22 +61,22 @@ html.dark {
 }
 
 html.light {
-  --color-bg-base: #f8f9fa;
-  --color-bg-surface: #ffffff;
+  --color-bg-base: #eef1f6;
+  --color-bg-surface: rgba(247, 249, 252, 0.86);
   --color-bg-elevated: #ffffff;
-  --color-bg-input: #f1f3f5;
-  --color-bg-hover: rgba(0, 0, 0, 0.04);
-  --color-glass: rgba(0, 0, 0, 0.03);
-  --color-border-default: rgba(0, 0, 0, 0.1);
-  --color-border-subtle: rgba(0, 0, 0, 0.06);
+  --color-bg-input: rgba(255, 255, 255, 0.72);
+  --color-bg-hover: rgba(15, 23, 42, 0.06);
+  --color-glass: rgba(15, 23, 42, 0.035);
+  --color-border-default: rgba(15, 23, 42, 0.12);
+  --color-border-subtle: rgba(15, 23, 42, 0.07);
   --color-text-primary: #1a1a1a;
   --color-text-secondary: #6b7280;
   --color-text-muted: #9ca3af;
   --color-overlay: rgba(0, 0, 0, 0.2);
-  --color-bg-inset: rgba(0, 0, 0, 0.02);
+  --color-bg-inset: rgba(15, 23, 42, 0.035);
   --foreground-rgb: 26, 26, 26;
-  --background-start-rgb: 248, 249, 250;
-  --background-end-rgb: 248, 249, 250;
+  --background-start-rgb: 238, 241, 246;
+  --background-end-rgb: 238, 241, 246;
 
   /* Light theme: same hues, slightly higher chroma + darker lightness
      so chips read with enough weight against a white surface. */

@@ -8,6 +8,7 @@ export type DurationConfig =
 export interface ModelParamSupport {
     resolution?: { options: string[]; default: string };
     ratio?: { options: string[]; default: string };
+    prompt?: { maxLength?: number };
     seed?: boolean;
     negativePrompt?: boolean;
     promptExtend?: boolean;

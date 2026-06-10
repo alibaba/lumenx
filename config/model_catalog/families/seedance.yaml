@@ -54,9 +54,11 @@ models:
           step: 1
           default: 5
         params:
+          prompt:
+            maxLength: 2000
           resolution:
             options: [720p, 1080p]
-            default: 1080p
+            default: 720p
           seed: true
           negativePrompt: false
           promptExtend: false
@@ -78,9 +80,11 @@ models:
           step: 1
           default: 5
         params:
+          prompt:
+            maxLength: 2000
           resolution:
             options: [720p, 1080p]
-            default: 1080p
+            default: 720p
           seed: true
           negativePrompt: false
           promptExtend: false
@@ -106,9 +110,11 @@ models:
           step: 1
           default: 5
         params:
+          prompt:
+            maxLength: 2000
           resolution:
             options: [720p, 1080p]
-            default: 1080p
+            default: 720p
           seed: true
           negativePrompt: false
           promptExtend: false

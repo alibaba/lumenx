@@ -33,7 +33,10 @@ _service = PlaygroundService(_storage)
 
 def generate(request: GenerateRequest, background_tasks: BackgroundTasks):
     """Create a generation record and kick off processing in the background."""
-    gen = _service.create_generation(request)
+    try:
+        gen = _service.create_generation(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     background_tasks.add_task(_service.process_generation, gen.id)
     return gen
 
