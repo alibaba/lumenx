@@ -2,6 +2,7 @@ import os
 from typing import Dict, Any
 from .models import StoryboardFrame, GenerationStatus
 from ...models.wanx import WanxModel
+from ...models.twelvelabs import PegasusSceneAnalyzer
 from ...utils import get_logger
 
 logger = get_logger(__name__)
@@ -11,6 +12,9 @@ class VideoGenerator:
         self.config = config or {}
         self.model = WanxModel(self.config.get('model', {}))
         self.output_dir = self.config.get('output_dir', 'output/video')
+        # Opt-in TwelveLabs Pegasus scene analyzer. Constructed cheaply;
+        # it stays a no-op unless TWELVELABS_API_KEY is configured.
+        self.scene_analyzer = PegasusSceneAnalyzer(self.config.get('scene_analysis', {}))
 
     def generate_i2v(self, image_url: str, prompt: str, duration: int = 5, audio_url: str = None) -> Dict[str, Any]:
         """
@@ -143,8 +147,49 @@ class VideoGenerator:
             except Exception as e:
                 logger.error(f"Failed to upload video for frame {frame.id} to OSS: {e}")
                 # Continue even if OSS upload fails
+
+            # Opt-in: describe the generated clip with TwelveLabs Pegasus.
+            # No-op unless TWELVELABS_API_KEY is set; never affects status.
+            self._analyze_scene(frame)
         except Exception as e:
             logger.error(f"Failed to generate video for frame {frame.id}: {e}")
             frame.status = GenerationStatus.FAILED
-            
+
         return frame
+
+    def _analyze_scene(self, frame: StoryboardFrame) -> None:
+        """Optionally annotate a completed clip with a Pegasus scene description.
+
+        Fully opt-in and non-breaking: returns immediately unless a
+        TwelveLabs key is configured, and any error is swallowed so scene
+        analysis can never fail or alter video generation. Pegasus needs a
+        public URL, so this only runs when the clip was mirrored to OSS
+        (object key -> signed URL); local-only clips are skipped.
+        """
+        if not self.scene_analyzer.is_configured:
+            return
+        try:
+            from ...utils.oss_utils import OSSImageUploader, is_object_key
+
+            public_url = None
+            if frame.video_url and is_object_key(frame.video_url):
+                uploader = OSSImageUploader()
+                if uploader.is_configured:
+                    public_url = uploader.sign_url_for_api(frame.video_url)
+            elif frame.video_url and frame.video_url.startswith("http"):
+                public_url = frame.video_url
+
+            if not public_url:
+                logger.info(
+                    "Skipping Pegasus scene analysis for frame %s: no public "
+                    "clip URL (configure OSS to mirror clips).",
+                    frame.id,
+                )
+                return
+
+            description = self.scene_analyzer.analyze_clip(public_url)
+            if description:
+                frame.scene_analysis = description
+                logger.info("Pegasus scene analysis attached to frame %s.", frame.id)
+        except Exception as e:  # pragma: no cover - optional path, never fatal
+            logger.warning("Pegasus scene analysis skipped for frame %s: %s", frame.id, e)

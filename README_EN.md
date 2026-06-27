@@ -160,6 +160,7 @@ LumenX uses a **local-first** architecture. The minimal setup requires only one 
 | **+ Kling Direct** | + `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` | Kling direct connection |
 | **+ Vidu Direct** | + `VIDU_API_KEY` | Vidu direct connection |
 | **+ OSS** | + Alibaba Cloud OSS credentials | Cloud media mirror + signed URLs |
+| **+ TwelveLabs** | + `TWELVELABS_API_KEY` (needs OSS) | Opt-in Pegasus scene description of generated clips (QA / captioning) |
 
 <details>
 <summary>Detailed Configuration</summary>

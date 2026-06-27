@@ -399,6 +399,9 @@ class StoryboardFrame(BaseModel):
     
     video_prompt: Optional[str] = Field(None, description="Optimized prompt for I2V")
     video_url: Optional[str] = Field(None, description="URL of the generated video clip")
+    # Optional TwelveLabs Pegasus scene description of the generated clip.
+    # Populated only when TWELVELABS_API_KEY is configured (opt-in); None otherwise.
+    scene_analysis: Optional[str] = Field(None, description="Pegasus scene description of the generated clip (opt-in, TwelveLabs)")
     
     audio_url: Optional[str] = Field(None, description="URL of the generated dialogue audio")
     audio_error: Optional[str] = Field(None, description="Audio generation error message")
