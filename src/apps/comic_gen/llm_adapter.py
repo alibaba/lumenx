@@ -1,9 +1,10 @@
 """
-LLM Adapter - Unified interface for DashScope and OpenAI-compatible APIs.
+LLM Adapter - Unified interface for provider-specific, OpenAI-compatible APIs.
 
-Supports two providers:
+Supported providers:
   - dashscope (default): Alibaba Cloud DashScope via OpenAI-compatible endpoint
   - openai: Any OpenAI-compatible API (OpenAI, DeepSeek, Ollama, etc.)
+  - minimax: MiniMax via its OpenAI-compatible endpoint
 
 Configuration via environment variables:
   LLM_PROVIDER=dashscope|openai
@@ -11,10 +12,15 @@ Configuration via environment variables:
   OPENAI_API_KEY=...
   OPENAI_BASE_URL=https://api.openai.com/v1
   OPENAI_MODEL=gpt-4o
+  LLM_PROVIDER=minimax
+  MINIMAX_API_KEY=...
+  MINIMAX_BASE_URL=https://api.minimax.io/v1
+  MINIMAX_MODEL=MiniMax-M3
 """
-import os
+
 import logging
-from typing import Dict, List, Optional, Any
+import os
+from typing import Any, Dict, List, Optional
 
 from ...utils.endpoints import get_provider_base_url
 
@@ -22,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class LLMAdapter:
-    """Unified LLM call interface supporting DashScope and OpenAI-compatible APIs."""
+    """Unified LLM call interface with provider-specific configuration."""
 
     def __init__(self):
         self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
@@ -31,6 +37,8 @@ class LLMAdapter:
 
     @property
     def is_configured(self) -> bool:
+        if self.provider == "minimax":
+            return bool(os.getenv("MINIMAX_API_KEY"))
         if self.provider == "openai":
             return bool(os.getenv("OPENAI_API_KEY"))
         return bool(os.getenv("DASHSCOPE_API_KEY"))
@@ -41,9 +49,14 @@ class LLMAdapter:
             try:
                 from openai import OpenAI
             except ImportError:
-                raise RuntimeError(
-                    "openai package not installed. Run: pip install openai>=1.0.0"
+                raise RuntimeError("openai package not installed. Run: pip install openai>=1.0.0")
+
+            if self.provider == "minimax":
+                self._client = OpenAI(
+                    api_key=os.getenv("MINIMAX_API_KEY"),
+                    base_url=get_provider_base_url("MINIMAX"),
                 )
+                return self._client
 
             if self.provider == "openai":
                 self._client = OpenAI(
@@ -64,6 +77,8 @@ class LLMAdapter:
     _DASHSCOPE_MODEL_FALLBACK_CHAIN = ["qwen3.7-plus", "qwen3.6-plus", "qwen-plus"]
 
     def _get_default_model(self) -> str:
+        if self.provider == "minimax":
+            return os.getenv("MINIMAX_MODEL", "MiniMax-M3")
         if self.provider == "openai":
             return os.getenv("OPENAI_MODEL", "gpt-4o")
         return self._DASHSCOPE_MODEL_FALLBACK_CHAIN[0]
@@ -94,6 +109,9 @@ class LLMAdapter:
         if model:
             return self._chat_once(client, model, messages, response_format)
 
+        if self.provider == "minimax":
+            return self._chat_once(client, self._get_default_model(), messages, response_format)
+
         # Provider 默认路径：DashScope 走 fallback chain，OpenAI 单次尝试。
         if self.provider == "openai":
             return self._chat_once(client, self._get_default_model(), messages, response_format)
@@ -106,16 +124,26 @@ class LLMAdapter:
                 # 仅在 "模型不存在 / 不可用" 类错误时回退；其他错误（鉴权、限流、网络）
                 # 直接抛，不浪费第二次重试。判定关键字宽松匹配 DashScope 文案。
                 msg = str(e).lower()
-                is_model_unavailable = any(k in msg for k in (
-                    "model not found", "invalidmodel", "model_not_found",
-                    "no such model", "not supported", "modelnotfound", "404",
-                ))
+                is_model_unavailable = any(
+                    k in msg
+                    for k in (
+                        "model not found",
+                        "invalidmodel",
+                        "model_not_found",
+                        "no such model",
+                        "not supported",
+                        "modelnotfound",
+                        "404",
+                    )
+                )
                 last_err = e
                 if is_model_unavailable and idx < len(self._DASHSCOPE_MODEL_FALLBACK_CHAIN) - 1:
                     next_candidate = self._DASHSCOPE_MODEL_FALLBACK_CHAIN[idx + 1]
                     logger.warning(
                         "DashScope model %s unavailable (%s); falling back to %s",
-                        candidate, e, next_candidate,
+                        candidate,
+                        e,
+                        next_candidate,
                     )
                     continue
                 raise
@@ -140,5 +168,7 @@ class LLMAdapter:
             response = client.chat.completions.create(**kwargs)
             return response.choices[0].message.content
         except Exception as e:
+            if self.provider == "minimax":
+                raise RuntimeError(f"MiniMax API error: {e}") from e
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
             raise RuntimeError(f"{provider_label} API error: {e}") from e
