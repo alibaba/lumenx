@@ -160,6 +160,7 @@ LumenX 采用 **本地优先** 的架构，最简配置只需一个 API Key。
 | **+ Kling 原厂** | + `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` | Kling 直连 |
 | **+ Vidu 原厂** | + `VIDU_API_KEY` | Vidu 直连 |
 | **+ OSS** | + 阿里云 OSS 凭证 | 云端媒体镜像 + 签名 URL |
+| **+ TwelveLabs** | + `TWELVELABS_API_KEY`（需 OSS） | 可选：用 Pegasus 为生成片段生成场景描述（质检 / 字幕） |
 
 <details>
 <summary>详细配置说明</summary>
