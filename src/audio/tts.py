@@ -115,7 +115,9 @@ class TTSProcessor:
         self,
         api_key: Optional[str] = None,
         model: str = "cosyvoice-v3-flash",
-        voice: str = "longanyang"
+        voice: str = "longanyang",
+        minimax_api_key: Optional[str] = None,
+        minimax_region: Optional[str] = None,
     ):
         """
         Initialize TTS processor
@@ -124,6 +126,8 @@ class TTSProcessor:
             api_key: DashScope API key. If None, will read from DASHSCOPE_API_KEY env var
             model: TTS model name (default: cosyvoice-v2)
             voice: Default voice ID (default: longxiaochun_v2)
+            minimax_api_key: MiniMax API key. Defaults to MINIMAX_API_KEY
+            minimax_region: MiniMax API region (global or cn)
         """
         import dashscope
 
@@ -133,6 +137,8 @@ class TTSProcessor:
 
         self.model = model
         self.voice = voice
+        self.minimax_api_key = minimax_api_key or os.getenv('MINIMAX_API_KEY')
+        self.minimax_region = minimax_region or os.getenv('MINIMAX_API_REGION', 'global')
 
         logger.info(f"TTS Processor initialized with model={model}, voice={voice}")
 
@@ -165,7 +171,7 @@ class TTSProcessor:
                 otherwise. PR-3g #2.
             model_override: Force a specific TTS model (e.g. cosyvoice-v3.5-plus
                 for custom cloned voices not in TTS_VOICE_REGISTRY). PR-3h #2.
-            family_override: Force dispatch family ('cosyvoice' | 'qwen3') for
+            family_override: Force a dispatch family for
                 voices not in the registry. PR-3h #2.
 
         Returns:
@@ -174,6 +180,12 @@ class TTSProcessor:
         voice = voice or self.voice
         family = family_override or self._resolve_family_for_voice(voice)
 
+        if family == 'minimax':
+            return self._synthesize_minimax(
+                text, output_path, voice,
+                speech_rate=speech_rate, volume=volume,
+                model_override=model_override,
+            )
         if family == 'qwen3':
             return self._synthesize_qwen3(
                 text, output_path, voice,
@@ -326,6 +338,36 @@ class TTSProcessor:
         )
         # Qwen3 non-streaming has no first_package_delay; report 0.
         return output_path, 0.0, request_id
+
+    def _synthesize_minimax(
+        self, text: str, output_path: str, voice: str,
+        speech_rate: float = 1.0, volume: int = 50,
+        model_override: Optional[str] = None,
+    ) -> Tuple[str, float, str]:
+        """Synthesize speech through the MiniMax HTTP API."""
+        from .minimax_tts import MINIMAX_AUDIO_FORMATS, MINIMAX_TTS_MODELS, MiniMaxTTSClient
+
+        model = model_override or (
+            self.model if self.model in MINIMAX_TTS_MODELS else MINIMAX_TTS_MODELS[0]
+        )
+        extension = os.path.splitext(output_path)[1].lstrip('.').lower()
+        audio_format = extension if extension in MINIMAX_AUDIO_FORMATS else 'mp3'
+        voice_setting = {
+            'voice_id': voice,
+            'speed': max(0.5, min(2.0, speech_rate)),
+            'vol': max(0.1, min(10.0, volume / 50.0)),
+        }
+        client = MiniMaxTTSClient(
+            api_key=self.minimax_api_key,
+            region=self.minimax_region,
+        )
+        return client.synthesize(
+            text,
+            output_path,
+            model=model,
+            voice_setting=voice_setting,
+            audio_setting={'format': audio_format},
+        )
 
     def _voice_meta(self, voice_id: str) -> dict:
         """Return registry metadata for a voice_id (matched via model_id field)."""
