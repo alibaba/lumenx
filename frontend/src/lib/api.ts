@@ -1671,9 +1671,10 @@ export const playgroundApi = {
     axios.delete(API_URL + "/playground/templates/" + id).then(r => r.data),
 
   // Upload media file for playground input (returns file path)
-  uploadMedia: (file: File) => {
+  uploadMedia: (file: File, mode: "t2i" | "i2i" | "t2v" | "i2v" | "r2v" | "v2v") => {
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("mode", mode);
     return axios.post<{ path: string }>(API_URL + "/playground/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }).then(r => r.data);

@@ -3,9 +3,9 @@
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
 
 from .models import (
     CreateTemplateRequest,
@@ -163,17 +163,98 @@ router.add_api_route("/templates/{template_id}", delete_template, methods=["DELE
 # ---------------------------------------------------------------------------
 
 UPLOAD_DIR = os.path.join("output", "playground", "uploads")
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
+UPLOAD_CHUNK_BYTES = 1024 * 1024
+
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".avi", ".mkv"}
+_ALLOWED_EXTENSIONS = _IMAGE_EXTENSIONS | _VIDEO_EXTENSIONS
+_MODE_MEDIA_KINDS: dict[str, set[str]] = {
+    "t2i": {"image"},
+    "i2i": {"image"},
+    "i2v": {"image"},
+    "r2v": {"image", "video"},
+    "v2v": {"video"},
+}
 
 
-async def upload_media(file: UploadFile = File(...)):
-    """Upload a media file for use as playground input (reference image, first frame, etc.)."""
+def _media_kind_from_signature(header: bytes) -> Optional[Literal["image", "video"]]:
+    """Identify supported media from trusted binary signatures, not client MIME."""
+    if header.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image"
+    if header.startswith(b"\xff\xd8\xff"):
+        return "image"
+    if header.startswith((b"GIF87a", b"GIF89a")):
+        return "image"
+    if header.startswith(b"RIFF") and header[8:12] == b"WEBP":
+        return "image"
+    if len(header) >= 12 and header[4:8] == b"ftyp":
+        return "video"
+    if header.startswith(b"\x1a\x45\xdf\xa3"):
+        return "video"
+    if header.startswith(b"RIFF") and header[8:12] == b"AVI ":
+        return "video"
+    return None
+
+
+def _validate_upload_name(filename: Optional[str]) -> str:
+    ext = os.path.splitext(filename or "")[1].lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported file extension. Upload PNG, JPEG, GIF, WebP, MP4, MOV, WebM, AVI, or MKV.",
+        )
+    return ext
+
+
+def _validate_upload_kind(mode: str, extension: str, header: bytes) -> None:
+    if mode not in _MODE_MEDIA_KINDS:
+        raise HTTPException(status_code=400, detail="This generation mode does not accept uploaded media.")
+
+    kind = _media_kind_from_signature(header)
+    if kind is None:
+        raise HTTPException(status_code=400, detail="File content is not a supported image or video format.")
+
+    extension_kind = "image" if extension in _IMAGE_EXTENSIONS else "video"
+    if kind != extension_kind:
+        raise HTTPException(status_code=400, detail="File extension does not match the uploaded file content.")
+    if kind not in _MODE_MEDIA_KINDS[mode]:
+        raise HTTPException(status_code=400, detail=f"Mode '{mode}' does not accept {kind} uploads.")
+
+
+async def upload_media(file: UploadFile = File(...), mode: str = Form(...)):
+    """Upload a validated image/video source for the selected Playground mode.
+
+    The client-supplied MIME type is intentionally ignored: extension allow-lists
+    and binary signatures determine whether the file is accepted.
+    """
+    extension = _validate_upload_name(file.filename)
+    initial_chunk = await file.read(UPLOAD_CHUNK_BYTES)
+    if len(initial_chunk) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File exceeds the 100 MiB upload limit.")
+    _validate_upload_kind(mode, extension, initial_chunk)
+
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-    ext = os.path.splitext(file.filename or "file")[1] or ".bin"
-    filename = f"{uuid.uuid4()}{ext}"
+    filename = f"{uuid.uuid4()}{extension}"
     dest = os.path.join(UPLOAD_DIR, filename)
-    contents = await file.read()
-    with open(dest, "wb") as f:
-        f.write(contents)
+    written = 0
+
+    try:
+        with open(dest, "wb") as output:
+            output.write(initial_chunk)
+            written += len(initial_chunk)
+            while chunk := await file.read(UPLOAD_CHUNK_BYTES):
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="File exceeds the 100 MiB upload limit.")
+                output.write(chunk)
+    except Exception:
+        if os.path.exists(dest):
+            os.remove(dest)
+        raise
+    finally:
+        await file.close()
+
     return {"path": dest}
 
 

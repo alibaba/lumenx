@@ -193,7 +193,7 @@ export default function MediaInput() {
     config = {
       ...config,
       labelKey: 'media.labelRefMaterialAV',
-      accept: 'image/*,video/*,audio/*',
+      accept: 'image/*,video/*',
       hintKey: 'r2vSeedance',
     };
   }
@@ -219,7 +219,7 @@ export default function MediaInput() {
     setUploading(true);
     try {
       const results = await Promise.all(
-        toUpload.map((file) => playgroundApi.uploadMedia(file))
+        toUpload.map((file) => playgroundApi.uploadMedia(file, mode))
       );
       const newPaths = results.map((r) => r.path);
 
