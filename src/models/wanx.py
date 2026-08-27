@@ -675,13 +675,23 @@ class WanxModel(VideoGenModel):
         if extra_headers:
             headers.update(dict(extra_headers))
 
-        input_key = "reference_image_urls" if model_name.startswith("wan2.7-") else "reference_video_urls"
+        # wan2.7 R2V uses the unified DashScope media format: input.media is a
+        # list of typed {"type", "url"} objects (reference sheets map to
+        # "reference_image"). The legacy wan2.6 protocol takes a plain string
+        # array under input.reference_urls. The old field names
+        # ("reference_image_urls" / "reference_video_urls") are accepted by
+        # neither and fail async validation with "Field required: input.media".
+        input_payload = {"prompt": prompt}
+        if model_name.startswith("wan2.7-"):
+            input_payload["media"] = [
+                {"type": "reference_image", "url": url} for url in ref_video_urls
+            ]
+        else:
+            input_payload["reference_urls"] = list(ref_video_urls)
+
         payload = {
             "model": model_name,
-            "input": {
-                "prompt": prompt,
-                input_key: ref_video_urls
-            },
+            "input": input_payload,
             "parameters": {
                 "duration": duration,
                 "audio": audio,
