@@ -3571,14 +3571,27 @@ class ComicGenPipeline:
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-            
+
         char = next((c for c in script.characters if c.id == char_id), None)
+        char_is_series_level = False
+        if not char and script.series_id:
+            # Fallback to parent series for series-level characters (same
+            # pattern as select_asset_variant). The Cast UI shows series
+            # characters alongside episode ones, so bind requests arrive
+            # with their ids too.
+            series = self.series_store.get(script.series_id)
+            if series:
+                char = next((c for c in series.characters if c.id == char_id), None)
+                if char:
+                    char_is_series_level = True
         if not char:
             raise ValueError("Character not found")
-            
+
         char.voice_id = voice_id
         char.voice_name = voice_name
         self._save_data()
+        if char_is_series_level:
+            self._save_series_data()
         return script
 
     def get_script(self, script_id: str) -> Optional[Script]:

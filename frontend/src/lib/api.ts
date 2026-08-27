@@ -1030,7 +1030,10 @@ export const api = {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ voice_id: voiceId, voice_name: voiceName }),
         });
-        if (!response.ok) throw new Error("Failed to bind voice");
+        if (!response.ok) {
+            const detail = await response.text();
+            throw new Error(`Failed to bind voice: ${response.status} ${detail}`);
+        }
         return response.json();
     },
 

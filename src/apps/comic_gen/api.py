@@ -2719,14 +2719,22 @@ class BindVoiceRequest(BaseModel):
     voice_name: str
 
 
-@app.post("/projects/{script_id}/characters/{char_id}/voice", response_model=Script)
+@app.post("/projects/{script_id}/characters/{char_id}/voice")
 def bind_voice(script_id: str, char_id: str, request: BindVoiceRequest):
-    """Binds a voice to a character."""
+    """Binds a voice to a character.
+
+    Returns the same merged episode + series + global payload as
+    GET /projects/{id} — the frontend spreads the response into its
+    project store, so returning the raw episode-local Script would
+    drop series-level characters from the Cast view.
+    """
     try:
-        updated_script = pipeline.bind_voice(script_id, char_id, request.voice_id, request.voice_name)
-        return signed_response(updated_script)
+        pipeline.bind_voice(script_id, char_id, request.voice_id, request.voice_name)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    return get_project(script_id)
 
 
 class UpdateVoiceParamsRequest(BaseModel):
@@ -2735,20 +2743,34 @@ class UpdateVoiceParamsRequest(BaseModel):
     volume: int = 50
 
 
-@app.put("/projects/{script_id}/characters/{char_id}/voice_params", response_model=Script)
+@app.put("/projects/{script_id}/characters/{char_id}/voice_params")
 def update_voice_params(script_id: str, char_id: str, request: UpdateVoiceParamsRequest):
-    """Updates voice parameters for a character."""
+    """Updates voice parameters for a character.
+
+    Returns the merged episode + series payload, see bind_voice above
+    for why the raw Script isn't returned."""
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
     char = next((c for c in script.characters if c.id == char_id), None)
+    char_is_series_level = False
+    if not char and script.series_id:
+        # Fallback to parent series for series-level characters (same
+        # pattern as pipeline.bind_voice / select_asset_variant).
+        series = pipeline.series_store.get(script.series_id)
+        if series:
+            char = next((c for c in series.characters if c.id == char_id), None)
+            if char:
+                char_is_series_level = True
     if not char:
         raise HTTPException(status_code=404, detail="Character not found")
     char.voice_speed = request.speed
     char.voice_pitch = request.pitch
     char.voice_volume = request.volume
     pipeline._save_data()
-    return signed_response(script)
+    if char_is_series_level:
+        pipeline._save_series_data()
+    return get_project(script_id)
 
 
 @app.get("/voices")
