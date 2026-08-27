@@ -390,7 +390,8 @@
     "generateScene": "Generate Scene",
     "generateProp": "Generate Prop",
     "charactersLabel": "Cast",
-    "voiceBoundLabel": "Voice"
+    "voiceBoundLabel": "Voice",
+    "toastVoiceErr": "Voice bind failed"
   },
   "common": {
     "save": "Save",

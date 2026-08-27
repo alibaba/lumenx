@@ -30,6 +30,7 @@ import PreviewImage from "@/components/shared/preview/PreviewImage";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import VoicePickerModal from "./cast/VoicePickerModal";
 import CastWorkbenchModal, { activePolls } from "./cast/CastWorkbenchModal";
+import { toast } from "@/store/toastStore";
 
 type AssetKind = "character" | "scene" | "prop";
 
@@ -708,9 +709,19 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
         if (!currentProject || !character) return;
         try {
             const updated = await api.bindVoice(currentProject.id, character.id, newVoiceId, newVoiceName);
-            // Backend returns the updated script - sync to store
+            // Backend returns the merged episode+series payload — safe to
+            // spread into the store without dropping series-level chars.
             updateProject(currentProject.id, updated);
-        } catch (e) {
+        } catch (e: any) {
+            // Surface the error instead of failing silently — a silent
+            // catch made series-level voice binds look broken (the POST
+            // returned 404/500 but the UI showed nothing).
+            const detail = e?.response?.data?.detail || e?.message || "voice bind failed";
+            toast.error(t("toastVoiceErr"), {
+                projectId: currentProject.id,
+                projectTitle: currentProject.title,
+                body: String(detail),
+            });
             console.error("Failed to bind voice:", e);
         }
     };

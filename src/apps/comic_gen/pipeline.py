@@ -1052,6 +1052,60 @@ class ComicGenPipeline:
         else:
             self._save_data()
 
+    def _character_search_pool(self, script: "Script") -> List[Any]:
+        """All characters visible to this episode, in precedence order:
+        episode-local → parent series → global library (duplicates by id
+        removed, episode-local wins). Mirrors the read-time merge of
+        GET /projects/{id} so name-based lookups (dialogue speaker
+        resolution) see series-level characters too."""
+        pool = list(script.characters)
+        seen = {c.id for c in pool}
+        if script.series_id:
+            series = self.series_store.get(script.series_id)
+            if series:
+                for c in series.characters:
+                    if c.id not in seen:
+                        pool.append(c)
+                        seen.add(c.id)
+        for c in self.library_store.characters:
+            if c.id not in seen:
+                pool.append(c)
+                seen.add(c.id)
+        return pool
+
+    def resolve_frame_speaker(self, script: "Script", frame: Any) -> Optional[Any]:
+        """Resolve the character speaking a frame's dialogue.
+
+        Tries frame.character_ids[0] first (via the episode → series →
+        global resolver), then falls back to fuzzy name matching against
+        the full character search pool. Returns None when no character
+        matches — callers treat that as "no voice bound".
+        """
+        if frame.character_ids:
+            char, _src = self._find_asset_with_source(
+                script, frame.character_ids[0], "character"
+            )
+            if char is not None:
+                return char
+        speaker_name = frame.speaker or (
+            frame.dialogue_structured.speaker if frame.dialogue_structured else None
+        )
+        if not speaker_name:
+            return None
+        key = speaker_name.strip().lower()
+        pool = self._character_search_pool(script)
+        exact = next(
+            (c for c in pool if (c.name or "").strip().lower() == key), None
+        )
+        if exact is not None:
+            return exact
+        return next(
+            (c for c in pool
+             if key in (c.name or "").strip().lower()
+             or (c.name or "").strip().lower() in key),
+            None,
+        )
+
     def toggle_asset_lock(self, script_id: str, asset_id: str, asset_type: str) -> Script:
         """Toggle the locked status of an asset. Works on both
         episode-local and series-shared assets (A2 decision: default
@@ -3533,20 +3587,7 @@ class ComicGenPipeline:
             or frame.dialogue
         )
         if dialogue_text:
-            speaker = None
-            if frame.character_ids:
-                speaker = next((c for c in script.characters if c.id == frame.character_ids[0]), None)
-            speaker_name = frame.speaker or (
-                frame.dialogue_structured.speaker if frame.dialogue_structured else None
-            )
-            if not speaker and speaker_name:
-                key = speaker_name.strip().lower()
-                speaker = next(
-                    (c for c in script.characters if c.name.strip().lower() == key
-                     or key in c.name.strip().lower()
-                     or c.name.strip().lower() in key),
-                    None,
-                )
+            speaker = self.resolve_frame_speaker(script, frame)
 
             if speaker:
                 model_override = None
@@ -3571,14 +3612,27 @@ class ComicGenPipeline:
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-            
+
         char = next((c for c in script.characters if c.id == char_id), None)
+        char_is_series_level = False
+        if not char and script.series_id:
+            # Fallback to parent series for series-level characters (same
+            # pattern as select_asset_variant). The Cast UI shows series
+            # characters alongside episode ones, so bind requests arrive
+            # with their ids too.
+            series = self.series_store.get(script.series_id)
+            if series:
+                char = next((c for c in series.characters if c.id == char_id), None)
+                if char:
+                    char_is_series_level = True
         if not char:
             raise ValueError("Character not found")
-            
+
         char.voice_id = voice_id
         char.voice_name = voice_name
         self._save_data()
+        if char_is_series_level:
+            self._save_series_data()
         return script
 
     def get_script(self, script_id: str) -> Optional[Script]:

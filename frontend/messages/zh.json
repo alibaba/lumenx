@@ -390,7 +390,8 @@
     "generateScene": "生成场景",
     "generateProp": "生成道具",
     "charactersLabel": "角色",
-    "voiceBoundLabel": "语音"
+    "voiceBoundLabel": "语音",
+    "toastVoiceErr": "音色绑定失败"
   },
   "common": {
     "save": "保存",
