@@ -22,6 +22,18 @@ MEDIA_REF_DATA_URI = "data_uri"
 MEDIA_REF_UNKNOWN = "unknown"
 
 
+def _normalize_separators(value: str) -> str:
+    """Normalize path separators to POSIX style.
+
+    Media refs are written with os.path.relpath / os.path.join (e.g. in
+    comic_gen asset generation), which produce backslash separators on
+    Windows such as ``assets\\characters\\foo.png``. Prefix-based
+    classification must not depend on the platform that wrote the ref, so
+    both separator styles are treated identically.
+    """
+    return value.replace("\\", "/")
+
+
 def _project_root(project_root: Optional[str] = None) -> Path:
     if project_root:
         return Path(project_root).resolve()
@@ -67,6 +79,11 @@ def classify_media_ref(
     if raw.startswith(("http://", "https://")):
         return MEDIA_REF_REMOTE_URL
 
+    # Refs written by os.path.relpath/os.path.join on Windows use
+    # backslashes ("assets\characters\foo.png"); normalize before matching
+    # POSIX-style prefixes and path checks.
+    raw = _normalize_separators(raw)
+
     output_root = _output_root(project_root)
     if os.path.isabs(raw):
         return MEDIA_REF_LOCAL_PATH if _is_under(Path(raw), output_root) else MEDIA_REF_UNKNOWN
@@ -90,7 +107,7 @@ def resolve_local_media_path(value: str, *, project_root: Optional[str] = None) 
     if classify_media_ref(value, project_root=project_root) != MEDIA_REF_LOCAL_PATH:
         return None
 
-    raw = value.strip()
+    raw = _normalize_separators(value.strip())
     output_root = os.path.realpath(str(_output_root(project_root)))
 
     if os.path.isabs(raw):
