@@ -562,12 +562,22 @@ class WanxModel(VideoGenModel):
         if extra_headers:
             headers.update(dict(extra_headers))
         
+        input_payload = {"prompt": prompt}
+        is_wan27 = model_name.startswith("wan2.7-")
+        if is_wan27:
+            # wan2.7 series uses the unified media array:
+            # first_frame image, optionally a driving_audio track
+            # (audio_url drives lip-sync / motion).
+            media_items = [{"type": "first_frame", "url": img_url}]
+            if audio_url:
+                media_items.append({"type": "driving_audio", "url": audio_url})
+            input_payload["media"] = media_items
+        else:
+            input_payload["img_url"] = img_url
+
         payload = {
             "model": model_name,  # Use passed model name (wan2.5-i2v, wan2.6-i2v, or wan2.7-i2v)
-            "input": {
-                "prompt": prompt,
-                "img_url": img_url
-            },
+            "input": input_payload,
             "parameters": {
                 "duration": duration,
                 "prompt_extend": prompt_extend,
@@ -582,11 +592,11 @@ class WanxModel(VideoGenModel):
             payload["parameters"]["ratio"] = ratio
         elif resolution:
             payload["parameters"]["resolution"] = resolution
-        
+
         # Add optional parameters
         if negative_prompt:
             payload["input"]["negative_prompt"] = negative_prompt
-        if audio_url:
+        if audio_url and not is_wan27:
             payload["input"]["audio_url"] = audio_url
             del payload["parameters"]["audio"]  # audio_url takes precedence
         if seed:
