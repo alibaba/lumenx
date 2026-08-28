@@ -3374,6 +3374,7 @@ class ComicGenPipeline:
             
             task.video_url = os.path.relpath(output_path, "output")
             task.status = "completed"
+            task.error = None
             
             # Sync with asset if this is an asset video
             if task.asset_id:
@@ -3384,6 +3385,9 @@ class ComicGenPipeline:
             logger.exception("Failed to process video task")
             logger.error(f"Video generation failed: {e}")
             task.status = "failed"
+            # Persist the failure reason so the queue panel / UI can show it;
+            # previously only the log captured it and task.error stayed null.
+            task.error = str(e) or type(e).__name__
             if task.asset_id:
                 self._sync_asset_video_task(script, task)
             

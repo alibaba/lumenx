@@ -562,12 +562,22 @@ class WanxModel(VideoGenModel):
         if extra_headers:
             headers.update(dict(extra_headers))
         
+        input_payload = {"prompt": prompt}
+        is_wan27 = model_name.startswith("wan2.7-")
+        if is_wan27:
+            # wan2.7 series uses the unified media array:
+            # first_frame image, optionally a driving_audio track
+            # (audio_url drives lip-sync / motion).
+            media_items = [{"type": "first_frame", "url": img_url}]
+            if audio_url:
+                media_items.append({"type": "driving_audio", "url": audio_url})
+            input_payload["media"] = media_items
+        else:
+            input_payload["img_url"] = img_url
+
         payload = {
             "model": model_name,  # Use passed model name (wan2.5-i2v, wan2.6-i2v, or wan2.7-i2v)
-            "input": {
-                "prompt": prompt,
-                "img_url": img_url
-            },
+            "input": input_payload,
             "parameters": {
                 "duration": duration,
                 "prompt_extend": prompt_extend,
@@ -582,11 +592,11 @@ class WanxModel(VideoGenModel):
             payload["parameters"]["ratio"] = ratio
         elif resolution:
             payload["parameters"]["resolution"] = resolution
-        
+
         # Add optional parameters
         if negative_prompt:
             payload["input"]["negative_prompt"] = negative_prompt
-        if audio_url:
+        if audio_url and not is_wan27:
             payload["input"]["audio_url"] = audio_url
             del payload["parameters"]["audio"]  # audio_url takes precedence
         if seed:
@@ -675,13 +685,23 @@ class WanxModel(VideoGenModel):
         if extra_headers:
             headers.update(dict(extra_headers))
 
-        input_key = "reference_image_urls" if model_name.startswith("wan2.7-") else "reference_video_urls"
+        # wan2.7 R2V uses the unified DashScope media format: input.media is a
+        # list of typed {"type", "url"} objects (reference sheets map to
+        # "reference_image"). The legacy wan2.6 protocol takes a plain string
+        # array under input.reference_urls. The old field names
+        # ("reference_image_urls" / "reference_video_urls") are accepted by
+        # neither and fail async validation with "Field required: input.media".
+        input_payload = {"prompt": prompt}
+        if model_name.startswith("wan2.7-"):
+            input_payload["media"] = [
+                {"type": "reference_image", "url": url} for url in ref_video_urls
+            ]
+        else:
+            input_payload["reference_urls"] = list(ref_video_urls)
+
         payload = {
             "model": model_name,
-            "input": {
-                "prompt": prompt,
-                input_key: ref_video_urls
-            },
+            "input": input_payload,
             "parameters": {
                 "duration": duration,
                 "audio": audio,
