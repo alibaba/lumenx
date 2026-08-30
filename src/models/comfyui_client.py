@@ -2,16 +2,16 @@
 
 Supports two server protocols:
 
-- ``zealman`` (default): the ZEALMAN ComfyUI control panel REST API used by
+- ``standard`` (default): vanilla ComfyUI (``POST /prompt``, ``GET /history``,
+  ``POST /upload/image``, ``GET /view``).
+- ``zealman``: the ZEALMAN ComfyUI control panel REST API used by
   the lumenx-comfyui fork (``/api/workflow/generate``, ``/api/workflow/result``,
   ``/api/comfy/upload/file``, ``/api/comfy/view``, ``/api/workflow/list``).
-- ``standard``: vanilla ComfyUI (``POST /prompt``, ``GET /history``,
-  ``POST /upload/image``, ``GET /view``).
 
 Environment variables:
 
 - ``COMFYUI_BASE_URL`` — server URL (default ``http://localhost:8188``)
-- ``COMFYUI_PROTOCOL`` — ``zealman`` or ``standard``
+- ``COMFYUI_PROTOCOL`` — ``standard`` (default) or ``zealman``
 - ``COMFYUI_API_KEY`` — optional bearer token
 - ``COMFYUI_VERIFY_SSL`` — set to ``1`` to verify TLS certificates
 """
@@ -68,12 +68,12 @@ class ComfyUIClient:
         timeout: int = 30,
     ) -> None:
         self.base_url = (base_url or os.getenv("COMFYUI_BASE_URL", "http://localhost:8188")).rstrip("/")
-        self.protocol = (protocol or os.getenv("COMFYUI_PROTOCOL", "zealman")).strip().lower()
+        self.protocol = (protocol or os.getenv("COMFYUI_PROTOCOL", "standard")).strip().lower()
         if self.protocol not in ("zealman", "standard"):
             logger.warning(
-                "Unknown COMFYUI_PROTOCOL %r, falling back to 'zealman'", self.protocol
+                "Unknown COMFYUI_PROTOCOL %r, falling back to 'standard'", self.protocol
             )
-            self.protocol = "zealman"
+            self.protocol = "standard"
         self.api_key = api_key or os.getenv("COMFYUI_API_KEY", "") or None
         self.timeout = timeout
         self.session = requests.Session()
@@ -176,6 +176,8 @@ class ComfyUIClient:
                     logger.error("No ComfyUI workflow template available for %r", workflow_id)
                     return None
                 prompt = self._apply_input_values(dict(workflow), parameters)
+                if upload_results:
+                    prompt = self._inject_uploaded_files(prompt, upload_results)
                 payload = {"prompt": prompt, "client_id": "lumenx-comfyui-client"}
                 logger.info(
                     "Submitting workflow to vanilla ComfyUI (template=%s)", workflow_id
@@ -489,6 +491,29 @@ class ComfyUIClient:
                 continue
             separator = ":" if ":" in key else ("." if "." in key else "")
             if not separator:
+                # Bare widget key (e.g. "seed", "size", "duration"): apply to
+                # the node whose inputs contain exactly one matching field.
+                matches = [
+                    node_id
+                    for node_id, node in prompt.items()
+                    if isinstance(node, dict)
+                    and isinstance(node.get("inputs"), dict)
+                    and key in node["inputs"]
+                ]
+                if len(matches) == 1:
+                    prompt[matches[0]]["inputs"][key] = value
+                elif len(matches) > 1:
+                    logger.warning(
+                        "ComfyUI parameter %r matches multiple nodes %s; "
+                        "use '<node_id>:<field>' to disambiguate",
+                        key,
+                        matches,
+                    )
+                else:
+                    logger.warning(
+                        "ComfyUI workflow has no node field matching parameter %r",
+                        key,
+                    )
                 continue
             node_id, _, field = key.partition(separator)
             node = prompt.get(node_id)
@@ -498,6 +523,38 @@ class ComfyUIClient:
             node_inputs = node.setdefault("inputs", {})
             if isinstance(node_inputs, dict):
                 node_inputs[field] = value
+        return prompt
+
+    @staticmethod
+    def _inject_uploaded_files(
+        workflow: Dict[str, Any],
+        upload_results: Dict[str, Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Wire uploaded file names into the workflow nodes for standard mode.
+
+        ``upload_files`` is keyed by the target node id (``{"5": local_path}``);
+        after upload we set that node's image/video/audio input to the filename.
+        """
+        prompt = json.loads(json.dumps(workflow))
+        for node_id, uploaded in upload_results.items():
+            node = prompt.get(node_id)
+            if not isinstance(node, dict):
+                logger.warning(
+                    "ComfyUI workflow has no node %r for uploaded file", node_id
+                )
+                continue
+            inputs = node.setdefault("inputs", {})
+            if not isinstance(inputs, dict):
+                continue
+            filename = uploaded.get("filename") or ""
+            field = next(
+                (f for f in ("image", "images", "video", "audio") if f in inputs),
+                "image",
+            )
+            if field == "images":
+                inputs[field] = [filename]
+            else:
+                inputs[field] = filename
         return prompt
 
     def _build_standard_results(self, entry: Dict[str, Any]) -> List[Dict[str, Any]]:

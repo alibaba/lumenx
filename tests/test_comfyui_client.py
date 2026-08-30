@@ -131,6 +131,11 @@ class TestZealmanProtocol:
 
 
 class TestStandardProtocol:
+    def test_default_protocol_is_standard(self, monkeypatch):
+        monkeypatch.delenv("COMFYUI_PROTOCOL", raising=False)
+        client = ComfyUIClient(base_url="http://comfyui.test")
+        assert client.protocol == "standard"
+
     def test_submit_uses_template_and_prompt_endpoint(self, tmp_path):
         session = FakeSession()
         captured = {}
@@ -208,6 +213,52 @@ class TestStandardProtocol:
         )
         assert result["5"]["inputs"]["text"] == "new"
         assert result["5"]["inputs"]["seed"] == 7
+
+    def test_apply_input_values_bare_widget_key_matches_single_node(self):
+        workflow = {
+            "10": {"class_type": "KSampler", "inputs": {"seed": 0}},
+            "12": {"class_type": "CLIPTextEncode", "inputs": {"text": ""}},
+        }
+        result = ComfyUIClient._apply_input_values(workflow, {"seed": 42})
+        assert result["10"]["inputs"]["seed"] == 42
+
+    def test_apply_input_values_ambiguous_bare_key_is_left_untouched(self):
+        workflow = {
+            "10": {"class_type": "KSampler", "inputs": {"seed": 1}},
+            "11": {"class_type": "KSampler", "inputs": {"seed": 2}},
+        }
+        result = ComfyUIClient._apply_input_values(workflow, {"seed": 42})
+        assert result["10"]["inputs"]["seed"] == 1
+        assert result["11"]["inputs"]["seed"] == 2
+
+    def test_standard_submit_wires_uploaded_file_into_node(self, tmp_path):
+        session = FakeSession()
+        captured = {}
+        local_file = tmp_path / "frame.png"
+        local_file.write_bytes(b"frame")
+
+        def respond(method, url, kwargs):
+            if url.endswith("/upload/image"):
+                return FakeResponse({"name": "frame.png", "subfolder": "", "type": "input"})
+            captured["url"] = url
+            captured["payload"] = kwargs.get("json")
+            return FakeResponse({"prompt_id": "std-2"})
+
+        session.respond = respond
+        client = _make_client(session, protocol="standard")
+        workflow = {
+            "5": {"class_type": "LoadImage", "inputs": {"image": "placeholder.png"}}
+        }
+
+        task_id = client.submit_workflow_task(
+            workflow=workflow,
+            parameters={"5:text": "hello"},
+            upload_files={"5": str(local_file)},
+        )
+
+        assert task_id == "std-2"
+        prompt = captured["payload"]["prompt"]
+        assert prompt["5"]["inputs"]["image"] == "frame.png"
 
 
 class TestWorkflowDiscovery:

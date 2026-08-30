@@ -187,7 +187,7 @@ LumenX can switch image / video / audio generation entirely to a local ComfyUI s
 ```dotenv
 # ComfyUI server
 COMFYUI_BASE_URL=http://localhost:8188
-COMFYUI_PROTOCOL=zealman        # zealman=ZEALMAN control panel (default) / standard=vanilla ComfyUI API
+COMFYUI_PROTOCOL=standard       # standard=vanilla ComfyUI API (default) / zealman=ZEALMAN control panel
 COMFYUI_API_KEY=                # optional, panel auth
 
 # Local LLM (OpenAI-compatible)
@@ -208,7 +208,7 @@ Feature → ComfyUI workflow ID mappings live in `config/workflow_mapping.json`:
 - `model_overrides`: specific model ID (e.g. `comfyui-wan2.2-i2v`) → workflow ID
 - `node_mapping`: input node fields for the ZEALMAN panel (positive/negative prompt, etc.)
 
-In `standard` (vanilla ComfyUI) mode, drop an exported workflow JSON into `config/comfyui_workflows/` and point the mapping at its filename.
+Native ComfyUI (`standard`) is the default: drop an exported workflow JSON into `config/comfyui_workflows/` and point the mapping at its filename. ZEALMAN control panel users can switch by setting `COMFYUI_PROTOCOL=zealman`.
 
 ### Built-in Local Models
 

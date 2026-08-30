@@ -187,7 +187,7 @@ LumenX 支持把图像 / 视频 / 音频生成全部切换到本地 ComfyUI，LL
 ```dotenv
 # ComfyUI 服务
 COMFYUI_BASE_URL=http://localhost:8188
-COMFYUI_PROTOCOL=zealman        # zealman=ZEALMAN 控制面板（默认）/ standard=原生 ComfyUI API
+COMFYUI_PROTOCOL=standard       # standard=原生 ComfyUI API（默认）/ zealman=ZEALMAN 控制面板
 COMFYUI_API_KEY=                # 可选，面板鉴权
 
 # 本地 LLM（OpenAI 兼容接口）
@@ -208,7 +208,7 @@ COMFYUI_TTS_ENABLED=1
 - `model_overrides`：具体模型 ID（如 `comfyui-wan2.2-i2v`）→ 工作流 ID
 - `node_mapping`：ZEALMAN 面板的输入节点字段（正向/负向提示词等）
 
-原生 ComfyUI（`standard`）模式下，把导出的工作流 JSON 放入 `config/comfyui_workflows/`，映射指向文件名即可。
+默认走原生 ComfyUI（`standard`）：把导出的工作流 JSON 放入 `config/comfyui_workflows/`，映射指向文件名即可；ZEALMAN 控制面板用户把 `COMFYUI_PROTOCOL` 改为 `zealman`。
 
 ### 内置本地模型
 

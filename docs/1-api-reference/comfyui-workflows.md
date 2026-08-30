@@ -25,18 +25,18 @@ LumenX 通过 `src/models/comfyui_client.py` 对接本地 ComfyUI 服务，图�
 
 客户端支持两种协议，通过 `COMFYUI_PROTOCOL` 切换：
 
-- `zealman`（默认）：ZEALMAN ComfyUI 控制面板 REST API
+- `standard`（默认）：原生 ComfyUI API（`POST /prompt`、`GET /history`、
+  `POST /upload/image`、`GET /view`）；工作流模板放在 `config/comfyui_workflows/<workflow_id>.json`，
+  `input_values` 使用 `"节点ID:字段"` 形式注入。
+- `zealman`：ZEALMAN ComfyUI 控制面板 REST API
   （`/api/workflow/generate`、`/api/workflow/result`、`/api/comfy/upload/file`、
   `/api/comfy/view`、`/api/workflow/list`）。
-- `standard`：原生 ComfyUI API（`POST /prompt`、`GET /history`、`POST /upload/image`、
-  `GET /view`）；工作流模板放在 `config/comfyui_workflows/<workflow_id>.json`，
-  `input_values` 使用 `"节点ID:字段"` 形式注入。
 
 ## 配置
 
 ```dotenv
 COMFYUI_BASE_URL=http://localhost:8188
-COMFYUI_PROTOCOL=zealman
+COMFYUI_PROTOCOL=standard
 COMFYUI_API_KEY=            # 可选
 COMFYUI_TTS_ENABLED=0       # 1 时音频走 ComfyUI
 ```
