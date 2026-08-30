@@ -3,6 +3,13 @@ from src.utils.provider_registry import ProviderFamilyConfig, ProviderRegistry, 
 
 
 class TestProviderRegistryRouting:
+    def test_comfyui_models_route_to_comfyui(self):
+        registry = get_default_provider_registry()
+
+        assert registry.resolve_backend("comfyui-wan2.2-i2v") == "comfyui"
+        assert registry.resolve_backend("comfyui-wan2.2-t2i") == "comfyui"
+        assert registry.resolve_backend("comfyui/comfyui-wan2.2-video#i2v") == "comfyui"
+
     def test_wan26_models_route_to_dashscope(self):
         registry = get_default_provider_registry()
 

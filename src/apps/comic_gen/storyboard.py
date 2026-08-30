@@ -12,7 +12,17 @@ class StoryboardGenerator:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
         self.model = WanxImageModel(self.config.get('model', {}))
+        self._comfyui_image_model = None
         self.output_dir = self.config.get('output_dir', 'output/storyboard')
+
+    def _get_model_for(self, model_name: str = None):
+        """Route to the ComfyUI image adapter for local models, else default."""
+        if model_name and (model_name.startswith("comfyui/") or model_name.startswith("comfyui-")):
+            if self._comfyui_image_model is None:
+                from ...models.comfyui_image import ComfyUIImageModel
+                self._comfyui_image_model = ComfyUIImageModel(self.config.get('model') or {})
+            return self._comfyui_image_model
+        return self.model
 
     def generate_storyboard(self, script: Any, characters: List[Character] = None, scenes: List[Scene] = None) -> Any:
         """Generates images for all frames in the storyboard.
@@ -179,7 +189,14 @@ class StoryboardGenerator:
                 # Use I2I if reference images are available
                 # Pass collected asset paths to model
                 logger.info(f"[Storyboard] Calling model.generate with {len(asset_ref_paths)} reference images using model {model_name or 'default'}")
-                self.model.generate(prompt, output_path, ref_image_paths=asset_ref_paths, size=effective_size, model_name=model_name)
+                self._get_model_for(model_name).generate(
+                    prompt,
+                    output_path,
+                    ref_image_paths=asset_ref_paths,
+                    size=effective_size,
+                    model_name=model_name,
+                    asset_type="storyboard",
+                )
                 
                 # Store relative path for frontend serving
                 rel_path = os.path.relpath(output_path, "output")

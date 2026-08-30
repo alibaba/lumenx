@@ -11,6 +11,11 @@ Configuration via environment variables:
   OPENAI_API_KEY=...
   OPENAI_BASE_URL=https://api.openai.com/v1
   OPENAI_MODEL=gpt-4o
+
+OpenAI-compatible aliases (reference-fork style, convenient for local LLMs):
+  LLM_BASE_URL=http://localhost:11434/v1
+  LLM_API_KEY=ollama
+  LLM_MODEL_NAME=qwen2.5:72b
 """
 import os
 import logging
@@ -25,14 +30,15 @@ class LLMAdapter:
     """Unified LLM call interface supporting DashScope and OpenAI-compatible APIs."""
 
     def __init__(self):
-        self.provider = os.getenv("LLM_PROVIDER", "dashscope").lower()
+        default_provider = "openai" if os.getenv("LLM_BASE_URL") else "dashscope"
+        self.provider = os.getenv("LLM_PROVIDER", default_provider).lower()
         self._client = None
         logger.info(f"LLM Adapter initialized with provider: {self.provider}")
 
     @property
     def is_configured(self) -> bool:
         if self.provider == "openai":
-            return bool(os.getenv("OPENAI_API_KEY"))
+            return bool(os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY"))
         return bool(os.getenv("DASHSCOPE_API_KEY"))
 
     def _get_client(self):
@@ -47,8 +53,12 @@ class LLMAdapter:
 
             if self.provider == "openai":
                 self._client = OpenAI(
-                    api_key=os.getenv("OPENAI_API_KEY"),
-                    base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+                    api_key=os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY"),
+                    base_url=(
+                        os.getenv("OPENAI_BASE_URL")
+                        or os.getenv("LLM_BASE_URL")
+                        or "https://api.openai.com/v1"
+                    ),
                 )
             else:
                 # DashScope uses OpenAI-compatible endpoint
@@ -65,7 +75,11 @@ class LLMAdapter:
 
     def _get_default_model(self) -> str:
         if self.provider == "openai":
-            return os.getenv("OPENAI_MODEL", "gpt-4o")
+            return (
+                os.getenv("OPENAI_MODEL")
+                or os.getenv("LLM_MODEL_NAME")
+                or "gpt-4o"
+            )
         return self._DASHSCOPE_MODEL_FALLBACK_CHAIN[0]
 
     def chat(

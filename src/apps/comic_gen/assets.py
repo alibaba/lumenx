@@ -51,10 +51,16 @@ class AssetGenerator:
         self.config = config or {}
         self.model = WanxImageModel(self.config.get('model', {}))
         self._mulerouter_image_model = None
+        self._comfyui_image_model = None
         self.output_dir = self.config.get('output_dir', 'output/assets')
 
     def _get_model_for(self, model_name: str) -> "ImageGenModel":
         """Route to the correct image adapter based on model name."""
+        if model_name and (model_name.startswith("comfyui/") or model_name.startswith("comfyui-")):
+            if self._comfyui_image_model is None:
+                from ...models.comfyui_image import ComfyUIImageModel
+                self._comfyui_image_model = ComfyUIImageModel(self.config.get('model') or {})
+            return self._comfyui_image_model
         if model_name and model_name.startswith("gpt-image"):
             if self._mulerouter_image_model is None:
                 from ...models.mulerouter import MuleRouterImageModel

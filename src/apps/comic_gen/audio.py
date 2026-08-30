@@ -78,13 +78,27 @@ class AudioGenerator:
         self.config = config or {}
         self.output_dir = self.config.get('output_dir', 'output/audio')
         
-        # Initialize TTS Processor
-        try:
-            self.tts = TTSProcessor()
-            logger.info("TTS Processor initialized successfully")
-        except Exception as e:
-            logger.warning(f"Failed to initialize TTS Processor: {e}. Using mock mode.")
-            self.tts = None
+        # COMFYUI_TTS_ENABLED=1 → route dialogue synthesis to a local
+        # ComfyUI audio workflow (FishAudio 等), otherwise keep CosyVoice.
+        comfyui_tts_enabled = os.getenv("COMFYUI_TTS_ENABLED", "").strip().lower() in (
+            "1", "true", "yes", "on"
+        )
+        if comfyui_tts_enabled:
+            try:
+                from ...models.comfyui_audio import ComfyUIAudioModel
+                self.tts = ComfyUIAudioModel()
+                logger.info("TTS initialized: ComfyUI audio model (local)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize ComfyUI TTS: {e}. Using mock mode.")
+                self.tts = None
+        else:
+            # Initialize TTS Processor
+            try:
+                self.tts = TTSProcessor()
+                logger.info("TTS Processor initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize TTS Processor: {e}. Using mock mode.")
+                self.tts = None
 
     def get_available_voices(self) -> List[Dict[str, Any]]:
         """Returns a list of available voices with full registry metadata.
@@ -95,7 +109,7 @@ class AudioGenerator:
         sub-groupings inside 系统音色.
         """
         if self.tts:
-            voices_dict = TTSProcessor.list_voices()
+            voices_dict = self.tts.list_voices()
             return [
                 {
                     # Use actual model_id (server sends "Cherry" not "qwen3_cherry")

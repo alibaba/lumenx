@@ -3345,7 +3345,10 @@ class ComicGenPipeline:
                         self._save_data()
                     except Exception:
                         logger.warning("Failed to persist provider IDs mid-flight; will retry at task completion")
-                video_path, _ = self.video_generator.model.generate(
+                video_model = self.video_generator.model
+                if hasattr(self.video_generator, "get_model"):
+                    video_model = self.video_generator.get_model(task.model)
+                video_path, _ = video_model.generate(
                     prompt=task.prompt,
                     output_path=output_path,
                     img_path=img_path,

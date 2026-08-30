@@ -1,0 +1,165 @@
+family: comfyui
+display_name: "ComfyUI (本地)"
+provider: local
+routing_prefixes:
+  - comfyui/
+  - comfyui-
+supported_backends:
+  - comfyui
+default_backend: comfyui
+credential_sources:
+  comfyui:
+    - COMFYUI_BASE_URL
+supported_modalities:
+  - t2i
+  - i2i
+  - image
+  - i2v
+  - r2v
+transport:
+  image_input_mode:
+    comfyui: comfyui_local_upload
+  audio_input_mode:
+    comfyui: comfyui_local_upload
+  reference_video_input_mode:
+    comfyui: comfyui_local_upload
+docs:
+  official_snapshot_ids:
+    - comfyui/2026-08-30
+models:
+  # ── Wan 2.2 image (T2I / I2I) ─────────────────────────────────────
+  - id: comfyui/comfyui-wan2.2-image
+    display_name: ComfyUI Wan 2.2 图像
+    description: 本地 ComfyUI 工作流驱动的文生图/图生图（C16 短剧文生图等）
+    status: active
+    release_stage: local
+    docs:
+      context_hub_doc_ids: [comfyui/workflows]
+    modes:
+      t2i:
+        legacy_id: comfyui-wan2.2-t2i
+        display_name: ComfyUI Wan 2.2 文生图
+        description: 本地 T2I 图像生成，工作流可在 config/workflow_mapping.json 配置
+        capabilities: [t2i]
+        ui:
+          selection_group: t2i
+          visible_in: [project_settings, series_settings, global_settings]
+          order: 160
+          badges: [local]
+        params:
+          size:
+            options: ["1024*1024", "1024*576", "576*1024", "1280*1280"]
+            default: "1024*1024"
+          negativePrompt: true
+          seed: true
+      i2i:
+        legacy_id: comfyui-wan2.2-i2i
+        display_name: ComfyUI Wan 2.2 图生图
+        description: 本地 I2I 图像编辑/角色一致性生成
+        capabilities: [i2i]
+        ui:
+          selection_group: i2i
+          visible_in: [project_settings, series_settings, global_settings]
+          order: 160
+          badges: [local]
+        params:
+          size:
+            options: ["1024*1024", "1024*576", "576*1024", "1280*1280"]
+            default: "1024*1024"
+          negativePrompt: true
+          seed: true
+        inputs:
+          reference_images:
+            max: 4
+
+  # ── Wan 2.2 video (I2V / R2V) ─────────────────────────────────────
+  - id: comfyui/comfyui-wan2.2-video
+    display_name: ComfyUI Wan 2.2 视频
+    description: 本地 ComfyUI 工作流驱动的图生视频/动作迁移（G03 SmoothMix、P02/P07 Animate 等）
+    status: active
+    release_stage: local
+    docs:
+      context_hub_doc_ids: [comfyui/workflows]
+    modes:
+      i2v:
+        legacy_id: comfyui-wan2.2-i2v
+        display_name: ComfyUI Wan 2.2 I2V
+        description: 本地图生视频（首帧驱动），默认 G03 工作流
+        capabilities: [i2v]
+        ui:
+          selection_group: i2v
+          visible_in: [project_settings, series_settings, video_sidebar, global_settings]
+          order: 160
+          badges: [local]
+        duration:
+          type: slider
+          min: 2
+          max: 10
+          step: 1
+          default: 5
+        params:
+          resolution:
+            options: [720p, 1080p]
+            default: 720p
+          seed: true
+          negativePrompt: true
+        inputs:
+          reference_images:
+            max: 1
+            reference_type: image
+      r2v:
+        legacy_id: comfyui-wan2.2-r2v
+        display_name: ComfyUI Wan 2.2 R2V
+        description: 本地参考视频驱动生成（动作迁移），默认 P02/P07 工作流
+        capabilities: [r2v]
+        ui:
+          selection_group: r2v
+          visible_in: [project_settings, series_settings, video_sidebar, global_settings]
+          order: 160
+          badges: [local]
+        duration:
+          type: slider
+          min: 3
+          max: 10
+          step: 1
+          default: 5
+        params:
+          seed: true
+          negativePrompt: true
+        inputs:
+          reference_images:
+            max: 1
+            reference_type: video
+
+  # ── LTX 2.3 video (I2V) ───────────────────────────────────────────
+  - id: comfyui/comfyui-ltx2.3-video
+    display_name: ComfyUI LTX 2.3 视频
+    description: 本地 LTX2.3 图生视频（H17/H28 工作流），速度优先的备选
+    status: active
+    release_stage: local
+    docs:
+      context_hub_doc_ids: [comfyui/workflows]
+    modes:
+      i2v:
+        legacy_id: comfyui-ltx2.3-i2v
+        display_name: ComfyUI LTX 2.3 I2V
+        description: 本地 LTX2.3 图生视频
+        capabilities: [i2v]
+        ui:
+          selection_group: i2v
+          visible_in: [project_settings, series_settings, video_sidebar, global_settings]
+          order: 150
+          badges: [local]
+        duration:
+          type: slider
+          min: 2
+          max: 10
+          step: 1
+          default: 5
+        params:
+          seed: true
+          negativePrompt: true
+        inputs:
+          reference_images:
+            max: 1
+            reference_type: image

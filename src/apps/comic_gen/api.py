@@ -4861,3 +4861,78 @@ def confirm_shot_block(project_id: str, shot_id: str, req: ConfirmShotBlockReque
     )
 
     return confirmed
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ComfyUI 本地模型端点
+# 这些端点只做只读查询/状态检查，不改变项目数据。生成本身仍走既有
+# asset/storyboard/video 流程（模型名 comfyui-* / comfyui/* 自动路由）。
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_comfyui_client():
+    from ...models.comfyui_client import ComfyUIClient
+    return ComfyUIClient()
+
+
+@app.get("/comfyui/health")
+def comfyui_health():
+    """Check whether the configured ComfyUI server is reachable."""
+    client = _get_comfyui_client()
+    return {
+        "success": client.health_check(),
+        "base_url": client.base_url,
+        "protocol": client.protocol,
+    }
+
+
+@app.get("/comfyui/config")
+def comfyui_config():
+    """Return the current ComfyUI connection config and workflow mapping."""
+    from ...models.comfyui_client import load_workflow_mapping
+    client = _get_comfyui_client()
+    return {
+        "success": True,
+        "base_url": client.base_url,
+        "protocol": client.protocol,
+        "workflow_mapping": load_workflow_mapping(),
+    }
+
+
+@app.get("/comfyui/workflows")
+def comfyui_list_workflows():
+    """List workflows available on the ComfyUI server / local templates."""
+    try:
+        client = _get_comfyui_client()
+        workflows = client.list_workflows()
+        return {"success": True, "workflows": workflows}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("comfyui_list_workflows failed: %s", exc)
+        return JSONResponse(status_code=502, content={"success": False, "error": str(exc)})
+
+
+@app.get("/comfyui/workflow/{workflow_id}")
+def comfyui_workflow_info(workflow_id: str):
+    """Get details for a single workflow."""
+    try:
+        client = _get_comfyui_client()
+        info = client.get_workflow_info(workflow_id)
+        if info is None:
+            return JSONResponse(status_code=404, content={"success": False, "error": "Workflow not found"})
+        return {"success": True, "workflow": info}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("comfyui_workflow_info failed: %s", exc)
+        return JSONResponse(status_code=502, content={"success": False, "error": str(exc)})
+
+
+@app.get("/comfyui/task/{task_id}")
+def comfyui_task_status(task_id: str):
+    """Query the status of a previously submitted ComfyUI task."""
+    try:
+        client = _get_comfyui_client()
+        status = client.get_task_status(task_id)
+        if status is None:
+            return JSONResponse(status_code=502, content={"success": False, "error": "Failed to query task status"})
+        return {"success": True, **status}
+    except Exception as exc:  # noqa: BLE001
+        logger.error("comfyui_task_status failed: %s", exc)
+        return JSONResponse(status_code=502, content={"success": False, "error": str(exc)})

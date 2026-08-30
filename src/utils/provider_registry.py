@@ -4,7 +4,7 @@ from typing import Dict, Mapping, Optional, Sequence, Tuple
 
 from .model_catalog import build_provider_family_configs, load_generated_model_catalog
 
-SUPPORTED_PROVIDER_BACKENDS = ("dashscope", "vendor", "mulerouter")
+SUPPORTED_PROVIDER_BACKENDS = ("dashscope", "vendor", "mulerouter", "comfyui")
 
 
 @dataclass
@@ -63,6 +63,24 @@ class ProviderRegistry:
 
 
 DEFAULT_PROVIDER_FAMILIES: Tuple[ProviderFamilyConfig, ...] = (
+    ProviderFamilyConfig(
+        model_family="comfyui",
+        backend_default="comfyui",
+        backend_env_key="COMFYUI_PROVIDER_MODE",
+        credential_sources={
+            "comfyui": ("COMFYUI_BASE_URL",),
+        },
+        supported_modalities=("t2i", "i2i", "image", "i2v", "r2v", "t2v"),
+        image_input_mode={
+            "comfyui": "comfyui_local_upload",
+        },
+        audio_input_mode={
+            "comfyui": "comfyui_local_upload",
+        },
+        reference_video_input_mode={
+            "comfyui": "comfyui_local_upload",
+        },
+    ),
     ProviderFamilyConfig(
         model_family="wan2.7-",
         backend_default="dashscope",

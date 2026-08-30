@@ -1,0 +1,39 @@
+{
+  "asset_generation": {
+    "character": "C16-短剧文生图专用-支持场景-角色",
+    "character_multiangle": "B13-千问角色一键多角度_multiple_character_angles-v1.0",
+    "scene": "C16-短剧文生图专用-支持场景-角色",
+    "prop": "C16-短剧文生图专用-支持场景-角色",
+    "enhance": "D20-RAW画质重建Adonis_Workflow"
+  },
+  "storyboard": {
+    "default": "C16-短剧文生图专用-支持场景-角色",
+    "fast": "C07-文生图-Zimage-Nunchaku加速"
+  },
+  "video_generation": {
+    "i2v": "G03-图生视频-Wan2.2SmoothMix",
+    "i2v_alternative": "G10-图生视频-Wan2.2SmoothMixV2",
+    "i2v_first_last_frame": "G02-首尾帧-Wan2.2首尾帧视频",
+    "r2v": "P02-动作迁移-Wan2.2Animate角色迁移",
+    "r2v_v4": "P07-动作迁移-Wan2.2AnimateV4",
+    "ltx_optimized": "H17-文图生视频-LTX2.3全面优化版",
+    "ltx_high_dynamic": "H28-LTX2.3-高动态图生视频"
+  },
+  "audio_generation": {
+    "voice_clone": "N2-单人声音克隆FishAudio S2pro"
+  },
+  "node_mapping": {
+    "positive_prompt": "49:text",
+    "negative_prompt": "16:text",
+    "seed": "seed",
+    "batch_size": "batch_size",
+    "image": "image"
+  },
+  "model_overrides": {
+    "comfyui-wan2.2-t2i": "C16-短剧文生图专用-支持场景-角色",
+    "comfyui-wan2.2-i2i": "B13-千问角色一键多角度_multiple_character_angles-v1.0",
+    "comfyui-wan2.2-i2v": "G03-图生视频-Wan2.2SmoothMix",
+    "comfyui-wan2.2-r2v": "P02-动作迁移-Wan2.2Animate角色迁移",
+    "comfyui-ltx2.3-i2v": "H17-文图生视频-LTX2.3全面优化版"
+  }
+}

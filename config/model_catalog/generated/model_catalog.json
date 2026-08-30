@@ -1,6 +1,11 @@
 {
   "compat": {
     "legacy_model_ids": {
+      "comfyui-ltx2.3-i2v": "comfyui/comfyui-ltx2.3-video#i2v",
+      "comfyui-wan2.2-i2i": "comfyui/comfyui-wan2.2-image#i2i",
+      "comfyui-wan2.2-i2v": "comfyui/comfyui-wan2.2-video#i2v",
+      "comfyui-wan2.2-r2v": "comfyui/comfyui-wan2.2-video#r2v",
+      "comfyui-wan2.2-t2i": "comfyui/comfyui-wan2.2-image#t2i",
       "gpt-image-2": "gpt-image/gpt-image-2#image",
       "happyhorse-1.0-video-edit": "happyhorse/happyhorse-1.0-video-edit#i2v",
       "happyhorse-1.1-i2v": "happyhorse/happyhorse-1.1-video#i2v",
@@ -59,6 +64,55 @@
     }
   },
   "families": {
+    "comfyui": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "display_name": "ComfyUI (本地)",
+      "docs": {
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "family": "comfyui",
+      "models": [
+        "comfyui-ltx2.3-i2v",
+        "comfyui-wan2.2-i2i",
+        "comfyui-wan2.2-i2v",
+        "comfyui-wan2.2-r2v",
+        "comfyui-wan2.2-t2i"
+      ],
+      "provider": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "supported_backends": [
+        "comfyui"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "image",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      }
+    },
     "gpt-image": {
       "backend_env_key": null,
       "credential_sources": {
@@ -452,6 +506,178 @@
     }
   },
   "model_lines": {
+    "comfyui/comfyui-ltx2.3-video": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 LTX2.3 图生视频（H17/H28 工作流），速度优先的备选",
+      "display_name": "ComfyUI LTX 2.3 视频",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "family": "comfyui",
+      "id": "comfyui/comfyui-ltx2.3-video",
+      "legacy_model_ids": [
+        "comfyui-ltx2.3-i2v"
+      ],
+      "modes": [
+        "comfyui/comfyui-ltx2.3-video#i2v"
+      ],
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "runtime": {},
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "image",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      }
+    },
+    "comfyui/comfyui-wan2.2-image": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 ComfyUI 工作流驱动的文生图/图生图（C16 短剧文生图等）",
+      "display_name": "ComfyUI Wan 2.2 图像",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "family": "comfyui",
+      "id": "comfyui/comfyui-wan2.2-image",
+      "legacy_model_ids": [
+        "comfyui-wan2.2-i2i",
+        "comfyui-wan2.2-t2i"
+      ],
+      "modes": [
+        "comfyui/comfyui-wan2.2-image#i2i",
+        "comfyui/comfyui-wan2.2-image#t2i"
+      ],
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "runtime": {},
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "image",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      }
+    },
+    "comfyui/comfyui-wan2.2-video": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 ComfyUI 工作流驱动的图生视频/动作迁移（G03 SmoothMix、P02/P07 Animate 等）",
+      "display_name": "ComfyUI Wan 2.2 视频",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "family": "comfyui",
+      "id": "comfyui/comfyui-wan2.2-video",
+      "legacy_model_ids": [
+        "comfyui-wan2.2-i2v",
+        "comfyui-wan2.2-r2v"
+      ],
+      "modes": [
+        "comfyui/comfyui-wan2.2-video#i2v",
+        "comfyui/comfyui-wan2.2-video#r2v"
+      ],
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "runtime": {},
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "image",
+        "i2v",
+        "r2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      }
+    },
     "gpt-image/gpt-image-2": {
       "backend_env_key": null,
       "credential_sources": {
@@ -2141,6 +2367,391 @@
     }
   },
   "models": {
+    "comfyui-ltx2.3-i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "i2v"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 LTX2.3 图生视频",
+      "display_name": "ComfyUI LTX 2.3 I2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 10,
+        "min": 2,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "comfyui",
+      "id": "comfyui-ltx2.3-i2v",
+      "inputs": {
+        "reference_images": {
+          "max": 1,
+          "reference_type": "image"
+        }
+      },
+      "params": {
+        "negativePrompt": true,
+        "seed": true
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 150,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "comfyui-wan2.2-i2i": {
+      "backend_env_key": null,
+      "capabilities": [
+        "i2i"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 I2I 图像编辑/角色一致性生成",
+      "display_name": "ComfyUI Wan 2.2 图生图",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": null,
+      "family": "comfyui",
+      "id": "comfyui-wan2.2-i2i",
+      "inputs": {
+        "reference_images": {
+          "max": 4
+        }
+      },
+      "params": {
+        "negativePrompt": true,
+        "seed": true,
+        "size": {
+          "default": "1024*1024",
+          "options": [
+            "1024*1024",
+            "1024*576",
+            "576*1024",
+            "1280*1280"
+          ]
+        }
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 160,
+        "recommended": false,
+        "selection_group": "i2i",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "comfyui-wan2.2-i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "i2v"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地图生视频（首帧驱动），默认 G03 工作流",
+      "display_name": "ComfyUI Wan 2.2 I2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 10,
+        "min": 2,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "comfyui",
+      "id": "comfyui-wan2.2-i2v",
+      "inputs": {
+        "reference_images": {
+          "max": 1,
+          "reference_type": "image"
+        }
+      },
+      "params": {
+        "negativePrompt": true,
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "720p",
+            "1080p"
+          ]
+        },
+        "seed": true
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 160,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "comfyui-wan2.2-r2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "r2v"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地参考视频驱动生成（动作迁移），默认 P02/P07 工作流",
+      "display_name": "ComfyUI Wan 2.2 R2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 10,
+        "min": 3,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "comfyui",
+      "id": "comfyui-wan2.2-r2v",
+      "inputs": {
+        "reference_images": {
+          "max": 1,
+          "reference_type": "video"
+        }
+      },
+      "params": {
+        "negativePrompt": true,
+        "seed": true
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 160,
+        "recommended": false,
+        "selection_group": "r2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "comfyui-wan2.2-t2i": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2i"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 T2I 图像生成，工作流可在 config/workflow_mapping.json 配置",
+      "display_name": "ComfyUI Wan 2.2 文生图",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": null,
+      "family": "comfyui",
+      "id": "comfyui-wan2.2-t2i",
+      "inputs": {},
+      "params": {
+        "negativePrompt": true,
+        "seed": true,
+        "size": {
+          "default": "1024*1024",
+          "options": [
+            "1024*1024",
+            "1024*576",
+            "576*1024",
+            "1280*1280"
+          ]
+        }
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 160,
+        "recommended": false,
+        "selection_group": "t2i",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "global_settings"
+        ]
+      }
+    },
     "gpt-image-2": {
       "backend_env_key": null,
       "capabilities": [
@@ -5182,6 +5793,411 @@
     }
   },
   "modes": {
+    "comfyui/comfyui-ltx2.3-video#i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "i2v"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 LTX2.3 图生视频",
+      "display_name": "ComfyUI LTX 2.3 I2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 10,
+        "min": 2,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "comfyui",
+      "id": "comfyui/comfyui-ltx2.3-video#i2v",
+      "inputs": {
+        "reference_images": {
+          "max": 1,
+          "reference_type": "image"
+        }
+      },
+      "legacy_model_id": "comfyui-ltx2.3-i2v",
+      "mode": "i2v",
+      "model_line_id": "comfyui/comfyui-ltx2.3-video",
+      "params": {
+        "negativePrompt": true,
+        "seed": true
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "runtime": {},
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 150,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "comfyui/comfyui-wan2.2-image#i2i": {
+      "backend_env_key": null,
+      "capabilities": [
+        "i2i"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 I2I 图像编辑/角色一致性生成",
+      "display_name": "ComfyUI Wan 2.2 图生图",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": null,
+      "family": "comfyui",
+      "id": "comfyui/comfyui-wan2.2-image#i2i",
+      "inputs": {
+        "reference_images": {
+          "max": 4
+        }
+      },
+      "legacy_model_id": "comfyui-wan2.2-i2i",
+      "mode": "i2i",
+      "model_line_id": "comfyui/comfyui-wan2.2-image",
+      "params": {
+        "negativePrompt": true,
+        "seed": true,
+        "size": {
+          "default": "1024*1024",
+          "options": [
+            "1024*1024",
+            "1024*576",
+            "576*1024",
+            "1280*1280"
+          ]
+        }
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "runtime": {},
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 160,
+        "recommended": false,
+        "selection_group": "i2i",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "comfyui/comfyui-wan2.2-image#t2i": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2i"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地 T2I 图像生成，工作流可在 config/workflow_mapping.json 配置",
+      "display_name": "ComfyUI Wan 2.2 文生图",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": null,
+      "family": "comfyui",
+      "id": "comfyui/comfyui-wan2.2-image#t2i",
+      "inputs": {},
+      "legacy_model_id": "comfyui-wan2.2-t2i",
+      "mode": "t2i",
+      "model_line_id": "comfyui/comfyui-wan2.2-image",
+      "params": {
+        "negativePrompt": true,
+        "seed": true,
+        "size": {
+          "default": "1024*1024",
+          "options": [
+            "1024*1024",
+            "1024*576",
+            "576*1024",
+            "1280*1280"
+          ]
+        }
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "runtime": {},
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 160,
+        "recommended": false,
+        "selection_group": "t2i",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "global_settings"
+        ]
+      }
+    },
+    "comfyui/comfyui-wan2.2-video#i2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "i2v"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地图生视频（首帧驱动），默认 G03 工作流",
+      "display_name": "ComfyUI Wan 2.2 I2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 10,
+        "min": 2,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "comfyui",
+      "id": "comfyui/comfyui-wan2.2-video#i2v",
+      "inputs": {
+        "reference_images": {
+          "max": 1,
+          "reference_type": "image"
+        }
+      },
+      "legacy_model_id": "comfyui-wan2.2-i2v",
+      "mode": "i2v",
+      "model_line_id": "comfyui/comfyui-wan2.2-video",
+      "params": {
+        "negativePrompt": true,
+        "resolution": {
+          "default": "720p",
+          "options": [
+            "720p",
+            "1080p"
+          ]
+        },
+        "seed": true
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "runtime": {},
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 160,
+        "recommended": false,
+        "selection_group": "i2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
+    "comfyui/comfyui-wan2.2-video#r2v": {
+      "backend_env_key": null,
+      "capabilities": [
+        "r2v"
+      ],
+      "credential_sources": {
+        "comfyui": [
+          "COMFYUI_BASE_URL"
+        ]
+      },
+      "default_backend": "comfyui",
+      "description": "本地参考视频驱动生成（动作迁移），默认 P02/P07 工作流",
+      "display_name": "ComfyUI Wan 2.2 R2V",
+      "docs": {
+        "context_hub_doc_ids": [
+          "comfyui/workflows"
+        ],
+        "official_snapshot_ids": [
+          "comfyui/2026-08-30"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 10,
+        "min": 3,
+        "step": 1,
+        "type": "slider"
+      },
+      "family": "comfyui",
+      "id": "comfyui/comfyui-wan2.2-video#r2v",
+      "inputs": {
+        "reference_images": {
+          "max": 1,
+          "reference_type": "video"
+        }
+      },
+      "legacy_model_id": "comfyui-wan2.2-r2v",
+      "mode": "r2v",
+      "model_line_id": "comfyui/comfyui-wan2.2-video",
+      "params": {
+        "negativePrompt": true,
+        "seed": true
+      },
+      "provider": "local",
+      "release_stage": "local",
+      "routing_prefixes": [
+        "comfyui-",
+        "comfyui/"
+      ],
+      "runtime": {},
+      "status": "active",
+      "supported_backends": [
+        "comfyui"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "image_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        },
+        "reference_video_input_mode": {
+          "comfyui": "comfyui_local_upload"
+        }
+      },
+      "ui": {
+        "badges": [
+          "local"
+        ],
+        "order": 160,
+        "recommended": false,
+        "selection_group": "r2v",
+        "visible_in": [
+          "project_settings",
+          "series_settings",
+          "video_sidebar",
+          "global_settings"
+        ]
+      }
+    },
     "gpt-image/gpt-image-2#image": {
       "backend_env_key": null,
       "capabilities": [

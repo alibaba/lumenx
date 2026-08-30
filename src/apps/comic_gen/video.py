@@ -10,7 +10,17 @@ class VideoGenerator:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
         self.model = WanxModel(self.config.get('model', {}))
+        self._comfyui_video_model = None
         self.output_dir = self.config.get('output_dir', 'output/video')
+
+    def get_model(self, model_name: str = None):
+        """Route to the ComfyUI video adapter for local models, else default Wanx."""
+        if model_name and (model_name.startswith("comfyui/") or model_name.startswith("comfyui-")):
+            if self._comfyui_video_model is None:
+                from ...models.comfyui_video import ComfyUIVideoModel
+                self._comfyui_video_model = ComfyUIVideoModel(self.config.get('model') or {})
+            return self._comfyui_video_model
+        return self.model
 
     def generate_i2v(self, image_url: str, prompt: str, duration: int = 5, audio_url: str = None) -> Dict[str, Any]:
         """
@@ -43,7 +53,7 @@ class VideoGenerator:
             output_path = os.path.join(self.output_dir, output_filename)
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
-            video_path, _ = self.model.generate(
+            video_path, _ = self.get_model().generate(
                 prompt=prompt,
                 output_path=output_path,
                 img_path=img_path,
@@ -118,7 +128,7 @@ class VideoGenerator:
         try:
             output_path = os.path.join(self.output_dir, f"{frame.id}.mp4")
             
-            video_path, _ = self.model.generate(
+            video_path, _ = self.get_model().generate(
                 prompt=prompt,
                 output_path=output_path,
                 img_path=img_path, # Pass local path, model will upload
