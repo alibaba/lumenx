@@ -104,6 +104,7 @@ LumenX 目前包含两个核心模块：
 | **Vidu 原厂** | Vidu Q3 Pro / Turbo | I2V, R2V |
 | **DashScope** | CosyVoice, Qwen3-TTS | TTS 配音 |
 | **DashScope** | Qwen 3.7 Plus | 剧本分析、Prompt 润色 |
+| **ComfyUI (本地)** | 任意本地 ComfyUI 工作流（Wan 2.2 / LTX 2.3 / FishAudio 等） | T2I, I2I, I2V, R2V, TTS |
 
 ---
 
@@ -124,7 +125,7 @@ cd lumenx
 
 # 配置 API Key
 cp .env.example .env
-# 编辑 .env，填入 DASHSCOPE_API_KEY（必填）
+# 编辑 .env，填入 DASHSCOPE_API_KEY；或使用「ComfyUI 全本地模式」（见下文），无需云端 Key
 
 # 启动（后端 17177 + 前端 3008，自动开浏览器）
 npm run dev
@@ -160,6 +161,7 @@ LumenX 采用 **本地优先** 的架构，最简配置只需一个 API Key。
 | **+ Kling 原厂** | + `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` | Kling 直连 |
 | **+ Vidu 原厂** | + `VIDU_API_KEY` | Vidu 直连 |
 | **+ OSS** | + 阿里云 OSS 凭证 | 云端媒体镜像 + 签名 URL |
+| **全本地 (ComfyUI)** | + `COMFYUI_BASE_URL`（+ 本地 LLM 的 `LLM_BASE_URL`） | 图像/视频/音频全走本地 ComfyUI，LLM 走 OpenAI 兼容本地服务 |
 
 <details>
 <summary>详细配置说明</summary>
@@ -173,6 +175,63 @@ MuleRun 支持两种认证方式：
 2. **API Key 模式**: 在设置页填入 `muk-...` 格式的 Key
 
 </details>
+
+---
+
+## 🖥️ ComfyUI 全本地模式
+
+LumenX 支持把图像 / 视频 / 音频生成全部切换到本地 ComfyUI，LLM（剧本分析、Prompt 润色）走任意 OpenAI 兼容的本地服务（Ollama / vLLM / LM Studio 等），云端 Provider 保留为可选项。模型名以 `comfyui/` 或 `comfyui-` 开头时，后端会自动路由到本地 ComfyUI 适配器，无需改动生成流程。
+
+### 环境变量
+
+```dotenv
+# ComfyUI 服务
+COMFYUI_BASE_URL=http://localhost:8188
+COMFYUI_PROTOCOL=zealman        # zealman=ZEALMAN 控制面板（默认）/ standard=原生 ComfyUI API
+COMFYUI_API_KEY=                # 可选，面板鉴权
+
+# 本地 LLM（OpenAI 兼容接口）
+LLM_PROVIDER=openai
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=ollama
+LLM_MODEL_NAME=qwen2.5:72b
+
+# 本地 TTS（可选，走 ComfyUI FishAudio 工作流）
+COMFYUI_TTS_ENABLED=1
+```
+
+### 工作流映射
+
+功能 → ComfyUI 工作流 ID 的映射位于 `config/workflow_mapping.json`：
+
+- `asset_generation` / `storyboard` / `video_generation` / `audio_generation`：功能 → 工作流 ID（C16 文生图、G03 图生视频、P02 动作迁移、N2 声音克隆等）
+- `model_overrides`：具体模型 ID（如 `comfyui-wan2.2-i2v`）→ 工作流 ID
+- `node_mapping`：ZEALMAN 面板的输入节点字段（正向/负向提示词等）
+
+原生 ComfyUI（`standard`）模式下，把导出的工作流 JSON 放入 `config/comfyui_workflows/`，映射指向文件名即可。
+
+### 内置本地模型
+
+| 模型 ID | 能力 | 默认工作流 |
+|---------|------|------------|
+| `comfyui-wan2.2-t2i` | 文生图 | C16 短剧文生图专用 |
+| `comfyui-wan2.2-i2i` | 图生图 | B13 角色一键多角度 |
+| `comfyui-wan2.2-i2v` | 图生视频 | G03 Wan2.2 SmoothMix |
+| `comfyui-wan2.2-r2v` | 动作迁移 | P02 Wan2.2 Animate |
+| `comfyui-ltx2.3-i2v` | 图生视频 | H17 LTX2.3 |
+
+> ComfyUI 支持任意已安装的模型：这些 ID 只是「功能 → 工作流」的入口标签，真正使用哪个底模由工作流决定。想用新模型，改 `workflow_mapping.json` 或在 `config/model_catalog/families/comfyui.yaml` 增加条目即可。
+
+### 切换默认模型为全本地
+
+编辑 `config/model_catalog/catalog.meta.yaml` 的 `defaults.model_settings`，把 `t2i_model` / `i2i_model` / `image_model` / `i2v_model` / `r2v_model` 换成上面的 ComfyUI 模型 ID，然后运行：
+
+```bash
+python scripts/build_model_catalog.py
+python scripts/validate_model_catalog.py
+```
+
+完整说明见 [ComfyUI 接入参考](docs/1-api-reference/comfyui-workflows.md)。
 
 ---
 
@@ -194,7 +253,7 @@ lumenx/
 ├── src/
 │   ├── apps/comic_gen/        # Studio 后端 (API + Pipeline)
 │   ├── apps/playground/       # Playground 后端 (API + Service)
-│   ├── models/                # AI 模型适配器 (Wanx/Kling/Vidu/MuleRouter)
+│   ├── models/                # AI 模型适配器 (Wanx/Kling/Vidu/MuleRouter/ComfyUI)
 │   └── audio/                 # TTS 语音合成
 ├── config/model_catalog/      # 模型目录 (YAML → JSON)
 └── output/                    # 生成产物 (本地存储)

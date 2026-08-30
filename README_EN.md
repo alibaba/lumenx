@@ -104,6 +104,7 @@ LumenX currently includes two core modules:
 | **Vidu Direct** | Vidu Q3 Pro / Turbo | I2V, R2V |
 | **DashScope** | CosyVoice, Qwen3-TTS | TTS Dubbing |
 | **DashScope** | Qwen 3.7 Plus | Script Analysis, Prompt Polish |
+| **ComfyUI (Local)** | Any local ComfyUI workflow (Wan 2.2 / LTX 2.3 / FishAudio, etc.) | T2I, I2I, I2V, R2V, TTS |
 
 ---
 
@@ -124,7 +125,7 @@ cd lumenx
 
 # Configure API Key
 cp .env.example .env
-# Edit .env, fill in DASHSCOPE_API_KEY (required)
+# Edit .env, fill in DASHSCOPE_API_KEY; or use "ComfyUI All-Local Mode" (see below) — no cloud key needed
 
 # Start (backend on 17177 + frontend on 3008, auto-opens browser)
 npm run dev
@@ -160,6 +161,7 @@ LumenX uses a **local-first** architecture. The minimal setup requires only one 
 | **+ Kling Direct** | + `KLING_ACCESS_KEY` + `KLING_SECRET_KEY` | Kling direct connection |
 | **+ Vidu Direct** | + `VIDU_API_KEY` | Vidu direct connection |
 | **+ OSS** | + Alibaba Cloud OSS credentials | Cloud media mirror + signed URLs |
+| **All-Local (ComfyUI)** | + `COMFYUI_BASE_URL` (+ local LLM `LLM_BASE_URL`) | Image/video/audio all run on local ComfyUI; LLM uses any OpenAI-compatible local service |
 
 <details>
 <summary>Detailed Configuration</summary>
@@ -173,6 +175,63 @@ MuleRun supports two authentication methods:
 2. **API Key mode**: Enter `muk-...` format key in Settings page
 
 </details>
+
+---
+
+## 🖥️ ComfyUI All-Local Mode
+
+LumenX can switch image / video / audio generation entirely to a local ComfyUI server, while the LLM (script analysis, prompt polishing) uses any OpenAI-compatible local service (Ollama / vLLM / LM Studio, etc.). Cloud providers remain optional. Any model name starting with `comfyui/` or `comfyui-` is automatically routed to the local ComfyUI adapters — no generation-flow changes required.
+
+### Environment Variables
+
+```dotenv
+# ComfyUI server
+COMFYUI_BASE_URL=http://localhost:8188
+COMFYUI_PROTOCOL=zealman        # zealman=ZEALMAN control panel (default) / standard=vanilla ComfyUI API
+COMFYUI_API_KEY=                # optional, panel auth
+
+# Local LLM (OpenAI-compatible)
+LLM_PROVIDER=openai
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=ollama
+LLM_MODEL_NAME=qwen2.5:72b
+
+# Local TTS (optional, ComfyUI FishAudio workflow)
+COMFYUI_TTS_ENABLED=1
+```
+
+### Workflow Mapping
+
+Feature → ComfyUI workflow ID mappings live in `config/workflow_mapping.json`:
+
+- `asset_generation` / `storyboard` / `video_generation` / `audio_generation`: feature → workflow ID (C16 text-to-image, G03 image-to-video, P02 motion transfer, N2 voice clone, etc.)
+- `model_overrides`: specific model ID (e.g. `comfyui-wan2.2-i2v`) → workflow ID
+- `node_mapping`: input node fields for the ZEALMAN panel (positive/negative prompt, etc.)
+
+In `standard` (vanilla ComfyUI) mode, drop an exported workflow JSON into `config/comfyui_workflows/` and point the mapping at its filename.
+
+### Built-in Local Models
+
+| Model ID | Capability | Default Workflow |
+|----------|-----------|------------------|
+| `comfyui-wan2.2-t2i` | Text-to-image | C16 short-drama text-to-image |
+| `comfyui-wan2.2-i2i` | Image-to-image | B13 character multi-angle |
+| `comfyui-wan2.2-i2v` | Image-to-video | G03 Wan2.2 SmoothMix |
+| `comfyui-wan2.2-r2v` | Motion transfer | P02 Wan2.2 Animate |
+| `comfyui-ltx2.3-i2v` | Image-to-video | H17 LTX2.3 |
+
+> ComfyUI can run any model you have installed: these IDs are just "feature → workflow" entry labels; the actual checkpoint is decided by the workflow. To use a new model, edit `workflow_mapping.json` or add an entry under `config/model_catalog/families/comfyui.yaml`.
+
+### Switch Defaults to All-Local
+
+Edit `defaults.model_settings` in `config/model_catalog/catalog.meta.yaml`, replacing `t2i_model` / `i2i_model` / `image_model` / `i2v_model` / `r2v_model` with the ComfyUI model IDs above, then run:
+
+```bash
+python scripts/build_model_catalog.py
+python scripts/validate_model_catalog.py
+```
+
+Full reference: [ComfyUI integration reference](docs/1-api-reference/comfyui-workflows.md).
 
 ---
 
@@ -194,7 +253,7 @@ lumenx/
 ├── src/
 │   ├── apps/comic_gen/        # Studio backend (API + Pipeline)
 │   ├── apps/playground/       # Playground backend (API + Service)
-│   ├── models/                # AI model adapters (Wanx/Kling/Vidu/MuleRouter)
+│   ├── models/                # AI model adapters (Wanx/Kling/Vidu/MuleRouter/ComfyUI)
 │   └── audio/                 # TTS voice synthesis
 ├── config/model_catalog/      # Model catalog (YAML → JSON)
 └── output/                    # Generated outputs (local storage)
