@@ -7,6 +7,7 @@ See: https://help.aliyun.com/zh/model-studio/cosyvoice-python-sdk
 """
 import os
 import logging
+import re
 from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -46,8 +47,18 @@ VOICES = {
     'loongstella': {'model_id': 'loongstella_v2', 'name': 'Stella (English Female)', 'gender': 'Female', 'model': 'cosyvoice-v2'},
     'loongbella': {'model_id': 'loongbella_v2', 'name': 'Bella (English Female)', 'gender': 'Female', 'model': 'cosyvoice-v2'},
     # === cosyvoice-v3 voices (require cosyvoice-v3-flash or cosyvoice-v3-plus) ===
-    'longanyang': {'model_id': 'longanyang', 'name': '龙安阳 (阳光少年)', 'gender': 'Male', 'model': 'cosyvoice-v3-flash'},
-    'longanhuan': {'model_id': 'longanhuan', 'name': '龙安欢 (活力女)', 'gender': 'Female', 'model': 'cosyvoice-v3-flash'},
+    'longanyang': {
+        'model_id': 'longanyang', 'name': '龙安阳 (阳光少年)',
+        'gender': 'Male', 'model': 'cosyvoice-v3-flash',
+        # This benchmark voice rejects free-form instructions. DashScope
+        # requires exactly: 你说话的情感是<supported emotion>。
+        'supports_instruction': True, 'instruction_mode': 'strict_emotion',
+    },
+    'longanhuan': {
+        'model_id': 'longanhuan', 'name': '龙安欢 (活力女)',
+        'gender': 'Female', 'model': 'cosyvoice-v3-flash',
+        'supports_instruction': True, 'instruction_mode': 'strict_emotion',
+    },
     # === Qwen3-TTS voices (PR-3g Stage A — added 2026-05-25 from official doc)
     # Use qwen3-tts-flash for standard / qwen3-tts-instruct-flash for instructions
     # control. Voice IDs are case-sensitive (Cherry not cherry). Supports 10 langs:
@@ -216,15 +227,21 @@ class TTSProcessor:
             'pitch_rate': pitch_rate,
             'volume': volume,
         }
-        # Pass instructions only if voice supports it (v3-flash / v3.5-*).
-        # SDK will reject unknown kwargs, so gate explicitly.
-        if instructions and self._voice_supports_instruction(voice):
-            synth_kwargs['instructions'] = instructions
+        normalized_instruction = self._normalize_cosyvoice_instruction(
+            voice, instructions
+        )
+
+        # DashScope's CosyVoice SDK names this constructor argument
+        # ``instruction`` (singular).  Qwen3's separate API uses
+        # ``instructions`` (plural), so keep the provider-specific spelling
+        # here instead of forwarding our public parameter name verbatim.
+        if normalized_instruction:
+            synth_kwargs['instruction'] = normalized_instruction
 
         logger.info(
             f"CosyVoice synth: model={model}, voice='{voice}' "
             f"(rate={speech_rate}, pitch={pitch_rate}, vol={volume}, "
-            f"instr={'yes' if instructions else 'no'})"
+            f"instr={'yes' if normalized_instruction else 'no'})"
         )
         logger.info(f"Text: {text[:100]}{'...' if len(text) > 100 else ''}")
 
@@ -244,6 +261,62 @@ class TTSProcessor:
             f"delay={first_package_delay}ms, total={duration:.2f}s -> {output_path}"
         )
         return output_path, first_package_delay, request_id
+
+    def _normalize_cosyvoice_instruction(
+        self, voice: str, instructions: Optional[str]
+    ) -> Optional[str]:
+        """Convert generic UI directions to the format required by a voice.
+
+        Most instruction-capable CosyVoice models accept natural language.
+        A small set of v3 benchmark voices (including ``longanyang`` and
+        ``longanhuan``) only accepts one of seven emotion values in a fixed
+        Chinese sentence. Passing LumenX's generic ``情绪：…；演绎：…`` string
+        makes DashScope fail with engine code 428, so reduce it to the closest
+        supported emotion. Unknown directions are omitted rather than making
+        the whole dialogue synthesis fail.
+        """
+        if not instructions or not self._voice_supports_instruction(voice):
+            return None
+
+        meta = self._voice_meta(voice)
+        if meta.get('instruction_mode') != 'strict_emotion':
+            return instructions
+
+        value = instructions.strip().lower()
+        canonical = re.fullmatch(
+            r"你说话的情感是(neutral|fearful|angry|sad|surprised|happy|disgusted)。",
+            value,
+        )
+        if canonical:
+            return f"你说话的情感是{canonical.group(1)}。"
+
+        # Storyboard extraction emits "情绪：…；演绎：…". Prefer the explicit
+        # emotion field over delivery keywords when they conflict.
+        explicit_emotion = re.search(
+            r"(?:情绪|emotion)\s*[:：]\s*([^;；,，\n]+)",
+            value,
+        )
+        emotion_source = explicit_emotion.group(1) if explicit_emotion else value
+        emotion_keywords = (
+            ('fearful', ('fearful', '恐惧', '害怕', '惊恐', '恐慌', '焦急', '紧张', '不安')),
+            ('angry', ('angry', '愤怒', '生气', '恼怒', '气愤')),
+            ('sad', ('sad', '悲伤', '难过', '伤心', '哀伤', '沮丧')),
+            ('surprised', ('surprised', '惊讶', '吃惊', '震惊', '意外')),
+            ('happy', ('happy', '开心', '高兴', '喜悦', '兴奋', '欢快')),
+            ('disgusted', ('disgusted', '厌恶', '反感', '恶心', '嫌弃')),
+            ('neutral', ('neutral', '平静', '中性', '冷静', '淡定', '平稳')),
+        )
+        for emotion, keywords in emotion_keywords:
+            if any(keyword in emotion_source for keyword in keywords):
+                return f"你说话的情感是{emotion}。"
+
+        logger.warning(
+            "Ignoring unsupported free-form instruction for strict CosyVoice "
+            "voice '%s': %s",
+            voice,
+            instructions[:100],
+        )
+        return None
 
     def _synthesize_qwen3(
         self, text: str, output_path: str, voice: str,

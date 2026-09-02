@@ -3119,8 +3119,24 @@ def generate_dialogue_audio_batch(script_id: str):
                 skipped += 1
                 continue
             try:
-                pipeline.generate_dialogue_line(script_id, frame.id)
-                generated += 1
+                updated_script = pipeline.generate_dialogue_line(script_id, frame.id)
+                updated_frame = next(
+                    (candidate for candidate in updated_script.frames if candidate.id == frame.id),
+                    None,
+                )
+                if (
+                    updated_frame
+                    and updated_frame.audio_url
+                    and not dialogue_audio_is_stale(updated_frame, speaker)
+                ):
+                    generated += 1
+                else:
+                    failed += 1
+                    error = getattr(updated_frame, "audio_error", None) if updated_frame else None
+                    logger.error(
+                        f"[batch_dialogue_audio] frame={frame.id} generation did not "
+                        f"produce current audio: {error or 'unknown error'}"
+                    )
             except Exception as exc:
                 logger.error(f"[batch_dialogue_audio] frame={frame.id} error={exc}")
                 failed += 1
