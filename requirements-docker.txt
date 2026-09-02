@@ -5,6 +5,7 @@ python-multipart>=0.0.9
 
 # AI/ML Models
 dashscope>=1.20.0
+openai>=1.0.0
 
 # Data Validation & Processing
 pydantic>=2.0.0

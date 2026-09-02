@@ -5,6 +5,7 @@ python-multipart>=0.0.9
 
 # AI/ML Models
 dashscope>=1.20.0
+openai>=1.0.0
 pywebview>=5.0.0
 
 # Data Validation & Processing
@@ -32,4 +33,3 @@ soundfile>=0.12.0
 # Uncomment if needed:
 # numpy>=1.24.0
 # pillow>=10.0.0
-# openai>=1.0.0  # Required when LLM_PROVIDER=openai
