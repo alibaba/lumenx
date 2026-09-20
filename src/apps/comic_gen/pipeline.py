@@ -3567,18 +3567,31 @@ class ComicGenPipeline:
         return script
 
     def bind_voice(self, script_id: str, char_id: str, voice_id: str, voice_name: str) -> Script:
-        """Binds a voice to a character."""
+        """Binds a voice to a character (episode-local or series-shared).
+
+        The Cast workbench binds voices on series-level characters, which live
+        on the parent series rather than the episode. Looking only at
+        ``script.characters`` raised "Character not found" (HTTP 500) for every
+        shared character.
+        """
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-            
+
         char = next((c for c in script.characters if c.id == char_id), None)
+        source = "episode"
+        if not char and script.series_id:
+            series = self.series_store.get(script.series_id)
+            if series:
+                char = next((c for c in series.characters if c.id == char_id), None)
+                if char:
+                    source = "series"
         if not char:
             raise ValueError("Character not found")
-            
+
         char.voice_id = voice_id
         char.voice_name = voice_name
-        self._save_data()
+        self._save_after_asset_mutation(source)
         return script
 
     def get_script(self, script_id: str) -> Optional[Script]:
@@ -3592,6 +3605,23 @@ class ComicGenPipeline:
         for variant in image_asset.variants:
             if variant.id == variant_id:
                 image_asset.selected_id = variant_id
+                return variant
+        return None
+
+    def _select_variant_in_asset_unit(self, unit: Any, variant_id: str) -> Any:
+        """Select a variant inside an AssetUnit (e.g. character reference_sheet).
+
+        AssetUnit keeps its pool as `image_variants` / `selected_image_id`,
+        unlike the legacy ImageAsset which uses `variants` / `selected_id`.
+        Passing an AssetUnit to `_select_variant_in_asset` raises
+        AttributeError, so the two shapes need separate helpers.
+        """
+        if not unit or not getattr(unit, "image_variants", None):
+            return None
+
+        for variant in unit.image_variants:
+            if variant.id == variant_id:
+                unit.selected_image_id = variant_id
                 return variant
         return None
 
@@ -3651,28 +3681,40 @@ class ComicGenPipeline:
                     # the CastWorkbench flow. Selecting a variant here updates
                     # selected_image_id + legacy image_url so the rest of the
                     # app (storyboard reference, etc.) sees the pick.
-                    variant = self._select_variant_in_asset(getattr(target_asset, "reference_sheet", None), variant_id)
+                    variant = self._select_variant_in_asset_unit(getattr(target_asset, "reference_sheet", None), variant_id)
                     if variant:
                         if target_asset.reference_sheet:
                             target_asset.reference_sheet.selected_image_id = variant.id
                         target_asset.image_url = variant.url
                 else:
-                    # Legacy fallback: search all assets (for backward compatibility)
-                    variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
+                    # R2V v2 / CastWorkbench sends no generation_type, and its
+                    # variants live in `reference_sheet` — which the legacy
+                    # containers below never searched, so picking a reference
+                    # silently no-op'd. Try the reference sheet first.
+                    variant = self._select_variant_in_asset_unit(
+                        getattr(target_asset, "reference_sheet", None), variant_id
+                    )
                     if variant:
-                        target_asset.full_body_image_url = variant.url
+                        if target_asset.reference_sheet:
+                            target_asset.reference_sheet.selected_image_id = variant.id
                         target_asset.image_url = variant.url
-
-                    if not variant:
-                        variant = self._select_variant_in_asset(target_asset.three_view_asset, variant_id)
+                    else:
+                        # Legacy fallback: search all assets (for backward compatibility)
+                        variant = self._select_variant_in_asset(target_asset.full_body_asset, variant_id)
                         if variant:
-                            target_asset.three_view_image_url = variant.url
+                            target_asset.full_body_image_url = variant.url
+                            target_asset.image_url = variant.url
 
-                    if not variant:
-                        variant = self._select_variant_in_asset(target_asset.headshot_asset, variant_id)
-                        if variant:
-                            target_asset.headshot_image_url = variant.url
-                            target_asset.avatar_url = variant.url
+                        if not variant:
+                            variant = self._select_variant_in_asset(target_asset.three_view_asset, variant_id)
+                            if variant:
+                                target_asset.three_view_image_url = variant.url
+
+                        if not variant:
+                            variant = self._select_variant_in_asset(target_asset.headshot_asset, variant_id)
+                            if variant:
+                                target_asset.headshot_image_url = variant.url
+                                target_asset.avatar_url = variant.url
                         
         elif asset_type == "scene":
             target_asset = next((s for s in script.scenes if s.id == asset_id), None)

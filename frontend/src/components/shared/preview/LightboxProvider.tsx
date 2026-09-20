@@ -14,8 +14,13 @@
  *   - `useLightbox()` — components call `open({src, alt, kind, group?})`
  *   - `LightboxGroup` — wraps children to register them as a navigable set
  *
- * Visual treatment matches CompareModal (z-60 backdrop, motion-safe
+ * Visual treatment matches CompareModal (full-screen backdrop, motion-safe
  * enter animation, click-outside / ESC to close).
+ *
+ * Stacking: the lightbox is opened from *inside* modal layers (Cast workbench
+ * detail = z-100, voice dialogs = z-110/z-120), so it must sit above them —
+ * otherwise the enlarged image renders behind the dialog and only becomes
+ * visible after the dialog is closed. Kept below the toast layer (z-200).
  */
 import React, {
     createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
@@ -216,7 +221,7 @@ function LightboxPortal({
             <div
                 aria-hidden="true"
                 onClick={onClose}
-                className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm motion-safe:animate-[lightboxFadeIn_200ms_ease-out_both]"
+                className="fixed inset-0 z-[180] bg-black/85 backdrop-blur-sm motion-safe:animate-[lightboxFadeIn_200ms_ease-out_both]"
             />
             <div
                 ref={dialogRef}
@@ -224,10 +229,10 @@ function LightboxPortal({
                 aria-modal="true"
                 aria-label={item.alt || t("previewAlt")}
                 tabIndex={-1}
-                className="fixed inset-0 z-[61] flex items-center justify-center p-8 outline-none motion-safe:animate-[lightboxScaleIn_220ms_cubic-bezier(0.22,1,0.36,1)_both]"
+                className="fixed inset-0 z-[181] flex items-center justify-center p-8 outline-none motion-safe:animate-[lightboxScaleIn_220ms_cubic-bezier(0.22,1,0.36,1)_both]"
             >
                 {/* Top-right toolbar */}
-                <div className="absolute right-4 top-4 z-[62] flex items-center gap-1">
+                <div className="absolute right-4 top-4 z-[182] flex items-center gap-1">
                     <button
                         type="button"
                         onClick={onCopyUrl}
@@ -264,7 +269,7 @@ function LightboxPortal({
                         onClick={onPrev}
                         aria-label={t("prev")}
                         title={t("prevTitle")}
-                        className="absolute left-4 top-1/2 z-[62] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full border border-foreground/15 bg-black/55 text-foreground backdrop-blur transition-colors duration-fast ease-out-quart hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                        className="absolute left-4 top-1/2 z-[182] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full border border-foreground/15 bg-black/55 text-foreground backdrop-blur transition-colors duration-fast ease-out-quart hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                     >
                         <ChevronLeft size={20} />
                     </button>
@@ -275,7 +280,7 @@ function LightboxPortal({
                         onClick={onNext}
                         aria-label={t("next")}
                         title={t("nextTitle")}
-                        className="absolute right-4 top-1/2 z-[62] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full border border-foreground/15 bg-black/55 text-foreground backdrop-blur transition-colors duration-fast ease-out-quart hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
+                        className="absolute right-4 top-1/2 z-[182] grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full border border-foreground/15 bg-black/55 text-foreground backdrop-blur transition-colors duration-fast ease-out-quart hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                     >
                         <ChevronRight size={20} />
                     </button>
@@ -283,7 +288,7 @@ function LightboxPortal({
 
                 {/* Group counter */}
                 {groupCount > 1 ? (
-                    <div className="absolute bottom-4 left-1/2 z-[62] -translate-x-1/2 rounded-full border border-foreground/15 bg-black/55 px-3 py-1 font-mono text-chrome-sm text-foreground backdrop-blur">
+                    <div className="absolute bottom-4 left-1/2 z-[182] -translate-x-1/2 rounded-full border border-foreground/15 bg-black/55 px-3 py-1 font-mono text-chrome-sm text-foreground backdrop-blur">
                         {groupIndex + 1} / {groupCount}
                     </div>
                 ) : null}
