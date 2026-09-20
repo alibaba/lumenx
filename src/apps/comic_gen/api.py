@@ -1324,39 +1324,23 @@ def update_env_config(config: EnvConfig):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _merged_project_payload(script: Script) -> dict:
+    """Build a project payload with series + global assets merged in.
 
-@app.get("/projects/{script_id}")
-def get_project(script_id: str):
-    """Retrieves a project by ID. When the project belongs to a
-    Series, the response merges series-shared characters / scenes /
-    props on top of the episode-local lists. Each item carries a
-    `source` field ("episode" | "series" | "global") so the frontend can
-    visually distinguish where the asset lives and route writes
-    appropriately (per A2 design decision — shared writes default to
-    the series side; local writes stay episode-side; the helper
-    `_find_asset_with_source` in pipeline routes mutations correctly).
-
-    Response model dropped from `Script` because the `source` field
-    is a presentation-layer concern (never persisted, derived from
-    container membership at read time)."""
-    script = pipeline.get_script(script_id)
-    if not script:
-        raise HTTPException(status_code=404, detail="Project not found")
-
+    Mirrors the merge performed by GET /projects/{id}. Mutation endpoints
+    (variant select / favorite / delete, voice bind) also return a project;
+    without this merge they hand the frontend an episode-only payload, which
+    overwrites the store's merged view and makes series-level assets (the
+    Cast list) appear to vanish until the user manually reloads.
+    """
     payload = script.model_dump()
 
-    # Episode-local entries always carry source="episode".
     for asset_list in (payload.get("characters", []),
-                      payload.get("scenes", []),
-                      payload.get("props", [])):
+                       payload.get("scenes", []),
+                       payload.get("props", [])):
         for item in asset_list:
             item["source"] = "episode"
 
-    # Merge series-shared assets on top (any id not already present
-    # locally — episode-local overrides series). Without this step
-    # the user "loses" characters when switching between episodes of
-    # the same series, because the series shared pool isn't
-    # reflected on each episode's response.
     if script.series_id:
         series = pipeline.get_series(script.series_id)
         if series:
@@ -1379,11 +1363,6 @@ def get_project(script_id: str):
                     d["source"] = "series"
                     payload["props"].append(d)
 
-    # Merge the project-independent global asset library underneath as
-    # the lowest layer. Any id not already present from the episode or
-    # series layers is appended with source="global" (read-time only —
-    # never written back to projects.json). When the library is empty
-    # this is a no-op and the response is byte-identical to before.
     lib = pipeline.library_store
     if lib.characters or lib.scenes or lib.props:
         seen_char_ids = {c["id"] for c in payload["characters"]}
@@ -1404,7 +1383,33 @@ def get_project(script_id: str):
                 d = pr.model_dump()
                 d["source"] = "global"
                 payload["props"].append(d)
-    return signed_response(payload)
+
+    return payload
+
+
+
+@app.get("/projects/{script_id}")
+def get_project(script_id: str):
+    """Retrieves a project by ID. When the project belongs to a
+    Series, the response merges series-shared characters / scenes /
+    props on top of the episode-local lists. Each item carries a
+    `source` field ("episode" | "series" | "global") so the frontend can
+    visually distinguish where the asset lives and route writes
+    appropriately (per A2 design decision — shared writes default to
+    the series side; local writes stay episode-side; the helper
+    `_find_asset_with_source` in pipeline routes mutations correctly).
+
+    Response model dropped from `Script` because the `source` field
+    is a presentation-layer concern (never persisted, derived from
+    container membership at read time)."""
+    script = pipeline.get_script(script_id)
+    if not script:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Episode-local -> series -> global merge lives in the shared helper so
+    # the mutation endpoints (variant select/favorite/delete, voice bind)
+    # return the exact same shape as this read endpoint.
+    return signed_response(_merged_project_payload(script))
 
 
 
@@ -2551,7 +2556,7 @@ class SelectVariantRequest(BaseModel):
     variant_id: str
     generation_type: str = None  # For character: "full_body", "three_view", "headshot"
 
-@app.post("/projects/{script_id}/assets/variant/select", response_model=Script)
+@app.post("/projects/{script_id}/assets/variant/select")
 def select_asset_variant(script_id: str, request: SelectVariantRequest):
     """Selects a specific variant for an asset."""
     try:
@@ -2562,7 +2567,7 @@ def select_asset_variant(script_id: str, request: SelectVariantRequest):
             request.variant_id,
             request.generation_type
         )
-        return signed_response(updated_script)
+        return signed_response(_merged_project_payload(updated_script))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2597,7 +2602,7 @@ class FavoriteVariantRequest(BaseModel):
     generation_type: Optional[str] = None  # For character: 'full_body', 'three_view', 'headshot'
     is_favorited: bool
 
-@app.post("/projects/{script_id}/assets/variant/favorite", response_model=Script)
+@app.post("/projects/{script_id}/assets/variant/favorite")
 def toggle_variant_favorite(script_id: str, request: FavoriteVariantRequest):
     """Toggles the favorite status of a variant. Favorited variants won't be auto-deleted when limit is reached."""
     try:
@@ -2609,7 +2614,7 @@ def toggle_variant_favorite(script_id: str, request: FavoriteVariantRequest):
             request.is_favorited,
             request.generation_type
         )
-        return signed_response(updated_script)
+        return signed_response(_merged_project_payload(updated_script))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -2719,12 +2724,12 @@ class BindVoiceRequest(BaseModel):
     voice_name: str
 
 
-@app.post("/projects/{script_id}/characters/{char_id}/voice", response_model=Script)
+@app.post("/projects/{script_id}/characters/{char_id}/voice")
 def bind_voice(script_id: str, char_id: str, request: BindVoiceRequest):
     """Binds a voice to a character."""
     try:
         updated_script = pipeline.bind_voice(script_id, char_id, request.voice_id, request.voice_name)
-        return signed_response(updated_script)
+        return signed_response(_merged_project_payload(updated_script))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2735,20 +2740,29 @@ class UpdateVoiceParamsRequest(BaseModel):
     volume: int = 50
 
 
-@app.put("/projects/{script_id}/characters/{char_id}/voice_params", response_model=Script)
+@app.put("/projects/{script_id}/characters/{char_id}/voice_params")
 def update_voice_params(script_id: str, char_id: str, request: UpdateVoiceParamsRequest):
-    """Updates voice parameters for a character."""
+    """Updates voice parameters for a character (episode-local or series-shared)."""
     script = pipeline.get_script(script_id)
     if not script:
         raise HTTPException(status_code=404, detail="Script not found")
     char = next((c for c in script.characters if c.id == char_id), None)
+    source = "episode"
+    if not char and script.series_id:
+        # Series-shared characters live on the parent series (Cast workbench
+        # edits speed/pitch/volume on them directly).
+        series = pipeline.get_series(script.series_id)
+        if series:
+            char = next((c for c in series.characters if c.id == char_id), None)
+            if char:
+                source = "series"
     if not char:
         raise HTTPException(status_code=404, detail="Character not found")
     char.voice_speed = request.speed
     char.voice_pitch = request.pitch
     char.voice_volume = request.volume
-    pipeline._save_data()
-    return signed_response(script)
+    pipeline._save_after_asset_mutation(source)
+    return signed_response(_merged_project_payload(script))
 
 
 @app.get("/voices")
