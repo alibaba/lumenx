@@ -133,7 +133,16 @@ def test_pipeline_routes_kling_dashscope_mode_to_wanx_without_vendor_credentials
     assert task.status == "completed"
 
 
-def test_vendor_kling_local_image_uses_base64_payload(monkeypatch, tmp_path):
+def test_vendor_kling_local_image_requires_upload_url_payload(monkeypatch, tmp_path):
+    """API 2.0 请求体语义: contents[].url 只收远程 URL。
+
+    本地文件直接在构造层报 KlingError(params)（必须先上传拿 URL），
+    不再走 v1 的 base64 payload；远程 URL 正常提交到 /image-to-video/{model}。
+    """
+    import pytest
+
+    from src.models.kling import KlingError
+
     captured = {}
     local_path = _write_output_png("uploads/test_kling_vendor_ref.png")
 
@@ -141,18 +150,18 @@ def test_vendor_kling_local_image_uses_base64_payload(monkeypatch, tmp_path):
         captured["submit_url"] = url
         captured["headers"] = dict(headers or {})
         captured["body"] = json or {}
-        return _FakeResponse(200, {"code": 0, "data": {"task_id": "kling-task-1"}})
+        return _FakeResponse(200, {"code": 0, "data": {"id": "kling-task-1"}})
 
     def fake_get(url, headers=None, timeout=None):
-        if "image2video" in url or "text2video" in url:
+        if "/tasks" in url:
             return _FakeResponse(
                 200,
                 {
                     "code": 0,
-                    "data": {
-                        "task_status": "succeed",
-                        "task_result": {"videos": [{"url": "https://example.com/out.mp4"}]},
-                    },
+                    "data": [{
+                        "status": "succeeded",
+                        "outputs": [{"type": "video", "url": "https://example.com/out.mp4"}],
+                    }],
                 },
             )
         return _FakeResponse(200, content=b"video")
@@ -161,15 +170,26 @@ def test_vendor_kling_local_image_uses_base64_payload(monkeypatch, tmp_path):
     monkeypatch.setattr("src.models.kling.requests.get", fake_get)
     monkeypatch.setattr("src.models.kling.time.sleep", lambda _: None)
 
-    model = KlingModel({"access_key": "test-ak", "secret_key": "test-sk"})
-    out_path = str(tmp_path / "out.mp4")
+    model = KlingModel({"api_key": "test-key"})
+
+    # 本地文件: 构造层拒绝（不发请求）
+    with pytest.raises(KlingError, match="本地文件请先上传"):
+        model.generate(
+            prompt="demo",
+            output_path=str(tmp_path / "out.mp4"),
+            img_path=local_path,
+        )
+    assert "submit_url" not in captured
+
+    # 远程 URL: 正常提交, first_frame.url 语义
     model.generate(
         prompt="demo",
-        output_path=out_path,
-        img_path=local_path,
-        model="kling-v1",
+        output_path=str(tmp_path / "out.mp4"),
+        img_url="https://example.com/ref.png",
     )
-
-    assert captured["submit_url"].endswith("/videos/image2video")
+    assert captured["submit_url"].endswith("/image-to-video/kling-3.0")
     assert captured["headers"]["Authorization"].startswith("Bearer ")
-    assert captured["body"]["image"] == PNG_1X1_BASE64
+    contents = captured["body"]["contents"]
+    first_frame = [c for c in contents if c["type"] == "first_frame"]
+    assert first_frame == [{"type": "first_frame", "url": "https://example.com/ref.png"}]
+    assert "image" not in captured["body"]

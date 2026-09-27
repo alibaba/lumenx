@@ -154,8 +154,7 @@
           "DASHSCOPE_API_KEY"
         ],
         "vendor": [
-          "KLING_ACCESS_KEY",
-          "KLING_SECRET_KEY"
+          "KLING_API_KEY"
         ]
       },
       "default_backend": "dashscope",
@@ -686,8 +685,7 @@
           "DASHSCOPE_API_KEY"
         ],
         "vendor": [
-          "KLING_ACCESS_KEY",
-          "KLING_SECRET_KEY"
+          "KLING_API_KEY"
         ]
       },
       "default_backend": "dashscope",
@@ -2535,8 +2533,7 @@
           "DASHSCOPE_API_KEY"
         ],
         "vendor": [
-          "KLING_ACCESS_KEY",
-          "KLING_SECRET_KEY"
+          "KLING_API_KEY"
         ]
       },
       "default_backend": "dashscope",
@@ -2645,8 +2642,7 @@
           "DASHSCOPE_API_KEY"
         ],
         "vendor": [
-          "KLING_ACCESS_KEY",
-          "KLING_SECRET_KEY"
+          "KLING_API_KEY"
         ]
       },
       "default_backend": "dashscope",
@@ -5608,8 +5604,7 @@
           "DASHSCOPE_API_KEY"
         ],
         "vendor": [
-          "KLING_ACCESS_KEY",
-          "KLING_SECRET_KEY"
+          "KLING_API_KEY"
         ]
       },
       "default_backend": "dashscope",
@@ -5730,8 +5725,7 @@
           "DASHSCOPE_API_KEY"
         ],
         "vendor": [
-          "KLING_ACCESS_KEY",
-          "KLING_SECRET_KEY"
+          "KLING_API_KEY"
         ]
       },
       "default_backend": "dashscope",

@@ -55,6 +55,10 @@ class AssetGenerator:
 
     def _get_model_for(self, model_name: str) -> "ImageGenModel":
         """Route to the correct image adapter based on model name."""
+        # T-B2：mock- 前缀 → Mock provider（无 key 期全链路回归用）
+        if model_name and model_name.startswith("mock-"):
+            from ...models.mock import MockImageModel
+            return MockImageModel({})
         if model_name and model_name.startswith("gpt-image"):
             if self._mulerouter_image_model is None:
                 from ...models.mulerouter import MuleRouterImageModel

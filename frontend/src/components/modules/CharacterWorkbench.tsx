@@ -11,6 +11,7 @@ import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import { useProjectStore } from "@/store/projectStore";
 import { Image as PhotoIcon } from "lucide-react";
 import { getAssetUrl } from "@/lib/utils";
+import MethodologyCardSection from "@/components/shared/MethodologyCardSection";
 
 
 interface CharacterWorkbenchProps {
@@ -308,6 +309,11 @@ export default function CharacterWorkbench({ asset, onClose, onUpdateDescription
                     <button onClick={onClose} className="p-2 hover:bg-hover-bg rounded-full text-text-secondary hover:text-foreground transition-colors">
                         <X size={24} />
                     </button>
+                </div>
+
+                {/* T-B6 方法论三分离角色卡（可折叠全宽条，收起时不占空间） */}
+                <div className="px-6 py-3 border-b border-glass-border bg-surface">
+                    <MethodologyCardSection asset={asset} type="character" />
                 </div>
 
                 {/* Main Content - 3 Columns */}

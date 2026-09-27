@@ -1,0 +1,26 @@
+{
+  "_meta": {
+    "currency": "CNY",
+    "source": "初值口径来自 workflow/06-toolchain.md 已实测记录（kling pro 5s≈¥2 / 10s≈¥4 / 15s≈¥6）",
+    "calibration": "拿到 Kling key 后用 GET /account/costs 消费记录实测校准（check_credentials 同款端点）；mock 条目为离线测试象征单价，非真实价格",
+    "schema": "models.{model}.price_by_duration_cny: {时长秒字符串: 单价}; 关键字 default 兜底未列出时长"
+  },
+  "models": {
+    "kling-3.0": {
+      "price_by_duration_cny": { "5": 2.0, "10": 4.0, "15": 6.0 },
+      "note": "pro 口径初值；720p/1080p 暂按同价，待 /account/costs 实测校准"
+    },
+    "kling-3.0-turbo": {
+      "price_by_duration_cny": { "5": 1.0, "10": 2.0, "15": 3.0 },
+      "note": "初值按 pro 一半估算，无实测依据，待校准"
+    },
+    "mock-video": {
+      "price_by_duration_cny": { "5": 0.5, "10": 1.0, "15": 1.5 },
+      "note": "离线测试用象征单价（mock- 路由），非真实价格"
+    },
+    "mock-image": {
+      "price_by_duration_cny": { "default": 0.1 },
+      "note": "离线测试用象征单价（mock- 路由），非真实价格"
+    }
+  }
+}

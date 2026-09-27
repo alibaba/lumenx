@@ -38,3 +38,6 @@ python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+# Dump all thread tracebacks if a test exceeds 30s — a hang must show its
+# stack instead of silently freezing the suite (T-B3b cold-import hang).
+faulthandler_timeout = 30

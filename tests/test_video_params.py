@@ -2,9 +2,16 @@
 
 Covers:
 - VideoTask model new fields (models.py)
-- CreateVideoTaskRequest new fields (api.py)
+- CreateVideoTaskRequest new fields (models.py, re-exported by api.py)
 - Pipeline routing of new params to Kling/Vidu adapters
+- Hermeticity: importing/constructing the request model never touches
+  the network or drags in the FastAPI app graph (regression guard for
+  the T-B3b cold-import hang).
 """
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -70,15 +77,16 @@ class TestVideoTaskModel:
         assert task.vidu_audio is None
 
 
-# ── api.py: CreateVideoTaskRequest 新字段 ────────────────────────────────
+# ── models.py: CreateVideoTaskRequest 新字段 ─────────────────────────────
 
 class TestCreateVideoTaskRequest:
     """Verify the API request model accepts new params."""
 
     def _make_request(self, **overrides):
-        import sys, importlib
-        # 需要直接 import api 模块中的 request model
-        from src.apps.comic_gen.api import CreateVideoTaskRequest
+        # Import from the light models module — NOT api.py. Importing the
+        # FastAPI app here was the root cause of the T-B3b cold-import hang
+        # (whole pipeline/tts/oss graph pulled in just to build a DTO).
+        from src.apps.comic_gen.models import CreateVideoTaskRequest
         defaults = dict(
             image_url="https://example.com/img.png",
             prompt="test prompt",
@@ -106,18 +114,90 @@ class TestCreateVideoTaskRequest:
         assert req.movement_amplitude == "medium"
 
 
+# ── 防回归：请求模型必须离线可构造、离线可导入（T-B3b 挂死根因守卫）─────
+
+class TestHermeticRequestModel:
+    """The request-model path must never touch the network or the app graph.
+
+    History: test_defaults lazily imported src.apps.comic_gen.api (the full
+    FastAPI app, ~300 modules with import-time side effects). On a cold FS
+    cache / offline box that import stalled for tens of seconds and looked
+    like a hang. Guards below keep the construct path hermetic for good.
+    """
+
+    def test_construct_makes_no_network_calls(self, monkeypatch):
+        """构造 CreateVideoTaskRequest 时禁止任何网络调用（构造层零 IO）。"""
+        import socket
+
+        def _boom(*args, **kwargs):
+            raise AssertionError(
+                f"network attempted during request-model construction: {args} {kwargs}"
+            )
+
+        monkeypatch.setattr(socket, "socket", _boom)
+        monkeypatch.setattr(socket, "create_connection", _boom)
+        monkeypatch.setattr(socket, "getaddrinfo", _boom)
+
+        from src.apps.comic_gen.models import CreateVideoTaskRequest
+        req = CreateVideoTaskRequest(image_url="https://x/img.png", prompt="p")
+        assert req.model == "wan2.6-i2v"
+
+    def test_models_import_is_offline_and_light(self):
+        """子进程先屏蔽 socket 再 import models 并构造请求：
+        1) 全程零网络调用；2) 不拖入 fastapi 应用图。subprocess.run 带
+        timeout——未来若再挂死，这里失败并给出栈，而不是卡死整个套件。"""
+        repo_root = Path(__file__).resolve().parents[1]
+        child_code = (
+            "import socket\n"
+            "class _Blocked(socket.socket):\n"
+            "    def __init__(self, *a, **k):\n"
+            "        raise AssertionError('network attempted during import/construct')\n"
+            "socket.socket = _Blocked\n"
+            "def _boom(*a, **k):\n"
+            "    raise AssertionError('network attempted during import/construct')\n"
+            "socket.create_connection = _boom\n"
+            "socket.getaddrinfo = _boom\n"
+            "from src.apps.comic_gen.models import CreateVideoTaskRequest\n"
+            "req = CreateVideoTaskRequest(image_url='https://x/i.png', prompt='p')\n"
+            "assert req.model == 'wan2.6-i2v'\n"
+            "import sys\n"
+            "heavy = [m for m in ('fastapi', 'aiohttp', 'torch', 'dashscope') if m in sys.modules]\n"
+            "print('HERMETIC_OK heavy=' + ','.join(heavy))\n"
+        )
+        proc = subprocess.run(
+            [sys.executable, "-c", child_code],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=60,  # a real hang must fail the test, not freeze the suite
+        )
+        assert proc.returncode == 0, f"child failed:\n{proc.stdout}\n{proc.stderr}"
+        marker = next(
+            (ln for ln in proc.stdout.splitlines() if ln.startswith("HERMETIC_OK")),
+            "",
+        )
+        assert marker, f"child did not report HERMETIC_OK:\n{proc.stdout}\n{proc.stderr}"
+        heavy_part = marker.split("heavy=", 1)[1].strip()
+        assert heavy_part == "", f"light import violated, dragged in: {heavy_part}"
+
+    def test_api_reexport_compat(self):
+        """api.py 仍可 `from ...api import CreateVideoTaskRequest`，且与 models 同一对象。"""
+        from src.apps.comic_gen.api import CreateVideoTaskRequest as FromApi
+        from src.apps.comic_gen.models import CreateVideoTaskRequest as FromModels
+        assert FromApi is FromModels
+
+
 # ── kling.py: generate() 接受并传入 sound / cfg_scale ───────────────────
 
 class TestKlingModelParams:
     """Verify Kling adapter correctly includes new params in the request body."""
 
     def test_sound_and_cfg_scale_in_body(self, monkeypatch):
+        """2.0 请求体语义: sound→settings.audio, cfg_scale→settings.cfg_scale,
+        mode(std/pro)→settings.resolution。"""
         from src.models.kling import KlingModel
 
-        model = KlingModel({
-            "access_key": "test_ak",
-            "secret_key": "test_sk",
-        })
+        model = KlingModel({"api_key": "test-key"})
 
         captured_body = {}
 
@@ -125,37 +205,32 @@ class TestKlingModelParams:
             status_code = 200
             def raise_for_status(self): pass
             def json(self):
-                return {"code": 0, "data": {"task_id": "fake-task-id"}}
+                return {"code": 0, "data": {"id": "fake-task-id"}}
 
         def mock_post(url, headers=None, json=None, timeout=None):
             captured_body.update(json or {})
             return FakeResponse()
 
-        # 只 mock 提交阶段，让它在 poll 阶段直接报错退出
         import requests
         monkeypatch.setattr(requests, "post", mock_post)
 
-        # generate 会在 poll 阶段 sleep + get，
-        # 我们只需要验证提交的 body 包含新字段即可
         class FakePollResponse:
             status_code = 200
             def raise_for_status(self): pass
             def json(self):
                 return {
                     "code": 0,
-                    "data": {
-                        "task_status": "succeed",
-                        "task_result": {"videos": [{"url": "https://example.com/video.mp4"}]},
-                    },
+                    "data": [{
+                        "status": "succeeded",
+                        "outputs": [{"type": "video", "url": "https://example.com/video.mp4"}],
+                    }],
                 }
 
         class FakeVideoContent:
             content = b"fake video bytes"
 
-        call_count = {"n": 0}
         def mock_get(url, headers=None, timeout=None):
-            call_count["n"] += 1
-            if "image2video" in url or "text2video" in url:
+            if "/tasks" in url:
                 return FakePollResponse()
             return FakeVideoContent()
 
@@ -171,14 +246,21 @@ class TestKlingModelParams:
                 mode="pro", sound="on", cfg_scale=0.6,
             )
 
-        assert captured_body.get("sound") == "on"
-        assert captured_body.get("cfg_scale") == pytest.approx(0.6)
-        assert captured_body.get("mode") == "pro"
+        settings = captured_body["settings"]
+        assert settings.get("audio") == "on"
+        assert settings.get("cfg_scale") == pytest.approx(0.6)
+        assert settings.get("resolution") == "1080p"
+        # 2.0 三层结构: 顶层不应再有旧版扁平字段
+        assert "sound" not in captured_body
+        assert "mode" not in captured_body
+        assert "cfg_scale" not in captured_body
 
     def test_sound_omitted_when_none(self, monkeypatch):
+        """2.0 语义: 不传 sound/cfg_scale 时, settings 无 cfg_scale,
+        audio 落到显式默认 off, 顶层无旧版扁平字段。"""
         from src.models.kling import KlingModel
 
-        model = KlingModel({"access_key": "ak", "secret_key": "sk"})
+        model = KlingModel({"api_key": "test-key"})
 
         captured_body = {}
 
@@ -186,20 +268,23 @@ class TestKlingModelParams:
             status_code = 200
             def raise_for_status(self): pass
             def json(self):
-                return {"code": 0, "data": {"task_id": "t1"}}
+                return {"code": 0, "data": {"id": "t1"}}
 
         class FakePoll:
             status_code = 200
             def raise_for_status(self): pass
             def json(self):
-                return {"code": 0, "data": {"task_status": "succeed", "task_result": {"videos": [{"url": "http://x.mp4"}]}}}
+                return {"code": 0, "data": [{
+                    "status": "succeeded",
+                    "outputs": [{"type": "video", "url": "http://x.mp4"}],
+                }]}
 
         class FakeDL:
             content = b"bytes"
 
         import requests
         monkeypatch.setattr(requests, "post", lambda *a, **kw: (captured_body.update(kw.get("json", {})), FakeResponse())[1])
-        monkeypatch.setattr(requests, "get", lambda *a, **kw: FakePoll() if "image2video" in a[0] else FakeDL())
+        monkeypatch.setattr(requests, "get", lambda *a, **kw: FakePoll() if "/tasks" in a[0] else FakeDL())
         monkeypatch.setattr("time.sleep", lambda x: None)
 
         import tempfile, os
@@ -212,6 +297,9 @@ class TestKlingModelParams:
 
         assert "sound" not in captured_body
         assert "cfg_scale" not in captured_body
+        settings = captured_body["settings"]
+        assert "cfg_scale" not in settings
+        assert settings["audio"] == "off"
 
 
 # ── vidu.py: generate() 透传 audio / movement_amplitude ─────────────────

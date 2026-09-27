@@ -8,7 +8,11 @@ import re
 from difflib import SequenceMatcher
 from typing import List, Dict, Any, Optional
 
-from .models import Script, Character, Scene, Prop, StoryboardFrame, GenerationStatus
+from .models import (
+    Script, Character, Scene, Prop, StoryboardFrame, GenerationStatus,
+    ShotSizeEnum, CameraAngleEnum, CameraMovementType, CameraSpeed,
+    RawStoryboardFrame, StoryboardFrameList, StyleRecommendations,
+)
 
 
 def _strip_markdown_json(content: str) -> str:
@@ -18,6 +22,48 @@ def _strip_markdown_json(content: str) -> str:
     elif "```" in content:
         content = content.split("```")[1].split("```")[0]
     return content.strip()
+
+
+def _strip_think_blocks(content: str) -> str:
+    """剥离思考模型输出中的 <think>…</think> 与未闭合的 <think> 前缀。
+
+    DeepSeek/通义深度思考模式下 JSON 常被推理文本包裹；做法参照
+    MoneyPrinterTurbo app/services/llm.py（MIT）。
+    """
+    if "</think>" in content:
+        content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL)
+    elif "<think>" in content:
+        content = content.split("<think>")[0]
+    return content
+
+
+def _loads_llm_json(content: str):
+    """LLM 输出文本 → Python 对象；失败返回 None（不抛异常）。
+
+    解析链：_strip_markdown_json → _strip_think_blocks → json.loads
+    → json_repair 兜底（截断/尾逗号/单引号等常见畸形可修复）。
+    json_repair 也救不回（或产出非容器垃圾）时返回 None，由调用方走重试。
+    """
+    if not content or not content.strip():
+        return None
+    text = _strip_think_blocks(_strip_markdown_json(content))
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    try:
+        import json_repair
+        repaired = json_repair.loads(text)
+    except Exception as e:  # json_repair 缺失或内部错误都不致命
+        logger.warning("json_repair unavailable/failed: %s", e)
+        return None
+    # json_repair 对彻底的垃圾会产出 [[...]] 之类的容器壳——让上游
+    # schema 校验去拒绝，这里只把"完全没解析出东西"归为失败。
+    if repaired is None or repaired == "":
+        return None
+    return repaired
 
 
 class PolishError(Exception):
@@ -31,6 +77,7 @@ class PolishError(Exception):
       - is_configured_false: LLM 未配置（缺 API key）
       - api_error: 上游 API 调用本身失败（网络/鉴权/限流/模型不可用）
       - json_parse_error: 模型返回内容不是合法 JSON
+      - schema_validation_error: JSON 合法但不符合 schema，反馈式重试后仍失败
       - missing_keys: JSON 缺 prompt_cn 或 prompt_en
       - model_echo: 模型几乎原文返回（warning 级别，不是 hard error，
         前端展示为黄色警告 + 保留原文双语，让用户追加 feedback 重试）
@@ -142,6 +189,20 @@ DEFAULT_STORYBOARD_POLISH_PROMPT = """
     - **Prompt CN**：流畅中文，严格遵循草稿内容。
     - **Prompt EN**：自然英文描述，优先体现视觉氛围。
 
+导演铁律（图像画面质量的关键，必须遵守）：
+
+【拒绝空话套话】禁止使用空泛形容词堆砌，如 "beautiful / stunning / masterpiece / 绝美 / 惊艳" 这类无信息量的词。用具体的视觉事实替代：写清"什么颜色的光、从哪个方向来、落在什么材质上"。
+
+【光影塑形】必须写明光源方向 + 光质 + 高光点 + 阴影落点（如"黄昏侧逆光从左侧窗户打入，发丝边缘泛金色轮廓光，鼻梁一侧落下柔和的阴影"）。没有光影描述的图像是平的。
+
+【细节密度】画面描述具体到材质和纹理（皮肤毛孔、衣料褶皱、墙面斑驳、空气里的尘埃）。"一个房间"是废稿；"一间午后教室，木桌上有细密的粉笔灰，窗边光柱里浮着灰尘"是成品。
+
+【一图一职】一个画面只表达一个核心视觉信息。若草稿塞了多个焦点，突出最主要的一个，其余弱化。
+
+【风格一致性】全片必须保持同一美术风格。若已选定风格（如高清电影写实 / 新海诚式光影），用风格词锁定，禁止混入其他风格元素。
+
+@@CONTINUITY_CHECKLIST@@
+
 # 输出格式
 严格返回一个 JSON 对象：
 {{
@@ -167,7 +228,20 @@ DEFAULT_VIDEO_POLISH_PROMPT = """你是一名资深视频提示词工程师。�
 1.  **结构**：提示词 = 运动描述 + 镜头运动。
 2.  **运动描述**：描述图像中各元素（角色、物体）的动态动作。用副词控制速度与强度（如 "缓慢地"、"快速地"、"轻微的"）。
 3.  **镜头运动**：如有需要，显式说明镜头移动（如 "推近"、"向左平移"、"固定镜头"）。
-4.  **清晰**：简洁但具体，聚焦视觉运动。
+
+导演铁律（必须遵守，这是成片质量的根基）：
+
+【一镜一主动作】一个镜头只承载一个主动作 + 最多两个微表情变化。禁止堆叠多个动作——堆动作是角色肢体崩坏的第一原因。若草稿写了好几个动作，只保留最核心的一个，其余删除或拆到别的镜头。
+
+【动作幅度分级】每个动作必须写明幅度档位，用英文幅度词：slight（轻微）/ slowly（缓慢）/ uniform（匀速）/ obvious（明显）。默认用 slight 或 slowly（通过率最高）；只有动作戏才用 medium/obvious；禁止用 violent/fast（高危崩坏）。
+
+【身体联动】写人物动作时，写出联动细节（如"转头"要写"头转、肩膀微转、发丝随动"；"走路"写"手臂摆动+脚步交替"）。缺因果联动的动作，模型会摆烂。
+
+【细节到部位级】动作和表情描述要具体到身体部位（指尖、手腕、喉结、睫毛、呼吸节奏、衣料动态）。"她很悲伤"是废稿；"她的指尖攥紧了信纸边缘，指节泛白，喉咙动了一下没有声音"是成品。
+
+【多人动作写顺序】两人以上同框时，必须写明动作的先后顺序（"A先转头，B随后看向A"），避免模型把动作串位。
+
+【对白口型】若提示词含对白，写出说话者的张嘴动作和微表情，口型动作写"缓慢、轻微"。
 
 示例：
 
@@ -217,6 +291,10 @@ slot，因此 :name 后缀不会干扰——它只是补充可见的上下文。
    '[character1:name] says: "对白内容"'
 4. **保留意图**：保持原有意图与情绪基调。
 5. **强化**：补充视觉细节以增强戏剧效果（光线、"缓慢地"/"快速地" 等速度副词）。
+6. **锚点逐字复述**：角色的外观锚点（发型、服装、显著特征）必须从参考素材描述中逐字复述，不得改写、不得省略后即兴补充。角色一致性是第一优先级，宁可不加新细节，也不能让同一角色的外观在镜头间漂移。
+7. **动作幅度分级**：每个动作写明幅度档位（slight/slowly/uniform/obvious），默认 slight 或 slowly，禁止 violent/fast。一个镜头只承载一个主动作。
+8. **风格一致**：保持与参考素材相同的画风与色调，不混入其他风格元素。
+9. **跨镜连续**：若项目存在相邻镜头，保持轴线（屏幕方向）、站位、视线、持物四类连续——剧本明确写出转向/交接理由时才允许变化；上一镜的终点状态是本镜可信起点。
 
 # 输出格式
 严格返回一个 JSON 对象：
@@ -233,6 +311,83 @@ SLOTS：character1 = "White rabbit / 小兔子", character2 = "Robot dog / 机�
 {{
     "prompt_cn": "[character1:小兔子] 从门里猛然跳出，落地时耳朵竖起，充满活力。房间昏暗，温暖的光线从尘土飞扬的窗户中透入。[character1:小兔子] 兴奋地环顾四周说道：'我正好赶上了！' 镜头随着跳跃略微倾斜。",
     "prompt_en": "[character1:White rabbit] bursts through the door with an exaggerated jump, landing energetically with ears perked up. The room is dimly lit with warm ambient light streaming through dusty windows. [character1:White rabbit] looks around excitedly and says: 'I made it just in time!' Camera follows the jump with a slight tilt."
+}}""".strip()
+
+
+# ── 跨镜连续性检查清单（四类：轴线/站位/视线/持物） ────────────────────────
+# 方法论来源：zenstory-ai/drama-skills skills/short-drama-storyboard（MIT License），
+# 见 https://github.com/zenstory-ai/drama-skills 。仅提炼其连续性规范语义重写为
+# 中文检查项（只抄规范、不 vendor 代码）：相邻镜头的站位/朝向/视线/持物/伤势/光态
+# 连续；复杂群戏先锁空间锚点和屏幕方向；持物交接写接触者与落点，禁止镜外瞬移衔接。
+# 通过 @@CONTINUITY_CHECKLIST@@ 占位（同 @@SHOT_SIZES@@ 的模块级 replace 做法）
+# 注入 DEFAULT_STORYBOARD_POLISH_PROMPT，清单常量同时导出供质检/测试复用。
+CONTINUITY_CHECKLIST = (
+    ("轴线", "同一场景锁定空间锚点与屏幕方向，机位不越 180° 轴线，"
+             "人物左右关系与进出场方向不得无故翻转"),
+    ("站位", "人物相对位置与进出画方向逐镜衔接，上一镜终点站位是下一镜可信起点，"
+             "禁止镜外瞬移"),
+    ("视线", "谁的目光落在谁/什么身上逐镜可追溯，视线方向与对方实际方位一致，"
+             "对视与回避不得和站位矛盾"),
+    ("持物", "手持物件跨镜保持同一侧同一状态（伤势、光态等状态物同理），"
+             "交接/换手/放置写明接触者与落点，物件不凭空出现或消失"),
+)
+
+
+def format_continuity_checklist_block() -> str:
+    """把四类连续性清单格式化为注入 prompt 的导演铁律块。"""
+    lines = [f"- {cat}：{req}；" for cat, req in CONTINUITY_CHECKLIST]
+    return (
+        "【跨镜连续性】多镜头任务必须逐项自查以下四类连续性，"
+        "除非剧本明确写出转向/交接理由：\n" + "\n".join(lines)
+    )
+
+
+# 质检评审 prompt（导出待接线：后续 VLM/LLM 质检工位直接引用，当前不接调用链）。
+# 方法论来源：zenstory-ai/drama-skills skills/short-drama-review/SKILL.md（MIT License），
+# 仅提炼评审规范要点（冻结范围→可证明事实→带证据 finding→跨文档综合→结论分级），
+# 不 vendor 原文。花括号按惯例写成 {{}} 以兼容未来 .format 注入。
+DEFAULT_QA_REVIEW_PROMPT = """# 角色
+你是短剧分镜/成片的质检评审员（独立 reviewer 视角）。你只输出审查结论与修订要求，不代替创作者改稿。
+
+# 工作流
+1. **冻结范围**：先写清本次审查哪些镜头/场次/提示词；审查中范围发生变化时，重读材料再下结论。
+2. **先查可证明事实**（机器可核对的结构事实）：
+   - 镜号与引用 ID 是否唯一且可解析；每镜时长是否为正数、与声明总时长是否一致；
+   - 对白、动作、声音、画面文字是否都有镜头承载，或有明确的省略理由；
+   - 相邻镜头的站位、朝向、视线、持物、伤势、光态与可读文字是否连续；
+   - 起点与终点是否写绝对事实（禁止"同上""保持不变"代替）；
+   - 提示词是否从准确起点到准确终点；有无凭据/绝对路径/内部流程文字泄漏。
+3. **带证据审内容**：每个 finding 必须包含——位置、必要短引文或冲突事实、观众/制作影响、
+   必须达到的修订结果、严重程度。禁止只给"AI 味""不够电影感"这类无证据评语，禁止无证据打分。
+4. **跨文档综合**：剧本事实 → 视觉设定 → 镜头职责与边界 → 冻结关键帧 → 视频运动 → 下一状态。
+   优先守住原意、观众知情时机与连续性，不奖励脱离来源的华丽提示词。
+
+# 严重程度
+- blocker：不安全、不可交付或会让流程走错；
+- major：明显破坏剧情理解、连续性或制作结果；
+- minor：有具体影响但不阻断；
+- note：创作选择或可选润色。
+
+# 结论
+- APPROVE：没有阻断问题；
+- APPROVE_WITH_NOTES：只有不阻断的改进；
+- REVISE：存在结构、内容或限制冲突；
+- PROVISIONAL：关键输入不足，暂时无法完成判断。
+
+# 输出格式
+严格返回一个 JSON 对象：
+{{
+    "verdict": "APPROVE | APPROVE_WITH_NOTES | REVISE | PROVISIONAL",
+    "findings": [
+        {{
+            "id": "REV-001",
+            "severity": "blocker | major | minor | note",
+            "location": "文件/镜头 ID 或行号",
+            "evidence": "短引文或冲突事实",
+            "impact": "对观众/制作的影响",
+            "required_fix": "必须达到的修订结果"
+        }}
+    ]
 }}""".strip()
 
 
@@ -317,6 +472,8 @@ CRITICAL STYLE GUIDELINES:
 }"""
 
 
+# 枚举行从 models.py 的 Enum 派生（@@TOKEN@@ 占位，下方模块级 replace），
+# 保证 prompt 选项集与 schema Literal / 归一别名三方永远一张皮。
 DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 你是一名电影级的分镜师。你的任务是将剧本文本拆解为一系列连续的分镜帧。
 
@@ -325,8 +482,8 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 2. **角色可见性**: character_ref_names 只列画面中可见的角色。
 3. **实体约束**: 场景名、角色名、道具名严格匹配已提取实体。
 4. **语言**: 简体中文。
-5. **景别枚举**: 必须从以下选项中选择: 大特写 | 特写 | 近景 | 中景 | 全景 | 远景 | 大远景
-6. **角度枚举**: 必须从以下选项中选择: 平视 | 俯视 | 仰视 | 鸟瞰 | 蚁视 | 过肩 | 荷兰角 | 主观视角
+5. **景别枚举**: 必须从以下选项中选择(逐字使用,不要自创): @@SHOT_SIZES@@
+6. **角度枚举**: 必须从以下选项中选择(逐字使用,不要自创): @@CAMERA_ANGLES@@
 7. **时长**: 基于动作复杂度估算整数秒（范围 3-10 秒）。简单静态 3-4s，标准动作 5-6s，复杂/情绪镜头 7-10s。
 8. **对白**: 如果帧中有角色说话，dialogue 和 speaker 必须填写。一帧只能有一个说话人——多人对话必须拆为多帧。
 
@@ -390,6 +547,18 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 {text}
 """
 
+# 枚举选项集唯一来源 = models.py 的 Enum（与 RawStoryboardFrame 的 Literal 同源）
+DEFAULT_STORYBOARD_EXTRACTION_PROMPT = (
+    DEFAULT_STORYBOARD_EXTRACTION_PROMPT
+    .replace("@@SHOT_SIZES@@", " | ".join(e.value for e in ShotSizeEnum))
+    .replace("@@CAMERA_ANGLES@@", " | ".join(e.value for e in CameraAngleEnum))
+)
+
+# 四类连续性清单注入分镜润色 prompt（清单常量 = 唯一来源，测试防误删）
+DEFAULT_STORYBOARD_POLISH_PROMPT = DEFAULT_STORYBOARD_POLISH_PROMPT.replace(
+    "@@CONTINUITY_CHECKLIST@@", format_continuity_checklist_block()
+)
+
 
 class ScriptProcessor:
     def __init__(self, api_key: str = None):
@@ -400,6 +569,84 @@ class ScriptProcessor:
     @property
     def is_configured(self):
         return self.llm.is_configured
+
+    def _structured_llm_call(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        model_cls,
+        max_retries: int = 3,
+        model: Optional[str] = None,
+    ):
+        """instructor 式结构化输出调用（自研 ~60 行，不引框架依赖）。
+
+        流程（survey V1 §3.1 的 adopt 方案）：
+          1. response_format=json_object 请求（llm_adapter 已支持）；
+          2. 解析链 _loads_llm_json：markdown 剥壳 → think 剥离 →
+             json.loads → json_repair 兜底；
+          3. Pydantic model_cls.model_validate（枚举/必填/类型硬校验）；
+          4. 校验失败把错误摘要回喂重试（≤ max_retries 次）；
+          5. 全部失败抛 PolishError(reason="schema_validation_error")。
+
+        model_cls: pydantic BaseModel 子类（如 StoryboardFrameList /
+        StyleRecommendations，定义在 models.py）。
+        """
+        from pydantic import ValidationError
+
+        error_digests: List[str] = []
+        for attempt in range(1, max_retries + 1):
+            user_content = user_prompt
+            if error_digests:
+                user_content = (
+                    f"{user_prompt}\n\n[上次输出错误]\n你上一次返回的 JSON 存在以下问题：\n"
+                    + "\n".join(f"- {d}" for d in error_digests[-3:])
+                    + "\n请修正以上问题后，重新输出完整的合法 JSON（不要解释，不要 markdown 代码块）。"
+                )
+            try:
+                content = self.llm.chat(
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                    model=model,
+                    response_format={'type': 'json_object'},
+                )
+            except Exception as e:
+                raise PolishError(
+                    reason="api_error",
+                    message_zh=f"模型调用失败：{e}",
+                    message_en=f"Model call failed: {e}",
+                ) from e
+
+            data = _loads_llm_json(content or "")
+            if data is None:
+                error_digests.append(
+                    f"第 {attempt} 次输出无法解析为 JSON（原始长度 {len(content or '')}），"
+                    "请输出一个完整 JSON 对象"
+                )
+                logger.warning("[structured] attempt %d: JSON parse failed", attempt)
+                continue
+            try:
+                return model_cls.model_validate(data)
+            except ValidationError as e:
+                # 摘要只取前 5 条错误，避免回喂文本膨胀
+                all_errors = e.errors()
+                errors = all_errors[:5]
+                digest = "; ".join(
+                    f"{'.'.join(str(loc) for loc in err['loc']) or '<root>'}: {err['msg']}"
+                    for err in errors
+                )
+                if len(all_errors) > 5:
+                    digest += "; …"
+                error_digests.append(f"第 {attempt} 次输出 schema 校验失败：{digest}")
+                logger.warning("[structured] attempt %d: validation failed: %s", attempt, digest)
+                continue
+
+        raise PolishError(
+            reason="schema_validation_error",
+            message_zh=f"模型连续 {max_retries} 次未能输出符合 schema 的 JSON，请重试或简化输入。",
+            message_en=f"Model failed to produce schema-valid JSON after {max_retries} attempts.",
+        )
 
     def parse_novel(self, title: str, text: str, custom_extraction_prompt: str = "") -> Script:
         """
@@ -761,158 +1008,37 @@ class ScriptProcessor:
         """
         
         logger.info("Analyzing script for visual style recommendations...")
-        
+
         if not self.is_configured:
-            logger.warning("DASHSCOPE_API_KEY not set. Returning default recommendations.")
-            return self._mock_style_recommendations()
-        
+            # T-B2 可靠性：不再静默返回 mock 推荐（用户会误以为拿到了真实分析）。
+            logger.error("Style analysis requested but LLM is not configured.")
+            raise PolishError(
+                reason="is_configured_false",
+                message_zh="LLM 未配置（缺少 DASHSCOPE_API_KEY），无法进行风格分析。",
+                message_en="LLM not configured (missing DASHSCOPE_API_KEY); style analysis unavailable.",
+            )
+
         if custom_style_prompt and custom_style_prompt.strip():
             system_prompt = custom_style_prompt
         else:
             system_prompt = DEFAULT_STYLE_ANALYSIS_PROMPT
 
         user_prompt = f"剧本内容：\n\n{script_text[:2000]}"  # 限制长度避免 token 限制
-        
-        try:
-            content = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                response_format={'type': 'json_object'},
-            )
-            logger.debug(f"Style Analysis Response:\n{content}")
 
-            # Clean up markdown code blocks if present
-            content = _strip_markdown_json(content)
+        # T-B2：解析路径升级为 _structured_llm_call（json_object 约束 +
+        # think 剥离 + json_repair 兜底 + Pydantic schema 校验 + 报错回喂
+        # 重试 ≤3 次）。此前的截断 hack / regex 抢救 / 手写括号补丁 /
+        # 静默 mock 兜底全部删除——失败一律 PolishError 显式上抛。
+        result = self._structured_llm_call(system_prompt, user_prompt, StyleRecommendations)
 
-            # Safety check: if content is suspiciously long, truncate it
-            # This prevents issues where the model gets stuck in a loop
-            if len(content) > 5000:
-                logger.warning(f"Response too long ({len(content)} chars), truncating...")
-                content = content[:5000]
-                # Find the last closing brace of a recommendation object to make truncation cleaner
-                last_brace = content.rfind("}")
-                if last_brace != -1:
-                    content = content[:last_brace+1]
+        recommendations = [rec.model_dump() for rec in result.recommendations]
+        # Add unique IDs
+        for i, rec in enumerate(recommendations):
+            rec["id"] = f"ai-rec-{i+1}-{str(uuid.uuid4())[:8]}"
+            rec["is_custom"] = False
 
-            def repair_json(json_str):
-                """Attempt to repair truncated or malformed JSON."""
-                json_str = json_str.strip()
+        return recommendations
 
-                # If truncated, try to close it
-                if not json_str.endswith("}"):
-                    # Count open braces/brackets
-                    open_braces = json_str.count("{") - json_str.count("}")
-                    open_brackets = json_str.count("[") - json_str.count("]")
-                    open_quotes = json_str.count('"') % 2
-
-                    if open_quotes:
-                        json_str += '"'
-
-                    json_str += "]" * open_brackets
-                    json_str += "}" * open_braces
-
-                # Ensure the root object is closed
-                if json_str.count("{") > json_str.count("}"):
-                     json_str += "}" * (json_str.count("{") - json_str.count("}"))
-
-                return json_str
-
-            try:
-                data = json.loads(content)
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON parsing error: {e}")
-                logger.error(f"Raw content length: {len(content)}")
-
-                # Try to fix common JSON issues
-                try:
-                    # 1. Attempt to extract JSON object from text using regex
-                    import re
-                    # Look for the outermost JSON object
-                    json_match = re.search(r'\{[\s\S]*\}', content)
-                    if json_match:
-                        content = json_match.group(0)
-
-                    # 2. Try to repair if it looks truncated
-                    content = repair_json(content)
-
-                    data = json.loads(content)
-                except Exception as inner_e:
-                    logger.error(f"Failed to recover JSON: {inner_e}")
-                    # Last resort: try to parse partially using regex for fields
-                    try:
-                        logger.debug("Attempting regex extraction of fields...")
-                        recommendations = []
-                        # Regex to find style objects - improved to be non-greedy and handle newlines
-                        style_matches = re.finditer(r'\{\s*"name":\s*"(.*?)",\s*"description":\s*"(.*?)".*?\}', content, re.DOTALL)
-
-                        # If that fails, try a simpler regex that just looks for the array items
-                        if not list(style_matches):
-                            # Fallback manual parsing
-                            pass
-
-                        if not recommendations:
-                            # Construct a basic valid JSON if we have at least some content
-                            if "recommendations" in content:
-                                # Try to close it forcefully
-                                fixed_content = content + "}]}"
-                                try:
-                                    data = json.loads(fixed_content)
-                                    recommendations = data.get("recommendations", [])
-                                except:
-                                    pass
-
-                        if not recommendations:
-                            raise ValueError("Regex extraction failed")
-                    except:
-                        return self._mock_style_recommendations()
-
-            recommendations = data.get("recommendations", [])
-
-            # Add unique IDs
-            for i, rec in enumerate(recommendations):
-                rec["id"] = f"ai-rec-{i+1}-{str(uuid.uuid4())[:8]}"
-                rec["is_custom"] = False
-
-            return recommendations
-
-        except Exception as e:
-            logger.error(f"Error analyzing script for styles: {e}", exc_info=True)
-            return self._mock_style_recommendations()
-    
-    def _mock_style_recommendations(self) -> List[Dict[str, Any]]:
-        """返回默认的风格推荐"""
-        return [
-            {
-                "id": f"mock-cinematic-{str(uuid.uuid4())[:8]}",
-                "name": "Cinematic Realism",
-                "description": "电影级写实风格，专业打光",
-                "reason": "适合大多数叙事性内容，提供专业的视觉质感",
-                "positive_prompt": "cinematic, photorealistic, 8k, volumetric lighting, film grain, dramatic lighting",
-                "negative_prompt": "cartoon, anime, low quality, blurry",
-                "is_custom": False
-            },
-            {
-                "id": f"mock-anime-{str(uuid.uuid4())[:8]}",
-                "name": "Anime Style",
-                "description": "日式动漫风格，明快色彩",
-                "reason": "适合充满情感表现的故事",
-                "positive_prompt": "anime style, cel shading, vibrant colors, expressive, detailed character design",
-                "negative_prompt": "photorealistic, 3d, blurry, washed out",
-                "is_custom": False
-            },
-            {
-                "id": f"mock-noir-{str(uuid.uuid4())[:8]}",
-                "name": "Film Noir",
-                "description": "黑色电影风格，高对比度",
-                "reason": "适合悬疑、神秘题材的叙事",
-                "positive_prompt": "black and white, film noir, high contrast, dramatic shadows, moody lighting",
-                "negative_prompt": "colorful, bright, happy, modern",
-                "is_custom": False
-            }
-        ]
-    
     def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "") -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
@@ -925,8 +1051,14 @@ class ScriptProcessor:
         logger.info(f"Analyzing text to storyboard: {text[:100]}...")
         
         if not self.is_configured:
-            logger.warning("DASHSCOPE_API_KEY not set. Returning mock frames.")
-            return self._mock_storyboard_frames(text)
+            # T-B2 可靠性：不再静默返回 1 帧硬编码 mock 分镜（无 key 期用户会
+            # 误以为拿到了真实分镜结果）。
+            logger.error("Storyboard analysis requested but LLM is not configured.")
+            raise PolishError(
+                reason="is_configured_false",
+                message_zh="LLM 未配置（缺少 DASHSCOPE_API_KEY），无法生成分镜。",
+                message_en="LLM not configured (missing DASHSCOPE_API_KEY); storyboard analysis unavailable.",
+            )
         
         # Build entities context
         characters_list = entities_json.get("characters", [])
@@ -947,75 +1079,26 @@ class ScriptProcessor:
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
 
         try:
-            content = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。"}
-                ],
-            ).strip()
-            logger.debug(f"Storyboard Analysis Raw Response: {content[:500]}...")
-
-            frames = self._parse_storyboard_json(content)
-            if frames is not None:
-                return frames
-
-            # First parse failed — retry once with response_format constraint
-            logger.warning("Storyboard JSON parse failed, retrying with response_format=json_object...")
-            retry_content = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。请务必输出合法的JSON格式。"}
-                ],
-                response_format={'type': 'json_object'},
-            ).strip()
-            logger.debug(f"Storyboard Analysis Retry Response: {retry_content[:500]}...")
-            frames = self._parse_storyboard_json(retry_content)
-            if frames is not None:
-                return frames
-
-            raise RuntimeError(
-                "AI 模型输出的 JSON 格式不合规，自动重试后仍然失败。请重新点击生成按钮再试一次。"
+            # T-B2：升级为 _structured_llm_call——response_format 约束 +
+            # think 剥离 + json_repair 兜底 + StoryboardFrameList schema
+            # 硬校验（景别/角度枚举 strict 归一）+ 报错回喂重试 ≤3 次。
+            result = self._structured_llm_call(
+                system_prompt,
+                "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。",
+                StoryboardFrameList,
             )
-
+            # mode="json" 把 Literal 值规整为纯 str，下游 pipeline 映射
+            # （scene/char/prop 名 → id）按普通 dict 消费。
+            frames = [frame.model_dump(mode="json") for frame in result.frames]
+            logger.info(f"Storyboard Analysis generated {len(frames)} frames")
+            return frames
+        except PolishError:
+            raise
         except RuntimeError:
-            raise  # Re-raise our own descriptive errors
+            raise  # 兼容旧契约：非 PolishError 的运行时错误原样上抛
         except Exception as e:
             logger.error(f"Error in storyboard analysis: {e}", exc_info=True)
             raise RuntimeError(f"分镜分析过程出错: {str(e)}")
-    
-    def _parse_storyboard_json(self, content: str):
-        """Try to parse storyboard JSON from LLM output. Returns frames list or None on failure."""
-        content = _strip_markdown_json(content)
-
-        try:
-            result = json.loads(content.strip())
-            frames = result.get("frames", [])
-            if not frames:
-                logger.warning("Parsed JSON successfully but 'frames' array is empty")
-                return None
-            logger.info(f"Storyboard Analysis generated {len(frames)} frames")
-            return frames
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse storyboard analysis JSON: {e}")
-            return None
-
-    def _mock_storyboard_frames(self, text: str) -> List[Dict[str, Any]]:
-        """Returns mock storyboard frames for testing when API is unavailable."""
-        return [
-            {
-                "scene_ref_name": "卧室",
-                "character_ref_names": ["叶墨"],
-                "prop_ref_names": ["手机"],
-                "visual_atmosphere": "昏暗的卧室，窗外透进冷色调月光",
-                "character_acting": "叶墨眉头紧锁，眼神迷离",
-                "key_action_physics": "手机在柜上剧烈震动",
-                "shot_size": "中景",
-                "camera_angle": "平视",
-                "camera_movement": "Static",
-                "dialogue": None,
-                "speaker": None
-            }
-        ]
 
     def refine_frame_to_rich(
         self,
@@ -1029,6 +1112,12 @@ class ScriptProcessor:
         if not self.is_configured:
             logger.warning("LLM not configured, cannot refine frame")
             return None
+
+        # 枚举选项集与 models.py 的 Literal 同源（Enum 派生），两张皮合一张
+        shot_size_opts = "|".join(e.value for e in ShotSizeEnum)
+        camera_angle_opts = "|".join(e.value for e in CameraAngleEnum)
+        camera_move_opts = "|".join(e.value for e in CameraMovementType)
+        camera_speed_opts = "|".join(e.value for e in CameraSpeed)
 
         system_prompt = f"""# Role
 You are a film storyboard refinement specialist. Enrich one coarse frame into full structured data + visual description.
@@ -1044,12 +1133,12 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
 
 {{
     "visual_description": "Complete visual description (100-200 chars). Describe environment, character acting, physical action, lighting.",
-    "shot_size": "One of: 大特写|特写|近景|中景|全景|远景|大远景",
-    "camera_angle": "One of: 平视|俯视|仰视|鸟瞰|蚁视|过肩|荷兰角|主观视角",
+    "shot_size": "One of: {shot_size_opts}",
+    "camera_angle": "One of: {camera_angle_opts}",
     "camera_movement": {{
-        "primary": "static|push_in|pull_out|pan_left|pan_right|tilt_up|tilt_down|orbit|follow|crane_up|crane_down|handheld|zoom_in|zoom_out",
+        "primary": "One of: {camera_move_opts}",
         "secondary": null,
-        "speed": "slow|normal|fast",
+        "speed": "One of: {camera_speed_opts}",
         "description": "Natural language description of camera motion"
     }},
     "blocking": {{

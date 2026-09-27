@@ -3,7 +3,7 @@ Storyboard Schema v2 — Prompt Assembly & Dialogue-TTS Sync.
 
 Pure functions with no side effects (no I/O, no pipeline/api imports).
 """
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from .models import (
     CameraMovementData,
@@ -227,3 +227,17 @@ def sync_dialogue_to_tts(frame: StoryboardFrame) -> None:
 
     if instr_parts:
         frame.dialogue_instructions = "；".join(instr_parts)
+
+
+def assemble_r2v_prompt_with_locks(
+    base_prompt: str,
+    references: List["ReferenceLock"],
+) -> "Tuple[str, Dict[str, str]]":
+    """R2V prompt 组装路径：基础 prompt + Seedance 锁定行块 + @图片N 别名表。
+
+    委托 consistency.py（五分型锁定行 / 别名系统, T-V2 SS3.1#2 重写实现）。
+    返回 (prompt, alias_map)；alias_map 随 task 持久化便于审计（上游职责）。
+    """
+    from .consistency import assemble_r2v_prompt
+
+    return assemble_r2v_prompt(base_prompt, references)

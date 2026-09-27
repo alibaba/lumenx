@@ -13,8 +13,7 @@ credential_sources:
   dashscope:
     - DASHSCOPE_API_KEY
   vendor:
-    - KLING_ACCESS_KEY
-    - KLING_SECRET_KEY
+    - KLING_API_KEY
 supported_modalities:
   - t2v
   - i2v

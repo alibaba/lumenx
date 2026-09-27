@@ -11,12 +11,15 @@ pywebview>=5.0.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 defusedxml>=0.7.1
+json_repair>=0.63.0  # LLM 畸形 JSON 兜底修复（MIT, 纯 Python）
 
 # Utilities
 python-dotenv>=1.0.0
 requests>=2.31.0
 pyyaml>=6.0
 PyJWT>=2.8.0
+tenacity>=8.2.0        # Apache-2.0; 付费 API 瞬态错误重试（wait_random_exponential）
+pyrate-limiter>=4.0.0  # MIT; SQLite 持久限流桶（额度跨重启保留），注意 PyPI 包名是 pyrate-limiter
 
 # Cloud Services
 alibabacloud-videoenhan20200320>=1.0.0

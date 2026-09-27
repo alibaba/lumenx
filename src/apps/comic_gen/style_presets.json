@@ -221,6 +221,32 @@
       "negative_prompt": "photorealistic human, glossy 3d render, flat 2d anime, hard plastic toy, horror doll look, low quality, blurry, text, logo, watermark",
       "sample_prompt": "A tiny clay adventurer stands on a handmade miniature train platform, holding a brass compass, warm lamp light, cozy storybook atmosphere",
       "thumbnail": "/assets/styles/style_lab__clay_stop_motion__attic_star_lamp_v1__landscape.png"
+    },
+    {
+      "id": "shinkai_2000s_china",
+      "category": "live_action",
+      "name": "Makoto Shinkai Light · 2000s China",
+      "name_zh": "新海诚光·2000年代中国",
+      "subtitle_zh": "高清电影 · 逆光 · 时代细节 · 遗憾催泪",
+      "description": "高清电影级画质 + 新海诚式光影(高饱和天空/逆光/光线粒子) + 2000年代中国环境细节(梧桐/老公交/诺基亚/网吧)。年代感靠道具环境, 不用做旧滤镜。",
+      "best_for": [
+        "都市言情",
+        "青春",
+        "重生",
+        "校园",
+        "催泪剧情",
+        "怀旧"
+      ],
+      "avoid_for": [
+        "科幻",
+        "赛博朋克",
+        "古风",
+        "搞笑喜剧"
+      ],
+      "positive_prompt": "high-resolution cinematic film still, Makoto Shinkai-style lighting, high-saturation sky, dramatic backlight, lens flare, light particles, volumetric god rays, golden hour and blue hour, crystal-clear sharp focus, ultra-detailed skin texture, realistic pores, cinematic color grading, shallow depth of field, 85mm portrait lens, early-2000s China urban setting, plane tree-lined street, old-style public bus, nostalgic youthful atmosphere, bittersweet emotional tone",
+      "negative_prompt": "film grain, retro fade, sepia tone, aged photo filter, low resolution, blurry, plastic skin, over-smoothed face, CG cartoon look, anime, 3d render, neon cyberpunk, modern skyscrapers, Japanese school uniform, watermark, logo, text, captions, deformed hands",
+      "sample_prompt": "A young man stands under a plane tree-lined street in early-2000s China, golden-hour backlight through the leaves, high-saturation sky with drifting clouds, holding a Nokia phone, nostalgic bittersweet expression, 85mm shallow depth of field, cinematic realism",
+      "thumbnail": "/assets/styles/live_action__cinematic_realism__rooftop_sunrise__landscape.png"
     }
   ]
 }

@@ -65,7 +65,8 @@ def test_dashscope_non_image_local_without_oss_uses_temp_url_and_header(tmp_path
     uploader = FakeUploader(configured=False)
 
     def fake_temp_url_resolver(local_path: str) -> str:
-        assert local_path.endswith("output/video/ref.mp4")
+        # Windows 路径分隔符归一化后再比较
+        assert Path(local_path).as_posix().endswith("output/video/ref.mp4")
         return "oss://dashscope-temp/session-file-001"
 
     resolved = resolve_media_input(

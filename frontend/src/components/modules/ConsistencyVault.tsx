@@ -13,6 +13,7 @@ import { VideoVariantSelector } from "../common/VideoVariantSelector";
 import UploadAssetModal from "../modals/UploadAssetModal";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
+import MethodologyCardSection from "@/components/shared/MethodologyCardSection";
 
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
@@ -687,6 +688,9 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                 </p>
                             )}
                         </div>
+
+                        {/* Methodology Card (T-B6 三分离卡：scene 露出 image 卡+视觉锚点，prop 自动隐藏) */}
+                        <MethodologyCardSection asset={asset} type={type} />
 
                         {/* Video Prompt (Only visible in Video Tab) */}
                         {activeTab === "video" && (

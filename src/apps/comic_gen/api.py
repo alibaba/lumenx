@@ -40,6 +40,7 @@ import traceback
 from .pipeline import ComicGenPipeline, LibraryAssetInUseError
 from .models import (
     ArtDirection,
+    CreateVideoTaskRequest,  # re-exported for backward compat (defined in models.py)
     PromptConfig,
     ProviderBackend,
     ProviderRoutingConfig,
@@ -48,7 +49,7 @@ from .models import (
     StoryboardFrame,
     VideoTask,
 )
-from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT
+from .llm import ScriptProcessor, DEFAULT_STORYBOARD_POLISH_PROMPT, DEFAULT_VIDEO_POLISH_PROMPT, DEFAULT_R2V_POLISH_PROMPT, DEFAULT_ENTITY_EXTRACTION_PROMPT, DEFAULT_STYLE_ANALYSIS_PROMPT, DEFAULT_STORYBOARD_EXTRACTION_PROMPT, PolishError
 from ...utils.oss_utils import OSSImageUploader, sign_oss_urls_in_data
 from ...utils import setup_logging
 from fastapi.responses import JSONResponse
@@ -2053,6 +2054,10 @@ def analyze_to_storyboard(script_id: str, request: AnalyzeToStoryboardRequest):
         return signed_response(updated_script)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except PolishError as e:
+        # T-B2 可靠性：分镜分析失败（含未配置 LLM）不再静默降级为 mock 帧。
+        logger.warning("analyze_to_storyboard failed: %s", e)
+        raise HTTPException(status_code=502, detail=_polish_error_response(e))
     except Exception as e:
         logger.error(f"Error in analyze_to_storyboard: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -2154,41 +2159,6 @@ def generate_audio(script_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-
-class CreateVideoTaskRequest(BaseModel):
-    image_url: str
-    prompt: str
-    frame_id: Optional[str] = None
-    duration: int = 5
-    seed: Optional[int] = None
-    resolution: str = "720p"
-    generate_audio: bool = False
-    audio_url: Optional[str] = None
-    prompt_extend: bool = True
-    negative_prompt: Optional[str] = None
-    batch_size: int = 1
-    model: str = "wan2.6-i2v"
-    shot_type: str = "single"  # 'single' or 'multi' (only for wan2.6-i2v)
-    generation_mode: str = "i2v"  # 'i2v' (image-to-video) or 'r2v' (reference-to-video)
-    reference_video_urls: List[str] = []  # Reference video URLs for R2V (max 3)
-    # Kling params
-    mode: Optional[str] = None
-    sound: Optional[str] = None
-    cfg_scale: Optional[float] = None
-    # Vidu params
-    vidu_audio: Optional[bool] = None
-    movement_amplitude: Optional[str] = None
-    # HappyHorse params
-    reference_image_urls: List[str] = []  # Reference image URLs for HH R2V (max 9)
-    ratio: Optional[str] = None  # Aspect ratio for HH T2V/R2V
-    # Watermark toggle (wan / kling / vidu / pixverse / happyhorse video).
-    # None = leave to provider default; True/False = explicit user choice.
-    watermark: Optional[bool] = None
-    # Source tab in the Storyboard R2V workbench. Distinct from
-    # generation_mode (backend dispatcher hint) — used by the candidates
-    # panel to group takes per UI tab on refresh.
-    workbench_tab: Optional[str] = None  # 't2i_i2v' | 'direct_r2v'
 
 
 def process_video_task(script_id: str, task_id: str):
@@ -3577,6 +3547,10 @@ async def analyze_script_for_styles(script_id: str, request: AnalyzeStyleRequest
         return {"recommendations": recommendations}
     except HTTPException:
         raise
+    except PolishError as e:
+        # T-B2 可靠性：style 分析失败不再静默降级为 mock，统一 502 + reason。
+        logger.warning("analyze_script_for_styles failed: %s", e)
+        raise HTTPException(status_code=502, detail=_polish_error_response(e))
     except Exception as e:
         import traceback
         logger.exception("An error occurred")
