@@ -1,6 +1,7 @@
 import os
 import oss2
 import hashlib
+import tempfile
 import time
 from typing import Optional, Tuple
 from . import get_logger
@@ -160,18 +161,29 @@ class OSSImageUploader:
         if not self.bucket:
             logger.warning("OSS not configured, cannot upload file.")
             return None
-        
-        if not os.path.exists(local_path):
+
+        # Only allow uploads from the managed output/ tree or the system temp
+        # directory; anything else (e.g. path traversal via a crafted media
+        # ref) is rejected and callers fall back gracefully (data URI / local).
+        resolved = os.path.realpath(local_path)
+        out_base = os.path.realpath("output")
+        tmp_base = os.path.realpath(tempfile.gettempdir())
+        if not resolved.startswith(out_base + os.sep):
+            if not resolved.startswith(tmp_base + os.sep):
+                logger.error(f"Refusing OSS upload outside allowed directories: {local_path}")
+                return None
+
+        if not os.path.exists(resolved):
             logger.error(f"File not found: {local_path}")
             return None
         
         try:
-            filename = custom_filename or os.path.basename(local_path)
+            filename = custom_filename or os.path.basename(resolved)
             object_key = self._build_object_key(sub_path, filename)
             
-            logger.info(f"Uploading to OSS: {local_path} -> {object_key}")
+            logger.info(f"Uploading to OSS: {resolved} -> {object_key}")
             
-            with open(local_path, 'rb') as f:
+            with open(resolved, 'rb') as f:
                 result = self.bucket.put_object(object_key, f)
             
             if result.status == 200:

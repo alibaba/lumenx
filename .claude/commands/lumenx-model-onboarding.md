@@ -70,7 +70,7 @@ description: LumenX 模型接入与文档更新流程 - 厂商文档抓取、mod
 
 当当前工作区只有本仓库时：
 
-1. 先把文档证据抓到 `docs/api-reference/` 作为本地 staging mirror
+1. 先把文档证据抓到 `docs/1-api-reference/` 作为本地 staging mirror
 2. 在本仓库更新 `model_catalog`
 3. 在实现文档或 PR 里明确写出：外部 raw archive / Context Hub 仍待同步
 
@@ -88,7 +88,7 @@ description: LumenX 模型接入与文档更新流程 - 厂商文档抓取、mod
 
 当前仓库内的 fallback：
 
-- `docs/api-reference/<provider>-<topic>.md`
+- `docs/1-api-reference/<provider>-<topic>.md`
 
 最少要保留这些信息：
 
@@ -161,6 +161,7 @@ description: LumenX 模型接入与文档更新流程 - 厂商文档抓取、mod
 - `src/utils/provider_media.py`
 - `src/models/`
 - `src/apps/comic_gen/models.py`
+- 各 provider 专属 model wrapper 里的请求 / 响应处理
 
 如果 UI 行为发生变化，检查：
 

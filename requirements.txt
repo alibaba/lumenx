@@ -10,6 +10,7 @@ pywebview>=5.0.0
 # Data Validation & Processing
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
+defusedxml>=0.7.1
 
 # Utilities
 python-dotenv>=1.0.0

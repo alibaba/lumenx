@@ -19,6 +19,7 @@ import type { GlobalTab } from "@/components/layout/GlobalSidebar";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
 import { useTranslations } from "next-intl";
+import TauriMenuListener from "@/components/layout/TauriMenuListener";
 
 const ProjectClient = dynamic(() => import("@/components/project/ProjectClient"), { ssr: false });
 const SeriesDetailPage = dynamic(() => import("@/components/series/SeriesDetailPage"), { ssr: false });
@@ -26,6 +27,7 @@ const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDia
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
+const ScriptEditorShell = dynamic(() => import("@/components/modules/ScriptEditor/ScriptEditorShell"), { ssr: false });
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -460,7 +462,7 @@ export default function Home() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
@@ -579,6 +581,23 @@ export default function Home() {
         setCurrentView('series');
         return;
       }
+      if (hash === '#/studio/editor') {
+        setCurrentView('studio/editor');
+        setActiveTab('editor' as GlobalTab);
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
+      // Match #/project/{id}/editor
+      const projectEditorMatch = hash.match(/^#\/project\/([^/]+)\/editor$/);
+      if (projectEditorMatch) {
+        setProjectId(projectEditorMatch[1]);
+        setSeriesId(null);
+        setEpisodeId(null);
+        setCurrentView('project-editor');
+        return;
+      }
       if (hash.startsWith('#/project/')) {
         const id = hash.replace('#/project/', '');
         setProjectId(id);
@@ -609,6 +628,18 @@ export default function Home() {
         setProjectId(null);
         setSeriesId(null);
         setEpisodeId(null);
+        return;
+      }
+      // Menu action: open new project dialog then land on workspace
+      if (hash === '#/new-project') {
+        setCurrentView('home');
+        setActiveTab('workspace');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        setIsDialogOpen(true);
+        // Clean URL without triggering another hashchange
+        history.replaceState(null, '', '#/');
         return;
       }
       // Default: workspace
@@ -664,6 +695,12 @@ export default function Home() {
     }
     if (currentView === 'playground') {
       return <PlaygroundPage />;
+    }
+    if (currentView === 'studio/editor') {
+      return <ScriptEditorShell mode="full" />;
+    }
+    if (currentView === 'project-editor' && projectId) {
+      return <ScriptEditorShell mode="embedded" projectId={projectId} />;
     }
 
     // Workspace view — Line B skeleton
@@ -1069,6 +1106,9 @@ export default function Home() {
         onClose={() => setIsImportDialogOpen(false)}
         onSuccess={() => fetchSeriesList()}
       />
+
+      {/* Tauri native menu event listener */}
+      <TauriMenuListener onNewProject={() => setIsDialogOpen(true)} />
     </main>
   );
 }

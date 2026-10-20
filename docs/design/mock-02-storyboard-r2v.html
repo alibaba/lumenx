@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="canvas:width" content="1440">
+<meta name="canvas:height" content="960">
+<title>LumenX Studio — Storyboard R2V Workbench (Full Interaction Spec)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --seed-bg: #050508; --seed-fg: #ededed; --seed-primary: #646cff;
+  --seed-secondary: #535bf2; --seed-accent: #ff0080;
+  --seed-surface: rgba(255,255,255,0.04); --seed-radius: 8px;
+  --color-bg-base: var(--seed-bg); --color-bg-surface: var(--seed-surface);
+  --color-bg-elevated: #141416; --color-bg-inset: rgba(255,255,255,0.02);
+  --color-bg-hover: rgba(255,255,255,0.06); --color-bg-input: rgba(0,0,0,0.3);
+  --color-text-primary: var(--seed-fg); --color-text-secondary: #9ca3af;
+  --color-text-muted: #6b7280; --color-border-default: rgba(255,255,255,0.08);
+  --color-border-subtle: rgba(255,255,255,0.04); --color-primary: var(--seed-primary);
+  --color-primary-hover: var(--seed-secondary); --color-glass-border: rgba(255,255,255,0.06);
+  --font-display: 'Space Grotesk', sans-serif; --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
+  --duration-fast: 150ms; --duration-base: 250ms; --ease: cubic-bezier(0.22,1,0.36,1);
+  --status-pending-fg: oklch(0.85 0.13 230); --status-pending-border: oklch(0.75 0.16 230/0.45); --status-pending-bg: oklch(0.75 0.16 230/0.10);
+  --status-processing-fg: oklch(0.88 0.16 80); --status-processing-border: oklch(0.78 0.18 80/0.45); --status-processing-bg: oklch(0.78 0.18 80/0.10);
+  --status-completed-fg: oklch(0.88 0.16 155); --status-completed-border: oklch(0.78 0.18 155/0.45); --status-completed-bg: oklch(0.78 0.18 155/0.10);
+  --status-failed-fg: oklch(0.82 0.18 25); --status-failed-border: oklch(0.72 0.20 25/0.45); --status-failed-bg: oklch(0.72 0.20 25/0.10);
+  --status-starred-fg: oklch(0.90 0.15 90); --status-starred-border: oklch(0.85 0.16 90/0.55); --status-starred-bg: oklch(0.85 0.16 90/0.18);
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--color-bg-base);color:var(--color-text-primary);font-family:var(--font-body);font-size:13px;line-height:1.5;overflow:hidden;height:100vh;-webkit-font-smoothing:antialiased}
+
+/* Layout */
+.layout{display:flex;height:100vh}
+.pipeline-sidebar{width:200px;flex-shrink:0;border-right:1px solid var(--color-border-default);background:var(--color-bg-surface);display:flex;flex-direction:column;backdrop-filter:blur(2px)}
+.workbench{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;min-height:0}
+
+/* Pipeline Sidebar */
+.pipe-header{padding:12px 14px;border-bottom:1px solid var(--color-border-subtle)}
+.pipe-breadcrumb{display:flex;align-items:center;gap:3px;font-size:10.5px;color:var(--color-text-muted)}
+.pipe-breadcrumb .current{color:var(--color-text-primary);font-weight:500}
+.pipe-nav{flex:1;padding:8px;display:flex;flex-direction:column;gap:2px}
+.pipe-step{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--radius-md);cursor:pointer;transition:all var(--duration-fast) var(--ease);position:relative;border:1px solid transparent}
+.pipe-step:hover{background:var(--color-bg-hover)}
+.pipe-step.active{background:rgba(100,108,255,0.08);border-color:rgba(100,108,255,0.12)}
+.pipe-step.active::before{content:'';position:absolute;left:0;top:25%;height:50%;width:2px;background:var(--color-primary);border-radius:0 2px 2px 0}
+.pipe-step svg{width:14px;height:14px;opacity:0.45;flex-shrink:0}
+.pipe-step.active svg{opacity:1;color:var(--color-primary)}
+.pipe-step .s-label{font-size:11.5px;font-weight:500;color:var(--color-text-secondary)}
+.pipe-step.active .s-label{color:var(--color-text-primary)}
+.pipe-step .s-num{font-family:var(--font-mono);font-size:8.5px;color:var(--color-text-muted);letter-spacing:0.12em;text-transform:uppercase}
+.pipe-step .s-status{margin-left:auto;font-family:var(--font-mono);font-size:8.5px;padding:1px 4px;border-radius:3px}
+.pipe-step .s-status.done{color:var(--status-completed-fg);background:var(--status-completed-bg)}
+.pipe-step .s-status.wip{color:var(--status-processing-fg);background:var(--status-processing-bg)}
+
+/* Step Header */
+.step-header{height:80px;flex-shrink:0;border-bottom:1px solid var(--color-border-default);background:var(--color-bg-surface);display:flex;align-items:center;padding:0 20px;position:relative;gap:12px}
+.step-icon-chip{width:28px;height:28px;border-radius:50%;background:rgba(100,108,255,0.06);border:1px solid rgba(100,108,255,0.28);display:grid;place-items:center;flex-shrink:0}
+.step-icon-chip svg{width:12px;height:12px;color:#b9bdff;stroke-width:1.5}
+.step-titles{flex:1}
+.step-eyebrow{font-family:var(--font-mono);font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.2em;color:var(--color-text-muted);margin-bottom:1px}
+.step-eyebrow .num{color:var(--color-primary);font-weight:600}
+.step-title{font-size:14px;font-weight:500}
+.step-subtitle{font-size:11px;color:var(--color-text-secondary);margin-top:1px}
+.step-ghost{font-family:var(--font-mono);font-size:56px;font-weight:300;color:rgba(255,255,255,0.03);user-select:none}
+.step-trailing{display:flex;align-items:center;gap:8px}
+
+/* Progress Rail */
+.progress-rail{position:absolute;bottom:6px;left:20px;right:20px;height:5px;display:flex;align-items:center}
+.progress-track{position:absolute;left:0;right:0;top:50%;height:1px;transform:translateY(-50%);background:rgba(255,255,255,0.05)}
+.progress-fill{position:absolute;left:0;top:50%;height:1px;transform:translateY(-50%);background:var(--color-primary);opacity:0.5;width:60%}
+.progress-nodes{position:relative;display:flex;justify-content:space-between;width:100%}
+.pn{width:5px;height:5px;border-radius:50%;border:1px solid rgba(255,255,255,0.12);background:transparent}
+.pn.done{border-color:var(--color-primary);background:var(--color-primary);opacity:0.6}
+.pn.cur{width:6px;height:6px;border-color:var(--color-primary);background:var(--color-primary);box-shadow:0 0 0 3px rgba(100,108,255,0.08)}
+
+/* Task Queue / Generate All */
+.tq-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;border-radius:var(--radius-md);background:var(--color-bg-hover);border:1px solid var(--color-border-default);color:var(--color-text-secondary);font-family:var(--font-mono);font-size:9.5px;font-weight:500;cursor:pointer;transition:all var(--duration-fast) var(--ease)}
+.tq-btn:hover{background:rgba(255,255,255,0.08);color:var(--color-text-primary)}
+.tq-btn .cnt{min-width:14px;height:14px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:var(--status-processing-bg);border:1px solid var(--status-processing-border);color:var(--status-processing-fg);font-size:8.5px;font-weight:600}
+.gen-all-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--radius-md);background:linear-gradient(160deg,#6269e8 5%,#4a50c6 60%,#3d42a8 100%);border:1px solid rgba(130,140,255,0.28);color:#fff;font-size:11px;font-weight:500;cursor:pointer;box-shadow:0 0 14px rgba(100,108,255,0.2),inset 0 1px 0 rgba(255,255,255,0.12),inset 0 -1px 0 rgba(0,0,0,0.15);transition:all var(--duration-fast) var(--ease)}
+.gen-all-btn:hover{background:linear-gradient(160deg,#6e75f0 5%,#5258d0 60%,#4548b2 100%);box-shadow:0 0 20px rgba(100,108,255,0.3),inset 0 1px 0 rgba(255,255,255,0.15),inset 0 -1px 0 rgba(0,0,0,0.12)}
+.gen-all-btn svg{width:11px;height:11px}
+
+/* Shot List */
+.shot-list{flex:1;min-height:0;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:12px}
+
+/* ====== SHOT CARD (Glass, Two-Column) ====== */
+.shot-card{position:relative;border-radius:var(--radius-lg);border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);backdrop-filter:blur(12px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);overflow:hidden;transition:border-color var(--duration-fast) var(--ease)}
+.shot-card:hover{border-color:rgba(255,255,255,0.10)}
+
+/* Card Header Row */
+.card-top{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 6px 12px}
+/* Pill Tab Switcher */
+.pill-tabs{display:inline-flex;align-items:center;padding:3px;background:rgba(0,0,0,0.4);border-radius:var(--radius-md);backdrop-filter:blur(4px)}
+.pill-tab{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;font-size:10.5px;font-weight:600;color:var(--color-text-muted);cursor:pointer;border:none;background:transparent;transition:all var(--duration-fast) var(--ease)}
+.pill-tab.active{background:rgba(255,255,255,0.08);color:var(--color-text-primary);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08)}
+.pill-tab svg{width:11px;height:11px}
+/* Shot Number */
+.shot-badge{display:flex;align-items:center;gap:5px}
+.shot-badge .num-text{font-family:var(--font-mono);font-size:9.5px;color:var(--color-text-muted);letter-spacing:0.08em}
+.shot-badge .num-circle{width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);display:grid;place-items:center;font-size:9px;font-weight:700}
+
+/* Card Body: Two-Column */
+.card-body{display:flex}
+/* Left: Preview */
+.card-preview{width:220px;flex-shrink:0;background:rgba(0,0,0,0.2);display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;border-right:1px solid rgba(255,255,255,0.04);min-height:160px}
+.card-preview .aspect-video{width:100%;aspect-ratio:16/9;display:grid;place-items:center}
+.preview-placeholder{display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--color-text-muted)}
+.preview-placeholder svg{width:18px;height:18px;opacity:0.5}
+.preview-placeholder span{font-size:10.5px}
+.preview-img{width:100%;height:100%;object-fit:cover}
+/* Pinned chip */
+.pinned-chip{position:absolute;top:6px;right:6px;display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:99px;background:rgba(100,108,255,0.2);border:1px solid rgba(100,108,255,0.55);font-family:var(--font-mono);font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.12em;color:var(--color-primary);backdrop-filter:blur(4px)}
+.pinned-chip svg{width:9px;height:9px}
+/* Status overlay */
+.status-overlay{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.5)}
+.status-overlay .spinner{width:16px;height:16px;animation:spin 1s linear infinite;color:var(--status-processing-fg)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.status-overlay .fail-msg{display:flex;flex-direction:column;align-items:center;gap:4px}
+.status-overlay .fail-msg span{font-size:10.5px;color:var(--status-failed-fg);font-weight:500}
+.status-overlay .fail-msg button{font-size:10.5px;color:var(--color-primary);background:none;border:none;cursor:pointer;font-weight:500}
+
+/* Right: Editor */
+.card-editor{flex:1;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+
+/* Cast avatars */
+.cast-row{display:flex;align-items:center;gap:5px}
+.cast-row .cast-label{font-family:var(--font-mono);font-size:9px;color:var(--color-text-muted);letter-spacing:0.08em;text-transform:uppercase}
+.avatar-group{display:flex;align-items:center}
+.avatar{width:22px;height:22px;border-radius:50%;background:var(--color-bg-elevated);border:2px solid var(--color-bg-base);display:grid;place-items:center;margin-left:-5px;font-family:var(--font-mono);font-size:8px;font-weight:600;color:var(--color-text-secondary)}
+.avatar:first-child{margin-left:0}
+.avatar.overflow{background:var(--color-bg-elevated);color:var(--color-text-muted)}
+
+/* Prompt textarea */
+.prompt-wrap{position:relative}
+.prompt-ta{width:100%;background:transparent;border:1px solid rgba(255,255,255,0.06);border-radius:var(--radius-md);padding:8px 28px 8px 10px;color:var(--color-text-primary);font-family:var(--font-body);font-size:12px;line-height:1.6;resize:none;outline:none;min-height:80px;transition:border-color var(--duration-fast) var(--ease)}
+.prompt-ta:focus{border-color:rgba(100,108,255,0.3);background:rgba(255,255,255,0.02)}
+.prompt-expand-btn{position:absolute;top:6px;right:6px;width:20px;height:20px;border-radius:4px;display:grid;place-items:center;border:none;background:transparent;color:var(--color-text-muted);cursor:pointer;transition:all var(--duration-fast) var(--ease)}
+.prompt-expand-btn:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}
+.prompt-expand-btn svg{width:11px;height:11px}
+
+/* Polish button — small, right-aligned trigger (matches WorkflowActionButton secondary sm) */
+.polish-row{display:flex;justify-content:flex-end}
+.polish-btn{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:var(--color-text-secondary);font-size:10.5px;font-weight:500;cursor:pointer;transition:all var(--duration-fast) var(--ease)}
+.polish-btn:hover{background:rgba(100,108,255,0.08);border-color:rgba(100,108,255,0.2);color:rgba(140,148,255,0.9)}
+.polish-btn svg{width:10px;height:10px}
+
+/* Field Tag Chips — color-coded by field type (matches FieldTagChip FIELD_COLORS) */
+.field-tags{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.ftag{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:5px;font-size:11.5px;font-weight:500;cursor:pointer;transition:all var(--duration-fast) var(--ease)}
+.ftag .ftag-label{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.06em;margin-right:2px;opacity:0.75}
+/* Duration: emerald */
+.ftag.duration{background:rgba(16,185,129,0.10);border:1px solid rgba(16,185,129,0.25);color:#a7f3d0}
+.ftag.duration:hover{border-color:rgba(52,211,153,0.5)}
+/* Shot size / Camera angle: sky */
+.ftag.shot-size,.ftag.camera-angle{background:rgba(14,165,233,0.10);border:1px solid rgba(14,165,233,0.25);color:#bae6fd}
+.ftag.shot-size:hover,.ftag.camera-angle:hover{border-color:rgba(56,189,248,0.5)}
+/* Camera movement: teal */
+.ftag.camera-move{background:rgba(20,184,166,0.10);border:1px solid rgba(20,184,166,0.25);color:#99f6e4}
+.ftag.camera-move:hover{border-color:rgba(45,212,191,0.5)}
+/* Transition: purple */
+.ftag.transition{background:rgba(168,85,247,0.10);border:1px solid rgba(168,85,247,0.25);color:#e9d5ff}
+.ftag.transition:hover{border-color:rgba(192,132,252,0.5)}
+/* Empty/add state */
+.ftag.empty{border:1px dashed rgba(255,255,255,0.2);background:rgba(255,255,255,0.02);color:var(--color-text-muted)}
+.ftag.empty:hover{border-color:rgba(255,255,255,0.4);color:var(--color-text-secondary)}
+.ftag-add{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:5px;border:1px dashed rgba(255,255,255,0.15);color:var(--color-text-muted);cursor:pointer;font-size:13px;transition:all var(--duration-fast) var(--ease)}
+.ftag-add:hover{border-color:rgba(255,255,255,0.3);color:var(--color-text-secondary);background:rgba(255,255,255,0.04)}
+
+/* Dialogue display */
+.dialogue-row{display:flex;align-items:baseline;gap:5px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.02)}
+.dialogue-row .speaker{font-size:9.5px;color:var(--color-text-muted);font-weight:500;flex-shrink:0}
+.dialogue-row .line{font-size:11px;color:var(--color-text-secondary);font-style:italic}
+
+/* Assembled prompt preview toggle */
+.assembled-toggle{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--color-text-muted);cursor:pointer;border:none;background:none;transition:color var(--duration-fast) var(--ease)}
+.assembled-toggle:hover{color:var(--color-text-secondary)}
+.assembled-toggle svg{width:11px;height:11px}
+
+/* Asset chip bar — rounded-full pills with colored dots (insert buttons) */
+.asset-bar{display:flex;flex-wrap:wrap;gap:4px;padding:2px 0}
+.achip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:400;cursor:pointer;transition:all var(--duration-fast) var(--ease);color:var(--color-text-primary)}
+.achip .adot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.achip.character{border:1px solid rgba(96,165,250,0.3);background:rgba(96,165,250,0.1)}
+.achip.character .adot{background:rgb(96,165,250)}
+.achip.character:hover{background:rgba(96,165,250,0.2)}
+.achip.scene{border:1px solid rgba(74,222,128,0.3);background:rgba(74,222,128,0.1)}
+.achip.scene .adot{background:rgb(74,222,128)}
+.achip.scene:hover{background:rgba(74,222,128,0.2)}
+.achip.prop{border:1px solid rgba(251,146,60,0.3);background:rgba(251,146,60,0.1)}
+.achip.prop .adot{background:rgb(251,146,60)}
+.achip.prop:hover{background:rgba(251,146,60,0.2)}
+
+/* ====== ACTION BAR (bottom) ====== */
+.action-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-top:1px solid rgba(255,255,255,0.04)}
+/* Left cluster */
+.action-left{display:flex;align-items:center;gap:1px}
+.act-btn{width:26px;height:26px;border-radius:6px;display:grid;place-items:center;border:none;background:transparent;color:var(--color-text-muted);cursor:pointer;transition:all var(--duration-fast) var(--ease)}
+.act-btn:hover{background:rgba(255,255,255,0.06);color:var(--color-text-primary)}
+.act-btn.danger:hover{color:#fb7185}
+.act-btn:disabled{opacity:0.2;cursor:not-allowed}
+.act-btn:disabled:hover{background:transparent;color:var(--color-text-muted)}
+.act-btn svg{width:13px;height:13px}
+.act-sep{width:1px;height:14px;background:rgba(255,255,255,0.06);margin:0 3px}
+/* Right cluster: count selector + generate */
+.action-right{display:flex;align-items:center;gap:6px}
+.count-sel{display:flex;align-items:center;gap:3px}
+.count-btn{width:28px;height:28px;border-radius:5px;display:grid;place-items:center;border:1px solid var(--color-glass-border);background:rgba(0,0,0,0.2);font-family:var(--font-mono);font-size:10px;font-weight:500;color:var(--color-text-secondary);cursor:pointer;transition:all var(--duration-fast) var(--ease)}
+.count-btn:hover{border-color:rgba(255,255,255,0.15);color:var(--color-text-primary)}
+.count-btn.active{border-color:rgba(100,108,255,0.55);background:rgba(100,108,255,0.15);color:var(--color-primary)}
+.gen-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:var(--radius-md);background:linear-gradient(160deg,#6269e8 5%,#4a50c6 60%,#3d42a8 100%);border:1px solid rgba(130,140,255,0.28);color:#fff;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 0 14px rgba(100,108,255,0.2),inset 0 1px 0 rgba(255,255,255,0.12),inset 0 -1px 0 rgba(0,0,0,0.15);transition:all var(--duration-fast) var(--ease)}
+.gen-btn:hover{background:linear-gradient(160deg,#6e75f0 5%,#5258d0 60%,#4548b2 100%);box-shadow:0 0 20px rgba(100,108,255,0.3),inset 0 1px 0 rgba(255,255,255,0.15),inset 0 -1px 0 rgba(0,0,0,0.12)}
+.gen-btn:disabled{opacity:0.4;cursor:not-allowed}
+.gen-btn svg{width:13px;height:13px}
+
+/* Disclosure toggle */
+.disclosure-bar{display:flex;justify-content:flex-end;padding:4px 12px 8px}
+.disclosure-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.12em;cursor:pointer;border:1px solid var(--color-glass-border);background:rgba(0,0,0,0.3);color:var(--color-text-secondary);transition:all var(--duration-fast) var(--ease)}
+.disclosure-btn:hover{border-color:rgba(255,255,255,0.15);background:rgba(255,255,255,0.04);color:var(--color-text-primary)}
+.disclosure-btn.open{border-color:rgba(100,108,255,0.4);background:rgba(100,108,255,0.1);color:var(--color-primary)}
+.disclosure-btn svg{width:12px;height:12px}
+
+/* ====== ATTACHED PANEL (Candidates/Params) ====== */
+.attached-panel{border-top:1px solid var(--color-border-subtle);padding:10px 12px}
+.section-shell{border-bottom:1px solid var(--color-glass-border);padding-bottom:8px;margin-bottom:8px}
+.section-shell:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.sec-header{display:flex;align-items:center;gap:6px;padding:4px 0;cursor:pointer;user-select:none}
+.sec-chevron{width:14px;height:14px;display:grid;place-items:center;color:var(--color-text-muted);transition:transform var(--duration-fast) var(--ease)}
+.sec-chevron.open{transform:rotate(90deg)}
+.sec-title{font-family:var(--font-mono);font-size:9.5px;font-weight:500;text-transform:uppercase;letter-spacing:0.16em;color:var(--color-text-muted)}
+.sec-sub{font-family:var(--font-mono);font-size:9.5px;color:var(--color-text-muted);opacity:0.6;margin-left:3px}
+.sec-trailing{margin-left:auto;display:flex;align-items:center;gap:4px}
+.sec-body{padding:6px 0 2px}
+
+/* Candidates row */
+.cands-row{display:flex;gap:8px;overflow-x:auto;padding:2px 0;scrollbar-width:none}
+.cands-row::-webkit-scrollbar{display:none}
+.cand{width:140px;flex-shrink:0;display:flex;flex-direction:column;gap:3px}
+.cand-thumb{width:140px;height:80px;border-radius:6px;background:rgba(0,0,0,0.4);border:1px solid var(--color-glass-border);position:relative;overflow:hidden;cursor:pointer;display:grid;place-items:center;transition:all var(--duration-fast) var(--ease)}
+.cand-thumb:hover{border-color:rgba(100,108,255,0.3)}
+.cand-thumb.active{border-color:var(--color-primary);box-shadow:0 0 10px -2px rgba(100,108,255,0.5)}
+.cand-thumb.starred{border-color:var(--status-starred-border)}
+.cand-thumb .ph{font-family:var(--font-mono);font-size:7px;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.1em}
+.cand-badge{position:absolute;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.55);transition:all var(--duration-fast) var(--ease)}
+.cand-badge svg{width:9px;height:9px;color:rgba(255,255,255,0.7)}
+.cand-badge.pin{right:24px;top:3px;opacity:0}
+.cand-thumb:hover .cand-badge.pin{opacity:1}
+.cand-badge.pin.on{opacity:1;border-color:var(--color-primary);background:rgba(100,108,255,0.85)}
+.cand-badge.pin.on svg{color:#fff}
+.cand-badge.star{right:3px;top:3px}
+.cand-badge.star.on{border-color:var(--status-starred-border);background:var(--status-starred-bg)}
+.cand-badge.star.on svg{color:var(--status-starred-fg)}
+.cand-label{font-family:var(--font-mono);font-size:9.5px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;padding:0 2px}
+.cand-label.empty{color:var(--color-text-muted);font-style:italic;opacity:0.6}
+
+/* Params grid */
+.params-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.pf{display:flex;flex-direction:column;gap:2px}
+.pf-label{font-family:var(--font-mono);font-size:8.5px;font-weight:500;text-transform:uppercase;letter-spacing:0.1em;color:var(--color-text-muted)}
+.pf-val{padding:4px 7px;border-radius:var(--radius-sm);background:var(--color-bg-input);border:1px solid var(--color-border-subtle);font-size:11px;color:var(--color-text-primary);font-family:var(--font-mono)}
+
+/* Text button */
+.txt-btn{background:none;border:none;cursor:pointer;font-family:var(--font-mono);font-size:9px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-primary);padding:2px 5px;border-radius:3px;transition:all var(--duration-fast) var(--ease)}
+.txt-btn:hover{background:rgba(100,108,255,0.12);color:#fff}
+
+/* Status badge */
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:8.5px;font-weight:500;text-transform:uppercase;letter-spacing:0.1em}
+.badge.processing{color:var(--status-processing-fg);background:var(--status-processing-bg);border:1px solid var(--status-processing-border)}
+.badge.completed{color:var(--status-completed-fg);background:var(--status-completed-bg);border:1px solid var(--status-completed-border)}
+.badge.pending{color:var(--status-pending-fg);background:var(--status-pending-bg);border:1px solid var(--status-pending-border)}
+.badge.failed{color:var(--status-failed-fg);background:var(--status-failed-bg);border:1px solid var(--status-failed-border)}
+.badge .dot{width:4px;height:4px;border-radius:50%;background:currentColor;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.05);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- PIPELINE SIDEBAR -->
+  <aside class="pipeline-sidebar">
+    <div class="pipe-header"><div class="pipe-breadcrumb">LumenX / 都市奇幻录 / <span class="current">EP03</span></div></div>
+    <nav class="pipe-nav">
+      <div class="pipe-step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg><div style="display:flex;flex-direction:column;gap:1px"><span class="s-label">Script</span><span class="s-num">Step 01</span></div><span class="s-status done">Done</span></div>
+      <div class="pipe-step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg><div style="display:flex;flex-direction:column;gap:1px"><span class="s-label">Art Direction</span><span class="s-num">Step 02</span></div><span class="s-status done">Done</span></div>
+      <div class="pipe-step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg><div style="display:flex;flex-direction:column;gap:1px"><span class="s-label">Cast</span><span class="s-num">Step 03</span></div><span class="s-status done">Done</span></div>
+      <div class="pipe-step active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg><div style="display:flex;flex-direction:column;gap:1px"><span class="s-label">Storyboard</span><span class="s-num">Step 04</span></div><span class="s-status wip">3/5</span></div>
+      <div class="pipe-step"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><div style="display:flex;flex-direction:column;gap:1px"><span class="s-label">Assembly</span><span class="s-num">Step 05</span></div></div>
+    </nav>
+  </aside>
+
+  <!-- MAIN WORKBENCH -->
+  <div class="workbench">
+    <!-- Step Header -->
+    <div class="step-header">
+      <div class="step-icon-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg></div>
+      <div class="step-titles">
+        <div class="step-eyebrow"><span class="num">04</span> &mdash; STORYBOARD &middot; R2V</div>
+        <div class="step-title">故事板 — 视频生成</div>
+        <div class="step-subtitle">5 个分镜 &middot; 3 完成 &middot; 1 生成中 &middot; 1 待处理</div>
+      </div>
+      <span class="step-ghost">04</span>
+      <div class="step-trailing">
+        <div class="tq-btn"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>队列<span class="cnt">2</span></div>
+        <button class="gen-all-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>生成全部</button>
+      </div>
+      <div class="progress-rail"><div class="progress-track"></div><div class="progress-fill"></div><div class="progress-nodes"><span class="pn done"></span><span class="pn done"></span><span class="pn done"></span><span class="pn cur"></span><span class="pn"></span></div></div>
+    </div>
+
+    <!-- SHOT LIST -->
+    <div class="shot-list">
+
+      <!-- ═══════════ SHOT 01: Completed + Pinned active take ═══════════ -->
+      <div class="shot-card">
+        <div class="card-top">
+          <div class="pill-tabs">
+            <button class="pill-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>T2I→I2V</button>
+            <button class="pill-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Direct R2V</button>
+          </div>
+          <div class="shot-badge"><span class="num-text">#01</span><span class="num-circle">1</span></div>
+        </div>
+        <div class="card-body">
+          <div class="card-preview">
+            <div class="aspect-video" style="background:linear-gradient(135deg,#0a0a1a 0%,#1a1030 100%)">
+              <div class="preview-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>00:04.0</span></div>
+            </div>
+            <div class="pinned-chip"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/></svg>Pinned</div>
+          </div>
+          <div class="card-editor">
+            <div class="cast-row"><span class="cast-label">Cast:</span><div class="avatar-group"><span class="avatar">李</span><span class="avatar">张</span></div></div>
+            <div class="prompt-wrap">
+              <textarea class="prompt-ta" rows="3" spellcheck="false">城市天际线全景，霓虹灯在雨中倒映，镜头缓慢俯冲穿过云层，[character1:李明] 的背影渐渐出现在画面下方</textarea>
+              <button class="prompt-expand-btn" title="⌘E 展开"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+            </div>
+            <div class="polish-row"><button class="polish-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>Polish</button></div>
+            <div class="field-tags">
+              <span class="ftag duration"><span class="ftag-label">时长</span>4s</span>
+              <span class="ftag shot-size"><span class="ftag-label">景别</span>远景</span>
+              <span class="ftag camera-move"><span class="ftag-label">运镜</span>缓慢俯冲</span>
+              <span class="ftag-add" title="添加字段">+</span>
+            </div>
+            <div class="asset-bar">
+              <span class="achip character"><span class="adot"></span>李明</span>
+              <span class="achip scene"><span class="adot"></span>城市天际</span>
+            </div>
+          </div>
+        </div>
+        <!-- ACTION BAR -->
+        <div class="action-bar">
+          <div class="action-left">
+            <button class="act-btn" title="浏览资产 @"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94"/></svg></button>
+            <span class="act-sep"></span>
+            <button class="act-btn" disabled title="上移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="18 15 12 9 6 15"/></svg></button>
+            <button class="act-btn" title="下移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <button class="act-btn" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+            <button class="act-btn danger" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+            <span class="act-sep"></span>
+            <button class="act-btn" title="精修此帧"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M19 13l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/></svg></button>
+          </div>
+          <div class="action-right">
+            <div class="count-sel">
+              <button class="count-btn active">&times;1</button>
+              <button class="count-btn">&times;2</button>
+              <button class="count-btn">&times;4</button>
+              <button class="count-btn">&times;6</button>
+            </div>
+            <button class="gen-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>生成 &times;1</button>
+          </div>
+        </div>
+        <!-- Disclosure toggle -->
+        <div class="disclosure-bar">
+          <button class="disclosure-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M3 7h18M3 11h18"/></svg>参数 / Takes</button>
+        </div>
+      </div>
+
+      <!-- ═══════════ SHOT 02: Processing (in-flight) ═══════════ -->
+      <div class="shot-card">
+        <div class="card-top">
+          <div class="pill-tabs">
+            <button class="pill-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>T2I→I2V</button>
+            <button class="pill-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Direct R2V</button>
+          </div>
+          <div class="shot-badge"><span class="num-text">#02</span><span class="num-circle">2</span></div>
+        </div>
+        <div class="card-body">
+          <div class="card-preview">
+            <div class="aspect-video">
+              <div class="status-overlay"><svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg></div>
+            </div>
+          </div>
+          <div class="card-editor">
+            <div class="prompt-wrap">
+              <textarea class="prompt-ta" rows="3" spellcheck="false">主角站在雨中街头，黑色风衣，面部特写，眼神坚定望向远方，shallow DOF, cinematic lighting, rain droplets on lens</textarea>
+              <button class="prompt-expand-btn" title="⌘E 展开"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+            </div>
+            <div class="polish-row"><button class="polish-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>Polish</button></div>
+            <div class="field-tags">
+              <span class="ftag duration"><span class="ftag-label">时长</span>3s</span>
+              <span class="ftag shot-size"><span class="ftag-label">景别</span>特写</span>
+              <span class="ftag-add" title="添加字段">+</span>
+            </div>
+            <div class="asset-bar">
+              <span class="achip character"><span class="adot"></span>李明</span>
+            </div>
+          </div>
+        </div>
+        <div class="action-bar">
+          <div class="action-left">
+            <button class="act-btn" title="@"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94"/></svg></button>
+            <span class="act-sep"></span>
+            <button class="act-btn" title="上移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="18 15 12 9 6 15"/></svg></button>
+            <button class="act-btn" title="下移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <button class="act-btn" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+            <button class="act-btn danger" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+          </div>
+          <div class="action-right">
+            <div class="count-sel">
+              <button class="count-btn">&times;1</button>
+              <button class="count-btn active">&times;2</button>
+              <button class="count-btn">&times;4</button>
+              <button class="count-btn">&times;6</button>
+            </div>
+            <button class="gen-btn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>生成中 &middot; 1</button>
+          </div>
+        </div>
+        <div class="disclosure-bar"><button class="disclosure-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M3 7h18M3 11h18"/></svg>参数 / Takes</button></div>
+      </div>
+
+      <!-- ═══════════ SHOT 03: EXPANDED with Attached Panel ═══════════ -->
+      <div class="shot-card">
+        <div class="card-top">
+          <div class="pill-tabs">
+            <button class="pill-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>T2I→I2V</button>
+            <button class="pill-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Direct R2V</button>
+          </div>
+          <div class="shot-badge"><span class="num-text">#03</span><span class="num-circle">3</span></div>
+        </div>
+        <div class="card-body">
+          <div class="card-preview">
+            <div class="aspect-video" style="background:linear-gradient(135deg,#0f0a1a 0%,#1a0f20 100%)">
+              <div class="preview-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>00:05.0</span></div>
+            </div>
+          </div>
+          <div class="card-editor">
+            <div class="cast-row"><span class="cast-label">Cast:</span><div class="avatar-group"><span class="avatar">李</span></div></div>
+            <div class="prompt-wrap">
+              <textarea class="prompt-ta" rows="3" spellcheck="false">追逐戏：[character1:李明] 在狭窄巷道中奔跑，背后有光影追逐，镜头跟随快速移动，画面模糊化处理动感，wet pavement reflections</textarea>
+              <button class="prompt-expand-btn" title="⌘E 展开"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+            </div>
+            <div class="polish-row"><button class="polish-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>Polish</button></div>
+            <div class="field-tags">
+              <span class="ftag duration"><span class="ftag-label">时长</span>5s</span>
+              <span class="ftag shot-size"><span class="ftag-label">景别</span>中景</span>
+              <span class="ftag camera-angle"><span class="ftag-label">机位</span>平视</span>
+              <span class="ftag camera-move"><span class="ftag-label">运镜</span>跟随平移</span>
+              <span class="ftag transition"><span class="ftag-label">转场</span>硬切</span>
+              <span class="ftag-add" title="添加字段">+</span>
+            </div>
+            <div class="dialogue-row"><span class="speaker">李明:</span><span class="line">「快跑...他们追来了！」</span></div>
+            <button class="assembled-toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>查看最终提示词 &rsaquo;</button>
+            <div class="asset-bar">
+              <span class="achip character"><span class="adot"></span>李明</span>
+              <span class="achip scene"><span class="adot"></span>暗巷</span>
+              <span class="achip prop"><span class="adot"></span>风衣</span>
+            </div>
+          </div>
+        </div>
+        <!-- ACTION BAR -->
+        <div class="action-bar">
+          <div class="action-left">
+            <button class="act-btn" title="浏览资产 @"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94"/></svg></button>
+            <span class="act-sep"></span>
+            <button class="act-btn" title="上移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="18 15 12 9 6 15"/></svg></button>
+            <button class="act-btn" title="下移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <button class="act-btn" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+            <button class="act-btn danger" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+            <span class="act-sep"></span>
+            <button class="act-btn" title="精修此帧"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M19 13l1 3 3 1-3 1-1 3-1-3-3-1 3-1z"/></svg></button>
+          </div>
+          <div class="action-right">
+            <div class="count-sel">
+              <button class="count-btn">&times;1</button>
+              <button class="count-btn">&times;2</button>
+              <button class="count-btn active">&times;4</button>
+              <button class="count-btn">&times;6</button>
+            </div>
+            <button class="gen-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>生成 &times;4</button>
+          </div>
+        </div>
+        <!-- Disclosure: OPEN -->
+        <div class="disclosure-bar"><button class="disclosure-btn open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="8" rx="2"/><path d="M3 17h18M3 21h18"/></svg>收起面板<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;opacity:0.6"><polyline points="18 15 12 9 6 15"/></svg></button></div>
+
+        <!-- ══ ATTACHED PANEL ══ -->
+        <div class="attached-panel">
+          <!-- Candidates -->
+          <div class="section-shell">
+            <div class="sec-header">
+              <span class="sec-chevron open"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
+              <span class="sec-title">Candidates</span>
+              <span class="sec-sub">4 takes &middot; 1 starred</span>
+              <div class="sec-trailing"><button class="txt-btn">Compare</button></div>
+            </div>
+            <div class="sec-body">
+              <div class="cands-row">
+                <div class="cand"><div class="cand-thumb"><span class="ph">Take 1</span><span class="cand-badge pin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h-6v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/></svg></span><span class="cand-badge star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span></div><span class="cand-label empty">add label...</span></div>
+                <div class="cand"><div class="cand-thumb active"><span class="ph">Take 2</span><span class="cand-badge pin on"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h-6v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/></svg></span><span class="cand-badge star on"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span></div><span class="cand-label">best-motion</span></div>
+                <div class="cand"><div class="cand-thumb"><span class="ph">Take 3</span><span class="cand-badge pin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 00-1.11-1.79l-1.78-.9A2 2 0 0115 10.76V6h-6v4.76a2 2 0 01-1.11 1.79l-1.78.9A2 2 0 005 15.24V17z"/></svg></span><span class="cand-badge star"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span></div><span class="cand-label">alt-angle</span></div>
+                <div class="cand"><div class="cand-thumb"><div class="status-overlay"><svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg></div></div><span class="cand-label empty">generating...</span></div>
+              </div>
+            </div>
+          </div>
+          <!-- Params -->
+          <div class="section-shell">
+            <div class="sec-header">
+              <span class="sec-chevron open"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
+              <span class="sec-title">Params</span>
+              <span class="sec-sub">R2V &middot; Kling v1.6</span>
+              <div class="sec-trailing"><button class="txt-btn">Config</button></div>
+            </div>
+            <div class="sec-body">
+              <div class="params-grid">
+                <div class="pf"><span class="pf-label">Model</span><span class="pf-val">kling-v1.6-pro</span></div>
+                <div class="pf"><span class="pf-label">Duration</span><span class="pf-val">5s</span></div>
+                <div class="pf"><span class="pf-label">Aspect</span><span class="pf-val">16:9</span></div>
+                <div class="pf"><span class="pf-label">Motion</span><span class="pf-val">Medium</span></div>
+                <div class="pf"><span class="pf-label">Seed</span><span class="pf-val">42</span></div>
+                <div class="pf"><span class="pf-label">Neg Prompt</span><span class="pf-val" style="font-size:9.5px;color:var(--color-text-muted)">blur, static...</span></div>
+              </div>
+            </div>
+          </div>
+          <!-- Advanced (collapsed) -->
+          <div class="section-shell">
+            <div class="sec-header">
+              <span class="sec-chevron"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
+              <span class="sec-title">Advanced</span>
+              <span class="sec-sub">T2I &middot; dialogue audio</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════ SHOT 04: Failed ═══════════ -->
+      <div class="shot-card">
+        <div class="card-top">
+          <div class="pill-tabs">
+            <button class="pill-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>T2I→I2V</button>
+            <button class="pill-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Direct R2V</button>
+          </div>
+          <div class="shot-badge"><span class="num-text">#04</span><span class="num-circle">4</span></div>
+        </div>
+        <div class="card-body">
+          <div class="card-preview">
+            <div class="aspect-video">
+              <div class="status-overlay"><div class="fail-msg"><span>生成失败</span><button>重试</button></div></div>
+            </div>
+          </div>
+          <div class="card-editor">
+            <div class="prompt-wrap">
+              <textarea class="prompt-ta" rows="2" spellcheck="false">空旷的地下停车场，回声效果，[character1:李明] 停下脚步回头，紧张氛围，fluorescent lights flickering</textarea>
+              <button class="prompt-expand-btn" title="⌘E 展开"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+            </div>
+            <div class="field-tags">
+              <span class="ftag duration"><span class="ftag-label">时长</span>4s</span>
+              <span class="ftag shot-size"><span class="ftag-label">景别</span>全景</span>
+              <span class="ftag-add" title="添加字段">+</span>
+            </div>
+          </div>
+        </div>
+        <div class="action-bar">
+          <div class="action-left">
+            <button class="act-btn" title="@"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94"/></svg></button>
+            <span class="act-sep"></span>
+            <button class="act-btn" title="上移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="18 15 12 9 6 15"/></svg></button>
+            <button class="act-btn" title="下移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <button class="act-btn" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+            <button class="act-btn danger" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+          </div>
+          <div class="action-right">
+            <div class="count-sel"><button class="count-btn active">&times;1</button><button class="count-btn">&times;2</button><button class="count-btn">&times;4</button><button class="count-btn">&times;6</button></div>
+            <button class="gen-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>生成 &times;1</button>
+          </div>
+        </div>
+        <div class="disclosure-bar"><button class="disclosure-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M3 7h18M3 11h18"/></svg>参数 / Takes</button></div>
+      </div>
+
+      <!-- ═══════════ SHOT 05: Pending (no video yet) ═══════════ -->
+      <div class="shot-card">
+        <div class="card-top">
+          <div class="pill-tabs">
+            <button class="pill-tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>T2I→I2V</button>
+            <button class="pill-tab active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Direct R2V</button>
+          </div>
+          <div class="shot-badge"><span class="num-text">#05</span><span class="num-circle">5</span></div>
+        </div>
+        <div class="card-body">
+          <div class="card-preview">
+            <div class="aspect-video">
+              <div class="preview-placeholder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span>尚无视频</span></div>
+            </div>
+          </div>
+          <div class="card-editor">
+            <div class="prompt-wrap">
+              <textarea class="prompt-ta" rows="2" spellcheck="false">最终对峙：[character1:李明] 与 [character2:张远] 面对面，雨幕中两人轮廓对比，dramatic silhouette, split lighting</textarea>
+              <button class="prompt-expand-btn" title="⌘E 展开"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+            </div>
+            <div class="field-tags">
+              <span class="ftag duration"><span class="ftag-label">时长</span>3s</span>
+              <span class="ftag-add" title="添加字段">+</span>
+            </div>
+            <div class="asset-bar">
+              <span class="achip character"><span class="adot"></span>李明</span>
+              <span class="achip character"><span class="adot"></span>张远</span>
+            </div>
+          </div>
+        </div>
+        <div class="action-bar">
+          <div class="action-left">
+            <button class="act-btn" title="@"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94"/></svg></button>
+            <span class="act-sep"></span>
+            <button class="act-btn" title="上移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="18 15 12 9 6 15"/></svg></button>
+            <button class="act-btn" disabled title="下移"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="6 9 12 15 18 9"/></svg></button>
+            <button class="act-btn" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+            <button class="act-btn danger" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+          </div>
+          <div class="action-right">
+            <div class="count-sel"><button class="count-btn active">&times;1</button><button class="count-btn">&times;2</button><button class="count-btn">&times;4</button><button class="count-btn">&times;6</button></div>
+            <button class="gen-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/></svg>生成 &times;1</button>
+          </div>
+        </div>
+        <div class="disclosure-bar"><button class="disclosure-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M3 7h18M3 11h18"/></svg>参数 / Takes</button></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

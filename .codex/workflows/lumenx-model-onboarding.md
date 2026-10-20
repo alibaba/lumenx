@@ -9,7 +9,7 @@ Use this workflow when working in this repository and the user asks to:
 
 - onboard a new model or model family into LumenX
 - update model docs, versions, defaults, parameters, or UI exposure
-- refresh DashScope proxy mappings for Wan, Kling, Vidu, or future families
+- refresh catalog definitions for the Wan, Kling, Vidu, or PixVerse model families
 - review whether a model change is catalog-only or requires runtime adapter work
 - run `/lumenx-model-onboarding`
 
@@ -66,7 +66,7 @@ Use when the raw vendor-doc archive repo and the Context Hub source package are 
 
 Use when only this repo is available.
 
-1. Capture source evidence into `docs/api-reference/` as a repo-local staging mirror.
+1. Capture source evidence into `docs/1-api-reference/` as a repo-local staging mirror.
 2. Update `model_catalog` here.
 3. Explicitly note in the implementation doc or PR that the raw archive repo and Context Hub package still need promotion.
 
@@ -84,7 +84,7 @@ Preferred destination:
 
 Repo-local fallback:
 
-- `docs/api-reference/<provider>-<topic>.md`
+- `docs/1-api-reference/<provider>-<topic>.md`
 
 Minimum evidence requirements:
 

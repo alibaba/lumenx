@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# ========================================
+# LumenX pre-push hook (git-safe-push 自动化)
+# 来源: .agent/workflows/git-safe-push.md 第 8 条 — 不要直接 push 到 main
+# 安装: ./scripts/git-hooks/install.sh
+# 跳过(仅紧急情况): SKIP_SAFE_PUSH=1 git push ...
+# stdin 每行: <local ref> <local sha> <remote ref> <remote sha>
+# ========================================
+
+set -u
+
+if [ "${SKIP_SAFE_PUSH:-0}" = "1" ]; then
+    echo "[git-safe-push] SKIP_SAFE_PUSH=1，跳过 pre-push 检查"
+    exit 0
+fi
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+REMOTE_NAME="${1:-}"
+
+FAIL=0
+
+# ---- 检查 1: 禁止直接推送 main/master ----
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [ -z "$remote_ref" ] && continue
+    case "$remote_ref" in
+        refs/heads/main|refs/heads/master)
+            echo -e "${RED}[git-safe-push] ❌ 禁止直接推送到 ${remote_ref#refs/heads/} 分支 (remote: ${REMOTE_NAME})${NC}"
+            echo -e "  请推送功能分支并通过 Merge Request / Pull Request 合并"
+            echo -e "  紧急放行: ${YELLOW}SKIP_SAFE_PUSH=1 git push ...${NC}"
+            FAIL=1
+            ;;
+    esac
+done
+
+# ---- 检查 2: 兜底扫描已追踪的敏感文件 ----
+TRACKED_SENSITIVE=$(git ls-files \
+    | grep -E '(^|/)\.env(\..+)?$|secret|credential|\.key$|\.pem$' \
+    | grep -vE '\.example$|\.sample$' || true)
+if [ -n "$TRACKED_SENSITIVE" ]; then
+    echo -e "${RED}[git-safe-push] ❌ 仓库中存在被追踪的疑似敏感文件，禁止推送:${NC}"
+    echo "$TRACKED_SENSITIVE" | sed 's/^/    /'
+    echo -e "  请执行 ${YELLOW}git rm --cached <file>${NC} 并加入 .gitignore"
+    FAIL=1
+fi
+
+if [ "$FAIL" -ne 0 ]; then
+    exit 1
+fi
+
+echo -e "${GREEN}[git-safe-push] ✅ pre-push 检查通过${NC}"
+exit 0

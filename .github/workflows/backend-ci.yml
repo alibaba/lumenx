@@ -1,0 +1,48 @@
+# Minimal mechanical validation gate for merging into main.
+#
+# Runs the Python test suite and the model catalog validation script on
+# every pull request targeting main (and on pushes to main as a post-merge
+# safety net). Local development flow is unchanged — this only enforces
+# the checks that CLAUDE.md already declares.
+#
+# To make this a hard gate, enable branch protection on main with
+# "backend-tests" as a required status check.
+
+name: Backend CI
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-docker.txt
+
+      - name: Install dependencies
+        # requirements-docker.txt is the headless subset of requirements.txt
+        # (no pywebview / demucs); the test suite only needs these.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-docker.txt pytest
+
+      - name: Run Python test suite
+        run: python -m pytest
+
+      - name: Validate model catalog
+        run: python scripts/validate_model_catalog.py

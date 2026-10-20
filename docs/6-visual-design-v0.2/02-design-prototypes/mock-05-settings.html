@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LumenX Studio — Settings 设置</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --seed-bg:#050508;--seed-fg:#ededed;--seed-primary:#646cff;--seed-secondary:#535bf2;--seed-accent:#ff0080;--seed-surface:rgba(255,255,255,0.04);--seed-radius:8px;
+  --color-bg-base:var(--seed-bg);--color-bg-surface:var(--seed-surface);--color-bg-elevated:#141416;--color-bg-inset:rgba(255,255,255,0.02);--color-bg-hover:rgba(255,255,255,0.06);--color-bg-input:rgba(0,0,0,0.3);
+  --color-text-primary:var(--seed-fg);--color-text-secondary:#9ca3af;--color-text-muted:#6b7280;
+  --color-border-default:rgba(255,255,255,0.08);--color-border-subtle:rgba(255,255,255,0.04);
+  --color-primary:var(--seed-primary);--color-primary-hover:var(--seed-secondary);--color-destructive:#dc2626;
+  --font-display:'Space Grotesk',sans-serif;--font-body:'Inter',sans-serif;--font-mono:'JetBrains Mono',monospace;
+  --radius-sm:4px;--radius-md:8px;--radius-lg:12px;
+  --duration-fast:150ms;--ease:cubic-bezier(0.22,1,0.36,1);
+  --status-completed-fg:oklch(0.88 0.16 155);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--color-bg-base);color:var(--color-text-primary);font-family:var(--font-body);font-size:13px;line-height:1.5;overflow:hidden;height:100vh;-webkit-font-smoothing:antialiased;}
+.layout{display:flex;height:100vh;}
+
+.sidebar{width:220px;flex-shrink:0;border-right:1px solid var(--color-border-default);background:var(--color-bg-surface);display:flex;flex-direction:column;backdrop-filter:blur(2px);}
+.sidebar-brand{padding:24px 20px 20px;border-bottom:1px solid var(--color-border-subtle);display:flex;align-items:center;gap:10px;}
+.brand-icon{width:28px;height:28px;flex-shrink:0;background-image:url("LumenX-cybr.png");background-size:contain;background-repeat:no-repeat;background-position:center;font-size:0;color:transparent;}
+.brand-text{font-family:var(--font-mono);font-size:14px;font-weight:700;letter-spacing:-0.02em;line-height:1;color:var(--color-text-primary);display:flex;flex-direction:column;gap:3px;}
+.brand-text .word-row{display:flex;align-items:baseline;}
+.brand-text .word-x{color:var(--color-primary);font-weight:900;}
+.brand-text .brand-tag{font-family:var(--font-mono);font-size:9px;color:rgba(255,255,255,0.3);letter-spacing:0.2em;text-transform:uppercase;font-weight:500;}
+.sidebar-nav{flex:1;padding:12px;display:flex;flex-direction:column;gap:2px;}
+.nav-item{display:flex;align-items:center;gap:12px;padding:9px 14px;border-radius:var(--radius-md);cursor:pointer;transition:all var(--duration-fast) var(--ease);position:relative;border:1px solid transparent;}
+.nav-item:hover{background:var(--color-bg-hover);}
+.nav-item.active{background:rgba(100,108,255,0.08);border-color:rgba(100,108,255,0.15);}
+.nav-item.active::before{content:'';position:absolute;left:0;top:25%;height:50%;width:2px;background:var(--color-primary);border-radius:0 2px 2px 0;}
+.nav-item svg{width:16px;height:16px;opacity:0.5;}
+.nav-item.active svg{opacity:1;color:var(--color-primary);}
+.nav-item span{font-size:12.5px;font-weight:500;color:var(--color-text-secondary);}
+.nav-item.active span{color:var(--color-text-primary);}
+.sidebar-footer{padding:16px;border-top:1px solid var(--color-border-subtle);font-family:var(--font-mono);font-size:10px;color:var(--color-text-muted);padding-left:26px;}
+
+.main{flex:1;overflow-y:auto;padding:40px 48px 80px;}
+.page-title{font-family:var(--font-display);font-size:20px;font-weight:600;letter-spacing:-0.02em;margin-bottom:32px;}
+
+/* Section Shell */
+.section{margin-bottom:32px;}
+.section-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;border-bottom:1px solid var(--color-border-subtle);margin-bottom:16px;}
+.section-title{font-family:var(--font-mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);}
+.section-desc{font-size:12px;color:var(--color-text-muted);margin-top:2px;}
+
+/* Form elements */
+.field{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:center;padding:12px 0;border-bottom:1px solid var(--color-border-subtle);}
+.field:last-child{border-bottom:none;}
+.field-label{font-size:12.5px;font-weight:500;}
+.field-hint{font-size:11px;color:var(--color-text-muted);margin-top:2px;}
+.input{display:block;width:100%;max-width:400px;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--color-border-default);background:var(--color-bg-input);color:var(--color-text-primary);font-family:var(--font-body);font-size:12.5px;outline:none;transition:border-color var(--duration-fast) var(--ease);}
+.input:focus{border-color:var(--color-primary);}
+.input-mono{font-family:var(--font-mono);font-size:11.5px;letter-spacing:0.02em;}
+.select{appearance:none;display:block;width:100%;max-width:400px;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--color-border-default);background:var(--color-bg-input);color:var(--color-text-primary);font-size:12.5px;outline:none;cursor:pointer;}
+.toggle-wrap{display:flex;align-items:center;gap:10px;}
+.toggle{width:36px;height:20px;border-radius:10px;background:var(--color-border-default);position:relative;cursor:pointer;transition:background var(--duration-fast) var(--ease);}
+.toggle.on{background:var(--color-primary);}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform var(--duration-fast) var(--ease);}
+.toggle.on::after{transform:translateX(16px);}
+.toggle-label{font-size:12px;color:var(--color-text-secondary);}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--radius-md);font-size:12px;font-weight:500;cursor:pointer;transition:all var(--duration-fast) var(--ease);border:1px solid var(--color-border-default);background:var(--color-bg-hover);color:var(--color-text-primary);}
+.btn:hover{background:rgba(255,255,255,0.08);}
+.btn-primary{background:linear-gradient(160deg,#6269e8 5%,#4a50c6 60%,#3d42a8 100%);border-color:rgba(130,140,255,0.28);color:#fff;box-shadow:0 0 14px rgba(100,108,255,0.2),inset 0 1px 0 rgba(255,255,255,0.12),inset 0 -1px 0 rgba(0,0,0,0.15);}
+.btn-primary:hover{background:linear-gradient(160deg,#6e75f0 5%,#5258d0 60%,#4548b2 100%);box-shadow:0 0 20px rgba(100,108,255,0.3),inset 0 1px 0 rgba(255,255,255,0.15),inset 0 -1px 0 rgba(0,0,0,0.12);}
+.btn-destructive{background:transparent;border-color:var(--color-destructive);color:var(--color-destructive);}
+.btn-destructive:hover{background:rgba(220,38,38,0.1);}
+.key-mask{font-family:var(--font-mono);font-size:11.5px;letter-spacing:0.05em;color:var(--color-text-muted);background:var(--color-bg-inset);padding:6px 12px;border-radius:var(--radius-md);border:1px solid var(--color-border-subtle);display:flex;align-items:center;justify-content:space-between;max-width:400px;}
+.key-mask .reveal{font-size:10px;color:var(--color-primary);cursor:pointer;text-transform:uppercase;letter-spacing:0.1em;font-weight:500;}
+.saved-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--status-completed-fg);background:oklch(0.78 0.18 155 / 0.10);border:1px solid oklch(0.78 0.18 155 / 0.45);}
+.path-input{display:flex;align-items:center;gap:8px;max-width:400px;}
+.path-input .input{flex:1;}
+.path-input .browse{padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--color-border-default);background:var(--color-bg-hover);color:var(--color-text-secondary);font-size:11px;cursor:pointer;}
+
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-component="GlobalSidebar">
+    <div class="sidebar-brand"><div class="brand-icon">X</div><span class="brand-text"><span class="word-row">LUMEN<span class="word-x">X</span></span><span class="brand-tag">STUDIO</span></span></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg><span>工作区</span></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg><span>资产库</span></div>
+      <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15"/></svg><span>设置</span></div>
+    </nav>
+    <div class="sidebar-footer">v0.2.0</div>
+  </aside>
+
+  <main class="main" data-component="SettingsPage">
+    <h1 class="page-title">设置</h1>
+
+    <!-- API Keys -->
+    <section class="section" data-component="SectionShell">
+      <div class="section-header">
+        <div><span class="section-title">API KEYS</span><div class="section-desc">管理外部服务密钥</div></div>
+        <span class="saved-badge">SAVED</span>
+      </div>
+      <div class="field">
+        <div><div class="field-label">DashScope API Key</div><div class="field-hint">通义千问 / Wanx / CosyVoice</div></div>
+        <div class="key-mask"><span>sk-••••••••••••••••3f8a</span><span class="reveal">Reveal</span></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">Kling API Key</div><div class="field-hint">可灵视频生成（可选）</div></div>
+        <div class="key-mask"><span>kling_••••••••7b2c</span><span class="reveal">Reveal</span></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">Vidu API Key</div><div class="field-hint">Vidu 视频生成（可选）</div></div>
+        <input class="input input-mono" placeholder="输入 API Key..." data-component="Input">
+      </div>
+    </section>
+
+    <!-- Model Preferences -->
+    <section class="section" data-component="SectionShell">
+      <div class="section-header">
+        <div><span class="section-title">模型配置</span><div class="section-desc">默认生成模型 & 参数</div></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">默认 R2V 模型</div></div>
+        <select class="select" data-component="Select"><option>Wanx R2V v2 (推荐)</option><option>Kling v2</option><option>Vidu 1.5</option></select>
+      </div>
+      <div class="field">
+        <div><div class="field-label">默认 I2V 模型</div></div>
+        <select class="select" data-component="Select"><option>Wanx I2V (默认)</option><option>Kling I2V</option></select>
+      </div>
+      <div class="field">
+        <div><div class="field-label">默认 Take 数量</div><div class="field-hint">每次生成候选视频数</div></div>
+        <select class="select" data-component="Select" style="max-width:120px"><option>2</option><option selected>4 (推荐)</option><option>6</option></select>
+      </div>
+      <div class="field">
+        <div><div class="field-label">视频分辨率</div></div>
+        <select class="select" data-component="Select" style="max-width:200px"><option>1920×1080 (1080p)</option><option>1280×720 (720p)</option></select>
+      </div>
+    </section>
+
+    <!-- Storage -->
+    <section class="section" data-component="SectionShell">
+      <div class="section-header">
+        <div><span class="section-title">存储与导出</span><div class="section-desc">本地输出路径与 OSS 配置</div></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">本地输出路径</div><div class="field-hint">所有生成资产默认保存位置</div></div>
+        <div class="path-input"><input class="input input-mono" value="~/.lumen-x/output/" data-component="Input"><button class="browse">浏览...</button></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">OSS 同步</div></div>
+        <div class="toggle-wrap"><div class="toggle" data-component="Toggle"></div><span class="toggle-label">关闭（仅本地）</span></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">导出格式</div></div>
+        <select class="select" data-component="Select" style="max-width:200px"><option>MP4 (H.264)</option><option>MOV (ProRes)</option><option>WebM (VP9)</option></select>
+      </div>
+    </section>
+
+    <!-- Preferences -->
+    <section class="section" data-component="SectionShell">
+      <div class="section-header">
+        <div><span class="section-title">偏好设置</span></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">自动保存</div></div>
+        <div class="toggle-wrap"><div class="toggle on" data-component="Toggle"></div><span class="toggle-label">每 30 秒自动保存项目状态</span></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">减弱动效</div><div class="field-hint">尊重系统 reduce-motion 偏好</div></div>
+        <div class="toggle-wrap"><div class="toggle" data-component="Toggle"></div><span class="toggle-label">跟随系统</span></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">语言</div></div>
+        <select class="select" data-component="Select" style="max-width:200px"><option selected>简体中文</option><option>English</option></select>
+      </div>
+    </section>
+
+    <!-- Danger Zone -->
+    <section class="section" data-component="SectionShell">
+      <div class="section-header">
+        <div><span class="section-title" style="color:var(--color-destructive)">危险区域</span></div>
+      </div>
+      <div class="field">
+        <div><div class="field-label">清除缓存</div><div class="field-hint">删除所有临时文件与 model cache</div></div>
+        <button class="btn btn-destructive">清除缓存</button>
+      </div>
+      <div class="field">
+        <div><div class="field-label">重置设置</div><div class="field-hint">恢复所有配置为出厂默认</div></div>
+        <button class="btn btn-destructive">恢复默认</button>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

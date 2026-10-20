@@ -1,11 +1,12 @@
 "use client";
 
-import { LayoutGrid, Layers, Wand2, Settings } from "lucide-react";
+import { LayoutGrid, Layers, Wand2, Settings, FileText } from "lucide-react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import LumenXBranding from "./LumenXBranding";
+import { isTauri } from "@/lib/transport";
 
-export type GlobalTab = "workspace" | "library" | "playground" | "settings";
+export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "settings";
 
 interface GlobalSidebarProps {
   activeTab: GlobalTab;
@@ -17,6 +18,7 @@ interface GlobalSidebarProps {
 export const GLOBAL_NAV_ITEMS: { id: GlobalTab; icon: typeof LayoutGrid; hash: string }[] = [
   { id: "workspace", icon: LayoutGrid, hash: "#/" },
   { id: "library", icon: Layers, hash: "#/library" },
+  { id: "editor", icon: FileText, hash: "#/studio/editor" },
   { id: "playground", icon: Wand2, hash: "#/playground" },
   { id: "settings", icon: Settings, hash: "#/settings" },
 ];
@@ -80,7 +82,12 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
   };
 
   return (
-    <aside className="w-52 flex-shrink-0 h-full hidden md:flex flex-col border-r border-glass-border bg-surface/60 backdrop-blur-xl">
+    <aside
+      className="w-52 flex-shrink-0 h-full hidden md:flex flex-col border-r border-glass-border bg-surface/60 backdrop-blur-xl"
+      data-tauri-drag-region
+    >
+      {/* Traffic Light inset for Tauri desktop */}
+      {isTauri() && <div className="tauri-titlebar-inset" />}
       {/* Brand lockup — Logo + LUMENX + Slogan, click → workspace */}
       <button
         type="button"
@@ -96,7 +103,7 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
 
       {/* Primary navigation */}
       <nav className="flex-1 flex flex-col gap-0.5 p-2.5" aria-label={t("mainNavAria")}>
-        {GLOBAL_NAV_ITEMS.slice(0, 3).map((item) => (
+        {GLOBAL_NAV_ITEMS.slice(0, 4).map((item) => (
           <NavButton
             key={item.id}
             active={activeTab === item.id}

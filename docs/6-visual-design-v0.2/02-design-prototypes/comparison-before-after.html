@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LumenX Studio — 视觉差异注释 (Before → After)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --seed-bg:#050508;--seed-fg:#ededed;--seed-primary:#646cff;--seed-accent:#ff0080;
+  --color-bg-base:#050508;--color-bg-surface:rgba(255,255,255,0.04);--color-bg-elevated:#141416;--color-bg-inset:rgba(255,255,255,0.02);
+  --color-text-primary:#ededed;--color-text-secondary:#9ca3af;--color-text-muted:#6b7280;
+  --color-border-default:rgba(255,255,255,0.08);--color-border-subtle:rgba(255,255,255,0.04);
+  --font-display:'Space Grotesk',sans-serif;--font-body:'Inter',sans-serif;--font-mono:'JetBrains Mono',monospace;
+  --radius-md:8px;--radius-lg:12px;
+  --callout-red:#ff4d4f;--callout-blue:#4dabf7;--callout-green:#69db7c;--callout-gold:#ffd43b;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--color-bg-base);color:var(--color-text-primary);font-family:var(--font-body);font-size:13px;line-height:1.7;-webkit-font-smoothing:antialiased;}
+
+/* Header */
+.page-header{padding:48px 48px 32px;border-bottom:1px solid var(--color-border-default);max-width:1200px;margin:0 auto;}
+.doc-brand{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.doc-brand-mark{width:32px;height:32px;flex-shrink:0;background-image:url("LumenX-cybr.png");background-size:contain;background-repeat:no-repeat;background-position:center;}
+.doc-brand-wordmark{display:flex;flex-direction:column;line-height:1;}
+.doc-brand-wordmark .row{font-family:var(--font-mono);font-size:15px;font-weight:700;letter-spacing:-0.02em;color:var(--color-text-primary);}
+.doc-brand-wordmark .row .x{color:var(--color-primary);font-weight:900;}
+.doc-brand-wordmark .tag{font-family:var(--font-mono);font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-top:3px;}
+.page-eyebrow{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--color-text-muted);margin-bottom:10px;}
+.page-title{font-family:var(--font-display);font-size:28px;font-weight:700;letter-spacing:-0.03em;margin-bottom:10px;}
+.page-desc{color:var(--color-text-secondary);font-size:14px;max-width:760px;}
+
+/* Legend */
+.legend{display:flex;gap:20px;padding:16px 48px;border-bottom:1px solid var(--color-border-subtle);max-width:1200px;margin:0 auto;flex-wrap:wrap;}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--color-text-secondary);}
+.legend-dot{width:10px;height:10px;border-radius:2px;}
+.legend-dot.surface{background:var(--callout-red);}
+.legend-dot.blur{background:var(--callout-blue);}
+.legend-dot.new-pattern{background:var(--callout-green);}
+.legend-dot.neon{background:var(--callout-gold);}
+
+/* Content */
+.content{max-width:1200px;margin:0 auto;padding:32px 48px 80px;}
+
+/* Section */
+.diff-section{margin-bottom:56px;}
+.diff-section-title{font-family:var(--font-display);font-size:18px;font-weight:600;margin-bottom:6px;}
+.diff-section-desc{color:var(--color-text-muted);font-size:12px;margin-bottom:20px;}
+
+/* Comparison Row */
+.compare-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+.compare-panel{border-radius:var(--radius-lg);overflow:hidden;border:1px solid var(--color-border-default);position:relative;}
+.compare-label{position:absolute;top:10px;left:10px;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.15em;padding:3px 8px;border-radius:4px;z-index:10;}
+.compare-label.before{background:rgba(255,77,79,0.15);color:var(--callout-red);border:1px solid rgba(255,77,79,0.3);}
+.compare-label.after{background:rgba(105,219,124,0.15);color:var(--callout-green);border:1px solid rgba(105,219,124,0.3);}
+
+/* Mini rendered panels */
+.mini-render{padding:20px;min-height:140px;position:relative;}
+.mini-render.old-surface{background:rgba(0,0,0,0.4);backdrop-filter:blur(12px);}
+.mini-render.new-surface{background:rgba(255,255,255,0.04);backdrop-filter:blur(2px);}
+
+/* Annotation callout */
+.annotation{margin:12px 0;padding:12px 16px;border-radius:var(--radius-md);border:1px solid;font-size:12px;line-height:1.6;}
+.annotation.red{border-color:rgba(255,77,79,0.3);background:rgba(255,77,79,0.04);color:var(--callout-red);}
+.annotation.blue{border-color:rgba(77,171,247,0.3);background:rgba(77,171,247,0.04);color:var(--callout-blue);}
+.annotation.green{border-color:rgba(105,219,124,0.3);background:rgba(105,219,124,0.04);color:var(--callout-green);}
+.annotation.gold{border-color:rgba(255,212,59,0.3);background:rgba(255,212,59,0.04);color:var(--callout-gold);}
+.annotation-label{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.15em;opacity:0.7;margin-bottom:4px;}
+.annotation strong{color:var(--color-text-primary);}
+.annotation code{font-family:var(--font-mono);font-size:11px;background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px;}
+
+/* Token table */
+.token-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px;}
+.token-table th{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--color-text-muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--color-border-default);background:var(--color-bg-inset);}
+.token-table td{padding:8px 10px;border-bottom:1px solid var(--color-border-subtle);vertical-align:middle;}
+.token-table .var{font-family:var(--font-mono);font-size:11px;color:var(--seed-primary);}
+.token-table .old-val{color:var(--callout-red);font-family:var(--font-mono);font-size:11px;text-decoration:line-through;opacity:0.6;}
+.token-table .new-val{color:var(--callout-green);font-family:var(--font-mono);font-size:11px;}
+.swatch{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:middle;margin-right:6px;border:1px solid rgba(255,255,255,0.1);}
+
+/* Inline demo elements */
+.demo-card{border-radius:8px;padding:14px;margin:6px 0;}
+.demo-card.old{background:rgba(0,0,0,0.4);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);}
+.demo-card.new{background:rgba(255,255,255,0.04);backdrop-filter:blur(2px);border:1px solid rgba(255,255,255,0.08);}
+.demo-text{font-size:11px;color:var(--color-text-secondary);}
+.demo-sidebar{width:100%;display:flex;flex-direction:column;gap:8px;}
+.demo-nav-item{padding:8px 12px;border-radius:6px;font-size:12px;color:var(--color-text-secondary);position:relative;}
+.demo-nav-item.active-old{background:rgba(100,108,255,0.1);}
+.demo-nav-item.active-new{background:transparent;color:var(--color-text-primary);}
+.demo-nav-item.active-new::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:2px;height:16px;background:var(--seed-primary);border-radius:1px;}
+.demo-btn{display:inline-block;padding:7px 14px;border-radius:6px;font-size:12px;font-weight:500;}
+.demo-btn.old{background:rgba(255,255,255,0.05);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.1);color:var(--color-text-primary);box-shadow:0 0 12px rgba(100,108,255,0.2);}
+.demo-btn.new{background:rgba(100,108,255,0.12);border:1px solid rgba(100,108,255,0.25);color:#ededed;box-shadow:none;}
+.demo-btn.new-cta{background:var(--seed-primary);border:1px solid transparent;color:#fff;box-shadow:0 0 16px rgba(100,108,255,0.3);}
+/* CTA 最终方案：三段渐变 · 立体感 · logo 匹配 */
+.demo-btn.cta-gradient{
+  background:linear-gradient(160deg, #6269e8 5%, #4a50c6 60%, #3d42a8 100%);
+  border:1px solid rgba(130,140,255,0.28);
+  color:#fff;
+  box-shadow:0 0 14px rgba(100,108,255,0.2), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.15);
+  backdrop-filter:blur(4px);
+  text-shadow:0 1px 2px rgba(0,0,0,0.3);
+  letter-spacing:0.01em;
+}
+/* CTA 方案 B：玻璃质感 + 内发光 */
+.demo-btn.cta-glass{
+  background:rgba(100,108,255,0.18);
+  border:1px solid rgba(100,108,255,0.4);
+  color:#fff;
+  box-shadow:0 0 18px rgba(100,108,255,0.2), inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -1px 0 rgba(0,0,0,0.2);
+  backdrop-filter:blur(8px);
+  text-shadow:0 0 8px rgba(100,108,255,0.5);
+}
+
+/* Step header demo */
+.demo-step-old{padding:12px;border-bottom:1px solid rgba(255,255,255,0.1);}
+.demo-step-old .step-title{font-size:14px;font-weight:600;color:var(--color-text-primary);}
+.demo-step-new{padding:16px 20px;position:relative;overflow:hidden;}
+.demo-step-new .ghost-num{position:absolute;right:16px;top:50%;transform:translateY(-50%);font-family:var(--font-display);font-size:64px;font-weight:700;color:rgba(255,255,255,0.03);line-height:1;pointer-events:none;}
+.demo-step-new .eyebrow{font-family:var(--font-mono);font-size:9.5px;text-transform:uppercase;letter-spacing:0.2em;color:var(--color-text-muted);margin-bottom:4px;}
+.demo-step-new .step-title{font-family:var(--font-display);font-size:15px;font-weight:600;color:var(--color-text-primary);}
+.demo-step-new .step-sub{font-size:11px;color:var(--color-text-muted);margin-top:2px;}
+
+/* Progress rail demo */
+.demo-rail{display:flex;align-items:center;gap:0;margin:12px 0;}
+.rail-node{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.rail-node.done{background:oklch(0.88 0.16 155);}
+.rail-node.active{background:var(--seed-primary);box-shadow:0 0 6px rgba(100,108,255,0.5);}
+.rail-node.future{background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);}
+.rail-line{height:2px;flex:1;margin:0 -1px;}
+.rail-line.done{background:oklch(0.78 0.18 155/0.4);}
+.rail-line.active{background:linear-gradient(90deg,oklch(0.78 0.18 155/0.4),rgba(100,108,255,0.4));}
+.rail-line.future{background:rgba(255,255,255,0.06);}
+
+/* Entity chip demo */
+.demo-chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;}
+.demo-chip{padding:3px 8px;border-radius:4px;font-size:10px;font-family:var(--font-mono);letter-spacing:0.05em;}
+.demo-chip.char{background:rgba(100,108,255,0.1);color:rgba(140,148,255,0.9);border:1px solid rgba(100,108,255,0.2);}
+.demo-chip.scene{background:rgba(255,0,128,0.08);color:rgba(255,100,160,0.9);border:1px solid rgba(255,0,128,0.2);}
+.demo-chip.prop{background:rgba(255,180,60,0.08);color:rgba(255,200,100,0.9);border:1px solid rgba(255,180,60,0.2);}
+
+/* New pattern badge */
+.new-badge{display:inline-block;font-family:var(--font-mono);font-size:8px;text-transform:uppercase;letter-spacing:0.12em;padding:2px 6px;border-radius:3px;background:rgba(105,219,124,0.1);color:var(--callout-green);border:1px solid rgba(105,219,124,0.25);margin-left:8px;vertical-align:middle;}
+
+/* Summary */
+.summary-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:20px 0;}
+.summary-card{background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-md);padding:16px;}
+.summary-card h4{font-family:var(--font-display);font-size:13px;font-weight:600;margin-bottom:8px;}
+.summary-card p{font-size:12px;color:var(--color-text-secondary);margin:0;}
+
+@media(max-width:900px){.compare-row{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="doc-brand">
+    <div class="doc-brand-mark"></div>
+    <div class="doc-brand-wordmark">
+      <span class="row">LUMEN<span class="x">X</span> STUDIO</span>
+      <span class="tag">Cyber Brutalism · Design Doc</span>
+    </div>
+  </div>
+  <div class="page-eyebrow">LUMENX STUDIO · DESIGN DIFF · 视觉差异注释</div>
+  <h1 class="page-title">Before → After 逐项对比</h1>
+  <p class="page-desc">本文档逐一标注"克制电影感 + Cyber Brutalism 焕新"方向与现有设计的<strong>具体视觉差异</strong>。每项变更附带 token 值对比、渲染示例和设计意图说明。<br><strong style="color:var(--color-primary)">v0.2 更新 (2026-06-09):</strong> 新增 Brand Identity 焕新 (commit <code>e6f86ea</code>) — 棱角几何莲花 logo + 等宽 LUMENX 字标，替代旧紫粉渐变方块。</p>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot surface"></div>Surface 哲学变更</div>
+  <div class="legend-item"><div class="legend-dot blur"></div>Blur / Glass 减量</div>
+  <div class="legend-item"><div class="legend-dot new-pattern"></div>全新模式 (现有无)</div>
+  <div class="legend-item"><div class="legend-dot neon"></div>Neon 克制策略</div>
+</div>
+
+<div class="content">
+
+<!-- ═══════════ DIFF 00: Brand Identity v0.2 (NEW) ═══════════ -->
+<div class="diff-section" style="border-left:3px solid var(--color-primary);padding-left:20px;background:rgba(100,108,255,0.03);border-radius:0 8px 8px 0;padding-right:20px;padding-top:24px;padding-bottom:24px;">
+  <h2 class="diff-section-title" style="margin-top:0;">00 · Brand Identity 焕新 (Cyber Brutalism v0.2)</h2>
+  <p class="diff-section-desc">主视觉从柔性渐变方块切换为棱角几何莲花徽标 + 等宽体 LUMENX 字标。这是 v0.2 焕新的<strong>视觉锚点</strong>，影响所有 sidebar / banner / splash / 文档头部。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE · v0.1</span>
+      <div class="mini-render" style="padding:32px;display:flex;align-items:center;gap:12px;background:#0a0a0d;">
+        <div style="width:36px;height:36px;border-radius:7px;background:linear-gradient(135deg,#7c3aed,#4f46e5,#ec4899);display:grid;place-items:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;color:#fff;">X</div>
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600;background:linear-gradient(135deg,#7c3aed,#4f46e5,#ec4899);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;">LumenX Studio</div>
+      </div>
+      <div style="padding:10px 14px;font-size:11px;color:var(--color-text-muted);font-family:var(--font-mono);">
+        圆角方块 · 紫→indigo→pink 渐变 · Sans-serif 标题字 · 渐变文本剪裁
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER · v0.2</span>
+      <div class="mini-render" style="padding:32px;display:flex;align-items:center;gap:12px;background:#050508;">
+        <div style="width:36px;height:36px;background-image:url('LumenX-cybr.png');background-size:contain;background-repeat:no-repeat;background-position:center;flex-shrink:0;"></div>
+        <div style="display:flex;flex-direction:column;line-height:1;gap:4px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;letter-spacing:-0.02em;color:#ededed;">LUMEN<span style="color:#646cff;font-weight:900;">X</span></div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:0.2em;color:rgba(255,255,255,0.3);text-transform:uppercase;">STUDIO</div>
+        </div>
+      </div>
+      <div style="padding:10px 14px;font-size:11px;color:var(--color-text-muted);font-family:var(--font-mono);">
+        棱角几何莲花 · 纯白 + #646cff 蓝水晶 · Mono 字标 · X 加粗高亮
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:18px;padding:14px 18px;background:rgba(100,108,255,0.06);border:1px solid rgba(100,108,255,0.2);border-radius:8px;font-size:13px;line-height:1.7;">
+    <strong style="color:var(--color-primary);">为什么换：</strong> 旧渐变方块视觉上属于 2020-2022 年"AI SaaS 默认审美"集群（Linear / Vercel / Notion AI 同款）。新 logo 用<strong>角度强烈的几何切线 + 中央蓝色水晶 + 电路线点缀</strong>建立"机器制造 / 赛博粗野"的独特识别度，与 LumenX 作为"AI 短漫剧 pipeline 平台"的产品定位更契合（精度感 + 工业感 + 创作感）。
+  </div>
+
+  <div style="margin-top:14px;padding:14px 18px;background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:8px;font-size:12px;line-height:1.8;font-family:var(--font-mono);">
+    <strong style="color:var(--color-text-primary);">⛔ 禁用项：</strong><br>
+    · 紫→indigo→pink 渐变 brand-icon 方块<br>
+    · 渐变 LumenX 文字 (background-clip: text)<br>
+    · 任何彩色光晕环绕 logo<br>
+    · Sans-serif 字标（必须 JetBrains Mono）<br>
+    · "LumenX Studio" 大小写混合写法 → 改为全大写 "LUMENX" + "STUDIO" tag
+  </div>
+</div>
+
+<!-- ═══════════ DIFF 01: Surface 哲学 ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">01 · Surface 哲学翻转</h2>
+  <p class="diff-section-desc">面板背景从"黑色叠加层"变为"白色微透层"—— 方向性翻转。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render old-surface">
+        <div class="demo-card old">
+          <div class="demo-text">面板内容在黑色 40% 叠加层上<br>文字可读性受限于深色泥潭</div>
+        </div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render new-surface">
+        <div class="demo-card new">
+          <div class="demo-text">面板内容在白色 4% 微透层上<br>内容获得更多"空气感"和层次</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation red">
+    <div class="annotation-label">核心差异</div>
+    <strong>Surface 背景方向完全相反：</strong>旧方案用 <code>rgba(0,0,0,0.4)</code>（黑色 40% 叠加）使面板"沉入"背景；新方案用 <code>rgba(255,255,255,0.04)</code>（白色 4% 微透）使面板"浮出"背景。虽然两者在暗色主题下看起来相似，但新方案让面板 <strong>边界更清晰</strong>、<strong>层次感更分明</strong>，且与内容区形成正确的 figure-ground 关系。
+  </div>
+
+  <table class="token-table">
+  <thead><tr><th>Token</th><th>旧值</th><th></th><th>新值</th><th>影响</th></tr></thead>
+  <tbody>
+  <tr>
+    <td class="var">--color-bg-surface</td>
+    <td class="old-val"><span class="swatch" style="background:rgba(0,0,0,0.4)"></span>rgba(0,0,0,0.4)</td>
+    <td style="color:var(--color-text-muted)">→</td>
+    <td class="new-val"><span class="swatch" style="background:rgba(255,255,255,0.04)"></span>rgba(255,255,255,0.04)</td>
+    <td style="color:var(--color-text-secondary)">所有面板/卡片/侧边栏</td>
+  </tr>
+  <tr>
+    <td class="var">--color-bg-elevated</td>
+    <td class="old-val"><span class="swatch" style="background:#1a1a1a"></span>#1a1a1a</td>
+    <td style="color:var(--color-text-muted)">→</td>
+    <td class="new-val"><span class="swatch" style="background:#141416"></span>#141416</td>
+    <td style="color:var(--color-text-secondary)">Modal / Dropdown / Elevated Card</td>
+  </tr>
+  <tr>
+    <td class="var">--color-bg-inset</td>
+    <td class="old-val">rgba(255,255,255,0.03)</td>
+    <td style="color:var(--color-text-muted)">→</td>
+    <td class="new-val">rgba(255,255,255,0.02)</td>
+    <td style="color:var(--color-text-secondary)">嵌入区域 (代码块/输入背景)</td>
+  </tr>
+  <tr>
+    <td class="var">--color-glass</td>
+    <td class="old-val">rgba(255,255,255,0.05)</td>
+    <td style="color:var(--color-text-muted)">→</td>
+    <td class="new-val">rgba(255,255,255,0.03)</td>
+    <td style="color:var(--color-text-secondary)">Sidebar / Toolbar 辅助层</td>
+  </tr>
+  </tbody>
+  </table>
+</div>
+
+<!-- ═══════════ DIFF 02: Blur 减量 ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">02 · Backdrop-Blur 大幅减量</h2>
+  <p class="diff-section-desc">Glass 模糊半径从 12px 降至 2-4px，保留层次感但不遮盖内容。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render" style="background:linear-gradient(135deg,#1a0030,#050508,#001020);position:relative;">
+        <div style="position:absolute;inset:0;background:rgba(0,0,0,0.4);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:11px;color:var(--color-text-muted);">backdrop-filter: blur(12px) — 背后内容完全模糊不可辨</span>
+        </div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render" style="background:linear-gradient(135deg,#1a0030,#050508,#001020);position:relative;">
+        <div style="position:absolute;inset:0;background:rgba(255,255,255,0.04);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;">
+          <span style="font-size:11px;color:var(--color-text-secondary);">backdrop-filter: blur(2px) — 背景隐约可见，层次通过亮度区分</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation blue">
+    <div class="annotation-label">Blur 策略变更</div>
+    <strong>不是去除 glass，而是让 glass "更薄"。</strong>旧方案 blur(12px) + 黑叠加 让面板像一块不透明毛玻璃；新方案 blur(2px) + 白微透 让面板像一层薄纱——既保留了 glass language（CLAUDE.md 设计原则），又让内容区域（图片/视频/分镜缩略图）成为真正的视觉主角。<br><br>
+    <strong>GPU 收益</strong>：backdrop-filter blur 半径每减半，GPU 采样成本约降 75%。从 12px → 2px 可节省约 97% 的模糊计算。
+  </div>
+
+  <table class="token-table">
+  <thead><tr><th>场景</th><th>旧 blur</th><th></th><th>新 blur</th><th>说明</th></tr></thead>
+  <tbody>
+  <tr><td style="color:var(--color-text-secondary)">GlobalSidebar</td><td class="old-val">blur(12px)</td><td style="color:var(--color-text-muted)">→</td><td class="new-val">blur(2px)</td><td style="color:var(--color-text-secondary)">侧边栏</td></tr>
+  <tr><td style="color:var(--color-text-secondary)">PipelineSidebar</td><td class="old-val">blur(12px)</td><td style="color:var(--color-text-muted)">→</td><td class="new-val">blur(2px)</td><td style="color:var(--color-text-secondary)">步骤导航</td></tr>
+  <tr><td style="color:var(--color-text-secondary)">ShotCard (expanded)</td><td class="old-val">blur(6px)</td><td style="color:var(--color-text-muted)">→</td><td class="new-val">blur(4px)</td><td style="color:var(--color-text-secondary)">分镜卡片展开态</td></tr>
+  <tr><td style="color:var(--color-text-secondary)">Modal overlay</td><td class="old-val">blur(8px)</td><td style="color:var(--color-text-muted)">→</td><td class="new-val">blur(4px)</td><td style="color:var(--color-text-secondary)">模态叠加层</td></tr>
+  <tr><td style="color:var(--color-text-secondary)">.glass-button</td><td class="old-val">blur(8px)</td><td style="color:var(--color-text-muted)">→</td><td class="new-val">移除</td><td style="color:var(--color-text-secondary)">按钮不再需要 blur</td></tr>
+  </tbody>
+  </table>
+</div>
+
+<!-- ═══════════ DIFF 03: Border 精密化 ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">03 · Border Opacity 精密化</h2>
+  <p class="diff-section-desc">边框从"可见线条"调整为"若隐若现的分界"。</p>
+
+  <div class="annotation red">
+    <div class="annotation-label">值变更</div>
+    <code>--color-border-default</code>: <span style="color:var(--callout-red);text-decoration:line-through;">rgba(255,255,255,0.10)</span> → <span style="color:var(--callout-green);">rgba(255,255,255,0.08)</span><br>
+    <code>--color-border-subtle</code>: <span style="color:var(--callout-red);text-decoration:line-through;">rgba(255,255,255,0.05)</span> → <span style="color:var(--callout-green);">rgba(255,255,255,0.04)</span><br><br>
+    差异虽然只有 2% 和 1%，但在大面积面板边界上感知明显——新方案下 <strong>chrome 更安静</strong>，让内容图片的色彩不被边框线条打断。
+  </div>
+</div>
+
+<!-- ═══════════ DIFF 04: Neon 克制 ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">04 · Neon / Glow 克制策略</h2>
+  <p class="diff-section-desc">Primary (#646cff) 的发光效果从"无处不在"收敛为"仅在 CTA + Active State"出现。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:24px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <span class="demo-btn old">普通按钮 (有 glow)</span>
+          <span class="demo-btn old">次要操作 (有 glow)</span>
+          <span class="demo-btn old" style="box-shadow:0 0 16px rgba(100,108,255,0.35);">CTA (更多 glow)</span>
+        </div>
+        <div style="margin-top:12px;font-size:10px;color:var(--color-text-muted);">所有按钮都有 glow → 视觉权重平均 → 无主次</div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:24px;">
+        <div style="margin-bottom:16px;">
+          <div style="font-size:10px;font-family:var(--font-mono);color:var(--color-text-muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">普通按钮 (无 glow)</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <span class="demo-btn new">普通按钮</span>
+            <span class="demo-btn new">次要操作</span>
+          </div>
+        </div>
+        <div style="margin-bottom:14px;border-top:1px solid rgba(255,255,255,0.06);padding-top:14px;">
+          <div style="font-size:10px;font-family:var(--font-mono);color:var(--color-primary);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">CTA 方案对比 ▾</div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+            <span class="demo-btn new-cta">原版 (纯色)</span>
+            <span class="demo-btn cta-gradient">✓ 最终方案 (三段渐变)</span>
+            <span class="demo-btn cta-glass">备选 (玻璃内光)</span>
+          </div>
+        </div>
+        <div style="margin-top:12px;font-size:10px;color:var(--color-text-muted);">三种 CTA 风格对比：原版纯实底 vs 渐变+微透 vs 毛玻璃+内侧高光</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation gold">
+    <div class="annotation-label">Glow 使用规则 (新)</div>
+    <strong>允许 glow 的场景（仅限）：</strong><br>
+    1. Primary CTA 按钮 (hover 态 box-shadow: 0 0 16px rgba(100,108,255,0.3))<br>
+    2. Sidebar active indicator (2px 竖线 + 微弱 shadow)<br>
+    3. 异步任务 in-flight 状态 (processing badge pulse)<br>
+    4. Starred/Golden selection border (status-starred-solid)<br><br>
+    <strong>移除 glow 的场景：</strong>所有 glass-button 的 box-shadow、BorderGlow 在非 CTA 元素上的使用、Tooltip 的渐变 glow、非 active 导航项。
+  </div>
+</div>
+
+<!-- ═══════════ DIFF 05: Sidebar Active 指示 ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">05 · Sidebar Active 指示方式</h2>
+  <p class="diff-section-desc">从"背景填充"变为"2px 竖条指示器"。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render" style="background:rgba(0,0,0,0.4);backdrop-filter:blur(12px);padding:16px;">
+        <div class="demo-sidebar">
+          <div class="demo-nav-item">Workspace</div>
+          <div class="demo-nav-item active-old" style="background:rgba(100,108,255,0.1);color:var(--color-text-primary);">Library (active: bg fill)</div>
+          <div class="demo-nav-item">Settings</div>
+        </div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render" style="background:rgba(255,255,255,0.04);backdrop-filter:blur(2px);padding:16px;">
+        <div class="demo-sidebar">
+          <div class="demo-nav-item">Workspace</div>
+          <div class="demo-nav-item active-new" style="padding-left:16px;">Library (active: 2px bar)</div>
+          <div class="demo-nav-item">Settings</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation red">
+    <div class="annotation-label">设计意图</div>
+    旧方案使用 <code>bg-primary/10</code> 背景填充标示 active 状态——在暗色背景下可见性尚可，但面积大、视觉权重重。新方案改用 <strong>2px 品牌色竖条</strong> (left indicator bar) 作为最小化 active 标记，chrome 更安静，注意力留给内容区。这也是 VS Code / Linear / Figma 等现代工具的主流做法。
+  </div>
+</div>
+
+<!-- ═══════════ DIFF 06: StepHeader 全新模式 ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">06 · StepHeader 全新设计模式 <span class="new-badge">NEW</span></h2>
+  <p class="diff-section-desc">Pipeline 步骤标题从"简单文字"变为"结构化 header + 幽灵水印数字"。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:0;">
+        <div class="demo-step-old">
+          <div class="step-title">Storyboard R2V</div>
+        </div>
+        <div style="padding:12px;font-size:10px;color:var(--color-text-muted);">仅一行标题文字，无层级结构，无上下文信息</div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:0;">
+        <div class="demo-step-new">
+          <div class="ghost-num">04</div>
+          <div class="eyebrow">STEP 04 · STORYBOARD</div>
+          <div class="step-title">Reference-to-Video</div>
+          <div class="step-sub">12 shots · 8 completed · 2 processing</div>
+        </div>
+        <div style="padding:12px;font-size:10px;color:var(--color-text-muted);">结构化: eyebrow + title + subtitle + ghost watermark</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation green">
+    <div class="annotation-label">全新模式说明</div>
+    <strong>现有代码中不存在此模式。</strong>新 StepHeader 包含 4 层信息：<br>
+    1. <strong>Ghost Number</strong> — 64px 半透明数字水印 (opacity 0.03)，提供空间锚点<br>
+    2. <strong>Eyebrow</strong> — Mono 9.5px 大写，格式: "STEP {N} · {CATEGORY}"<br>
+    3. <strong>Title</strong> — Space Grotesk 15px semibold，当前步骤名称<br>
+    4. <strong>Subtitle</strong> — 12px muted，实时状态摘要 (shot count / completion)<br><br>
+    设计意图：给用户强烈的"我在第几步"空间感知，同时 subtitle 减少需要切换到 overview 查看进度的次数。
+  </div>
+</div>
+
+<!-- ═══════════ DIFF 07: ProgressRail ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">07 · ProgressRail 进度轨道 <span class="new-badge">NEW</span></h2>
+  <p class="diff-section-desc">Pipeline 步骤间增加可视化进度连接线。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);display:flex;flex-direction:column;gap:4px;padding:20px;">
+        <div style="padding:8px 12px;font-size:12px;border-radius:6px;background:rgba(100,108,255,0.1);color:var(--color-text-primary);">Script</div>
+        <div style="padding:8px 12px;font-size:12px;border-radius:6px;background:rgba(100,108,255,0.1);color:var(--color-text-primary);">Art Direction</div>
+        <div style="padding:8px 12px;font-size:12px;border-radius:6px;background:rgba(100,108,255,0.1);color:var(--seed-primary);">Storyboard (active)</div>
+        <div style="padding:8px 12px;font-size:12px;border-radius:6px;color:var(--color-text-muted);">Assembly</div>
+        <div style="margin-top:8px;font-size:10px;color:var(--color-text-muted);">各步骤独立列表项，无连接关系可视化</div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:20px;">
+        <div class="demo-rail">
+          <div class="rail-node done"></div>
+          <div class="rail-line done"></div>
+          <div class="rail-node done"></div>
+          <div class="rail-line active"></div>
+          <div class="rail-node active"></div>
+          <div class="rail-line future"></div>
+          <div class="rail-node future"></div>
+          <div class="rail-line future"></div>
+          <div class="rail-node future"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:9px;font-family:var(--font-mono);letter-spacing:0.1em;text-transform:uppercase;">
+          <span style="color:oklch(0.88 0.16 155)">Script</span>
+          <span style="color:oklch(0.88 0.16 155)">Art</span>
+          <span style="color:var(--seed-primary)">R2V</span>
+          <span style="color:var(--color-text-muted)">Motion</span>
+          <span style="color:var(--color-text-muted)">Export</span>
+        </div>
+        <div style="margin-top:12px;font-size:10px;color:var(--color-text-muted);">节点 + 连接线 → 明确进度关系和当前位置</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation green">
+    <div class="annotation-label">全新模式说明</div>
+    <strong>ProgressRail 是新增组件</strong>，现有代码无对应实现。设计特点：<br>
+    1. 圆形节点 8px，状态着色 (completed/active/future) 使用 OKLCH status token<br>
+    2. 连接线 2px 高，渐变过渡当前位置<br>
+    3. Active 节点带微弱 glow (box-shadow 6px) —— 这是允许 glow 的场景之一<br>
+    4. 整体在 PipelineSidebar 顶部展示，给用户全局进度感知
+  </div>
+</div>
+
+<!-- ═══════════ DIFF 08: Entity Chips ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">08 · FieldTagChip 实体类型色彩系统 <span class="new-badge">NEW</span></h2>
+  <p class="diff-section-desc">Prompt 区域的实体标签从"纯文字"变为"按角色/场景/道具三类着色的 chip"。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:20px;">
+        <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:12px;font-size:12px;color:var(--color-text-secondary);line-height:1.8;">
+          Prompt: 星莲 站在天台上，城市霓虹灯光映照。手持道具：魔法书。<br>
+          <span style="color:var(--color-text-muted);font-size:10px;">纯文本，无语义标注可视化</span>
+        </div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:20px;">
+        <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:12px;">
+          <div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:8px;">Prompt entities:</div>
+          <div class="demo-chips">
+            <span class="demo-chip char">@星莲</span>
+            <span class="demo-chip scene">#天台夜景</span>
+            <span class="demo-chip scene">#城市霓虹</span>
+            <span class="demo-chip prop">$魔法书</span>
+          </div>
+          <div style="font-size:10px;color:var(--color-text-muted);margin-top:8px;">@ = character · # = scene · $ = prop → 一目了然</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation green">
+    <div class="annotation-label">全新模式说明</div>
+    <strong>FieldTagChip 存在于现有代码中</strong>（storyboard-r2v/FieldTagChip.tsx），但<strong>没有按实体类型区分颜色</strong>。新方案定义三种语义变体：<br>
+    1. <span style="color:rgba(140,148,255,0.9)">Character (蓝紫)</span> — 与 --seed-primary 同色系<br>
+    2. <span style="color:rgba(255,100,160,0.9)">Scene (粉红)</span> — 与 --seed-accent 同色系<br>
+    3. <span style="color:rgba(255,200,100,0.9)">Prop (金橙)</span> — 与 status-starred 同色系<br><br>
+    用户在编辑 prompt 时可以一眼辨别"哪些是角色引用，哪些是场景描述，哪些是道具指令"，大幅提升编辑效率。
+  </div>
+</div>
+
+<!-- ═══════════ DIFF 09: Candidates Grid ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">09 · Candidates Grid 选区交互 <span class="new-badge">ENHANCED</span></h2>
+  <p class="diff-section-desc">生成候选图从"线性列表"变为"4列网格 + Starred 金色选中"。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:16px;">
+        <div style="display:flex;gap:8px;">
+          <div style="width:60px;height:60px;background:rgba(255,255,255,0.05);border-radius:6px;border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-text-muted);">Take 1</div>
+          <div style="width:60px;height:60px;background:rgba(255,255,255,0.05);border-radius:6px;border:2px solid var(--seed-primary);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-text-muted);">Take 2</div>
+          <div style="width:60px;height:60px;background:rgba(255,255,255,0.05);border-radius:6px;border:1px solid rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--color-text-muted);">Take 3</div>
+        </div>
+        <div style="font-size:10px;color:var(--color-text-muted);margin-top:8px;">选中 = primary border (同色用于按钮/链接/active，角色不清)</div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:16px;">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+          <div style="aspect-ratio:1;background:rgba(255,255,255,0.05);border-radius:6px;border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--color-text-muted);">T1</div>
+          <div style="aspect-ratio:1;background:rgba(255,255,255,0.05);border-radius:6px;border:2px solid oklch(0.85 0.16 90/0.55);display:flex;align-items:center;justify-content:center;font-size:8px;color:oklch(0.90 0.15 90);position:relative;">T2<div style="position:absolute;top:-4px;right:-4px;width:12px;height:12px;background:oklch(0.85 0.16 90);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;color:#141416;">*</div></div>
+          <div style="aspect-ratio:1;background:rgba(255,255,255,0.05);border-radius:6px;border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--color-text-muted);">T3</div>
+          <div style="aspect-ratio:1;background:rgba(255,255,255,0.05);border-radius:6px;border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--color-text-muted);">T4</div>
+        </div>
+        <div style="font-size:10px;color:var(--color-text-muted);margin-top:8px;">选中 = 独立 "starred" 金色语义 → 与 primary/active 不混淆</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation gold">
+    <div class="annotation-label">交互改进</div>
+    <strong>Starred 选中使用独立语义色 (OKLCH hue 90 金色)</strong>，而非复用 primary blue。这解决了旧方案中"选中/激活/链接"全部用同一蓝色导致的角色混淆问题。新方案中：<br>
+    — <span style="color:var(--seed-primary)">Primary blue (#646cff)</span> = 交互/CTA/系统操作<br>
+    — <span style="color:oklch(0.90 0.15 90)">Starred gold</span> = 用户主动选择/收藏/最终决定<br><br>
+    4 列网格布局（vs 旧的横向列表）更好地利用面板空间，单镜头可展示更多 candidates 而无需滚动。
+  </div>
+</div>
+
+<!-- ═══════════ DIFF 10: Chrome 排版 ═══════════ -->
+<div class="diff-section">
+  <h2 class="diff-section-title">10 · Chrome 排版 "驾驶舱" 美学</h2>
+  <p class="diff-section-desc">界面 chrome 区域（标签/标题/辅助文字）统一为 Mono 大写风格。</p>
+
+  <div class="compare-row">
+    <div class="compare-panel">
+      <span class="compare-label before">BEFORE</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:20px;">
+        <div style="font-size:12px;font-weight:600;color:var(--color-text-primary);margin-bottom:8px;">Prompt Configuration</div>
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-secondary);margin-bottom:8px;">Generation Params</div>
+        <div style="font-size:11px;color:var(--color-text-muted);">各处 chrome 文字用 Inter 正文字体，大小/粗细/大小写不统一</div>
+      </div>
+    </div>
+    <div class="compare-panel">
+      <span class="compare-label after">AFTER</span>
+      <div class="mini-render" style="background:var(--color-bg-elevated);padding:20px;">
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);margin-bottom:12px;">PROMPT CONFIGURATION</div>
+        <div style="font-family:var(--font-mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);margin-bottom:12px;">GENERATION PARAMS</div>
+        <div style="font-size:10px;color:var(--color-text-muted);">所有 chrome 标签: JetBrains Mono / 10px / UPPERCASE / 0.18em tracking<br>→ 统一"驾驶舱"美学，chrome 退后让出内容主角位置</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="annotation blue">
+    <div class="annotation-label">排版策略</div>
+    <strong>Chrome typography 统一为一种样式</strong>：JetBrains Mono / 10px / uppercase / letter-spacing 0.18em / color text-muted。这借鉴了电影调色软件 (DaVinci Resolve) 和音频 DAW 的 UI 语言——小型大写 mono 标签让 UI chrome "消失"在感知中，用户注意力自然聚焦在内容（图片/视频/文字创作）上。
+  </div>
+</div>
+
+<!-- ═══════════ 总结 ═══════════ -->
+<div class="diff-section" style="margin-top:64px;padding-top:32px;border-top:1px solid var(--color-border-default);">
+  <h2 class="diff-section-title">差异全景总结</h2>
+
+  <div class="summary-grid">
+    <div class="summary-card">
+      <h4 style="color:var(--callout-red);">Token 值变更 (微调)</h4>
+      <p>Surface 哲学翻转 (rgba方向) · Blur 减量 (12 → 2px) · Border opacity (-2%) · Elevated 色值 (#1a → #14) · Glass 浓度 (-2%)</p>
+    </div>
+    <div class="summary-card">
+      <h4 style="color:var(--callout-green);">全新模式 (现有代码不存在)</h4>
+      <p>StepHeader 4层结构 · ProgressRail 进度轨道 · Ghost Number 水印 · Entity-typed Chips (3色) · Candidates 4列网格 + Starred 金色选中</p>
+    </div>
+    <div class="summary-card">
+      <h4 style="color:var(--callout-gold);">策略性移除 / 克制</h4>
+      <p>非 CTA 的 glow/shadow · 按钮 backdrop-filter · BorderGlow 在静态元素上的使用 · Sidebar bg-fill active · 不统一的 chrome 排版</p>
+    </div>
+    <div class="summary-card">
+      <h4 style="color:var(--callout-blue);">架构性新增 (不可见但关键)</h4>
+      <p>Seed token 层 (6变量) · Component token 层 (30+变量) · Primitive 灰阶 (7级) · Surface 5级语义 · Motion token 连接 · 3-layer 推导架构</p>
+    </div>
+  </div>
+
+  <div class="annotation" style="border-color:var(--color-border-default);background:var(--color-bg-elevated);">
+    <div class="annotation-label" style="color:var(--color-text-muted);">为什么"看不出来"？</div>
+    <p style="color:var(--color-text-secondary);margin:0;">"克制电影感"方向的核心就是<strong style="color:var(--color-text-primary);">不做革命性外观变更</strong>。色板相同、字体相同、布局骨架相同——改变发生在"看不见但能感受到"的层面：surface 的呼吸感、chrome 的安静程度、注意力流向内容的自然度。这些差异在<strong style="color:var(--color-text-primary);">静态截图中很难察觉</strong>，需要在交互中（hover / transition / focus flow）才能充分体验。<br><br>本文档将这些"感受层"差异提升为<strong style="color:var(--color-text-primary);">可视化的具体 token 值变更 + AB 对比渲染</strong>，让产品决策者可以在审批前明确"改了什么"以及"为什么要改"。</p>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

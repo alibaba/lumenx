@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LumenX Studio — Pipeline 模块视觉稿（Script · ArtDirection · Cast · Assembly）</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --seed-bg: #050508;
+  --seed-fg: #ededed;
+  --seed-primary: #646cff;
+  --seed-secondary: #535bf2;
+  --seed-accent: #ff0080;
+  --seed-surface: rgba(255,255,255,0.04);
+  --color-bg-base: var(--seed-bg);
+  --color-bg-doc: #0a0a0c;
+  --color-bg-surface: var(--seed-surface);
+  --color-bg-elevated: #141416;
+  --color-bg-inset: rgba(255,255,255,0.02);
+  --color-bg-hover: rgba(255,255,255,0.06);
+  --color-text-primary: var(--seed-fg);
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #6b7280;
+  --color-border-default: rgba(255,255,255,0.08);
+  --color-border-subtle: rgba(255,255,255,0.04);
+  --color-primary: var(--seed-primary);
+  --status-pending-fg: oklch(0.85 0.13 230);
+  --status-pending-border: oklch(0.75 0.16 230 / 0.45);
+  --status-pending-bg: oklch(0.75 0.16 230 / 0.10);
+  --status-processing-fg: oklch(0.88 0.16 80);
+  --status-processing-border: oklch(0.78 0.18 80 / 0.45);
+  --status-processing-bg: oklch(0.78 0.18 80 / 0.10);
+  --status-completed-fg: oklch(0.88 0.16 155);
+  --status-completed-border: oklch(0.78 0.18 155 / 0.45);
+  --status-completed-bg: oklch(0.78 0.18 155 / 0.10);
+  --status-starred-fg: oklch(0.90 0.15 90);
+  --status-starred-border: oklch(0.85 0.16 90 / 0.55);
+  --status-starred-bg: oklch(0.85 0.16 90 / 0.18);
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--color-bg-doc);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 40px 48px 80px;
+}
+.doc-header {
+  max-width: 1320px;
+  margin: 0 auto 36px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-border-default);
+}
+.doc-eyebrow { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--color-text-muted); margin-bottom: 8px; }
+.doc-title { font-family: var(--font-display); font-size: 28px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 8px; }
+.doc-summary { color: var(--color-text-secondary); max-width: 820px; }
+
+.module {
+  max-width: 1320px;
+  margin: 0 auto 48px;
+}
+.module-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.module-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary);
+  letter-spacing: 0.2em;
+}
+.module-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+.module-desc {
+  font-size: 12.5px;
+  color: var(--color-text-muted);
+}
+
+/* Module preview frame */
+.frame {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  height: 560px;
+}
+
+/* Pipeline sidebar (shared) */
+.pipe-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border-default);
+  background: var(--color-bg-surface);
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(2px);
+}
+.pipe-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.pipe-breadcrumb {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.pipe-breadcrumb .current { color: var(--color-text-primary); font-weight: 500; }
+.pipe-nav { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+.pipe-step {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  position: relative;
+  border: 1px solid transparent;
+}
+.pipe-step .step-icon { width: 16px; height: 16px; opacity: 0.5; }
+.pipe-step .step-label { font-size: 12px; font-weight: 500; color: var(--color-text-secondary); }
+.pipe-step.active { background: rgba(100,108,255,0.08); border-color: rgba(100,108,255,0.15); }
+.pipe-step.active::before {
+  content: ''; position: absolute; left: 0; top: 25%; height: 50%; width: 2px;
+  background: var(--color-primary); border-radius: 0 2px 2px 0;
+}
+.pipe-step.active .step-icon { opacity: 1; color: var(--color-primary); }
+.pipe-step.active .step-label { color: var(--color-text-primary); }
+
+/* Workbench shell (shared) */
+.workbench {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.step-header {
+  border-bottom: 1px solid var(--color-border-default);
+  padding: 18px 24px 14px;
+  position: relative;
+}
+.step-eyebrow {
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--font-mono); font-size: 9.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+.step-eyebrow .num { color: var(--color-primary); font-weight: 600; }
+.step-eyebrow .divider { width: 14px; height: 1px; background: var(--color-border-default); }
+.step-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.step-subtitle {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+.step-ghost-num {
+  position: absolute;
+  top: 14px;
+  right: 24px;
+  font-family: var(--font-mono);
+  font-size: 64px;
+  font-weight: 300;
+  color: rgba(255,255,255,0.04);
+  line-height: 0.85;
+  user-select: none;
+}
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  background: linear-gradient(160deg, #6269e8 5%, #4a50c6 60%, #3d42a8 100%);
+  border: 1px solid rgba(130,140,255,0.28);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(100,108,255,0.2), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.15);
+}
+.btn-primary:hover {
+  background: linear-gradient(160deg, #6e75f0 5%, #5258d0 60%, #4548b2 100%);
+  box-shadow: 0 0 20px rgba(100,108,255,0.3), inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.12);
+}
+.btn-glass {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--color-bg-hover);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.btn-ghost {
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chrome { font-family: var(--font-mono); font-size: 10px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.18em; color: var(--color-text-muted); }
+.chrome-sm { font-family: var(--font-mono); font-size: 9px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.18em; color: var(--color-text-muted); }
+
+/* ═══════ MODULE A: SCRIPT ═══════ */
+.script-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 0;
+  overflow: hidden;
+}
+.script-editor {
+  border-right: 1px solid var(--color-border-default);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.script-toolbar {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.script-content {
+  flex: 1;
+  padding: 24px 32px;
+  overflow-y: auto;
+  font-family: 'Inter', serif;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--color-text-primary);
+}
+.script-content .scene-head {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-primary);
+  margin-top: 16px;
+  margin-bottom: 6px;
+}
+.script-content p {
+  margin-bottom: 10px;
+}
+.script-content .character-name {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--seed-accent);
+  display: block;
+  margin-top: 14px;
+}
+.script-content .dialogue {
+  padding-left: 28px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+.script-content .entity {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: rgba(100,108,255,0.1);
+  color: rgba(100,108,255,0.95);
+  border-bottom: 1px dashed rgba(100,108,255,0.4);
+}
+.script-content .entity.scene-mark {
+  background: rgba(80,200,120,0.1);
+  color: rgba(80,200,120,0.95);
+  border-bottom-color: rgba(80,200,120,0.4);
+}
+.script-side {
+  background: var(--color-bg-surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.script-side-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.script-side-body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.entity-group { }
+.entity-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.entity-list { display: flex; flex-direction: column; gap: 4px; }
+.entity-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-subtle);
+}
+.entity-dot { width: 6px; height: 6px; border-radius: 50%; }
+.entity-dot.character { background: var(--seed-accent); }
+.entity-dot.scene { background: oklch(0.78 0.18 155); }
+.entity-dot.prop { background: oklch(0.85 0.16 90); }
+.entity-name { font-size: 12px; flex: 1; }
+.entity-count {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+}
+
+/* ═══════ MODULE B: ART DIRECTION ═══════ */
+.art-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 280px 1fr 280px;
+  gap: 0;
+  overflow: hidden;
+}
+.art-left, .art-right {
+  background: var(--color-bg-surface);
+  border-right: 1px solid var(--color-border-default);
+  padding: 16px;
+  overflow-y: auto;
+}
+.art-right { border-right: none; border-left: 1px solid var(--color-border-default); }
+.art-canvas {
+  background: var(--color-bg-base);
+  display: flex;
+  flex-direction: column;
+}
+.art-canvas-toolbar {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.art-mood-board {
+  flex: 1;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  align-content: start;
+}
+.mood-tile {
+  aspect-ratio: 4/3;
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04), transparent),
+    repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0, rgba(255,255,255,0.02) 1px, transparent 1px, transparent 6px),
+    #0a0a0c;
+  border: 1px solid var(--color-border-subtle);
+  position: relative;
+  overflow: hidden;
+}
+.mood-tile.selected { border-color: var(--status-starred-border); box-shadow: 0 0 0 1px var(--status-starred-border); }
+.mood-tile .label {
+  position: absolute;
+  bottom: 6px;
+  left: 8px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.15em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.mood-tile.selected .label { color: var(--status-starred-fg); }
+.style-token {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+.style-token-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--color-text-muted);
+}
+.style-token-value { font-size: 12px; color: var(--color-text-primary); }
+.style-swatch-row { display: flex; gap: 6px; margin-top: 4px; }
+.style-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--color-border-subtle); }
+
+/* ═══════ MODULE C: CAST ═══════ */
+.cast-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 0;
+  overflow: hidden;
+}
+.cast-list {
+  background: var(--color-bg-surface);
+  border-right: 1px solid var(--color-border-default);
+  display: flex;
+  flex-direction: column;
+}
+.cast-list-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cast-list-body {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+}
+.cast-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 150ms;
+  margin-bottom: 2px;
+}
+.cast-item:hover { background: var(--color-bg-hover); }
+.cast-item.active { background: rgba(100,108,255,0.08); border: 1px solid rgba(100,108,255,0.15); }
+.cast-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+  border: 1px solid var(--color-border-subtle);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.cast-item.active .cast-avatar { border-color: var(--status-starred-border); }
+.cast-name { font-size: 12.5px; font-weight: 500; flex: 1; }
+.cast-takes { font-family: var(--font-mono); font-size: 9px; color: var(--color-text-muted); }
+.cast-detail {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cast-detail-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.cast-detail-body {
+  flex: 1;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+.cast-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.consistency-vault {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.vault-tile {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255,0,128,0.15), transparent 50%),
+    #0a0a0c;
+  border: 1px solid var(--color-border-subtle);
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: end stretch;
+}
+.vault-tile.canon { border-color: var(--status-starred-border); }
+.vault-tile-foot {
+  padding: 4px 6px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.vault-tile-foot .seed { color: var(--color-text-muted); }
+.vault-tile.canon .vault-tile-foot .seed { color: var(--status-starred-fg); }
+.field-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  align-items: baseline;
+}
+.field-row:last-child { border-bottom: none; }
+
+/* ═══════ MODULE D: ASSEMBLY ═══════ */
+.asm-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.asm-preview {
+  flex: 1;
+  background: #000;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border-bottom: 1px solid var(--color-border-default);
+}
+.asm-preview-frame {
+  width: 60%;
+  aspect-ratio: 16/9;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.06), transparent 30%),
+    radial-gradient(circle at 30% 70%, rgba(100,108,255,0.18), transparent 50%),
+    radial-gradient(circle at 70% 30%, rgba(255,0,128,0.12), transparent 50%),
+    #050508;
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.asm-preview-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+}
+.asm-time-overlay {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: rgba(255,255,255,0.6);
+  background: rgba(0,0,0,0.4);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.asm-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--color-border-default);
+  background: var(--color-bg-surface);
+}
+.transport-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.transport-btn.play {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.timecode {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.05em;
+}
+.timecode .total { color: var(--color-text-muted); }
+.asm-timeline {
+  height: 168px;
+  display: flex;
+  flex-direction: column;
+}
+.timeline-ruler {
+  height: 22px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-surface);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  position: relative;
+}
+.timeline-ruler-tick {
+  flex: 1;
+  height: 100%;
+  border-left: 1px solid var(--color-border-subtle);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: var(--color-text-muted);
+  padding: 4px 0 0 4px;
+  letter-spacing: 0.1em;
+}
+.timeline-playhead {
+  position: absolute;
+  top: 0;
+  bottom: -146px;
+  width: 1px;
+  background: var(--color-primary);
+  z-index: 5;
+  left: 32%;
+}
+.timeline-playhead::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -4px;
+  width: 9px;
+  height: 9px;
+  background: var(--color-primary);
+  border-radius: 50%;
+}
+.timeline-tracks {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.timeline-track {
+  height: 48px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: stretch;
+  padding: 4px 8px;
+  gap: 4px;
+  position: relative;
+}
+.track-label {
+  position: absolute;
+  left: 8px;
+  top: 4px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  z-index: 2;
+  pointer-events: none;
+}
+.timeline-clip {
+  flex: var(--flex, 1);
+  height: 100%;
+  border-radius: 4px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-default);
+  display: flex;
+  align-items: end;
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  position: relative;
+  overflow: hidden;
+}
+.timeline-clip.video {
+  background:
+    repeating-linear-gradient(90deg, rgba(100,108,255,0.06) 0, rgba(100,108,255,0.06) 2px, transparent 2px, transparent 4px),
+    rgba(100,108,255,0.04);
+  border-color: rgba(100,108,255,0.25);
+}
+.timeline-clip.video.starred {
+  background:
+    repeating-linear-gradient(90deg, rgba(234,179,8,0.08) 0, rgba(234,179,8,0.08) 2px, transparent 2px, transparent 4px),
+    var(--status-starred-bg);
+  border-color: var(--status-starred-border);
+  color: var(--status-starred-fg);
+}
+.timeline-clip.audio {
+  background: rgba(255,0,128,0.06);
+  border-color: rgba(255,0,128,0.25);
+  color: rgba(255,0,128,0.8);
+}
+.timeline-clip.empty {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-muted);
+}
+
+.note {
+  background: var(--color-bg-surface);
+  border-left: 2px solid var(--color-primary);
+  padding: 14px 18px;
+  margin-top: 12px;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+}
+.note strong { color: var(--color-text-primary); }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <div class="doc-eyebrow">PIPELINE MOCKS · 02 / 04</div>
+  <h1 class="doc-title">Pipeline 模块视觉稿（4 模块）</h1>
+  <p class="doc-summary">
+    覆盖 Storyboard 之外的 4 个 Pipeline 步骤，沿用统一 StepHeader / PipelineSidebar / 5 状态系统 / 同套 token。每个模块只展示 1 个最具代表性的工作态，目的是验证设计语言在不同信息密度下的一致性。
+  </p>
+</div>
+
+<!-- ═══ MODULE A: SCRIPT ═══ -->
+<section class="module">
+  <div class="module-header">
+    <span class="module-num">STEP 01</span>
+    <span class="module-title">Script · 剧本</span>
+    <span class="module-desc">— 双栏：左剧本编辑器 / 右实体抽取面板</span>
+  </div>
+  <div class="frame">
+    <aside class="pipe-sidebar">
+      <div class="pipe-header"><div class="pipe-breadcrumb">LumenX › 都市奇幻录 › <span class="current">EP03</span></div></div>
+      <nav class="pipe-nav">
+        <div class="pipe-step active">
+          <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13"/></svg>
+          <span class="step-label">1. Script</span>
+        </div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg><span class="step-label">2. Art Direction</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="4"/><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/></svg><span class="step-label">3. Cast</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg><span class="step-label">4. Storyboard</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span class="step-label">5. Assembly</span></div>
+      </nav>
+    </aside>
+    <div class="workbench">
+      <div class="step-header">
+        <div class="step-eyebrow"><span class="num">01</span><span class="divider"></span><span>SCRIPT</span></div>
+        <div class="step-title">剧本</div>
+        <div class="step-subtitle">写作与实体抽取 · 自动识别角色 / 场景 / 道具</div>
+        <span class="step-ghost-num">01</span>
+      </div>
+      <div class="script-body">
+        <div class="script-editor">
+          <div class="script-toolbar">
+            <span class="chrome-sm">EP03 · 对决 · 1234 字</span>
+            <span style="flex:1"></span>
+            <button class="btn-glass">实体抽取</button>
+            <button class="btn-primary">生成分镜 →</button>
+          </div>
+          <div class="script-content">
+            <div class="scene-head">第三场 · <span class="entity scene-mark">暗巷</span> · 内 · 夜</div>
+            <p>雨水倾盆而下。<span class="entity scene-mark">霓虹招牌</span>的光晕在水洼中破碎。<span class="entity">李明</span>压低帽檐，沿着潮湿的墙角快速移动，身后传来追逐的脚步声。</p>
+            <span class="character-name">李明</span>
+            <p class="dialogue">（低声）这次他们不会让我活着离开。</p>
+            <p>他停下脚步，从怀里掏出一把<span class="entity">古旧的怀表</span>。表盖打开的瞬间，时间仿佛凝固。</p>
+            <div class="scene-head">第四场 · <span class="entity scene-mark">天台</span> · 外 · 夜</div>
+            <p><span class="entity">林夏</span>站在城市天际线之上，风衣下摆在风中翻飞。她的眼神锁定远方某个看不见的目标。</p>
+            <span class="character-name">林夏</span>
+            <p class="dialogue">他终于来了。</p>
+          </div>
+        </div>
+        <aside class="script-side">
+          <div class="script-side-header">
+            <span class="chrome">实体面板</span>
+            <span class="chrome-sm" style="color:var(--status-completed-fg)">11 found</span>
+          </div>
+          <div class="script-side-body">
+            <div class="entity-group">
+              <div class="entity-group-title"><span class="chrome-sm">角色 · 4</span><button class="btn-ghost" style="font-size:10px">+</button></div>
+              <div class="entity-list">
+                <div class="entity-item"><span class="entity-dot character"></span><span class="entity-name">李明</span><span class="entity-count">14</span></div>
+                <div class="entity-item"><span class="entity-dot character"></span><span class="entity-name">林夏</span><span class="entity-count">8</span></div>
+                <div class="entity-item"><span class="entity-dot character"></span><span class="entity-name">老周</span><span class="entity-count">3</span></div>
+                <div class="entity-item"><span class="entity-dot character"></span><span class="entity-name">追兵 A</span><span class="entity-count">2</span></div>
+              </div>
+            </div>
+            <div class="entity-group">
+              <div class="entity-group-title"><span class="chrome-sm">场景 · 5</span></div>
+              <div class="entity-list">
+                <div class="entity-item"><span class="entity-dot scene"></span><span class="entity-name">暗巷</span><span class="entity-count">6</span></div>
+                <div class="entity-item"><span class="entity-dot scene"></span><span class="entity-name">天台</span><span class="entity-count">4</span></div>
+                <div class="entity-item"><span class="entity-dot scene"></span><span class="entity-name">霓虹招牌</span><span class="entity-count">2</span></div>
+              </div>
+            </div>
+            <div class="entity-group">
+              <div class="entity-group-title"><span class="chrome-sm">道具 · 2</span></div>
+              <div class="entity-list">
+                <div class="entity-item"><span class="entity-dot prop"></span><span class="entity-name">怀表</span><span class="entity-count">3</span></div>
+                <div class="entity-item"><span class="entity-dot prop"></span><span class="entity-name">风衣</span><span class="entity-count">5</span></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+  <div class="note"><strong>设计要点 ▸</strong> 剧本本体是该模块的"内容主角"——左栏 32px padding，无装饰底色；实体高亮用浅色 chip + 虚下划线（不夺主），右栏分组用 chrome 字体建立"系统读出"语感，与左栏散文体形成对位。</div>
+</section>
+
+<!-- ═══ MODULE B: ART DIRECTION ═══ -->
+<section class="module">
+  <div class="module-header">
+    <span class="module-num">STEP 02</span>
+    <span class="module-title">Art Direction · 视觉风格</span>
+    <span class="module-desc">— 三栏：左 Reference / 中 Mood Board / 右 Style Tokens</span>
+  </div>
+  <div class="frame">
+    <aside class="pipe-sidebar">
+      <div class="pipe-header"><div class="pipe-breadcrumb">LumenX › 都市奇幻录 › <span class="current">EP03</span></div></div>
+      <nav class="pipe-nav">
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6v13"/></svg><span class="step-label">1. Script</span></div>
+        <div class="pipe-step active"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg><span class="step-label">2. Art Direction</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="4"/></svg><span class="step-label">3. Cast</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18"/></svg><span class="step-label">4. Storyboard</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/></svg><span class="step-label">5. Assembly</span></div>
+      </nav>
+    </aside>
+    <div class="workbench">
+      <div class="step-header">
+        <div class="step-eyebrow"><span class="num">02</span><span class="divider"></span><span>ART DIRECTION</span></div>
+        <div class="step-title">视觉风格</div>
+        <div class="step-subtitle">基调 · 调色 · 光影方向 · 摄影机语言</div>
+        <span class="step-ghost-num">02</span>
+      </div>
+      <div class="art-body">
+        <div class="art-left">
+          <div class="cast-section-title"><span class="chrome">参考图库 · 8</span><button class="btn-ghost" style="font-size:10px">↑ 上传</button></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+            <div class="mood-tile" style="aspect-ratio:1"><span class="label">REF 01</span></div>
+            <div class="mood-tile" style="aspect-ratio:1"><span class="label">REF 02</span></div>
+            <div class="mood-tile" style="aspect-ratio:1"><span class="label">REF 03</span></div>
+            <div class="mood-tile" style="aspect-ratio:1"><span class="label">REF 04</span></div>
+            <div class="mood-tile" style="aspect-ratio:1"><span class="label">REF 05</span></div>
+            <div class="mood-tile" style="aspect-ratio:1"><span class="label">REF 06</span></div>
+          </div>
+        </div>
+        <div class="art-canvas">
+          <div class="art-canvas-toolbar">
+            <span class="chrome">MOOD BOARD · 暗黑赛博</span>
+            <span style="display:flex;gap:8px">
+              <button class="btn-glass">添加 AI 生成</button>
+              <button class="btn-primary">应用风格</button>
+            </span>
+          </div>
+          <div class="art-mood-board">
+            <div class="mood-tile selected"><span class="label">MOOD 01 · 雨夜霓虹</span></div>
+            <div class="mood-tile"><span class="label">MOOD 02</span></div>
+            <div class="mood-tile"><span class="label">MOOD 03</span></div>
+            <div class="mood-tile"><span class="label">MOOD 04</span></div>
+            <div class="mood-tile"><span class="label">MOOD 05</span></div>
+            <div class="mood-tile"><span class="label">+ 添加</span></div>
+          </div>
+        </div>
+        <div class="art-right">
+          <div class="cast-section-title"><span class="chrome">风格 Tokens</span></div>
+          <div class="style-token">
+            <span class="style-token-label">PALETTE</span>
+            <div class="style-swatch-row">
+              <span class="style-swatch" style="background:#050508"></span>
+              <span class="style-swatch" style="background:#646cff"></span>
+              <span class="style-swatch" style="background:#ff0080"></span>
+              <span class="style-swatch" style="background:#1f1f23"></span>
+              <span class="style-swatch" style="background:#ededed"></span>
+            </div>
+          </div>
+          <div class="style-token">
+            <span class="style-token-label">LIGHTING</span>
+            <span class="style-token-value">Low key · 顶光 / 侧逆光</span>
+          </div>
+          <div class="style-token">
+            <span class="style-token-label">CAMERA</span>
+            <span class="style-token-value">35mm 浅景深 / 手持微抖</span>
+          </div>
+          <div class="style-token">
+            <span class="style-token-label">TEXTURE</span>
+            <span class="style-token-value">湿感反光 + 颗粒胶片</span>
+          </div>
+          <div class="style-token">
+            <span class="style-token-label">MOOD</span>
+            <span class="style-token-value">压抑 · 紧绷 · 危机感</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><strong>设计要点 ▸</strong> 此处是"内容是王"原则最强的体现——中间 Mood Board 占据 40% 屏宽给视觉素材；侧栏只负责索引与 token 化提炼。Token 卡用 chrome 标签 + 1 行值，避免侧栏变成填空表。</div>
+</section>
+
+<!-- ═══ MODULE C: CAST ═══ -->
+<section class="module">
+  <div class="module-header">
+    <span class="module-num">STEP 03</span>
+    <span class="module-title">Cast · 角色定调</span>
+    <span class="module-desc">— 双栏：左角色列表 / 右一致性资产 (ConsistencyVault)</span>
+  </div>
+  <div class="frame">
+    <aside class="pipe-sidebar">
+      <div class="pipe-header"><div class="pipe-breadcrumb">LumenX › 都市奇幻录 › <span class="current">EP03</span></div></div>
+      <nav class="pipe-nav">
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6v13"/></svg><span class="step-label">1. Script</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485"/></svg><span class="step-label">2. Art Direction</span></div>
+        <div class="pipe-step active"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="4"/><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/></svg><span class="step-label">3. Cast</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18"/></svg><span class="step-label">4. Storyboard</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/></svg><span class="step-label">5. Assembly</span></div>
+      </nav>
+    </aside>
+    <div class="workbench">
+      <div class="step-header">
+        <div class="step-eyebrow"><span class="num">03</span><span class="divider"></span><span>CAST</span></div>
+        <div class="step-title">角色定调</div>
+        <div class="step-subtitle">为每位角色生成可一致复用的视觉锚点</div>
+        <span class="step-ghost-num">03</span>
+      </div>
+      <div class="cast-body">
+        <aside class="cast-list">
+          <div class="cast-list-header"><span class="chrome">角色 · 4</span><button class="btn-ghost" style="font-size:10px">+ 新增</button></div>
+          <div class="cast-list-body">
+            <div class="cast-item active">
+              <div class="cast-avatar">李</div>
+              <span class="cast-name">李明</span>
+              <span class="cast-takes">12</span>
+            </div>
+            <div class="cast-item">
+              <div class="cast-avatar">林</div>
+              <span class="cast-name">林夏</span>
+              <span class="cast-takes">8</span>
+            </div>
+            <div class="cast-item">
+              <div class="cast-avatar">周</div>
+              <span class="cast-name">老周</span>
+              <span class="cast-takes">4</span>
+            </div>
+            <div class="cast-item">
+              <div class="cast-avatar">兵</div>
+              <span class="cast-name">追兵 A</span>
+              <span class="cast-takes">2</span>
+            </div>
+          </div>
+        </aside>
+        <div class="cast-detail">
+          <div class="cast-detail-header">
+            <div>
+              <div class="step-eyebrow" style="margin-bottom:0"><span class="num">CHARACTER</span></div>
+              <span style="font-family:var(--font-display);font-size:18px;font-weight:600">李明</span>
+            </div>
+            <span style="display:flex;gap:8px">
+              <button class="btn-glass">复制 Prompt</button>
+              <button class="btn-primary">+ 生成新候选</button>
+            </span>
+          </div>
+          <div class="cast-detail-body">
+            <div class="cast-section-title">
+              <span class="chrome">CONSISTENCY VAULT · 12 takes</span>
+              <span class="chrome-sm" style="color:var(--status-starred-fg)">CANON · TAKE 04</span>
+            </div>
+            <div class="consistency-vault">
+              <div class="vault-tile"><div class="vault-tile-foot"><span class="seed">T01</span></div></div>
+              <div class="vault-tile"><div class="vault-tile-foot"><span class="seed">T02</span></div></div>
+              <div class="vault-tile"><div class="vault-tile-foot"><span class="seed">T03</span></div></div>
+              <div class="vault-tile canon"><div class="vault-tile-foot"><span class="seed">★ T04</span></div></div>
+              <div class="vault-tile"><div class="vault-tile-foot"><span class="seed">T05</span></div></div>
+              <div class="vault-tile"><div class="vault-tile-foot"><span class="seed">T06</span></div></div>
+              <div class="vault-tile"><div class="vault-tile-foot"><span class="seed">T07</span></div></div>
+              <div class="vault-tile"><div class="vault-tile-foot"><span class="seed">T08</span></div></div>
+            </div>
+            <div class="cast-section-title">
+              <span class="chrome">CHARACTER FIELDS</span>
+              <span class="chrome-sm">同步至 Storyboard prompt</span>
+            </div>
+            <div class="field-row"><span class="chrome-sm">外貌</span><span style="font-size:12.5px">男, 30岁, 短黑发, 锐利眼神, 颧骨线条硬朗</span></div>
+            <div class="field-row"><span class="chrome-sm">衣着</span><span style="font-size:12.5px">黑色长款风衣, 内深灰高领, 黑色皮手套</span></div>
+            <div class="field-row"><span class="chrome-sm">气质</span><span style="font-size:12.5px">沉稳冷峻, 暗藏隐痛, 行动极简</span></div>
+            <div class="field-row"><span class="chrome-sm">SEED</span><span style="font-family:var(--font-mono);font-size:11.5px;color:var(--color-text-muted)">42891 · 锁定</span></div>
+            <div class="field-row"><span class="chrome-sm">参考姿态</span><span style="font-size:12.5px">压低帽檐前行 / 侧身回头 / 立于雨中</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><strong>设计要点 ▸</strong> ConsistencyVault 是 LumenX 的核心创新——12 个 take 用 4×n 网格平铺，canonical take 用金色边框 + ★ 标识。下方字段表用 100px 标签栏 + 流式值，避免传统表单"label/input 平等"的 admin 感。</div>
+</section>
+
+<!-- ═══ MODULE D: ASSEMBLY ═══ -->
+<section class="module">
+  <div class="module-header">
+    <span class="module-num">STEP 05</span>
+    <span class="module-title">Assembly · 视频组装</span>
+    <span class="module-desc">— 全宽：上预览播放 / 中传输控制 / 下时间线</span>
+  </div>
+  <div class="frame" style="height:620px">
+    <aside class="pipe-sidebar">
+      <div class="pipe-header"><div class="pipe-breadcrumb">LumenX › 都市奇幻录 › <span class="current">EP03</span></div></div>
+      <nav class="pipe-nav">
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6v13"/></svg><span class="step-label">1. Script</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485"/></svg><span class="step-label">2. Art Direction</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="7" r="4"/></svg><span class="step-label">3. Cast</span></div>
+        <div class="pipe-step"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18"/></svg><span class="step-label">4. Storyboard</span></div>
+        <div class="pipe-step active"><svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg><span class="step-label">5. Assembly</span></div>
+      </nav>
+    </aside>
+    <div class="workbench">
+      <div class="step-header">
+        <div class="step-eyebrow"><span class="num">05</span><span class="divider"></span><span>ASSEMBLY</span></div>
+        <div class="step-title">视频组装</div>
+        <div class="step-subtitle">将 starred takes 串联 · 加入字幕 · 配乐 · 导出</div>
+        <span class="step-ghost-num">05</span>
+      </div>
+      <div class="asm-body">
+        <div class="asm-preview">
+          <div class="asm-preview-frame">
+            <span class="asm-time-overlay">00:42 / 02:15</span>
+            <span class="asm-preview-label">1920 × 1080 · 24FPS · PREVIEW</span>
+          </div>
+        </div>
+        <div class="asm-controls">
+          <span style="display:flex;gap:8px">
+            <button class="transport-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"/></svg></button>
+            <button class="transport-btn play"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+            <button class="transport-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"/></svg></button>
+          </span>
+          <span class="timecode">00:42:18 <span class="total">/ 02:15:00</span></span>
+          <span style="flex:1"></span>
+          <button class="btn-glass">+ 字幕</button>
+          <button class="btn-glass">+ 配乐</button>
+          <button class="btn-primary">导出 MP4</button>
+        </div>
+        <div class="asm-timeline">
+          <div class="timeline-ruler">
+            <div class="timeline-ruler-tick">00:00</div>
+            <div class="timeline-ruler-tick">00:30</div>
+            <div class="timeline-ruler-tick">01:00</div>
+            <div class="timeline-ruler-tick">01:30</div>
+            <div class="timeline-ruler-tick">02:00</div>
+            <div class="timeline-playhead"></div>
+          </div>
+          <div class="timeline-tracks">
+            <div class="timeline-track">
+              <span class="track-label">V1 · VIDEO</span>
+              <div class="timeline-clip video starred" style="--flex:2;padding-left:80px">SHOT 01</div>
+              <div class="timeline-clip video starred" style="--flex:1.2">SHOT 02</div>
+              <div class="timeline-clip video" style="--flex:2.5">SHOT 03</div>
+              <div class="timeline-clip empty" style="--flex:1">SHOT 04</div>
+              <div class="timeline-clip empty" style="--flex:1.2">SHOT 05</div>
+            </div>
+            <div class="timeline-track">
+              <span class="track-label">A1 · DIALOGUE</span>
+              <div class="timeline-clip audio" style="--flex:2;padding-left:80px">VO · 李明</div>
+              <div class="timeline-clip empty" style="--flex:1.2">—</div>
+              <div class="timeline-clip audio" style="--flex:2.5">VO · 林夏</div>
+              <div class="timeline-clip empty" style="--flex:2.2">—</div>
+            </div>
+            <div class="timeline-track">
+              <span class="track-label">A2 · MUSIC</span>
+              <div class="timeline-clip audio" style="--flex:7.9;padding-left:80px;opacity:0.8">CYBERPUNK_LOOP_03</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note"><strong>设计要点 ▸</strong> 预览区背景纯黑 + 60% 宽 16:9 居中容器，让创作者能"看片"而非"看 UI"。Timeline 用 OKLCH 系：starred 镜头黄、待选蓝、空缺虚线。Track 标签压在 clip 左上角作"水印"，不占额外列宽。</div>
+</section>
+
+</body>
+</html>

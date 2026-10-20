@@ -284,11 +284,11 @@ class TestModelSettingsIntegration:
         now = _ts()
         s = Series(id="s1", title="S", created_at=now, updated_at=now)
         assert isinstance(s.model_settings, ModelSettings)
-        # Defaults follow the catalog (2026-05-26 meta switch: i2v default
-        # moved to happyhorse-1.0-i2v, i2i default unified with t2i on
-        # wan2.7-image-pro).
+        # Defaults follow the catalog (HappyHorse 1.0→1.1 upgrade: i2v
+        # default moved to happyhorse-1.1-i2v, i2i default unified with
+        # t2i on wan2.7-image-pro).
         assert s.model_settings.t2i_model == "wan2.7-image-pro"
-        assert s.model_settings.i2v_model == "happyhorse-1.0-i2v"
+        assert s.model_settings.i2v_model == "happyhorse-1.1-i2v"
 
     def test_update_series_model_settings_via_pipeline(self, pipeline):
         """Pipeline update_series should accept model_settings changes."""

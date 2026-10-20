@@ -208,9 +208,9 @@ lumenx/
 |----------|-------------|
 | [User Manual](USER_MANUAL.md) | Feature usage guide |
 | [API Docs](http://localhost:17177/docs) | Swagger UI |
-| [Model Onboarding](docs/model-onboarding-implementation.md) | New model integration guide |
-| [Catalog Architecture](docs/plans/2026-04-03-model-docs-and-catalog-architecture.md) | Model catalog design |
-| [Playground PRD](docs/plans/2026-06-06-playground-standalone-generation-prd.md) | Playground design document |
+| [Model Onboarding](docs/2-model-catalog-design/model-onboarding-implementation.md) | New model integration guide |
+| [Catalog Architecture](docs/2-model-catalog-design/plans/2026-04-03-model-docs-and-catalog-architecture.md) | Model catalog design |
+| [Playground PRD](docs/5-playground-roadmap/2026-06-06-playground-standalone-generation-prd.md) | Playground design document |
 
 ---
 

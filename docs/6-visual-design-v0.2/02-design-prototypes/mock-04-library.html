@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LumenX Studio — Library 资产库</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --seed-bg: #050508; --seed-fg: #ededed; --seed-primary: #646cff; --seed-secondary: #535bf2; --seed-accent: #ff0080; --seed-surface: rgba(255,255,255,0.04); --seed-radius: 8px;
+  --color-bg-base: var(--seed-bg); --color-bg-surface: var(--seed-surface); --color-bg-elevated: #141416; --color-bg-inset: rgba(255,255,255,0.02); --color-bg-hover: rgba(255,255,255,0.06); --color-bg-input: rgba(0,0,0,0.3);
+  --color-text-primary: var(--seed-fg); --color-text-secondary: #9ca3af; --color-text-muted: #6b7280;
+  --color-border-default: rgba(255,255,255,0.08); --color-border-subtle: rgba(255,255,255,0.04);
+  --color-primary: var(--seed-primary); --color-primary-hover: var(--seed-secondary);
+  --font-display: 'Space Grotesk', sans-serif; --font-body: 'Inter', sans-serif; --font-mono: 'JetBrains Mono', monospace;
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px;
+  --duration-fast: 150ms; --ease: cubic-bezier(0.22,1,0.36,1);
+  --status-completed-fg: oklch(0.88 0.16 155); --status-completed-bg: oklch(0.78 0.18 155 / 0.10); --status-completed-border: oklch(0.78 0.18 155 / 0.45);
+  --status-processing-fg: oklch(0.88 0.16 80); --status-processing-bg: oklch(0.78 0.18 80 / 0.10); --status-processing-border: oklch(0.78 0.18 80 / 0.45);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--color-bg-base); color:var(--color-text-primary); font-family:var(--font-body); font-size:13px; line-height:1.5; overflow:hidden; height:100vh; -webkit-font-smoothing:antialiased; }
+.layout { display:flex; height:100vh; }
+
+/* Sidebar */
+.sidebar { width:220px; flex-shrink:0; border-right:1px solid var(--color-border-default); background:var(--color-bg-surface); display:flex; flex-direction:column; backdrop-filter:blur(2px); }
+.sidebar-brand { padding:24px 20px 20px; border-bottom:1px solid var(--color-border-subtle); display:flex; align-items:center; gap:10px; }
+.brand-icon { width:28px; height:28px; flex-shrink:0; background-image:url("LumenX-cybr.png"); background-size:contain; background-repeat:no-repeat; background-position:center; font-size:0; color:transparent; }
+.brand-text { font-family:var(--font-mono); font-size:14px; font-weight:700; letter-spacing:-0.02em; line-height:1; color:var(--color-text-primary); display:flex; flex-direction:column; gap:3px; }
+.brand-text .word-row { display:flex; align-items:baseline; }
+.brand-text .word-x { color:var(--color-primary); font-weight:900; }
+.brand-text .brand-tag { font-family:var(--font-mono); font-size:9px; color:rgba(255,255,255,0.3); letter-spacing:0.2em; text-transform:uppercase; font-weight:500; }
+.sidebar-nav { flex:1; padding:12px; display:flex; flex-direction:column; gap:2px; }
+.nav-item { display:flex; align-items:center; gap:12px; padding:9px 14px; border-radius:var(--radius-md); cursor:pointer; transition:all var(--duration-fast) var(--ease); position:relative; border:1px solid transparent; }
+.nav-item:hover { background:var(--color-bg-hover); }
+.nav-item.active { background:rgba(100,108,255,0.08); border-color:rgba(100,108,255,0.15); }
+.nav-item.active::before { content:''; position:absolute; left:0; top:25%; height:50%; width:2px; background:var(--color-primary); border-radius:0 2px 2px 0; }
+.nav-item svg { width:16px; height:16px; opacity:0.5; }
+.nav-item.active svg { opacity:1; color:var(--color-primary); }
+.nav-item span { font-size:12.5px; font-weight:500; color:var(--color-text-secondary); }
+.nav-item.active span { color:var(--color-text-primary); }
+.sidebar-footer { padding:16px; border-top:1px solid var(--color-border-subtle); font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); padding-left:26px; }
+
+/* Main */
+.main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.main-header { padding:24px 32px 0; display:flex; flex-direction:column; gap:16px; }
+.header-row { display:flex; align-items:center; justify-content:space-between; }
+.page-title { font-family:var(--font-display); font-size:20px; font-weight:600; letter-spacing:-0.02em; }
+.page-count { font-family:var(--font-mono); font-size:10px; color:var(--color-text-muted); letter-spacing:0.18em; margin-left:10px; }
+.header-actions { display:flex; gap:8px; }
+.btn { display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border-radius:var(--radius-md); font-size:12px; font-weight:500; cursor:pointer; transition:all var(--duration-fast) var(--ease); border:1px solid var(--color-border-default); background:var(--color-bg-hover); color:var(--color-text-primary); }
+.btn:hover { background:rgba(255,255,255,0.08); }
+.btn-primary { background:linear-gradient(160deg,#6269e8 5%,#4a50c6 60%,#3d42a8 100%); border-color:rgba(130,140,255,0.28); color:#fff; box-shadow:0 0 14px rgba(100,108,255,0.2),inset 0 1px 0 rgba(255,255,255,0.12),inset 0 -1px 0 rgba(0,0,0,0.15); }
+.btn-primary:hover { background:linear-gradient(160deg,#6e75f0 5%,#5258d0 60%,#4548b2 100%); box-shadow:0 0 20px rgba(100,108,255,0.3),inset 0 1px 0 rgba(255,255,255,0.15),inset 0 -1px 0 rgba(0,0,0,0.12); }
+.btn svg { width:14px; height:14px; }
+
+/* Filter bar */
+.filter-bar { display:flex; align-items:center; gap:10px; padding-bottom:16px; border-bottom:1px solid var(--color-border-subtle); }
+.filter-group { display:flex; gap:4px; }
+.filter-chip { padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:500; cursor:pointer; transition:all var(--duration-fast) var(--ease); background:transparent; border:1px solid var(--color-border-default); color:var(--color-text-secondary); }
+.filter-chip:hover { background:var(--color-bg-hover); }
+.filter-chip.active { background:rgba(100,108,255,0.1); border-color:rgba(100,108,255,0.3); color:var(--color-primary); }
+.search-input { flex:1; max-width:260px; padding:6px 12px 6px 32px; border-radius:var(--radius-md); border:1px solid var(--color-border-default); background:var(--color-bg-input); color:var(--color-text-primary); font-size:12px; outline:none; transition:border-color var(--duration-fast) var(--ease); position:relative; }
+.search-input:focus { border-color:var(--color-primary); }
+.search-wrap { position:relative; flex:1; max-width:260px; }
+.search-wrap svg { position:absolute; left:10px; top:50%; transform:translateY(-50%); width:14px; height:14px; color:var(--color-text-muted); pointer-events:none; }
+.search-wrap input { width:100%; }
+.view-toggle { display:inline-flex; border-radius:6px; background:var(--color-bg-inset); border:1px solid var(--color-border-subtle); padding:2px; margin-left:auto; }
+.view-toggle-item { padding:5px 10px; border-radius:4px; border:none; background:transparent; color:var(--color-text-muted); cursor:pointer; display:grid; place-items:center; transition:all var(--duration-fast) var(--ease); }
+.view-toggle-item.active { background:var(--color-bg-hover); color:var(--color-text-primary); border:1px solid var(--color-border-default); }
+.view-toggle-item svg { width:14px; height:14px; }
+
+/* Asset grid */
+.asset-area { flex:1; overflow-y:auto; padding:20px 32px; }
+.asset-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px; }
+.asset-card { background:var(--color-bg-surface); border:1px solid var(--color-border-default); border-radius:var(--radius-lg); overflow:hidden; cursor:pointer; transition:all var(--duration-fast) var(--ease); }
+.asset-card:hover { border-color:rgba(255,255,255,0.12); }
+.asset-thumb { aspect-ratio:4/3; background: linear-gradient(180deg,rgba(255,255,255,0.04),transparent), repeating-linear-gradient(135deg,rgba(255,255,255,0.02) 0,rgba(255,255,255,0.02) 1px,transparent 1px,transparent 8px), #0a0a0c; display:grid; place-items:center; position:relative; border-bottom:1px solid var(--color-border-subtle); }
+.asset-thumb .type-badge { position:absolute; top:8px; left:8px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-size:8.5px; font-weight:500; text-transform:uppercase; letter-spacing:0.15em; background:rgba(0,0,0,0.6); border:1px solid var(--color-border-default); color:var(--color-text-secondary); }
+.asset-thumb .ph { font-family:var(--font-mono); font-size:9px; color:var(--color-text-muted); letter-spacing:0.15em; text-transform:uppercase; }
+.asset-thumb.video .ph { color:var(--color-primary); opacity:0.7; }
+.asset-thumb .duration { position:absolute; bottom:6px; right:8px; font-family:var(--font-mono); font-size:9px; color:rgba(255,255,255,0.7); background:rgba(0,0,0,0.6); padding:1px 5px; border-radius:3px; }
+.asset-info { padding:10px 12px; }
+.asset-name { font-family:var(--font-display); font-size:12px; font-weight:600; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.asset-meta { display:flex; align-items:center; justify-content:space-between; }
+.asset-meta-text { font-family:var(--font-mono); font-size:9px; color:var(--color-text-muted); letter-spacing:0.05em; }
+.asset-status { width:6px; height:6px; border-radius:50%; }
+.asset-status.ready { background:var(--status-completed-fg); }
+.asset-status.processing { background:var(--status-processing-fg); }
+
+/* Empty state */
+.empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 40px; text-align:center; }
+.empty-icon { width:48px; height:48px; border-radius:12px; background:var(--color-bg-surface); border:1px solid var(--color-border-default); display:grid; place-items:center; margin-bottom:16px; }
+.empty-icon svg { width:20px; height:20px; color:var(--color-text-muted); }
+.empty-title { font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:0.18em; color:var(--color-text-muted); margin-bottom:8px; }
+.empty-desc { font-size:13px; color:var(--color-text-secondary); max-width:320px; margin-bottom:20px; }
+
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:3px; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" data-component="GlobalSidebar">
+    <div class="sidebar-brand"><div class="brand-icon">X</div><span class="brand-text"><span class="word-row">LUMEN<span class="word-x">X</span></span><span class="brand-tag">STUDIO</span></span></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg><span>工作区</span></div>
+      <div class="nav-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg><span>资产库</span></div>
+      <div class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15"/></svg><span>设置</span></div>
+    </nav>
+    <div class="sidebar-footer">v0.2.0</div>
+  </aside>
+
+  <main class="main" data-component="LibraryPage">
+    <div class="main-header">
+      <div class="header-row">
+        <div><span class="page-title">资产库</span><span class="page-count">48 ASSETS</span></div>
+        <div class="header-actions">
+          <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>上传</button>
+          <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>导入文件夹</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <div class="filter-group">
+          <span class="filter-chip active">全部</span>
+          <span class="filter-chip">图片</span>
+          <span class="filter-chip">视频</span>
+          <span class="filter-chip">角色</span>
+          <span class="filter-chip">场景</span>
+          <span class="filter-chip">音频</span>
+        </div>
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" placeholder="搜索资产名称或标签..." style="padding-left:32px">
+        </div>
+        <div class="view-toggle">
+          <button class="view-toggle-item active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+          <button class="view-toggle-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="asset-area">
+      <div class="asset-grid">
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb video"><span class="type-badge">VIDEO</span><span class="ph">▶ R2V</span><span class="duration">0:04</span></div>
+          <div class="asset-info"><div class="asset-name">城市天际线_R2V_take02</div><div class="asset-meta"><span class="asset-meta-text">1920×1080 · 24fps</span><span class="asset-status ready"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb"><span class="type-badge">IMAGE</span><span class="ph">4:3</span></div>
+          <div class="asset-info"><div class="asset-name">李明_正面_canon</div><div class="asset-meta"><span class="asset-meta-text">1024×1024 · PNG</span><span class="asset-status ready"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb video"><span class="type-badge">VIDEO</span><span class="ph">▶ I2V</span><span class="duration">0:06</span></div>
+          <div class="asset-info"><div class="asset-name">暗巷追逐_I2V_take01</div><div class="asset-meta"><span class="asset-meta-text">1920×1080 · 24fps</span><span class="asset-status processing"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb"><span class="type-badge">IMAGE</span><span class="ph">4:3</span></div>
+          <div class="asset-info"><div class="asset-name">林夏_侧面_v3</div><div class="asset-meta"><span class="asset-meta-text">1024×1024 · PNG</span><span class="asset-status ready"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb"><span class="type-badge">SCENE</span><span class="ph">16:9</span></div>
+          <div class="asset-info"><div class="asset-name">雨夜霓虹_mood_ref</div><div class="asset-meta"><span class="asset-meta-text">2048×1152 · JPG</span><span class="asset-status ready"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb video"><span class="type-badge">VIDEO</span><span class="ph">▶ R2V</span><span class="duration">0:05</span></div>
+          <div class="asset-info"><div class="asset-name">天台对峙_R2V_take04</div><div class="asset-meta"><span class="asset-meta-text">1920×1080 · 24fps</span><span class="asset-status ready"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb"><span class="type-badge">IMAGE</span><span class="ph">1:1</span></div>
+          <div class="asset-info"><div class="asset-name">老周_半身_seed42891</div><div class="asset-meta"><span class="asset-meta-text">768×768 · PNG</span><span class="asset-status ready"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb"><span class="type-badge">AUDIO</span><span class="ph">♪ BGM</span></div>
+          <div class="asset-info"><div class="asset-name">cyberpunk_loop_03</div><div class="asset-meta"><span class="asset-meta-text">2:15 · 128kbps</span><span class="asset-status ready"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb"><span class="type-badge">IMAGE</span><span class="ph">16:9</span></div>
+          <div class="asset-info"><div class="asset-name">停车场_空镜_wide</div><div class="asset-meta"><span class="asset-meta-text">2048×1152 · JPG</span><span class="asset-status ready"></span></div></div>
+        </div>
+        <div class="asset-card" data-component="AssetCard">
+          <div class="asset-thumb video"><span class="type-badge">VIDEO</span><span class="ph">▶ R2V</span><span class="duration">0:04</span></div>
+          <div class="asset-info"><div class="asset-name">怀表特写_R2V_take01</div><div class="asset-meta"><span class="asset-meta-text">1920×1080 · 24fps</span><span class="asset-status ready"></span></div></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

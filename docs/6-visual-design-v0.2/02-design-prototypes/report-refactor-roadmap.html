@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LumenX Studio — 重构方案与里程碑路线</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --seed-bg:#050508;--seed-fg:#ededed;--seed-primary:#646cff;--seed-secondary:#535bf2;--seed-accent:#ff0080;--seed-surface:rgba(255,255,255,0.04);--seed-radius:8px;
+  --color-bg-base:var(--seed-bg);--color-bg-surface:var(--seed-surface);--color-bg-elevated:#141416;--color-bg-inset:rgba(255,255,255,0.02);--color-bg-hover:rgba(255,255,255,0.06);
+  --color-text-primary:var(--seed-fg);--color-text-secondary:#9ca3af;--color-text-muted:#6b7280;
+  --color-border-default:rgba(255,255,255,0.08);--color-border-subtle:rgba(255,255,255,0.04);
+  --color-primary:var(--seed-primary);--color-accent:var(--seed-accent);
+  --font-display:'Space Grotesk',sans-serif;--font-body:'Inter',sans-serif;--font-mono:'JetBrains Mono',monospace;
+  --radius-sm:4px;--radius-md:8px;--radius-lg:12px;
+  --status-completed-fg:oklch(0.88 0.16 155);--status-completed-bg:oklch(0.78 0.18 155/0.10);--status-completed-border:oklch(0.78 0.18 155/0.45);
+  --status-processing-fg:oklch(0.88 0.16 80);--status-processing-bg:oklch(0.78 0.18 80/0.10);--status-processing-border:oklch(0.78 0.18 80/0.45);
+  --status-pending-fg:oklch(0.85 0.13 230);--status-pending-bg:oklch(0.75 0.16 230/0.10);--status-pending-border:oklch(0.75 0.16 230/0.45);
+  --status-failed-fg:oklch(0.78 0.20 25);--status-failed-bg:oklch(0.68 0.21 25/0.10);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--color-bg-base);color:var(--color-text-primary);font-family:var(--font-body);font-size:13.5px;line-height:1.7;padding:48px;-webkit-font-smoothing:antialiased;max-width:1100px;margin:0 auto;}
+
+.report-header{margin-bottom:48px;padding-bottom:32px;border-bottom:1px solid var(--color-border-default);}
+.doc-brand{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.doc-brand-mark{width:32px;height:32px;flex-shrink:0;background-image:url("LumenX-cybr.png");background-size:contain;background-repeat:no-repeat;background-position:center;}
+.doc-brand-wordmark{display:flex;flex-direction:column;line-height:1;}
+.doc-brand-wordmark .row{font-family:var(--font-mono);font-size:15px;font-weight:700;letter-spacing:-0.02em;color:var(--color-text-primary);}
+.doc-brand-wordmark .row .x{color:var(--color-primary);font-weight:900;}
+.doc-brand-wordmark .tag{font-family:var(--font-mono);font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-top:3px;}
+.report-eyebrow{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--color-text-muted);margin-bottom:10px;}
+.report-title{font-family:var(--font-display);font-size:32px;font-weight:700;letter-spacing:-0.03em;line-height:1.2;margin-bottom:12px;}
+.report-subtitle{color:var(--color-text-secondary);font-size:15px;max-width:720px;}
+.report-meta{margin-top:16px;display:flex;gap:24px;font-family:var(--font-mono);font-size:10px;letter-spacing:0.1em;color:var(--color-text-muted);text-transform:uppercase;}
+
+h2{font-family:var(--font-display);font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:48px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--color-border-subtle);}
+h3{font-family:var(--font-display);font-size:15px;font-weight:600;margin:28px 0 10px;}
+h4{font-family:var(--font-mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);margin:20px 0 8px;}
+p{margin-bottom:12px;color:var(--color-text-secondary);}
+strong{color:var(--color-text-primary);font-weight:600;}
+code{font-family:var(--font-mono);font-size:12px;background:var(--color-bg-inset);border:1px solid var(--color-border-subtle);padding:1px 5px;border-radius:3px;}
+ol,ul{padding-left:20px;margin-bottom:12px;}
+li{margin-bottom:6px;color:var(--color-text-secondary);}
+li strong{color:var(--color-text-primary);}
+
+/* Phase cards */
+.phase-card{background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-lg);padding:28px;margin:20px 0 28px;position:relative;overflow:hidden;}
+.phase-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
+.phase-card.phase-0::before{background:var(--status-completed-fg);}
+.phase-card.phase-1::before{background:var(--color-primary);}
+.phase-card.phase-2::before{background:var(--status-processing-fg);}
+.phase-card.phase-3::before{background:var(--color-accent);}
+.phase-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.phase-name{font-family:var(--font-display);font-size:16px;font-weight:600;}
+.phase-tag{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.15em;padding:3px 10px;border-radius:4px;}
+.phase-tag.foundation{color:var(--status-completed-fg);background:var(--status-completed-bg);border:1px solid var(--status-completed-border);}
+.phase-tag.structure{color:var(--color-primary);background:rgba(100,108,255,0.08);border:1px solid rgba(100,108,255,0.3);}
+.phase-tag.content{color:var(--status-processing-fg);background:var(--status-processing-bg);border:1px solid var(--status-processing-border);}
+.phase-tag.polish{color:var(--color-accent);background:rgba(255,0,128,0.08);border:1px solid rgba(255,0,128,0.3);}
+.phase-meta{display:flex;gap:16px;margin-bottom:16px;font-family:var(--font-mono);font-size:10px;color:var(--color-text-muted);letter-spacing:0.08em;text-transform:uppercase;}
+.phase-goal{font-size:13px;color:var(--color-text-secondary);margin-bottom:16px;padding-left:12px;border-left:2px solid var(--color-border-default);}
+.deliverables{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;}
+.deliverable{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:var(--radius-md);background:var(--color-bg-inset);border:1px solid var(--color-border-subtle);}
+.deliverable-icon{width:6px;height:6px;border-radius:50%;margin-top:6px;flex-shrink:0;}
+.deliverable-icon.code{background:var(--color-primary);}
+.deliverable-icon.design{background:var(--color-accent);}
+.deliverable-icon.doc{background:var(--status-completed-fg);}
+.deliverable-text{font-size:12px;color:var(--color-text-secondary);}
+.deliverable-text strong{font-size:12px;}
+
+/* Risk */
+.risk-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0;}
+.risk-item{padding:10px 12px;border-radius:var(--radius-md);background:var(--color-bg-inset);border:1px solid var(--color-border-subtle);}
+.risk-label{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:4px;}
+.risk-label.high{color:var(--status-failed-fg);}
+.risk-label.med{color:var(--status-processing-fg);}
+.risk-label.low{color:var(--status-pending-fg);}
+.risk-desc{font-size:12px;color:var(--color-text-secondary);}
+.risk-mitigation{font-size:11px;color:var(--color-text-muted);margin-top:4px;font-style:italic;}
+
+/* Timeline */
+.timeline{position:relative;margin:24px 0 32px;padding-left:24px;}
+.timeline::before{content:'';position:absolute;left:7px;top:4px;bottom:4px;width:1px;background:var(--color-border-default);}
+.tl-node{position:relative;margin-bottom:20px;padding-left:24px;}
+.tl-node::before{content:'';position:absolute;left:-20px;top:6px;width:10px;height:10px;border-radius:50%;border:2px solid var(--color-border-default);background:var(--color-bg-base);}
+.tl-node.done::before{background:var(--status-completed-fg);border-color:var(--status-completed-fg);}
+.tl-node.active::before{background:var(--color-primary);border-color:var(--color-primary);box-shadow:0 0 8px rgba(100,108,255,0.4);}
+.tl-node.future::before{background:transparent;}
+.tl-week{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--color-text-muted);margin-bottom:4px;}
+.tl-label{font-size:13px;font-weight:500;}
+.tl-detail{font-size:12px;color:var(--color-text-muted);margin-top:2px;}
+
+/* Callout */
+.callout{background:var(--color-bg-elevated);border-left:3px solid var(--color-primary);border-radius:0 var(--radius-md) var(--radius-md) 0;padding:14px 18px;margin:16px 0;font-size:12.5px;}
+.callout.warn{border-left-color:var(--status-failed-fg);}
+.callout-title{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);margin-bottom:6px;}
+.callout p{margin-bottom:4px;color:var(--color-text-secondary);}
+
+/* Metrics */
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0 28px;}
+.metric-card{background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-md);padding:16px;}
+.metric-value{font-family:var(--font-display);font-size:24px;font-weight:700;letter-spacing:-0.03em;margin-bottom:2px;}
+.metric-label{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);}
+
+/* Table */
+.dep-table{width:100%;border-collapse:collapse;margin:16px 0;}
+.dep-table th{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--color-text-muted);text-align:left;padding:8px 12px;border-bottom:1px solid var(--color-border-default);background:var(--color-bg-inset);}
+.dep-table td{padding:10px 12px;border-bottom:1px solid var(--color-border-subtle);font-size:12.5px;vertical-align:top;}
+.dep-table tr:hover td{background:var(--color-bg-hover);}
+.dep-table .path{font-family:var(--font-mono);font-size:11px;color:var(--color-primary);}
+
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<header class="report-header">
+  <div class="doc-brand">
+    <div class="doc-brand-mark"></div>
+    <div class="doc-brand-wordmark">
+      <span class="row">LUMEN<span class="x">X</span> STUDIO</span>
+      <span class="tag">Cyber Brutalism · Design Doc</span>
+    </div>
+  </div>
+  <div class="report-eyebrow">LUMENX STUDIO · 前端重塑 · 交付物 02/05</div>
+  <h1 class="report-title">重构方案与里程碑路线</h1>
+  <p class="report-subtitle">从 Token 注入到 Pipeline 全量迁移的 4 阶段渐进式重构计划。每阶段可独立交付价值，无需"大爆炸"重写。</p>
+  <div class="report-meta">
+    <span>日期 2026-06-06</span>
+    <span>版本 v1.0</span>
+    <span>总工期估算 6-8 周</span>
+    <span>前提 不影响 R2V Phase 1 稳定化</span>
+  </div>
+</header>
+
+<!-- ═══ 战略原则 ═══ -->
+<h2>1 重构战略原则</h2>
+
+<ol>
+  <li><strong>渐进不断裂</strong> — 每个 Phase 结束时产出可部署、功能等价的中间态。避免 "refactor branch hell"。</li>
+  <li><strong>Token-first</strong> — 先注入 seed→semantic→component 3-layer token 系统，后续视觉迁移变为"换 token 值"而非"改 class"。</li>
+  <li><strong>Content-is-King 验证</strong> — 每次视觉调整通过"截图 AB 比对"确认内容区域视觉权重 > chrome 区域。</li>
+  <li><strong>Atelier 不干涉</strong> — 严守 CLAUDE.md 约束：Studio 重构不引入 Atelier 依赖，仅通过 seed token 命名约定为未来对齐留接口。</li>
+  <li><strong>Zero-regression on R2V</strong> — Phase 1 不重构 StoryboardR2V 功能代码，仅做 token 替换和 Glass 减量。</li>
+</ol>
+
+<!-- ═══ 总览 ═══ -->
+<h2>2 阶段总览</h2>
+
+<div class="metrics-row">
+  <div class="metric-card"><div class="metric-value" style="color:var(--status-completed-fg)">P0</div><div class="metric-label">Token Foundation</div></div>
+  <div class="metric-card"><div class="metric-value" style="color:var(--color-primary)">P1</div><div class="metric-label">Shell Rebuild</div></div>
+  <div class="metric-card"><div class="metric-value" style="color:var(--status-processing-fg)">P2</div><div class="metric-label">Pipeline Migration</div></div>
+  <div class="metric-card"><div class="metric-value" style="color:var(--color-accent)">P3</div><div class="metric-label">Polish & Align</div></div>
+</div>
+
+<!-- ═══ Phase 0 ═══ -->
+<div class="phase-card phase-0">
+  <div class="phase-header">
+    <span class="phase-name">Phase 0 — Token Foundation</span>
+    <span class="phase-tag foundation">1.5 ~ 2 WEEKS</span>
+  </div>
+  <div class="phase-meta"><span>风险 LOW</span><span>功能影响 ZERO (纯加法)</span><span>前置依赖 NONE</span></div>
+  <p class="phase-goal">注入 3-layer token 系统（seed → semantic → component），建立视觉契约。现有样式不动，新 token 作为"叠加层"存在。</p>
+  
+  <h4>交付物</h4>
+  <div class="deliverables">
+    <div class="deliverable"><div class="deliverable-icon design"></div><div class="deliverable-text"><strong>design-system.css</strong> — seed + semantic + component 3 层 CSS vars (已完成草稿)</div></div>
+    <div class="deliverable"><div class="deliverable-icon doc"></div><div class="deliverable-text"><strong>DESIGN.md</strong> — 完整 DS 规范文档 (已完成草稿)</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>globals-v2.css</strong> — 在现有 globals.css 基础上注入 seed 层 + 更新 semantic 值</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>tailwind.config.v2.ts</strong> — 新增 seed-* / component token 引用，保留全部旧 key</div></div>
+    <div class="deliverable"><div class="deliverable-icon design"></div><div class="deliverable-text"><strong>_showcase.html</strong> — 组件 token 效果展示（已完成）</div></div>
+    <div class="deliverable"><div class="deliverable-icon doc"></div><div class="deliverable-text"><strong>Surface Hierarchy 文档</strong> — 5 级 surface 定义 + 使用规则</div></div>
+  </div>
+
+  <h4>技术方案</h4>
+  <ol>
+    <li>创建 <code>design-tokens/</code> 目录，放置 <code>seed.css</code>、<code>semantic.css</code>、<code>components.css</code></li>
+    <li>在 <code>globals.css</code> 顶部 <code>@import</code> seed 层；semantic 层覆写现有 CSS var 值（向后兼容）</li>
+    <li>Tailwind config 中新增 <code>seed</code> namespace，旧 token key 保留 + 新增 component 引用 <code>var(--button-bg)</code> 形式</li>
+    <li>确保所有现有 Tailwind 类名仍可工作（旧 semantic 变量值只是从新 seed 推导出来）</li>
+    <li>运行全量 E2E 截图对比：视觉零差异 = 注入成功</li>
+  </ol>
+
+  <h4>验收标准</h4>
+  <ul>
+    <li>✅ 修改 <code>--seed-primary</code> 一处 → 全站所有 primary 用色同步更新</li>
+    <li>✅ 修改 <code>--button-bg</code> → 所有按钮背景同步更新，不影响 Card/Input</li>
+    <li>✅ 视觉回归测试 0 diff（像素级一致）</li>
+    <li>✅ Lighthouse Performance 无退步</li>
+  </ul>
+</div>
+
+<!-- ═══ Phase 1 ═══ -->
+<div class="phase-card phase-1">
+  <div class="phase-header">
+    <span class="phase-name">Phase 1 — Shell Rebuild</span>
+    <span class="phase-tag structure">2 ~ 2.5 WEEKS</span>
+  </div>
+  <div class="phase-meta"><span>风险 MEDIUM</span><span>功能影响 LAYOUT ONLY</span><span>前置 Phase 0 完成</span></div>
+  <p class="phase-goal">统一 App Shell（GlobalSidebar + PipelineSidebar 合并为一套不 unmount 的 Layout），实现 Glass 减量和 chrome 静默化。</p>
+  
+  <h4>交付物</h4>
+  <div class="deliverables">
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>UnifiedShell.tsx</strong> — 不再区分 AppShell/全屏模式；Sidebar 始终挂载，内容区通过 Outlet/children 切换</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>GlobalSidebar v2</strong> — 视觉刷新：blur 2px, 白微透 surface, 2px primary indicator</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>PipelineSidebar v2</strong> — 新 StepHeader + ProgressRail + ghost number watermark</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>Route migration (partial)</strong> — 从 hash router 迁移为 React Router v6 nested layout (或 Next.js parallel route)</div></div>
+    <div class="deliverable"><div class="deliverable-icon design"></div><div class="deliverable-text"><strong>Storybook stories</strong> — Sidebar/StepHeader/ProgressRail 组件 stories</div></div>
+    <div class="deliverable"><div class="deliverable-icon doc"></div><div class="deliverable-text"><strong>Shell Migration Guide</strong> — 开发者迁移文档</div></div>
+  </div>
+
+  <h4>技术方案</h4>
+  <ol>
+    <li>新建 <code>layout/UnifiedShell.tsx</code>：固定 sidebar (w-56) + 动态 content area</li>
+    <li>Sidebar 内部根据 route 自动切换"全局导航"模式 (workspace/library/settings) 和"Pipeline 步骤"模式 (project context)</li>
+    <li>消除 <code>page.tsx</code> 内 hash routing：拆为 <code>app/(workspace)/page.tsx</code> + <code>app/project/[id]/page.tsx</code> + <code>app/project/[id]/[step]/page.tsx</code></li>
+    <li>每个 Pipeline step 成为独立 lazy segment → 自动 code-splitting</li>
+    <li>Glass 减量：sidebar backdrop-blur: 2px, bg: rgba(255,255,255,0.04), border: rgba(255,255,255,0.08)</li>
+    <li>Transition: sidebar 展开/收起用 CSS transition (transform + opacity)，不触发 layout reflow</li>
+  </ol>
+
+  <h4>风险与缓解</h4>
+  <div class="risk-grid">
+    <div class="risk-item"><div class="risk-label med">MEDIUM</div><div class="risk-desc">Hash → 文件路由迁移可能破坏外部 deep-link</div><div class="risk-mitigation">缓解: 保留 hash fallback redirect middleware 1 个版本周期</div></div>
+    <div class="risk-item"><div class="risk-label med">MEDIUM</div><div class="risk-desc">Sidebar 始终挂载增加 DOM 节点</div><div class="risk-mitigation">缓解: Pipeline sidebar 步骤面板仍 lazy render，仅 shell 框架常驻</div></div>
+  </div>
+</div>
+
+<!-- ═══ Phase 2 ═══ -->
+<div class="phase-card phase-2">
+  <div class="phase-header">
+    <span class="phase-name">Phase 2 — Pipeline Module Migration</span>
+    <span class="phase-tag content">2 ~ 3 WEEKS</span>
+  </div>
+  <div class="phase-meta"><span>风险 HIGH (核心功能)</span><span>功能影响 PER-MODULE</span><span>前置 Phase 1 完成</span></div>
+  <p class="phase-goal">逐模块迁移 Pipeline 各步骤至新 DS：token 替换 + 组件标准化 + 交互增强。按业务风险从低到高排列。</p>
+  
+  <h4>迁移顺序 (低风险 → 高风险)</h4>
+  <table class="dep-table">
+  <thead><tr><th>#</th><th>模块</th><th>文件数</th><th>工期</th><th>风险</th><th>关键变更</th></tr></thead>
+  <tbody>
+  <tr><td>1</td><td class="path">Script</td><td>1</td><td>2d</td><td>LOW</td><td>Token 替换 + section shell + 新排版</td></tr>
+  <tr><td>2</td><td class="path">ArtDirection</td><td>1</td><td>2d</td><td>LOW</td><td>Token 替换 + CandidateThumb 抽象 + 风格参考网格</td></tr>
+  <tr><td>3</td><td class="path">Cast</td><td>5</td><td>3d</td><td>MED</td><td>Cast 主面板 + 4个 Voice modal 统一为新 modal 模式</td></tr>
+  <tr><td>4</td><td class="path">Assembly</td><td>3</td><td>2d</td><td>MED</td><td>VideoAssembly + Timeline + VideoSidebar token 迁移</td></tr>
+  <tr><td>5</td><td class="path">Storyboard R2V</td><td>23</td><td>5-7d</td><td>HIGH</td><td>ShotCard 8态完整迁移 + ProgressRail 接入 + entity chip 色彩系统 + CompareModal 新版</td></tr>
+  </tbody>
+  </table>
+
+  <h4>交付物</h4>
+  <div class="deliverables">
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>各模块组件 v2</strong> — 消费 component token + data-component 属性 + TypeScript 严格模式</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>ShotCard 组件 (独立)</strong> — 完整 8 态 + collapsed/expanded/processing variants + Storybook</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>CompareModal v2</strong> — 新双栏布局 + 手势支持 (swipe compare)</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>TaskQueuePanel v2</strong> — 状态实时推送 + progress rail + 批量操作</div></div>
+    <div class="deliverable"><div class="deliverable-icon doc"></div><div class="deliverable-text"><strong>Module Migration Checklist</strong> — 每模块完成后的验收清单</div></div>
+    <div class="deliverable"><div class="deliverable-icon design"></div><div class="deliverable-text"><strong>Per-module 截图对比</strong> — Before/After 自动化截图存档</div></div>
+  </div>
+
+  <h4>风险与缓解</h4>
+  <div class="risk-grid">
+    <div class="risk-item"><div class="risk-label high">HIGH</div><div class="risk-desc">R2V 是核心稳定化目标 (CLAUDE.md Phase 1)，重构可能引入回归</div><div class="risk-mitigation">缓解: 先迁移低风险模块验证流程，R2V 放最后；每个 ShotCard 态写 visual regression test</div></div>
+    <div class="risk-item"><div class="risk-label med">MEDIUM</div><div class="risk-desc">23 文件强耦合：改 ShotCard 需同步改 ShotPanel/CandidatesSection</div><div class="risk-mitigation">缓解: 先抽取 shared/ 组件 (FieldTagChip, CandidateThumb, SectionShell)，再改宿主</div></div>
+    <div class="risk-item"><div class="risk-label med">MEDIUM</div><div class="risk-desc">Legacy 6-step 和 Unified 5-step 并存，部分模块有 content_mode 分支</div><div class="risk-mitigation">缓解: 引入 PipelineAdapter 层隔离差异，视觉层不关心步骤数</div></div>
+  </div>
+</div>
+
+<!-- ═══ Phase 3 ═══ -->
+<div class="phase-card phase-3">
+  <div class="phase-header">
+    <span class="phase-name">Phase 3 — Polish & Atelier Alignment</span>
+    <span class="phase-tag polish">1 ~ 1.5 WEEKS</span>
+  </div>
+  <div class="phase-meta"><span>风险 LOW</span><span>功能影响 NONE (DX + QA)</span><span>前置 Phase 2 完成</span></div>
+  <p class="phase-goal">收尾质量打磨：全站 token 审计、motion 统一、减弱装饰、Atelier seed token 文档对齐、Storybook 全量补齐、性能基线建立。</p>
+  
+  <h4>交付物</h4>
+  <div class="deliverables">
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>Motion 统一</strong> — 所有 @keyframes 引用 --duration / --ease token + prefers-reduced-motion 完整覆盖</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>CreativeCanvas 优化</strong> — IntersectionObserver 懒加载 + 进入项目后 pause</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>BorderGlow 精简</strong> — 限定仅 CTA hover + active state 使用，其余场景移除</div></div>
+    <div class="deliverable"><div class="deliverable-icon doc"></div><div class="deliverable-text"><strong>Atelier Token Mapping Doc</strong> — seed layer 消费指南 for Atelier branch</div></div>
+    <div class="deliverable"><div class="deliverable-icon code"></div><div class="deliverable-text"><strong>Storybook 全量</strong> — 所有 23 组件 stories + dark/light theme toggle</div></div>
+    <div class="deliverable"><div class="deliverable-icon doc"></div><div class="deliverable-text"><strong>Performance Baseline</strong> — Lighthouse CI score + bundle size budget</div></div>
+  </div>
+
+  <h4>Atelier 对齐要点</h4>
+  <ul>
+    <li><strong>Seed 层共享</strong>：<code>--seed-bg</code>, <code>--seed-fg</code>, <code>--seed-primary</code>, <code>--seed-accent</code>, <code>--seed-surface</code>, <code>--seed-radius</code> — Atelier 消费同一 seed 文件</li>
+    <li><strong>Semantic 层分离</strong>：Studio 的 <code>--color-bg-surface</code> 和 Atelier 的 <code>--atelier-canvas-bg</code> 可以从同一 seed 推导不同值</li>
+    <li><strong>Component 层独立</strong>：<code>--button-bg</code> / <code>--node-bg</code> 等各自 scope，绝对不 cross-import</li>
+  </ul>
+</div>
+
+<!-- ═══ 综合时间线 ═══ -->
+<h2>3 综合时间线</h2>
+
+<div class="timeline">
+  <div class="tl-node done">
+    <div class="tl-week">Week 0 (已完成)</div>
+    <div class="tl-label">Design System 草稿 + Mock 完成</div>
+    <div class="tl-detail">DESIGN.md · design-system.css · 6 page mocks · ShotCard spec · diff annotation</div>
+  </div>
+  <div class="tl-node active">
+    <div class="tl-week">Week 1-2</div>
+    <div class="tl-label">Phase 0: Token Foundation</div>
+    <div class="tl-detail">seed/semantic/component 3-layer 注入 · Tailwind config v2 · 零视觉差异验证</div>
+  </div>
+  <div class="tl-node future">
+    <div class="tl-week">Week 3-4</div>
+    <div class="tl-label">Phase 1: Shell Rebuild</div>
+    <div class="tl-detail">UnifiedShell · Route 迁移 · Glass 减量 · Sidebar v2</div>
+  </div>
+  <div class="tl-node future">
+    <div class="tl-week">Week 5-7</div>
+    <div class="tl-label">Phase 2: Pipeline Migration</div>
+    <div class="tl-detail">Script → ArtDirection → Cast → Assembly → R2V (最后)</div>
+  </div>
+  <div class="tl-node future">
+    <div class="tl-week">Week 8</div>
+    <div class="tl-label">Phase 3: Polish & Align</div>
+    <div class="tl-detail">Motion 统一 · Atelier token 文档 · Performance baseline · Storybook</div>
+  </div>
+</div>
+
+<!-- ═══ 成功指标 ═══ -->
+<h2>4 成功指标</h2>
+
+<table class="dep-table">
+<thead><tr><th>指标</th><th>当前基线</th><th>目标</th><th>测量方式</th></tr></thead>
+<tbody>
+<tr><td>首屏加载 (JS bundle)</td><td>~2.4 MB (未 split)</td><td>&lt; 800 KB initial</td><td>Lighthouse / webpack-bundle-analyzer</td></tr>
+<tr><td>Token 覆盖率</td><td>~30% (大量硬编码 class)</td><td>95%+</td><td>stylelint-no-hardcoded-colors rule</td></tr>
+<tr><td>Visual regression diff</td><td>N/A</td><td>每 PR &lt; 0.1% pixel diff (预期变更除外)</td><td>Percy / Chromatic</td></tr>
+<tr><td>组件 Storybook 覆盖</td><td>0%</td><td>100% (23 components)</td><td>Storybook coverage report</td></tr>
+<tr><td>a11y issues</td><td>未审计</td><td>0 critical / 0 serious</td><td>axe-core CI</td></tr>
+<tr><td>GPU 绘制 (idle)</td><td>常驻 (CreativeCanvas + glass blur)</td><td>空闲时 0 rasterize/composite</td><td>Chrome DevTools Performance</td></tr>
+</tbody>
+</table>
+
+<!-- ═══ 风险总览 ═══ -->
+<h2>5 全局风险总览</h2>
+
+<div class="risk-grid">
+  <div class="risk-item"><div class="risk-label high">HIGH</div><div class="risk-desc"><strong>R2V 功能回归</strong> — Studio 当前处于 R2V Phase 1 稳定化阶段</div><div class="risk-mitigation">缓解: R2V 迁移放 Phase 2 最后，且仅做 token 替换 + 视觉层变更，不改功能逻辑。每个 ShotCard 状态有 visual regression test guard。</div></div>
+  <div class="risk-item"><div class="risk-label med">MEDIUM</div><div class="risk-desc"><strong>Route 迁移中断 deep-link</strong> — 已有用户可能 bookmark hash URL</div><div class="risk-mitigation">缓解: 保留 hash → new URL redirect middleware 至少 1 版本周期 (2 weeks)。</div></div>
+  <div class="risk-item"><div class="risk-label med">MEDIUM</div><div class="risk-desc"><strong>Atelier 分支 merge conflict</strong> — 重构触碰 shared 层时</div><div class="risk-mitigation">缓解: 新增文件 > 修改现有文件；shared/ 新组件使用 namespace 前缀 (studio-)；与 Atelier 分支维护者每周 sync。</div></div>
+  <div class="risk-item"><div class="risk-label low">LOW</div><div class="risk-desc"><strong>设计方向模糊</strong> — "克制电影感"边界不清晰</div><div class="risk-mitigation">缓解: 本轮已交付 6 page mock + DS 规范 + diff 注释文档作为视觉 anchor。任何偏离需与 DS owner 确认。</div></div>
+</div>
+
+<!-- ═══ 决策点 ═══ -->
+<h2>6 需产品决策的事项</h2>
+
+<div class="callout">
+  <div class="callout-title">决策清单</div>
+  <p><strong>D1.</strong> Legacy 6-step pipeline 是否在本轮废弃？还是仅视觉统一但保留功能分支？</p>
+  <p><strong>D2.</strong> CreativeCanvas 背景动画：保留（优化性能）还是替换为静态渐变？</p>
+  <p><strong>D3.</strong> 路由迁移策略：Next.js App Router (最彻底) vs React Router v6 (风险更低) vs 仅重构 hash 结构 (最小变动)？</p>
+  <p><strong>D4.</strong> Storybook 是独立部署还是嵌入 dev server？是否对外可见？</p>
+  <p><strong>D5.</strong> 是否为 Atelier 预留 dark/light theme 切换能力，还是 Studio 永远 dark-first？</p>
+</div>
+
+<!-- ═══ 结语 ═══ -->
+<h2>7 结语</h2>
+
+<p>本方案核心理念：<strong>Token 是基础设施，视觉是 Token 的结果</strong>。Phase 0 建立 token 系统后，后续所有视觉调整本质上只是"调参"——改 <code>--seed-primary</code> 的值、改 <code>--card-border</code> 的 opacity、改 <code>--duration-base</code> 的毫秒数。这使得设计迭代从"改 79 个文件的 class"变为"改 1 个 CSS 变量文件"。</p>
+
+<p>6-8 周工期包含充分缓冲。如果 Phase 0 验证顺利（预计大概率，因为是纯加法），可以考虑 Phase 0 + Phase 1 合并为 3 周冲刺。</p>
+
+</body>
+</html>

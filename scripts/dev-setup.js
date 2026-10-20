@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -19,7 +19,7 @@ if (!fs.existsSync(venv)) {
       : path.join(venv, 'bin', 'pip');
 
     console.log('[setup] Installing Python dependencies...');
-    execSync(`${pip} install -e .`, { stdio: 'inherit', cwd: root });
+    execFileSync(pip, ['install', '-e', '.'], { stdio: 'inherit', cwd: root });
   } catch (e) {
     console.error('[setup] Failed to setup venv:', e.message);
   }

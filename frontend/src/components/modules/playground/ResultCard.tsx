@@ -129,6 +129,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
   const output = outputs[outputIndex];
   const isVideo = output?.media_type === 'video' || ['t2v', 'i2v', 'r2v', 'v2v'].includes(mode);
   const [saving, setSaving] = useState(false);
+  const [imgError, setImgError] = useState(false);
 
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
@@ -195,8 +196,15 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
             <div className="w-full h-full bg-gradient-to-br from-elevated to-surface flex items-center justify-center">
               <Video className="w-8 h-8 text-text-muted" />
             </div>
+          ) : imgError ? (
+            <div className="w-full h-full bg-gradient-to-br from-elevated to-surface flex flex-col items-center justify-center gap-1.5">
+              <svg className="w-8 h-8 text-text-muted/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+              </svg>
+              <span className="font-mono text-[0.5625rem] text-text-muted/50">{t('card.imageUnavailable') || 'Unavailable'}</span>
+            </div>
           ) : (
-            <img src={mediaUrl} alt={prompt} className="w-full h-full object-cover" />
+            <img src={mediaUrl} alt={prompt} className="w-full h-full object-cover" onError={() => setImgError(true)} />
           )
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-elevated to-surface" />
@@ -286,7 +294,7 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
           {/* Size or resolution tag */}
           {generation.parameters.size && (
             <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
-              {(generation.parameters.size as string).replace('*', '×').replace('x', '×')}
+              {(generation.parameters.size as string).replace(/[*x]/g, '×')}
             </span>
           )}
           {generation.parameters.resolution && !generation.parameters.size && (

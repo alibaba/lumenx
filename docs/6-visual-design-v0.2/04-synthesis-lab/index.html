@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LumenX Studio · 合成实验室 — Skeleton × Skin Decoupling</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════════════════════
+   PAGE CHROME — neutral "lab bench" palette (--ui-*), deliberately
+   distinct from every skin so specimens read as objective samples.
+   ══════════════════════════════════════════════════════════════ */
+:root{
+  --ui-bg:#0a0b0d; --ui-panel:#131418; --ui-panel-2:#191b20;
+  --ui-fg:#e7e8ea; --ui-fg-2:#9aa0aa; --ui-fg-3:#646a74;
+  --ui-line:rgba(255,255,255,0.08); --ui-line-soft:rgba(255,255,255,0.04);
+  --ui-accent:#8fd3c4;            /* lab teal — chrome only */
+  --c-brand:#646cff; --c-warm:#ffa94d; --c-atelier:#34d8c4;
+  --mono:'JetBrains Mono',monospace; --body:'Space Grotesk',system-ui,sans-serif;
+  --serif:'Fraunces',Georgia,serif;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--ui-bg);color:var(--ui-fg);font-family:var(--body);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;background-image:radial-gradient(80% 50% at 50% -10%,rgba(143,211,196,0.05),transparent 70%)}
+::-webkit-scrollbar{width:11px;height:11px}
+::-webkit-scrollbar-thumb{background:#2a2d34;border-radius:8px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--ui-accent);outline-offset:3px;border-radius:6px}
+.wrap{max-width:1320px;margin:0 auto;padding:0 32px}
+
+/* ── Top bar ── */
+.topbar{position:sticky;top:0;z-index:50;background:rgba(10,11,13,0.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--ui-line)}
+.topbar .wrap{display:flex;align-items:center;gap:20px;height:62px}
+.tb-brand{display:flex;align-items:center;gap:11px;font-family:var(--mono);font-weight:700;letter-spacing:0.04em;font-size:14px}
+.tb-brand .dot{width:9px;height:9px;border-radius:50%;background:var(--ui-accent);box-shadow:0 0 14px var(--ui-accent)}
+.tb-brand .x{color:var(--c-brand)}
+.tb-tag{font-family:var(--mono);font-size:10px;color:var(--ui-fg-3);letter-spacing:0.14em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--ui-line);border-radius:999px}
+.tb-nav{margin-left:auto;display:flex;gap:6px}
+.tb-nav a{font-family:var(--mono);font-size:11px;color:var(--ui-fg-2);text-decoration:none;padding:7px 13px;border-radius:8px;letter-spacing:0.04em;transition:.18s}
+.tb-nav a:hover{background:var(--ui-panel-2);color:var(--ui-fg)}
+
+/* ── Hero ── */
+.hero{padding:56px 0 30px}
+.hero .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;color:var(--ui-accent);margin-bottom:18px}
+.hero h1{font-family:var(--serif);font-weight:600;font-size:46px;line-height:1.08;letter-spacing:-0.02em;max-width:18ch}
+.hero h1 em{font-style:italic;color:var(--ui-accent)}
+.hero p{color:var(--ui-fg-2);max-width:64ch;margin-top:20px;font-size:15.5px}
+.hero .lead-q{margin-top:20px;padding:16px 20px;border-left:2px solid var(--c-warm);background:rgba(255,169,77,0.05);border-radius:0 10px 10px 0;color:var(--ui-fg);font-size:14px;max-width:72ch}
+.hero .lead-q b{color:var(--c-warm)}
+
+/* ── Layer decoupling diagram ── */
+.layers{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:36px 0 8px}
+.layer{background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:14px;padding:20px 18px;position:relative;overflow:hidden}
+.layer::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.layer.l1::before{background:var(--ui-accent)} .layer.l2::before{background:#9b8cff}
+.layer.l3::before{background:var(--c-warm)} .layer.l4::before{background:var(--c-brand)}
+.layer .ln{font-family:var(--mono);font-size:10px;color:var(--ui-fg-3);letter-spacing:0.1em}
+.layer h3{font-family:var(--serif);font-size:20px;font-weight:600;margin:6px 0 4px}
+.layer .zh{font-size:12.5px;color:var(--ui-fg-2)}
+.layer .verdict{margin-top:14px;font-family:var(--mono);font-size:10px;letter-spacing:0.04em;display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px}
+.layer .verdict.keep{background:rgba(143,211,196,0.12);color:var(--ui-accent)}
+.layer .verdict.swap{background:rgba(255,169,77,0.12);color:var(--c-warm)}
+
+/* ── Section frame ── */
+section.block{padding:54px 0;border-top:1px solid var(--ui-line-soft)}
+.sec-head{margin-bottom:30px}
+.sec-head .kicker{font-family:var(--mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--ui-fg-3)}
+.sec-head h2{font-family:var(--serif);font-size:32px;font-weight:600;letter-spacing:-0.01em;margin-top:8px}
+.sec-head p{color:var(--ui-fg-2);max-width:74ch;margin-top:10px}
+
+/* ── Skin toolbar for full workbench ── */
+.skin-tabs{display:inline-flex;gap:5px;padding:5px;background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:999px;margin-bottom:8px}
+.skin-tab{display:inline-flex;align-items:center;gap:8px;border:none;background:transparent;color:var(--ui-fg-2);font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:0.03em;padding:9px 17px;border-radius:999px;cursor:pointer;transition:.2s}
+.skin-tab .sw{width:11px;height:11px;border-radius:50%}
+.skin-tab[data-k="brand-true"] .sw{background:var(--c-brand)}
+.skin-tab[data-k="warm-bridge"] .sw{background:linear-gradient(90deg,var(--c-brand) 50%,var(--c-warm) 50%)}
+.skin-tab[data-k="full-atelier"] .sw{background:linear-gradient(90deg,var(--c-atelier) 50%,var(--c-warm) 50%)}
+.skin-tab.active{background:var(--ui-panel-2);color:var(--ui-fg);box-shadow:inset 0 0 0 1px var(--ui-line)}
+
+/* ═══════════════════════════════════════════════════
+   SPECIMEN — Line B skeleton, scoped tokens per skin.
+   These component styles are IDENTICAL across skins;
+   only the seed/semantic variables change. That IS the
+   proof of the seed→semantic→component architecture.
+   ═══════════════════════════════════════════════════ */
+.specimen{
+  /* ---- shared structural tokens (skeleton, skin-independent) ---- */
+  --font-display:var(--serif); --font-body:var(--body); --font-mono:var(--mono);
+  --radius-sm:8px; --radius-md:14px; --radius-lg:20px; --radius-pill:999px;
+  --dur-fast:160ms; --dur-base:280ms; --ease-out:cubic-bezier(0.22,1,0.36,1);
+  --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+  position:relative;border-radius:18px;overflow:hidden;
+  background:var(--color-bg-base);color:var(--color-text-primary);
+  font-family:var(--font-body);border:1px solid var(--color-border-default);
+  box-shadow:0 20px 60px rgba(0,0,0,0.5);
+}
+/* ---- SKIN A · Brand-True : cold black + brand blue/pink ---- */
+.specimen[data-skin="brand-true"]{
+  --color-bg-base:#050508; --color-bg-surface:#101015; --color-bg-elevated:#16161c;
+  --color-bg-inset:#000003; --color-bg-hover:rgba(255,255,255,0.05);
+  --color-bg-input:rgba(0,0,0,0.3);
+  --color-text-primary:#ededed; --color-text-secondary:#9ca3af; --color-text-muted:#6b7280;
+  --color-on-accent:#0a0a0f;
+  --color-border-default:rgba(255,255,255,0.08); --color-border-subtle:rgba(255,255,255,0.04);
+  --color-primary:#646cff; --color-primary-hover:#7d84ff;
+  --color-accent:#ff0080; --color-accent-hover:#ff3399;
+  --glow-primary:0 0 0 1px rgba(100,108,255,0.30),0 0 24px -6px rgba(100,108,255,0.5);
+  --glow-accent:0 0 0 1px rgba(255,0,128,0.35),0 0 26px -6px rgba(255,0,128,0.5);
+  --halation:inset 0 0 42px -8px rgba(255,0,128,0.28);
+  --status-star-fg:#ff5fae; --status-star-bg:rgba(255,0,128,0.14); --status-star-bd:rgba(255,0,128,0.5);
+  --status-done-fg:#5fd0a8; --status-done-bg:rgba(52,200,150,0.12); --status-done-bd:rgba(52,200,150,0.4);
+  --status-proc-fg:#ffc24d; --status-proc-bg:rgba(255,180,60,0.12); --status-proc-bd:rgba(255,180,60,0.4);
+  --status-pend-fg:#8ea2ff; --status-pend-bg:rgba(100,120,255,0.1); --status-pend-bd:rgba(100,120,255,0.35);
+  --status-fail-fg:#ff7a7a; --status-fail-bg:rgba(255,80,80,0.12); --status-fail-bd:rgba(255,80,80,0.4);
+  --bloom:radial-gradient(60% 50% at 18% 0%,rgba(100,108,255,0.10),transparent 70%),radial-gradient(55% 45% at 88% 100%,rgba(255,0,128,0.07),transparent 70%);
+  --grain-op:0.04;
+}
+/* ---- SKIN B · Warm Bridge : warm-neutral base, blue primary, amber only for selected ---- */
+.specimen[data-skin="warm-bridge"]{
+  --color-bg-base:#0a0a0d; --color-bg-surface:#141318; --color-bg-elevated:#1a1820;
+  --color-bg-inset:#060608; --color-bg-hover:rgba(255,255,255,0.045);
+  --color-bg-input:rgba(0,0,0,0.28);
+  --color-text-primary:#ece9e6; --color-text-secondary:#a4a0a8; --color-text-muted:#6f6b74;
+  --color-on-accent:#0a0a0d;
+  --color-border-default:rgba(255,255,255,0.07); --color-border-subtle:rgba(255,255,255,0.035);
+  --color-primary:#646cff; --color-primary-hover:#7d84ff;     /* blue stays primary */
+  --color-accent:#ffa94d; --color-accent-hover:#ffbf73;       /* amber = selected/starred only */
+  --glow-primary:0 0 0 1px rgba(100,108,255,0.3),0 0 24px -6px rgba(100,108,255,0.5);
+  --glow-accent:0 0 0 1px rgba(255,169,77,0.35),0 0 28px -6px rgba(255,169,77,0.5);
+  --halation:inset 0 0 42px -8px rgba(255,169,77,0.27);
+  --status-star-fg:#ffc878; --status-star-bg:rgba(255,169,77,0.15); --status-star-bd:rgba(255,169,77,0.55);
+  --status-done-fg:#7fb6ff; --status-done-bg:rgba(100,140,255,0.12); --status-done-bd:rgba(100,140,255,0.4);
+  --status-proc-fg:#ffc24d; --status-proc-bg:rgba(255,180,60,0.12); --status-proc-bd:rgba(255,180,60,0.42);
+  --status-pend-fg:#8ea2ff; --status-pend-bg:rgba(100,120,255,0.1); --status-pend-bd:rgba(100,120,255,0.35);
+  --status-fail-fg:#ff8585; --status-fail-bg:rgba(255,90,90,0.12); --status-fail-bd:rgba(255,90,90,0.4);
+  --bloom:radial-gradient(60% 50% at 18% 0%,rgba(100,108,255,0.09),transparent 70%),radial-gradient(55% 45% at 88% 100%,rgba(255,169,77,0.08),transparent 70%);
+  --grain-op:0.045;
+}
+/* ---- SKIN C · Full Atelier : warm graphite, teal↔amber (native Line B) ---- */
+.specimen[data-skin="full-atelier"]{
+  --color-bg-base:#0c0b0e; --color-bg-surface:#131116; --color-bg-elevated:#181620;
+  --color-bg-inset:#0c0b0e; --color-bg-hover:rgba(255,255,255,0.045);
+  --color-bg-input:rgba(0,0,0,0.28);
+  --color-text-primary:#f2ede4; --color-text-secondary:#a8a2b0; --color-text-muted:#8b8597;
+  --color-on-accent:#0c0b0e;
+  --color-border-default:rgba(255,255,255,0.06); --color-border-subtle:rgba(255,255,255,0.03);
+  --color-primary:#34d8c4; --color-primary-hover:#5ee9d6;
+  --color-accent:#ffa94d; --color-accent-hover:#e8852b;
+  --glow-primary:0 0 0 1px rgba(52,216,196,0.30),0 0 24px -6px rgba(52,216,196,0.45);
+  --glow-accent:0 0 0 1px rgba(255,169,77,0.35),0 0 28px -6px rgba(255,169,77,0.5);
+  --halation:inset 0 0 42px -8px rgba(255,169,77,0.27);
+  --status-star-fg:#ffce85; --status-star-bg:rgba(255,169,77,0.16); --status-star-bd:rgba(255,169,77,0.55);
+  --status-done-fg:#4fe0cc; --status-done-bg:rgba(52,216,196,0.12); --status-done-bd:rgba(52,216,196,0.45);
+  --status-proc-fg:#ffbe5a; --status-proc-bg:rgba(255,180,60,0.12); --status-proc-bd:rgba(255,180,60,0.45);
+  --status-pend-fg:#9bb8ff; --status-pend-bg:rgba(120,150,255,0.1); --status-pend-bd:rgba(120,150,255,0.4);
+  --status-fail-fg:#ff8585; --status-fail-bg:rgba(255,90,90,0.12); --status-fail-bd:rgba(255,90,90,0.4);
+  --bloom:radial-gradient(60% 50% at 18% 0%,rgba(52,216,196,0.10),transparent 70%),radial-gradient(55% 45% at 88% 100%,rgba(255,169,77,0.08),transparent 70%);
+  --grain-op:0.05;
+}
+/* atmosphere layer (bloom + grain) — Line B signature, skin-tinted */
+.specimen .atmo,.specimen .grain{position:absolute;inset:0;pointer-events:none}
+.specimen .atmo{background:var(--bloom);z-index:0}
+.specimen .grain{z-index:1;opacity:var(--grain-op);mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.specimen .spec-body{position:relative;z-index:2;padding:18px}
+.specimen .spec-label{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 0;position:relative;z-index:2}
+.specimen .spec-label .nm{font-family:var(--font-display);font-size:17px;font-weight:600}
+.specimen .spec-label .tg{font-family:var(--font-mono);font-size:9px;letter-spacing:0.1em;color:var(--color-text-muted);text-transform:uppercase}
+
+/* ---- ShotCard (Line B anatomy, scoped) ---- */
+.scard{background:var(--color-bg-surface);border-radius:var(--radius-lg);box-shadow:0 2px 8px rgba(0,0,0,0.4),inset 0 1px 0 rgba(255,255,255,0.05);overflow:hidden;border:1px solid var(--color-border-subtle)}
+.scard.sel{box-shadow:0 12px 40px rgba(0,0,0,0.55),0 0 0 1px var(--color-accent)}
+.sc-top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px}
+.sc-badge{display:flex;align-items:center;gap:11px}
+.sc-no{font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--color-text-muted);letter-spacing:-0.03em;line-height:1}
+.sc-cap{font-family:var(--font-mono);font-size:9px;color:var(--color-text-muted);letter-spacing:0.07em;text-transform:uppercase}
+.sc-cap b{color:var(--color-text-secondary)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:var(--radius-pill);font-family:var(--font-mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.09em}
+.badge .led{width:5px;height:5px;border-radius:50%}
+.badge.star{color:var(--status-star-fg);background:var(--status-star-bg);border:1px solid var(--status-star-bd)}.badge.star .led{background:var(--status-star-fg)}
+.badge.done{color:var(--status-done-fg);background:var(--status-done-bg);border:1px solid var(--status-done-bd)}.badge.done .led{background:var(--status-done-fg)}
+.badge.proc{color:var(--status-proc-fg);background:var(--status-proc-bg);border:1px solid var(--status-proc-bd)}.badge.proc .led{background:var(--status-proc-fg);animation:bpulse 1.2s infinite}
+.badge.pend{color:var(--status-pend-fg);background:var(--status-pend-bg);border:1px solid var(--status-pend-bd)}.badge.pend .led{background:var(--status-pend-fg)}
+.badge.fail{color:var(--status-fail-fg);background:var(--status-fail-bg);border:1px solid var(--status-fail-bd)}.badge.fail .led{background:var(--status-fail-fg)}
+@keyframes bpulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sc-bodyrow{display:flex;gap:14px;padding:0 16px}
+.sc-prev{width:200px;flex-shrink:0;aspect-ratio:16/9;background:var(--color-bg-inset);border-radius:var(--radius-md);position:relative;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.04)}
+.sc-prev img{width:100%;height:100%;object-fit:cover}
+.sc-prev.glow::after{content:'';position:absolute;inset:0;border-radius:var(--radius-md);box-shadow:var(--halation);pointer-events:none}
+.sc-chip{position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:var(--radius-pill);font-family:var(--font-mono);font-size:8px;font-weight:700;letter-spacing:0.05em;backdrop-filter:blur(6px);background:var(--status-star-bg);border:1px solid var(--status-star-bd);color:var(--status-star-fg);box-shadow:var(--glow-accent)}
+.sc-dur{position:absolute;bottom:8px;right:8px;padding:2px 8px;border-radius:var(--radius-pill);background:rgba(0,0,0,0.6);font-family:var(--font-mono);font-size:8px;color:#fff;backdrop-filter:blur(4px)}
+.sc-edit{flex:1;min-width:0;display:flex;flex-direction:column;gap:9px;padding-top:2px}
+.sc-prompt{border-left:2px solid var(--color-border-default);padding-left:12px;font-size:12px;line-height:1.55;color:var(--color-text-primary)}
+.sc-dlg{padding-left:12px;border-left:2px solid var(--color-accent)}
+.sc-dlg .sp{font-family:var(--font-mono);font-size:8px;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.08em}
+.sc-dlg .ln{font-family:var(--font-display);font-size:13px;font-style:italic;color:var(--color-text-secondary);margin-top:2px}
+.sc-tags{display:flex;flex-wrap:wrap;gap:5px}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:var(--radius-pill);font-size:10.5px;font-weight:500;background:var(--color-bg-inset);border:1px solid var(--color-border-subtle);color:var(--color-text-secondary)}
+.tag.pri{border-color:color-mix(in srgb,var(--color-primary) 40%,transparent);color:var(--color-primary)}
+.sc-actions{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 16px;margin-top:2px}
+.sc-actions .left{display:flex;gap:3px}
+.icob{width:30px;height:30px;border-radius:var(--radius-md);display:grid;place-items:center;border:none;background:transparent;color:var(--color-text-muted);cursor:pointer;transition:.2s}
+.icob:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}
+.icob svg{width:14px;height:14px}
+.sc-actions .right{display:flex;align-items:center;gap:9px}
+.csel{display:flex;gap:3px;background:var(--color-bg-inset);padding:3px;border-radius:var(--radius-pill)}
+.cbtn{width:26px;height:26px;border-radius:var(--radius-pill);display:grid;place-items:center;border:none;background:transparent;font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--color-text-muted);cursor:pointer}
+.cbtn.on{background:var(--color-primary);color:var(--color-on-accent)}
+.btn{display:inline-flex;align-items:center;gap:6px;border-radius:var(--radius-pill);font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;padding:8px 15px;font-family:var(--font-body);transition:.22s}
+.btn svg{width:13px;height:13px}
+.btn.pri{background:var(--color-primary);color:var(--color-on-accent);box-shadow:var(--glow-primary)}
+.btn.pri:hover{background:var(--color-primary-hover);transform:translateY(-1px)}
+.btn.soft{background:var(--color-bg-surface);color:var(--color-text-primary);box-shadow:inset 0 0 0 1px var(--color-border-default)}
+/* candidates strip (selected amber/skin halo) */
+.sc-panel{padding:0 16px 16px;border-top:1px solid var(--color-border-subtle);margin:6px 16px 0;padding-top:14px}
+.sc-panel .ph{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.sc-panel .ph .t{font-family:var(--font-mono);font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.14em;color:var(--color-text-secondary)}
+.sc-panel .ph .s{font-family:var(--font-mono);font-size:9px;color:var(--color-text-muted)}
+.cgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.cand{position:relative;aspect-ratio:16/9;border-radius:var(--radius-md);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.4)}
+.cand img{width:100%;height:100%;object-fit:cover}
+.cand.on{box-shadow:var(--glow-accent),0 8px 24px rgba(0,0,0,0.5)}
+.cand .st{position:absolute;top:5px;right:5px;width:19px;height:19px;border-radius:50%;display:grid;place-items:center;background:rgba(0,0,0,0.5);color:var(--color-text-muted);backdrop-filter:blur(4px)}
+.cand.on .st{color:var(--color-accent)}
+.cand .st svg{width:11px;height:11px}
+
+/* skin meta row under specimen */
+.skin-meta{position:relative;z-index:2;padding:0 18px 18px;display:flex;flex-direction:column;gap:12px}
+.swatches{display:flex;gap:7px;flex-wrap:wrap}
+.sw-chip{display:flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;background:var(--color-bg-inset);border:1px solid var(--color-border-subtle);font-family:var(--font-mono);font-size:9.5px;color:var(--color-text-secondary)}
+.sw-chip .d{width:13px;height:13px;border-radius:4px;box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15)}
+.state-row{display:flex;gap:6px;flex-wrap:wrap}
+.skin-note{font-size:11.5px;color:var(--color-text-secondary);line-height:1.55}
+.skin-note b{color:var(--color-text-primary);font-weight:600}
+
+/* ── three-up grid ── */
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;align-items:start}
+
+/* ── Logo lab ── */
+.logo-lab{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.logo-cell{border-radius:18px;overflow:hidden;border:1px solid var(--ui-line)}
+.logo-stage{aspect-ratio:16/10;display:grid;place-items:center;position:relative}
+.logo-stage.bg-cold{background:#050508}
+.logo-stage.bg-warm{background:#0a0a0d}
+.logo-stage.bg-graphite{background:#0c0b0e}
+.logo-set{display:flex;flex-direction:column;align-items:center;gap:14px}
+.logo-img{width:60px;height:60px;object-fit:contain}
+.logo-img.tealize{filter:hue-rotate(-64deg) saturate(1.35) brightness(1.08)}
+.wm{font-family:var(--mono);font-weight:700;font-size:19px;letter-spacing:0.02em;color:#fff;display:flex;align-items:baseline;gap:2px}
+.wm .x.blue{color:#646cff} .wm .x.teal{color:#34d8c4}
+.wm .sub{display:block;font-size:8px;letter-spacing:0.3em;color:rgba(255,255,255,0.3);margin-top:3px;text-align:center}
+.logo-foot{padding:15px 18px;background:var(--ui-panel)}
+.logo-foot .h{font-family:var(--mono);font-size:10px;letter-spacing:0.08em;color:var(--ui-fg-3);text-transform:uppercase}
+.logo-foot .v{font-size:13px;margin-top:6px;color:var(--ui-fg)}
+.logo-foot .v.ok{color:#7fd6b9} .logo-foot .v.warn{color:var(--c-warm)}
+
+/* ── Matrix table ── */
+.matrix{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;border:1px solid var(--ui-line);border-radius:14px;overflow:hidden}
+.matrix th,.matrix td{padding:13px 16px;text-align:left;border-bottom:1px solid var(--ui-line-soft);vertical-align:top}
+.matrix thead th{background:var(--ui-panel);font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ui-fg-2);font-weight:600}
+.matrix tbody tr:hover{background:rgba(255,255,255,0.015)}
+.matrix td:first-child{font-weight:600;color:var(--ui-fg)}
+.matrix td .mod-zh{font-family:var(--serif);font-size:15px}
+.matrix td .mod-en{font-family:var(--mono);font-size:9px;color:var(--ui-fg-3);letter-spacing:0.06em;display:block;margin-top:2px}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:0.03em;white-space:nowrap}
+.pill.skel{background:rgba(143,211,196,0.14);color:#8fd3c4}
+.pill.skin-b{background:rgba(255,169,77,0.13);color:#ffbf73}
+.pill.skin-a{background:rgba(100,108,255,0.14);color:#9aa0ff}
+.pill.inter{background:rgba(155,140,255,0.14);color:#b3a6ff}
+.matrix td.why{color:var(--ui-fg-2);font-size:12.5px;max-width:34ch}
+
+/* ── Recommendation cards ── */
+.rec-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:8px}
+.rec{background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:16px;padding:24px;position:relative;overflow:hidden}
+.rec::before{content:'';position:absolute;inset:0 auto 0 0;width:3px;background:var(--ui-accent)}
+.rec h3{font-family:var(--serif);font-size:21px;font-weight:600;margin-bottom:6px}
+.rec .num{font-family:var(--mono);font-size:10px;color:var(--ui-fg-3);letter-spacing:0.14em}
+.rec ul{list-style:none;margin-top:14px;display:flex;flex-direction:column;gap:10px}
+.rec li{display:flex;gap:10px;font-size:13px;color:var(--ui-fg-2);line-height:1.5}
+.rec li::before{content:'';flex-shrink:0;width:6px;height:6px;border-radius:50%;background:var(--ui-accent);margin-top:7px}
+.rec.warn::before{background:var(--c-warm)} .rec.warn li::before{background:var(--c-warm)}
+
+/* ── Callout ── */
+.callout{margin-top:30px;background:linear-gradient(120deg,rgba(143,211,196,0.07),rgba(100,108,255,0.05));border:1px solid var(--ui-line);border-radius:16px;padding:26px 28px}
+.callout .k{font-family:var(--mono);font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ui-accent)}
+.callout h3{font-family:var(--serif);font-size:23px;font-weight:600;margin:8px 0 12px}
+.callout p{color:var(--ui-fg-2);max-width:80ch}
+.callout .steps{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}
+.callout .step{flex:1;min-width:200px;background:var(--ui-bg);border:1px solid var(--ui-line);border-radius:12px;padding:16px}
+.callout .step .n{font-family:var(--mono);font-size:11px;color:var(--ui-accent);font-weight:700}
+.callout .step .t{font-weight:600;margin:6px 0 4px;font-size:14px}
+.callout .step .d{font-size:12px;color:var(--ui-fg-3)}
+
+/* ═══════════ INLINE WORKBENCH (real token switch, not iframe) ═══════════ */
+.wbspec{border-radius:18px;overflow:hidden;height:720px;display:flex;flex-direction:column;border:1px solid var(--color-border-default);box-shadow:0 20px 60px rgba(0,0,0,0.5);position:relative;background:var(--color-bg-base);color:var(--color-text-primary);font-family:var(--font-body);transition:background .4s ease,color .4s ease}
+.wbspec .atmo,.wbspec .grain{position:absolute;inset:0;pointer-events:none}
+.wbspec .atmo{background:var(--bloom);z-index:0}
+.wbspec .grain{z-index:1;opacity:var(--grain-op);mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n2)'/%3E%3C/svg%3E")}
+.wbshell{position:relative;z-index:2;display:flex;height:100%}
+.wb-rail{width:54px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:7px}
+.wb-rail .bm{width:32px;height:32px;border-radius:10px;background:var(--color-primary);display:grid;place-items:center;font-family:var(--font-display);font-weight:700;color:var(--color-on-accent);font-size:16px;margin-bottom:12px;box-shadow:var(--glow-primary)}
+.wb-rail .ri{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;color:var(--color-text-muted);cursor:pointer;transition:.18s}
+.wb-rail .ri:hover{background:var(--color-bg-hover);color:var(--color-text-primary)}
+.wb-rail .ri.on{color:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 12%,transparent)}
+.wb-rail .ri svg{width:17px;height:17px}
+.wb-rail .sp{flex:1}
+.wb-sb{width:210px;flex-shrink:0;display:flex;flex-direction:column;padding:6px 12px 12px}
+.wb-sb .hd{padding:12px 6px 14px}
+.wb-sb .cr{font-family:var(--font-mono);font-size:9px;color:var(--color-text-muted);letter-spacing:0.07em}
+.wb-sb .pj{font-family:var(--font-display);font-size:21px;font-weight:600;margin-top:6px;letter-spacing:-0.02em}
+.wb-sb .mt{font-family:var(--font-mono);font-size:8.5px;color:var(--color-text-muted);margin-top:5px;letter-spacing:0.05em}
+.wb-sb .nv{flex:1;display:flex;flex-direction:column;gap:2px}
+.wb-st{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:var(--radius-md);cursor:pointer;transition:.2s}
+.wb-st:hover{background:var(--color-bg-hover)}
+.wb-st.on{background:var(--color-bg-surface);box-shadow:0 2px 8px rgba(0,0,0,0.4)}
+.wb-st .n{font-family:var(--font-mono);font-size:9px;color:var(--color-text-muted)}
+.wb-st.on .n{color:var(--color-primary)}
+.wb-st .l{font-size:13px;font-weight:500;color:var(--color-text-secondary)}
+.wb-st.on .l{color:var(--color-text-primary);font-weight:600}
+.wb-st .dn{margin-left:auto;color:var(--status-done-fg)} .wb-st .dn svg{width:13px;height:13px}
+.wb-main{flex:1;display:flex;flex-direction:column;min-width:0}
+.wb-hd{padding:18px 22px 14px;display:flex;align-items:flex-end;gap:14px}
+.wb-hd .ti{flex:1;min-width:0}
+.wb-hd .eb{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.2em;color:var(--color-text-muted)}
+.wb-hd .eb .n{color:var(--color-primary);font-weight:600}
+.wb-hd .h1{font-family:var(--font-display);font-size:28px;font-weight:600;letter-spacing:-0.02em;margin-top:3px}
+.wb-hd .ac{display:flex;align-items:center;gap:9px}
+.wb-scroll{flex:1;overflow-y:auto;padding:6px 22px 22px;display:flex;flex-direction:column;gap:20px}
+.tqb{position:relative}
+.tqb .ct{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;border-radius:9px;background:var(--color-accent);color:var(--color-on-accent);font-family:var(--font-mono);font-size:9px;font-weight:700;display:grid;place-items:center;padding:0 4px;box-shadow:var(--glow-accent)}
+.wb-ov{position:absolute;inset:0;display:grid;place-items:center;background:rgba(8,7,10,0.6);backdrop-filter:blur(2px)}
+.wb-ring{width:28px;height:28px}
+.wb-ring circle{fill:none;stroke-width:2.5}
+.wb-ring .bg{stroke:rgba(255,255,255,0.12)}
+.wb-ring .fg{stroke:var(--color-accent);stroke-linecap:round;stroke-dasharray:80;stroke-dashoffset:30;transform-origin:center;animation:spin 1.1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.wb-pl{font-family:var(--font-mono);font-size:8.5px;color:var(--color-accent);letter-spacing:0.1em;margin-top:8px}
+.wb-ph{display:flex;flex-direction:column;align-items:center;gap:8px;color:var(--color-text-muted)}
+.wb-ph svg{width:22px;height:22px;opacity:.5} .wb-ph span{font-family:var(--font-mono);font-size:10px;letter-spacing:0.06em}
+.wbspec .note{position:relative;z-index:2;padding:8px 22px 14px;font-family:var(--font-mono);font-size:9px;color:var(--color-text-muted);letter-spacing:0.04em;display:flex;gap:16px;flex-shrink:0}
+.wbspec .note b{color:var(--color-primary)} .wbspec .note .am{color:var(--color-accent)}
+
+/* ═══════════ LAYER ANATOMY (visual decomposition) ═══════════ */
+.anat-wrap{display:grid;grid-template-columns:1.15fr 0.85fr;gap:26px;align-items:start}
+.anat-stage{position:relative;padding:20px;border-radius:18px;border:1px solid var(--ui-line);background:var(--ui-panel)}
+.anat-stage.show-skel .scard{outline:2px dashed #8fd3c4;outline-offset:4px}
+.anat-stage.show-skel .sc-bodyrow,.anat-stage.show-skel .sc-top,.anat-stage.show-skel .sc-actions{outline:1px dashed rgba(143,211,196,0.4);outline-offset:2px}
+.anat-stage.show-inter .scard{transform:translateY(-6px);box-shadow:0 24px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(179,166,255,0.45)}
+.anat-stage.show-inter .btn.pri{box-shadow:0 0 0 3px rgba(179,166,255,0.4)}
+.anat-stage.show-skin .btn.pri,.anat-stage.show-skin .badge.star,.anat-stage.show-skin .tag.pri,.anat-stage.show-skin .sc-prev.glow{outline:2px solid #ffbf73;outline-offset:3px;border-radius:8px}
+.anat-badges{position:absolute;z-index:5;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:0.04em;padding:4px 9px;border-radius:999px;pointer-events:none;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,0.4)}
+.anat-toggle{display:inline-flex;gap:5px;padding:5px;background:var(--ui-panel);border:1px solid var(--ui-line);border-radius:999px;margin-bottom:16px}
+.anat-tg{border:none;background:transparent;color:var(--ui-fg-2);font-family:var(--mono);font-size:11px;font-weight:600;padding:8px 15px;border-radius:999px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:7px}
+.anat-tg .d{width:9px;height:9px;border-radius:50%}
+.anat-tg[data-layer="skel"] .d{background:#8fd3c4} .anat-tg[data-layer="inter"] .d{background:#b3a6ff} .anat-tg[data-layer="skin"] .d{background:#ffbf73}
+.anat-tg.on{background:var(--ui-panel-2);color:var(--ui-fg);box-shadow:inset 0 0 0 1px var(--ui-line)}
+.anat-legend{display:flex;flex-direction:column;gap:14px}
+.anat-card{border:1px solid var(--ui-line);border-radius:14px;padding:18px;position:relative;overflow:hidden;background:var(--ui-panel)}
+.anat-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.anat-card.skel::before{background:#8fd3c4} .anat-card.inter::before{background:#b3a6ff} .anat-card.skin::before{background:#ffbf73}
+.anat-card .lab{font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ui-fg-3)}
+.anat-card h4{font-family:var(--serif);font-size:18px;font-weight:600;margin:5px 0 3px}
+.anat-card .ex{font-size:12.5px;color:var(--ui-fg-2);line-height:1.5}
+.anat-card .ex b{color:var(--ui-fg)}
+.anat-card .pillrow{margin-top:10px;display:flex;flex-wrap:wrap;gap:5px}
+.anat-card .src{display:inline-block;margin-top:10px;font-family:var(--mono);font-size:9.5px;padding:4px 9px;border-radius:999px;background:rgba(143,211,196,0.14);color:#8fd3c4}
+
+footer{padding:46px 0 60px;border-top:1px solid var(--ui-line-soft);margin-top:30px;color:var(--ui-fg-3);font-family:var(--mono);font-size:11px;letter-spacing:0.05em;text-align:center}
+footer .links{margin-top:12px;display:flex;gap:18px;justify-content:center;flex-wrap:wrap}
+footer a{color:var(--ui-fg-2);text-decoration:none}
+footer a:hover{color:var(--ui-accent)}
+
+@media (max-width:1080px){.three,.logo-lab{grid-template-columns:1fr}.layers{grid-template-columns:repeat(2,1fr)}.rec-grid{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="tb-brand"><span class="dot"></span>LUMEN<span class="x">X</span> · 合成实验室</div>
+    <span class="tb-tag">Skeleton × Skin Decoupling</span>
+    <nav class="tb-nav">
+      <a href="#skins">配色皮肤</a>
+      <a href="#workbench">单屏工作台</a>
+      <a href="#logo">Logo 适配</a>
+      <a href="#matrix">混搭矩阵</a>
+      <a href="#next">下一步</a>
+      <a href="../03-review-hub/index.html">← 返回评审中心</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Tasty Sam · 合成方案验证台</div>
+    <h1>不必二选一。把设计拆成<em>骨架</em>与<em>皮肤</em>，分层决策。</h1>
+    <p>你喜欢 Line B 的框架与交互，又担心它的 teal/amber 配色与蓝色 Logo 冲突。这其实是两个独立的问题——骨架（结构/布局/交互/动效）与皮肤（配色/字体/氛围）本就可以解耦。本实验室用<b style="color:var(--ui-fg)">同一套 Line B 骨架</b>，在最高价值的分镜工作台上并排呈现 <b style="color:var(--ui-fg)">3 套配色皮肤</b>，外加一条 Logo 适配实验，让你对着真实页面拍板。</p>
+    <div class="lead-q">关键洞察：下面三张卡片的 <b>HTML 结构与组件 CSS 完全相同</b>，差异只来自 <b>seed→semantic</b> 这一层 token 的替换。这正是「改一处主色 = 换一层皮肤」的工程证明——骨架不动，皮肤可随时切换甚至逐页混用。</div>
+
+    <div class="layers">
+      <div class="layer l1"><div class="ln">LAYER 01</div><h3>骨架</h3><div class="zh">IA · 布局 · 网格 · 组件解剖 · 间距</div><span class="verdict keep">✓ 采用 Line B</span></div>
+      <div class="layer l2"><div class="ln">LAYER 02</div><h3>交互</h3><div class="zh">模态 · 转场 · 展开 · 动效编排</div><span class="verdict keep">✓ 采用 Line B</span></div>
+      <div class="layer l3"><div class="ln">LAYER 03</div><h3>皮肤</h3><div class="zh">配色 · 字体 · 氛围（颗粒/光晕）</div><span class="verdict swap">⇄ 待你拍板</span></div>
+      <div class="layer l4"><div class="ln">LAYER 04</div><h3>品牌</h3><div class="zh">Logo · 字标 · slogan</div><span class="verdict swap">⇄ 适配实验</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ════════ SECTION 1 · THREE SKINS SIDE BY SIDE ════════ -->
+<section class="block" id="skins">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">Section 01 · 三套配色皮肤并排</div>
+      <h2>同一张「已选 Take」分镜卡，三种皮肤</h2>
+      <p>每张卡都是 Line B 的近无框浮起卡 + halation + 颗粒/光晕氛围层。注意结构一致、氛围一致，只有色彩语言不同。重点看：①主操作按钮的颜色 ②选中态 halation 的颜色 ③整体冷暖基调与 Logo 蓝的关系。</p>
+    </div>
+
+    <div class="three">
+
+      <!-- SKIN A · Brand-True -->
+      <div class="specimen" data-skin="brand-true">
+        <div class="atmo"></div><div class="grain"></div>
+        <div class="spec-label"><span class="nm">Brand-True</span><span class="tg">冷黑 · 品牌蓝/粉 · Logo 零改</span></div>
+        <div class="spec-body">
+          <article class="scard sel">
+            <div class="sc-top">
+              <div class="sc-badge"><div class="sc-no">01</div><div class="sc-cap">SHOT · <b>大特写</b> · 推镜</div></div>
+              <span class="badge star"><span class="led"></span>已选 Take</span>
+            </div>
+            <div class="sc-bodyrow">
+              <div class="sc-prev glow">
+                <img src="../../design/tasty-sam/assets/shot-01.png" alt="分镜渲染：雨夜霓虹侦探特写">
+                <span class="sc-chip">★ SELECTED</span><span class="sc-dur">0:04</span>
+              </div>
+              <div class="sc-edit">
+                <div class="sc-prompt">雨夜霓虹街头，侦探抬眼，雨水沿帽檐滑落，浅景深，电影级调色。</div>
+                <div class="sc-dlg"><div class="sp">侦探</div><div class="ln">"这座城市，从不下完一场干净的雨。"</div></div>
+                <div class="sc-tags"><span class="tag">大特写</span><span class="tag pri">缓慢推镜</span><span class="tag">4s</span></div>
+              </div>
+            </div>
+            <div class="sc-actions">
+              <div class="left"><button class="icob" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><button class="icob" title="历史"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button></div>
+              <div class="right"><div class="csel"><button class="cbtn">1</button><button class="cbtn on">2</button><button class="cbtn">4</button></div><button class="btn pri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>重新生成</button></div>
+            </div>
+            <div class="sc-panel">
+              <div class="ph"><span class="t">候选视频</span><span class="s">4 takes</span></div>
+              <div class="cgrid">
+                <div class="cand on"><img src="../../design/tasty-sam/assets/shot-01.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-02.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-03.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-05.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="skin-meta">
+          <div class="swatches">
+            <span class="sw-chip"><span class="d" style="background:#050508"></span>BG #050508</span>
+            <span class="sw-chip"><span class="d" style="background:#646cff"></span>主色 #646cff</span>
+            <span class="sw-chip"><span class="d" style="background:#ff0080"></span>选中 #ff0080</span>
+          </div>
+          <div class="state-row">
+            <span class="badge pend"><span class="led"></span>待生成</span><span class="badge proc"><span class="led"></span>生成中</span><span class="badge done"><span class="led"></span>已完成</span><span class="badge fail"><span class="led"></span>失败</span><span class="badge star"><span class="led"></span>已选</span>
+          </div>
+          <p class="skin-note"><b>主张：</b>Line B 骨架 + 现有品牌色原样移植。冷黑底、电蓝主操作、霓虹粉做选中 halation。<b>Logo 零成本适配</b>，品牌一致性最高。代价：丢掉了 Atelier 的暖调电影感，氛围偏冷硬。</p>
+        </div>
+      </div>
+
+      <!-- SKIN B · Warm Bridge -->
+      <div class="specimen" data-skin="warm-bridge">
+        <div class="atmo"></div><div class="grain"></div>
+        <div class="spec-label"><span class="nm">Warm Bridge</span><span class="tg">暖中性底 · 蓝主操作 · 仅选中借琥珀</span></div>
+        <div class="spec-body">
+          <article class="scard sel">
+            <div class="sc-top">
+              <div class="sc-badge"><div class="sc-no">01</div><div class="sc-cap">SHOT · <b>大特写</b> · 推镜</div></div>
+              <span class="badge star"><span class="led"></span>已选 Take</span>
+            </div>
+            <div class="sc-bodyrow">
+              <div class="sc-prev glow">
+                <img src="../../design/tasty-sam/assets/shot-01.png" alt="分镜渲染：雨夜霓虹侦探特写">
+                <span class="sc-chip">★ SELECTED</span><span class="sc-dur">0:04</span>
+              </div>
+              <div class="sc-edit">
+                <div class="sc-prompt">雨夜霓虹街头，侦探抬眼，雨水沿帽檐滑落，浅景深，电影级调色。</div>
+                <div class="sc-dlg"><div class="sp">侦探</div><div class="ln">"这座城市，从不下完一场干净的雨。"</div></div>
+                <div class="sc-tags"><span class="tag">大特写</span><span class="tag pri">缓慢推镜</span><span class="tag">4s</span></div>
+              </div>
+            </div>
+            <div class="sc-actions">
+              <div class="left"><button class="icob" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><button class="icob" title="历史"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button></div>
+              <div class="right"><div class="csel"><button class="cbtn">1</button><button class="cbtn on">2</button><button class="cbtn">4</button></div><button class="btn pri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>重新生成</button></div>
+            </div>
+            <div class="sc-panel">
+              <div class="ph"><span class="t">候选视频</span><span class="s">4 takes</span></div>
+              <div class="cgrid">
+                <div class="cand on"><img src="../../design/tasty-sam/assets/shot-01.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-02.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-03.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-05.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="skin-meta">
+          <div class="swatches">
+            <span class="sw-chip"><span class="d" style="background:#0a0a0d"></span>BG #0a0a0d</span>
+            <span class="sw-chip"><span class="d" style="background:#646cff"></span>主色 #646cff</span>
+            <span class="sw-chip"><span class="d" style="background:#ffa94d"></span>选中 #ffa94d</span>
+          </div>
+          <div class="state-row">
+            <span class="badge pend"><span class="led"></span>待生成</span><span class="badge proc"><span class="led"></span>生成中</span><span class="badge done"><span class="led"></span>已完成</span><span class="badge fail"><span class="led"></span>失败</span><span class="badge star"><span class="led"></span>已选</span>
+          </div>
+          <p class="skin-note"><b>推荐主线。</b>蓝色仍是主操作色（Logo 天然契合），只在<b>选中/精选 take</b> 借用 Atelier 的琥珀 halation——既保品牌、又拿到了电影级暖高光的「拍板感」。暖中性底比纯冷黑更接近暗房。冷暖反差恰好强调「这一条被选中了」。</p>
+        </div>
+      </div>
+
+      <!-- SKIN C · Full Atelier -->
+      <div class="specimen" data-skin="full-atelier">
+        <div class="atmo"></div><div class="grain"></div>
+        <div class="spec-label"><span class="nm">Full Atelier</span><span class="tg">暖石墨 · teal↔amber · Logo 焕新</span></div>
+        <div class="spec-body">
+          <article class="scard sel">
+            <div class="sc-top">
+              <div class="sc-badge"><div class="sc-no">01</div><div class="sc-cap">SHOT · <b>大特写</b> · 推镜</div></div>
+              <span class="badge star"><span class="led"></span>已选 Take</span>
+            </div>
+            <div class="sc-bodyrow">
+              <div class="sc-prev glow">
+                <img src="../../design/tasty-sam/assets/shot-01.png" alt="分镜渲染：雨夜霓虹侦探特写">
+                <span class="sc-chip">★ SELECTED</span><span class="sc-dur">0:04</span>
+              </div>
+              <div class="sc-edit">
+                <div class="sc-prompt">雨夜霓虹街头，侦探抬眼，雨水沿帽檐滑落，浅景深，电影级调色。</div>
+                <div class="sc-dlg"><div class="sp">侦探</div><div class="ln">"这座城市，从不下完一场干净的雨。"</div></div>
+                <div class="sc-tags"><span class="tag">大特写</span><span class="tag pri">缓慢推镜</span><span class="tag">4s</span></div>
+              </div>
+            </div>
+            <div class="sc-actions">
+              <div class="left"><button class="icob" title="复制"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><button class="icob" title="历史"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></button></div>
+              <div class="right"><div class="csel"><button class="cbtn">1</button><button class="cbtn on">2</button><button class="cbtn">4</button></div><button class="btn pri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>重新生成</button></div>
+            </div>
+            <div class="sc-panel">
+              <div class="ph"><span class="t">候选视频</span><span class="s">4 takes</span></div>
+              <div class="cgrid">
+                <div class="cand on"><img src="../../design/tasty-sam/assets/shot-01.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-02.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-03.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                <div class="cand"><img src="../../design/tasty-sam/assets/shot-05.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="skin-meta">
+          <div class="swatches">
+            <span class="sw-chip"><span class="d" style="background:#0c0b0e"></span>BG #0c0b0e</span>
+            <span class="sw-chip"><span class="d" style="background:#34d8c4"></span>主色 #34d8c4</span>
+            <span class="sw-chip"><span class="d" style="background:#ffa94d"></span>选中 #ffa94d</span>
+          </div>
+          <div class="state-row">
+            <span class="badge pend"><span class="led"></span>待生成</span><span class="badge proc"><span class="led"></span>生成中</span><span class="badge done"><span class="led"></span>已完成</span><span class="badge fail"><span class="led"></span>失败</span><span class="badge star"><span class="led"></span>已选</span>
+          </div>
+          <p class="skin-note"><b>最大胆。</b>完整的电影调色母语：teal 主操作 ↔ amber 高光，暖石墨底。氛围最电影、最像 craft studio。代价：<b>需要为 Logo 做配色焕新</b>（你已认可这一方向，见下方 Logo 实验）。品牌跨度最大，但差异化与记忆点也最强。</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ════════ SECTION 2 · FULL WORKBENCH SKIN SWITCH ════════ -->
+<section class="block" id="workbench">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">Section 02 · 单屏工作台 · 皮肤实时切换</div>
+      <h2>在真实工作台上切换皮肤</h2>
+      <p>下方是用<b style="color:var(--ui-fg)">真实 token 渲染</b>的完整分镜工作台（全局栏 + Pipeline 侧栏 + 头部 + 多态 ShotCard）。点按钮切换皮肤——同一段 DOM，只换 <code style="font-family:var(--mono);color:var(--ui-accent)">data-skin</code> 上的 token 作用域，主色 / 强调色 / 底色 / 字体 / 氛围全部随之改变。这次 Full Atelier 与前两套是真正不同的渲染，不再是叠色模拟。</p>
+    </div>
+    <div class="skin-tabs" role="tablist" aria-label="皮肤切换">
+      <button class="skin-tab active" data-k="brand-true" role="tab" aria-selected="true"><span class="sw"></span>Brand-True</button>
+      <button class="skin-tab" data-k="warm-bridge" role="tab" aria-selected="false"><span class="sw"></span>Warm Bridge</button>
+      <button class="skin-tab" data-k="full-atelier" role="tab" aria-selected="false"><span class="sw"></span>Full Atelier</button>
+    </div>
+
+    <div class="specimen wbspec" id="liveWb" data-skin="brand-true">
+      <div class="atmo"></div><div class="grain"></div>
+      <div class="wbshell">
+        <!-- global rail -->
+        <nav class="wb-rail" aria-label="全局导航">
+          <div class="bm">L</div>
+          <a class="ri on" title="工作区"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></a>
+          <a class="ri" title="资产库"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4M3 17l9 4 9-4"/></svg></a>
+          <a class="ri" title="Playground"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></a>
+          <div class="sp"></div>
+          <a class="ri" title="设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8M4.6 9a1.6 1.6 0 0 0-.3-1.8"/></svg></a>
+        </nav>
+        <!-- pipeline sidebar -->
+        <aside class="wb-sb">
+          <div class="hd"><div class="cr">霓虹追凶 / EP.01</div><div class="pj">雨夜街头</div><div class="mt">R2V · 12 SHOTS · 720P</div></div>
+          <nav class="nv" aria-label="制作步骤">
+            <div class="wb-st"><span class="n">01</span><span class="l">脚本</span><span class="dn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+            <div class="wb-st"><span class="n">02</span><span class="l">美术方向</span><span class="dn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+            <div class="wb-st"><span class="n">03</span><span class="l">Cast 角色</span><span class="dn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></span></div>
+            <div class="wb-st on"><span class="n">04</span><span class="l">分镜 R2V</span></div>
+            <div class="wb-st"><span class="n">05</span><span class="l">合成导出</span></div>
+          </nav>
+        </aside>
+        <!-- main workbench -->
+        <main class="wb-main">
+          <header class="wb-hd">
+            <div class="ti"><div class="eb">STEP <span class="n">04</span> · STORYBOARD R2V</div><div class="h1">分镜工作台</div></div>
+            <div class="ac">
+              <button class="btn soft tqb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>任务队列<span class="ct">2</span></button>
+              <button class="btn pri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>全部生成</button>
+            </div>
+          </header>
+          <div class="wb-scroll">
+            <!-- SHOT 1 starred -->
+            <article class="scard sel">
+              <div class="sc-top"><div class="sc-badge"><div class="sc-no">01</div><div class="sc-cap">SHOT · <b>大特写</b> · 推镜</div></div><span class="badge star"><span class="led"></span>已选 Take</span></div>
+              <div class="sc-bodyrow">
+                <div class="sc-prev glow"><img src="../../design/tasty-sam/assets/shot-01.png" alt="分镜 1"><span class="sc-chip">★ SELECTED</span><span class="sc-dur">0:04</span></div>
+                <div class="sc-edit">
+                  <div class="sc-prompt">雨夜霓虹街头，侦探抬眼，雨水沿帽檐滑落，浅景深，电影级调色。</div>
+                  <div class="sc-dlg"><div class="sp">侦探</div><div class="ln">"这座城市，从不下完一场干净的雨。"</div></div>
+                  <div class="sc-tags"><span class="tag">大特写</span><span class="tag pri">缓慢推镜</span><span class="tag">4s</span></div>
+                </div>
+              </div>
+              <div class="sc-actions">
+                <div class="left"><button class="icob"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+                <div class="right"><div class="csel"><button class="cbtn">1</button><button class="cbtn on">2</button><button class="cbtn">4</button></div><button class="btn pri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>重新生成</button></div>
+              </div>
+              <div class="sc-panel">
+                <div class="ph"><span class="t">候选视频</span><span class="s">4 takes</span></div>
+                <div class="cgrid">
+                  <div class="cand on"><img src="../../design/tasty-sam/assets/shot-01.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                  <div class="cand"><img src="../../design/tasty-sam/assets/shot-02.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                  <div class="cand"><img src="../../design/tasty-sam/assets/shot-03.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                  <div class="cand"><img src="../../design/tasty-sam/assets/shot-05.png" alt=""><span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg></span></div>
+                </div>
+              </div>
+            </article>
+            <!-- SHOT 2 processing -->
+            <article class="scard">
+              <div class="sc-top"><div class="sc-badge"><div class="sc-no">02</div><div class="sc-cap">SHOT · <b>中景</b> · 横移</div></div><span class="badge proc"><span class="led"></span>生成中</span></div>
+              <div class="sc-bodyrow">
+                <div class="sc-prev"><img src="../../design/tasty-sam/assets/shot-02.png" alt="" style="opacity:.3"><div class="wb-ov"><div style="text-align:center"><svg class="wb-ring" viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="14"/><circle class="fg" cx="18" cy="18" r="14"/></svg><div class="wb-pl">RENDERING · 62%</div></div></div><span class="sc-dur">0:05</span></div>
+                <div class="sc-edit">
+                  <div class="sc-prompt">侦探沿街快步前行，霓虹倒影在积水中破碎，镜头横移跟随，紧张氛围。</div>
+                  <div class="sc-tags"><span class="tag">中景</span><span class="tag pri">横移跟随</span><span class="tag">5s</span></div>
+                </div>
+              </div>
+              <div class="sc-actions"><div class="left"><button class="icob" disabled style="opacity:.3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div><div class="right"><button class="btn soft"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>取消</button></div></div>
+            </article>
+            <!-- SHOT 3 pending -->
+            <article class="scard">
+              <div class="sc-top"><div class="sc-badge"><div class="sc-no">03</div><div class="sc-cap">SHOT · <b>大远景</b> · 固定</div></div><span class="badge pend"><span class="led"></span>待生成</span></div>
+              <div class="sc-bodyrow">
+                <div class="sc-prev"><div class="wb-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="8.5" r="1.5"/></svg><span>AWAITING RENDER</span></div></div>
+                <div class="sc-edit">
+                  <div class="sc-prompt">俯瞰雨夜城市天际线，霓虹招牌如星河，建立镜头。</div>
+                  <div class="sc-tags"><span class="tag">大远景</span><span class="tag">4s</span></div>
+                </div>
+              </div>
+              <div class="sc-actions"><div class="left"><button class="icob"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div><div class="right"><div class="csel"><button class="cbtn on">1</button><button class="cbtn">2</button><button class="cbtn">4</button></div><button class="btn pri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>生成</button></div></div>
+            </article>
+          </div>
+          <div class="note"><span><b>当前皮肤：</b><span id="wbSkinName">Brand-True</span></span><span class="am">注意：主操作按钮、选中 take 的 halation、整体冷暖随皮肤改变</span></div>
+        </main>
+      </div>
+    </div>
+    <p style="font-family:var(--mono);font-size:10.5px;color:var(--ui-fg-3);margin-top:12px;letter-spacing:0.03em">实现：上面整块就是 <code style="font-family:var(--mono)">.specimen[data-skin]</code>，与 Section 01 卡片共用同一套 seed→semantic token。切皮肤 = 改一个属性，组件 CSS 一行不动。这正是落地时「换肤」的真实成本。</p>
+  </div>
+</section>
+
+<!-- ════════ SECTION 3 · LOGO LAB ════════ -->
+<section class="block" id="logo">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">Section 03 · Logo 适配实验</div>
+      <h2>现有 Logo 在三种底色下的表现</h2>
+      <p>核心问题：棱角莲花 Logo（白描边 + #646cff 水晶）与字标在不同皮肤底色下是否成立。左两套保留原蓝 Logo，最右套展示「配色焕新」的 teal 变体（此处用 CSS 滤镜快速验证方向，正式落地需重绘 SVG/PNG）。</p>
+    </div>
+    <div class="logo-lab">
+      <div class="logo-cell">
+        <div class="logo-stage bg-cold">
+          <div class="logo-set">
+            <img class="logo-img" src="logo-transparent.png" alt="LumenX 棱角莲花 Logo（冷黑底）">
+            <div class="wm">LUMEN<span class="x blue">X</span><span class="sub">RENDER NOISE INTO NARRATIVE</span></div>
+          </div>
+        </div>
+        <div class="logo-foot"><div class="h">Brand-True · 冷黑底 #050508</div><div class="v ok">✓ 原生契合 — 蓝水晶在冷黑上对比最锐利，零改动</div></div>
+      </div>
+      <div class="logo-cell">
+        <div class="logo-stage bg-warm">
+          <div class="logo-set">
+            <img class="logo-img" src="logo-transparent.png" alt="LumenX 棱角莲花 Logo（暖中性底）">
+            <div class="wm">LUMEN<span class="x blue">X</span><span class="sub">RENDER NOISE INTO NARRATIVE</span></div>
+          </div>
+        </div>
+        <div class="logo-foot"><div class="h">Warm Bridge · 暖中性底 #0a0a0d</div><div class="v ok">✓ 成立 — 暖底极轻微，蓝 Logo 依然清晰，无需改动</div></div>
+      </div>
+      <div class="logo-cell">
+        <div class="logo-stage bg-graphite">
+          <div class="logo-set">
+            <img class="logo-img tealize" src="logo-transparent.png" alt="LumenX Logo teal 焕新变体（暖石墨底）">
+            <div class="wm">LUMEN<span class="x teal">X</span><span class="sub">RENDER NOISE INTO NARRATIVE</span></div>
+          </div>
+        </div>
+        <div class="logo-foot"><div class="h">Full Atelier · 暖石墨底 #0c0b0e</div><div class="v warn">⇄ 需焕新 — 水晶改 teal、字标 X 改 teal，与新主色统一</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ SECTION 4 · MIX MATRIX ════════ -->
+<section class="block" id="matrix">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">Section 04 · 逐页混搭矩阵</div>
+      <h2>每个模块该用哪条线的什么</h2>
+      <p>你的诉求是「逐页混搭、不整套套用」。下表给出每个主要模块的建议：骨架/布局取自哪条线、交互动效取自哪条线、配色皮肤用哪套。这是一份可执行的混搭蓝图，而非二选一。</p>
+    </div>
+
+    <!-- ── Anatomy: what 骨架 / 交互 / 皮肤 actually mean ── -->
+    <div class="anat-intro" style="margin-bottom:22px">
+      <p style="font-size:13px;color:var(--ui-fg-2);line-height:1.6">先别看表 —— 下面这张图把<b style="color:var(--ui-fg)">同一张 ShotCard</b> 拆成三层，点按钮高亮，你就能一眼对上矩阵里「骨架 / 交互 / 配色皮肤」到底各指什么。三层互相独立：换皮肤不动骨架，换骨架不动交互。</p>
+    </div>
+
+    <div class="anat-wrap">
+      <div>
+        <div class="anat-toggle" role="tablist" aria-label="拆解图层">
+          <button class="anat-tg on" data-layer="skel" role="tab" aria-selected="true"><span class="d"></span>骨架</button>
+          <button class="anat-tg" data-layer="inter" role="tab" aria-selected="false"><span class="d"></span>交互</button>
+          <button class="anat-tg" data-layer="skin" role="tab" aria-selected="false"><span class="d"></span>皮肤</button>
+        </div>
+        <div class="anat-stage show-skel" id="anatStage">
+          <div class="specimen" data-skin="warm-bridge">
+            <article class="scard sel" style="margin:0">
+              <div class="sc-top"><div class="sc-badge"><div class="sc-no">01</div><div class="sc-cap">SHOT · <b>大特写</b> · 推镜</div></div><span class="badge star"><span class="led"></span>已选 Take</span></div>
+              <div class="sc-bodyrow">
+                <div class="sc-prev glow"><img src="../../design/tasty-sam/assets/shot-01.png" alt="分镜示例"><span class="sc-chip">★ SELECTED</span><span class="sc-dur">0:04</span></div>
+                <div class="sc-edit">
+                  <div class="sc-prompt">雨夜霓虹街头，侦探抬眼，雨水沿帽檐滑落，浅景深，电影级调色。</div>
+                  <div class="sc-tags"><span class="tag">大特写</span><span class="tag pri">缓慢推镜</span><span class="tag">4s</span></div>
+                </div>
+              </div>
+              <div class="sc-actions">
+                <div class="left"><button class="icob"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+                <div class="right"><div class="csel"><button class="cbtn">1</button><button class="cbtn on">2</button><button class="cbtn">4</button></div><button class="btn pri"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l14 9-14 9V3z"/></svg>重新生成</button></div>
+              </div>
+            </article>
+          </div>
+        </div>
+        <p style="font-family:var(--mono);font-size:10px;color:var(--ui-fg-3);margin-top:12px;letter-spacing:0.03em">提示：上方按钮切换高亮层；右侧三张卡解释每层的「具体是什么、由哪条线提供」。</p>
+      </div>
+
+      <div class="anat-legend">
+        <div class="anat-card skel">
+          <div class="lab">Layer 01 — Skeleton</div>
+          <h4>骨架 / 布局</h4>
+          <div class="ex">这张卡<b>有哪些区块、怎么排</b>：左侧 16:9 预览 + 右侧编辑区的两栏结构、徽标/状态/标签/操作条的位置、间距与圆角节奏。<b>与颜色无关</b> —— 换成任何配色，结构都不变。</div>
+          <div class="src">来源：Line B 骨架（近无框浮起卡 + 两栏）</div>
+        </div>
+        <div class="anat-card inter">
+          <div class="lab">Layer 02 — Interaction</div>
+          <h4>交互 / 动效</h4>
+          <div class="ex">卡片<b>怎么动、怎么响应</b>：悬停升起、候选面板弹簧展开、生成中的进度环、按钮按压反馈、模态背景模糊。<b>同样与颜色无关</b> —— 是「动的方式」，不是「什么颜色」。<i style="color:var(--ui-fg-3);font-style:normal">（把鼠标移到卡上试试升起效果）</i></div>
+          <div class="src" style="background:rgba(179,166,255,0.14);color:#b3a6ff">来源：Line B 交互（弹簧展开 + 悬停升起）</div>
+        </div>
+        <div class="anat-card skin">
+          <div class="lab">Layer 03 — Skin</div>
+          <h4>配色皮肤</h4>
+          <div class="ex">骨架与动效不变，<b>只换一层颜色/字体/氛围</b>：底色冷暖、主操作蓝 vs teal、选中 take 是否带琥珀 halation、是否上胶片颗粒。<b>这才是逐页真正会变的东西</b> —— 矩阵里每行的「配色皮肤」列指的就是它。</div>
+          <div class="src" style="background:rgba(255,191,115,0.14);color:#ffbf73">来源：Brand-True / Warm Bridge / Full Atelier 任选</div>
+        </div>
+      </div>
+    </div>
+
+    <p style="font-size:12.5px;color:var(--ui-fg-2);line-height:1.6;margin:26px 0 14px"><b style="color:var(--ui-fg)">读表方法：</b>骨架与交互几乎全程 Line B（你最认可的框架与动效），真正逐页变化的只有最后一列「配色皮肤」。所以下表可以这样读 —— <b style="color:#ffbf73">主要看「配色皮肤」列</b>，其余两列基本恒定。</p>
+
+    <table class="matrix">
+      <thead>
+        <tr><th style="width:18%">模块</th><th style="width:16%">骨架 / 布局</th><th style="width:16%">交互 / 动效</th><th style="width:14%">配色皮肤</th><th>理由</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="mod-zh">分镜工作台</span><span class="mod-en">STORYBOARD R2V</span></td>
+          <td><span class="pill skel">Line B 骨架</span></td>
+          <td><span class="pill inter">Line B 交互</span></td>
+          <td><span class="pill skin-b">Warm Bridge</span></td>
+          <td class="why">核心战场。近无框浮起卡 + halation 让选中 take 一眼可辨；蓝主操作保品牌，琥珀 halation 给「拍板感」。</td>
+        </tr>
+        <tr>
+          <td><span class="mod-zh">工作区</span><span class="mod-en">WORKSPACE</span></td>
+          <td><span class="pill skel">Line B 骨架</span></td>
+          <td><span class="pill inter">Line B 交互</span></td>
+          <td><span class="pill skin-a">Brand-True</span></td>
+          <td class="why">门面页，品牌一致性优先。画廊式留白 + 衬线标题提气质，但配色守住品牌蓝，第一印象不跑偏。</td>
+        </tr>
+        <tr>
+          <td><span class="mod-zh">Pipeline 步骤</span><span class="mod-en">SCRIPT / ART / CAST / ASSEMBLY</span></td>
+          <td><span class="pill skel">Line B 骨架</span></td>
+          <td><span class="pill skin-a">Line A 克制</span></td>
+          <td><span class="pill skin-b">Warm Bridge</span></td>
+          <td class="why">表单密集步骤借 Line A 的克制 chrome（更少装饰、信息优先），但容器与间距用 Line B 的呼吸感。</td>
+        </tr>
+        <tr>
+          <td><span class="mod-zh">资产库</span><span class="mod-en">LIBRARY</span></td>
+          <td><span class="pill skel">Line B 骨架</span></td>
+          <td><span class="pill inter">Line B 交互</span></td>
+          <td><span class="pill skin-b">Warm Bridge</span></td>
+          <td class="why">媒体网格是主角。Line B 的浮起卡 + 悬停升起最适合展陈，暖底让缩略图更「发光」。</td>
+        </tr>
+        <tr>
+          <td><span class="mod-zh">设置</span><span class="mod-en">SETTINGS</span></td>
+          <td><span class="pill skin-a">Line A 骨架</span></td>
+          <td><span class="pill skin-a">Line A 克制</span></td>
+          <td><span class="pill skin-a">Brand-True</span></td>
+          <td class="why">功能性页面，效率优先。沿用现有风格的克制布局即可，无需电影氛围，降低认知负担。</td>
+        </tr>
+        <tr>
+          <td><span class="mod-zh">Playground</span><span class="mod-en">PLAYGROUND</span></td>
+          <td><span class="pill skel">Line B 骨架</span></td>
+          <td><span class="pill inter">Line B 交互</span></td>
+          <td><span class="pill skin-c" style="background:rgba(52,216,196,0.14);color:#5fe0cd">Full Atelier</span></td>
+          <td class="why">独立探索台，可大胆。这里是展示「创作魔法」的地方，完整 teal↔amber 最能营造 craft studio 氛围。</td>
+        </tr>
+        <tr>
+          <td><span class="mod-zh">模态 / Lightbox</span><span class="mod-en">MODALS</span></td>
+          <td><span class="pill inter">Line B 交互</span></td>
+          <td><span class="pill inter">Line B 交互</span></td>
+          <td><span class="pill skin-b">随父页</span></td>
+          <td class="why">你特别欣赏的部分。Line B 的弹簧展开 + 背景模糊 + 内容居中对比，全局统一采用，配色继承所在页面。</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-family:var(--mono);font-size:10.5px;color:var(--ui-fg-3);margin-top:14px;letter-spacing:0.03em">说明：以上为建议初稿，每一格都可在确认主线皮肤后逐页微调。骨架与交互几乎全程 Line B；真正逐页变化的只有「配色皮肤」与少数克制度取舍。</p>
+  </div>
+</section>
+
+<!-- ════════ SECTION 5 · RECOMMENDATION ════════ -->
+<section class="block" id="next">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">Section 05 · 建议与下一步</div>
+      <h2>我的推荐：Line B 骨架 + Warm Bridge 主皮肤</h2>
+      <p>综合品牌延续性、落地成本与差异化，给出一条主线方案和一条进阶方案，供你拍板。</p>
+    </div>
+
+    <div class="rec-grid">
+      <div class="rec">
+        <div class="num">OPTION 01 · 推荐主线</div>
+        <h3>Warm Bridge — 蓝为骨，琥珀为魂</h3>
+        <ul>
+          <li>全站采用 Line B 骨架 + 交互（你最认可的框架与动效）。</li>
+          <li>主操作、链接、active 态保留品牌蓝 #646cff —— Logo 零改动，品牌零风险。</li>
+          <li>仅「选中 take / 精选 / 收藏」借用琥珀 halation，制造电影级高光「拍板感」。</li>
+          <li>底色从纯冷黑微调到暖中性 #0a0a0d，靠近暗房质感而不惊扰品牌。</li>
+          <li>落地最快：只需在现有 token 上加一层 Line B 语义映射 + 一个琥珀强调色。</li>
+        </ul>
+      </div>
+      <div class="rec warn">
+        <div class="num">OPTION 02 · 进阶（你已认可焕新）</div>
+        <h3>Full Atelier — 完整电影调色母语</h3>
+        <ul>
+          <li>teal↔amber 互补色 + 暖石墨底，氛围与差异化拉满。</li>
+          <li>需为 Logo 做配色焕新：水晶与字标 X 改 teal（见 Section 03 方向验证）。</li>
+          <li>最能让产品「不像控制台、像创作工坊」，记忆点最强。</li>
+          <li>建议路径：先上 Warm Bridge 验证用户接受度，再按数据决定是否推进到 Full Atelier。</li>
+          <li>风险：品牌跨度大，需同步更新 Logo / 启动页 / 营销物料。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="k">Proposed Next Step</div>
+      <h3>用 Warm Bridge 出一套「可落地」的核心三页定稿</h3>
+      <p>如果你认可 Warm Bridge 作为主线，我建议下一步把它从「实验卡片」推进到「定稿页面」：在 tasty-sam 下新建 <code style="font-family:var(--mono);color:var(--ui-accent)">line-c-bridge/</code>，输出工作台 / 工作区 / 资产库三张核心页的完整定稿 + 一份可直接喂给前端的 tokens.css（seed→semantic→component 三层）。其余页面按 Section 04 矩阵补齐。</p>
+      <div class="steps">
+        <div class="step"><div class="n">01</div><div class="t">确认主线皮肤</div><div class="d">你拍板 Warm Bridge / Full Atelier / 其他微调</div></div>
+        <div class="step"><div class="n">02</div><div class="t">产出 line-c tokens.css</div><div class="d">三层 token + 琥珀强调色映射，可直接落前端</div></div>
+        <div class="step"><div class="n">03</div><div class="t">核心三页定稿</div><div class="d">工作台 / 工作区 / 资产库高保真，真实媒体</div></div>
+        <div class="step"><div class="n">04</div><div class="t">按矩阵补全</div><div class="d">其余模块依 Section 04 逐页落皮肤</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    LUMENX STUDIO · 合成实验室 · by Tasty Sam — 骨架与皮肤分层决策 · 零侵入静态原型
+    <div class="links">
+      <a href="#skins">配色皮肤</a><a href="#workbench">单屏工作台</a><a href="#logo">Logo 适配</a><a href="#matrix">混搭矩阵</a>
+      <a href="../../design/tasty-sam/line-b-atelier/storyboard-r2v.html">Line B 原版工作台 ↗</a>
+      <a href="../03-review-hub/index.html">评审中心 ↗</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // Skin switch for the inline workbench — true token re-theming.
+  // Same DOM, only #liveWb[data-skin] changes; seed→semantic tokens cascade.
+  var live = document.getElementById('liveWb');
+  var nameEl = document.getElementById('wbSkinName');
+  var NAMES = {'brand-true':'Brand-True','warm-bridge':'Warm Bridge','full-atelier':'Full Atelier'};
+  var tabs = document.querySelectorAll('.skin-tab');
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      tabs.forEach(function(x){x.classList.remove('active');x.setAttribute('aria-selected','false');});
+      t.classList.add('active'); t.setAttribute('aria-selected','true');
+      var k = t.dataset.k;
+      if(live){ live.setAttribute('data-skin', k); }
+      if(nameEl){ nameEl.textContent = NAMES[k] || k; }
+    });
+  });
+
+  // Anatomy diagram layer toggle — reveal 骨架 / 交互 / 皮肤 overlays.
+  var anatStage = document.getElementById('anatStage');
+  var anatTgs = document.querySelectorAll('.anat-tg');
+  anatTgs.forEach(function(g){
+    g.addEventListener('click', function(){
+      anatTgs.forEach(function(x){x.classList.remove('on');x.setAttribute('aria-selected','false');});
+      g.classList.add('on'); g.setAttribute('aria-selected','true');
+      if(anatStage){
+        anatStage.classList.remove('show-skel','show-inter','show-skin');
+        anatStage.classList.add('show-' + g.dataset.layer);
+      }
+    });
+  });
+
+  // Smooth-scroll active state for top nav (lightweight)
+  var navLinks = document.querySelectorAll('.tb-nav a[href^="#"]');
+  navLinks.forEach(function(a){
+    a.addEventListener('click', function(e){
+      var id = a.getAttribute('href').slice(1);
+      var el = document.getElementById(id);
+      if(el){ e.preventDefault(); el.scrollIntoView({behavior:'smooth',block:'start'}); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

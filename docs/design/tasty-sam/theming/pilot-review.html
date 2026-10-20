@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LumenX · Atelier Pilot Review — Settings + LumenXBranding (Before / After)</title>
+<style>
+  :root {
+    --bg: #0b0a0e;
+    --bg-elev: #131119;
+    --bg-card: #181621;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --fg: #ecebf0;
+    --fg-muted: #9b97a8;
+    --fg-dim: #6f6c7c;
+    --accent: #ffa94d;     /* atelier amber */
+    --accent-2: #34d8c4;   /* atelier teal */
+    --primary: #646cff;
+    --pink: #ff0080;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --diff-bg: rgba(255,169,77,0.08);
+    --diff-bd: rgba(255,169,77,0.35);
+    --same-bg: rgba(74,222,128,0.06);
+    --same-bd: rgba(74,222,128,0.25);
+    --font-display: "Fraunces", "Times New Roman", serif;
+    --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font-family: var(--font-sans); font-size: 14px; line-height: 1.55; }
+  body { background: radial-gradient(1200px 600px at 20% -10%, rgba(255,169,77,0.05), transparent 60%), radial-gradient(900px 500px at 95% 110%, rgba(52,216,196,0.04), transparent 60%), var(--bg); min-height: 100vh; }
+
+  .container { max-width: 1480px; margin: 0 auto; padding: 32px 28px 80px; position: relative; z-index: 1; }
+  header.page { border-bottom: 1px solid var(--border); padding-bottom: 24px; margin-bottom: 32px; }
+  h1.page-title { font-family: var(--font-display); font-weight: 600; font-size: 38px; letter-spacing: -0.02em; margin: 0 0 6px; }
+  h1 .accent { color: var(--accent); font-style: italic; }
+  .subtitle { color: var(--fg-muted); font-size: 13px; max-width: 920px; }
+  .meta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-dim); }
+  .meta span b { color: var(--fg-muted); font-weight: 500; }
+  .meta .tag { padding: 2px 8px; border: 1px solid var(--border); border-radius: 4px; }
+  .meta .tag.before { color: #9b97a8; }
+  .meta .tag.after { color: var(--accent); border-color: var(--diff-bd); }
+
+  nav.toc { display: flex; gap: 8px; flex-wrap: wrap; margin: 20px 0 8px; }
+  nav.toc a { font-family: var(--font-mono); font-size: 11px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; color: var(--fg-muted); text-decoration: none; }
+  nav.toc a:hover { color: var(--accent); border-color: var(--diff-bd); }
+
+  section.module { margin: 56px 0 0; }
+  h2.module-title { font-family: var(--font-display); font-weight: 600; font-size: 24px; letter-spacing: -0.01em; margin: 0 0 4px; }
+  h2 .num { color: var(--accent); font-family: var(--font-mono); font-size: 14px; margin-right: 10px; letter-spacing: 0.04em; }
+  .module-sub { color: var(--fg-muted); font-size: 12px; margin-bottom: 18px; }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+  .pair .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; }
+  .card-header .label { font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+  .card-header.before .label { color: var(--fg-muted); }
+  .card-header.after .label { color: var(--accent); }
+  .card-header .src { color: var(--fg-dim); font-size: 10px; }
+  .card-body img { display: block; width: 100%; height: auto; background: #000; }
+  .theme-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 14px; }
+  .theme-row figure { margin: 0; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .theme-row figcaption { padding: 8px 10px; font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .theme-row figcaption .badge { font-size: 9px; padding: 1px 6px; border-radius: 3px; }
+  .theme-row figcaption .badge.signature { background: var(--diff-bg); color: var(--accent); border: 1px solid var(--diff-bd); }
+  .theme-row figcaption .badge.unchanged { background: var(--same-bg); color: var(--ok); border: 1px solid var(--same-bd); }
+  .theme-row img { display: block; width: 100%; height: auto; background: #000; }
+
+  .compare-strip { margin-top: 20px; }
+  .compare-strip h3 { font-size: 13px; font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--fg-muted); margin: 0 0 8px; font-weight: 500; }
+  .compare-strip .row { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 12px; align-items: stretch; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .compare-strip .row:last-child { border-bottom: 0; }
+  .compare-strip .row .theme { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
+  .compare-strip .row .theme .name { color: var(--fg); font-weight: 600; }
+  .compare-strip .row .theme .badge { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 3px; margin-right: auto; }
+  .compare-strip .row .shot { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .compare-strip .row .shot img { display: block; width: 100%; height: auto; background: #000; }
+  .compare-strip .row .shot .cap { font-family: var(--font-mono); font-size: 10px; color: var(--fg-dim); padding: 6px 10px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; }
+  .compare-strip .row .shot .cap.before { color: var(--fg-muted); }
+  .compare-strip .row .shot .cap.after { color: var(--accent); }
+
+  .feature-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12.5px; }
+  .feature-table th, .feature-table td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .feature-table thead th { background: var(--bg-elev); color: var(--fg-muted); font-weight: 500; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .feature-table tbody tr.diff { background: var(--diff-bg); }
+  .feature-table tbody tr.same td.delta { color: var(--ok); }
+  .feature-table td.delta { font-family: var(--font-mono); font-size: 11px; white-space: nowrap; }
+  .feature-table td.field { font-weight: 500; }
+  .feature-table td.before-val, .feature-table td.after-val { color: var(--fg-muted); font-family: var(--font-mono); font-size: 11px; }
+  .feature-table td.after-val.changed { color: var(--accent); }
+
+  .analysis { margin-top: 22px; background: var(--bg-elev); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 16px 18px; }
+  .analysis h3 { margin: 0 0 8px; font-size: 13px; font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  .analysis ul { margin: 0; padding-left: 20px; color: var(--fg); }
+  .analysis ul li { margin: 4px 0; }
+  .analysis .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 16px; margin-top: 10px; font-size: 12px; }
+  .analysis .kv b { color: var(--fg-muted); font-weight: 500; font-family: var(--font-mono); font-size: 11px; }
+
+  .legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 12px 14px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 6px; font-size: 11.5px; font-family: var(--font-mono); margin-top: 14px; }
+  .legend .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 4px; }
+  .legend .pill.diff { background: var(--diff-bg); color: var(--accent); border: 1px solid var(--diff-bd); }
+  .legend .pill.same { background: var(--same-bg); color: var(--ok); border: 1px solid var(--same-bd); }
+  .legend .pill.untouched { background: rgba(255,255,255,0.04); color: var(--fg-dim); border: 1px solid var(--border); }
+
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 24px 0 8px; }
+  .summary-grid .stat { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .summary-grid .stat .num { font-family: var(--font-display); font-size: 28px; color: var(--accent); font-weight: 600; letter-spacing: -0.02em; }
+  .summary-grid .stat .lbl { color: var(--fg-muted); font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 2px; }
+  .summary-grid .stat.muted .num { color: var(--ok); }
+
+  .ftr { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 11px; font-family: var(--font-mono); color: var(--fg-dim); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+
+  @media (max-width: 1100px) {
+    .pair { grid-template-columns: 1fr; }
+    .theme-row { grid-template-columns: repeat(2, 1fr); }
+    .compare-strip .row { grid-template-columns: 90px 1fr; }
+    .compare-strip .row .shot.before { grid-column: 2 / 3; }
+    .compare-strip .row .shot.after { grid-column: 2 / 3; }
+    .summary-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header class="page">
+  <h1 class="page-title">Atelier Pilot <span class="accent">Review</span> — Settings · LumenXBranding</h1>
+  <p class="subtitle">五主题 × 双页面 × Before/After 对照评审。Before = <code>main</code> 分支（<code>feat/multi-theme-system</code>，未实施 atelier 试点），After = worktree <code>feat/atelier-pilot-20260611-161001</code>（已合入 atelier-card / atelier-page-bloom / atelier-page-grain / atelier-display 四条 opt-in 协议）。试点目标：在不破坏其它 3 套主题的前提下，仅对 <code>atelier-dark</code> 与 <code>atelier-light</code> 引入 Line B「Luminous Atelier」签名层。</p>
+  <div class="meta">
+    <span class="tag before">BEFORE · localhost:3008 · main · feat/multi-theme-system</span>
+    <span class="tag after">AFTER · localhost:3009 · worktree · feat/atelier-pilot-20260611-161001 · e7aaf1d</span>
+    <span><b>Pilot 范围:</b> SettingsPage.tsx · LumenXBranding.tsx · page.tsx · globals.css</span>
+    <span><b>变更行数:</b> +108 / −8 (4 files)</span>
+  </div>
+
+  <div class="legend">
+    <span class="pill diff">● 触发签名 / 视觉变化 (atelier-dark · atelier-light)</span>
+    <span class="pill same">● 未受影响 / 像素对齐 (bridge-dark · brand-dark · brand-light)</span>
+    <span class="pill untouched">○ 功能点未改动</span>
+  </div>
+
+  <div class="summary-grid">
+    <div class="stat"><div class="num">2 / 5</div><div class="lbl">主题触发 atelier 签名</div></div>
+    <div class="stat muted"><div class="num">3 / 5</div><div class="lbl">主题逐像素未改动</div></div>
+    <div class="stat muted"><div class="num">0</div><div class="lbl">功能点增 / 删 / 改</div></div>
+    <div class="stat"><div class="num">4</div><div class="lbl">opt-in CSS 协议 utilities</div></div>
+  </div>
+
+  <nav class="toc">
+    <a href="#scope">协议总览</a>
+    <a href="#m-settings">Settings 全页对照</a>
+    <a href="#m0">§0 外观</a>
+    <a href="#m1">§1 API 配置</a>
+    <a href="#m2">§2 默认模型</a>
+    <a href="#m3">§3 默认 Prompt</a>
+    <a href="#m-branding">LumenXBranding</a>
+    <a href="#m-empty">Workspace 空状态</a>
+    <a href="#diff-matrix">功能点差异矩阵</a>
+    <a href="#risk">风险与遗留</a>
+  </nav>
+</header>
+
+<!-- ========== 协议总览 ========== -->
+<section class="module" id="scope">
+  <h2 class="module-title"><span class="num">§</span>Opt-in 协议 — 4 条 utility，仅在 atelier-* 下激活</h2>
+  <div class="module-sub">全部以 <code>html.atelier-dark</code> / <code>html.atelier-light</code> 作为选择器前缀；在其它 3 套主题下保持 <code>display:none</code> 或继承默认值，确保字节级回退。</div>
+
+  <table class="feature-table">
+    <thead>
+      <tr><th style="width:200px">Utility</th><th>作用</th><th>默认</th><th>atelier-dark</th><th>atelier-light</th></tr>
+    </thead>
+    <tbody>
+      <tr class="diff">
+        <td class="field"><code>.atelier-card</code></td>
+        <td>无框漂浮卡片：去掉 1px 边框、改用 halation 光晕 + 内白线 + 软阴影</td>
+        <td class="before-val">透传 glass-panel 原边框/阴影</td>
+        <td class="after-val changed">halation + 内白线(0.025) + 22/48 暗阴影</td>
+        <td class="after-val changed">halation + 内白线(0.6) + 18/40 暖阴影</td>
+      </tr>
+      <tr class="diff">
+        <td class="field"><code>.atelier-page-bloom</code></td>
+        <td>页面级双角光晕（fixed，pointer-events:none，z:0）</td>
+        <td class="before-val">display:none</td>
+        <td class="after-val changed">--bloom（teal + amber 双角）</td>
+        <td class="after-val changed">--bloom（浅暖双角）</td>
+      </tr>
+      <tr class="diff">
+        <td class="field"><code>.atelier-page-grain</code></td>
+        <td>页面级胶片颗粒（SVG turbulence，fixed，z:1，mix-blend）</td>
+        <td class="before-val">display:none</td>
+        <td class="after-val changed">opacity 0.05 / overlay 混合</td>
+        <td class="after-val changed">opacity 0.025 / multiply 混合</td>
+      </tr>
+      <tr class="diff">
+        <td class="field"><code>.atelier-display</code></td>
+        <td>编辑性衬线字体 + ss01/ss02 字形 + 负字距</td>
+        <td class="before-val">继承默认 sans</td>
+        <td class="after-val changed">Fraunces + −0.015em</td>
+        <td class="after-val changed">Fraunces + −0.015em</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ========== Settings 全页对照 ========== -->
+<section class="module" id="m-settings">
+  <h2 class="module-title"><span class="num">PAGE</span>Settings 全页 · 5 主题对照</h2>
+  <div class="module-sub">同一 URL <code>/#/settings</code>、同一 viewport、同一 localStorage 主题切换；下文每行 = 一个主题，左 = Before（3008），右 = After（3009）。</div>
+
+  <div class="compare-strip">
+    <div class="row">
+      <div class="theme"><span class="name">atelier-dark</span><span class="badge" style="background:var(--diff-bg);color:var(--accent);border:1px solid var(--diff-bd)">★ 默认主题 · 签名触发</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/settings-atelier-dark.png" alt="settings atelier-dark before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/settings-atelier-dark.png" alt="settings atelier-dark after" loading="lazy"/></div>
+    </div>
+    <div class="row">
+      <div class="theme"><span class="name">atelier-light</span><span class="badge" style="background:var(--diff-bg);color:var(--accent);border:1px solid var(--diff-bd)">签名触发</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/settings-atelier-light.png" alt="settings atelier-light before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/settings-atelier-light.png" alt="settings atelier-light after" loading="lazy"/></div>
+    </div>
+    <div class="row">
+      <div class="theme"><span class="name">bridge-dark</span><span class="badge" style="background:var(--same-bg);color:var(--ok);border:1px solid var(--same-bd)">未变 · 字节对齐</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/settings-bridge-dark.png" alt="settings bridge-dark before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/settings-bridge-dark.png" alt="settings bridge-dark after" loading="lazy"/></div>
+    </div>
+    <div class="row">
+      <div class="theme"><span class="name">brand-dark</span><span class="badge" style="background:var(--same-bg);color:var(--ok);border:1px solid var(--same-bd)">未变 · 字节对齐</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/settings-brand-dark.png" alt="settings brand-dark before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/settings-brand-dark.png" alt="settings brand-dark after" loading="lazy"/></div>
+    </div>
+    <div class="row">
+      <div class="theme"><span class="name">brand-light</span><span class="badge" style="background:var(--same-bg);color:var(--ok);border:1px solid var(--same-bd)">未变 · 字节对齐</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/settings-brand-light.png" alt="settings brand-light before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/settings-brand-light.png" alt="settings brand-light after" loading="lazy"/></div>
+    </div>
+  </div>
+
+  <div class="analysis">
+    <h3>对比观察 · Settings 全页</h3>
+    <ul>
+      <li><b>视觉层：</b>atelier-dark / atelier-light 两图在背景对角出现 amber + teal 光晕（bloom）、整页叠加颗粒（grain）；4 个 section 卡片由 1px 实边框 → 无框漂浮 + halation 光晕；H1「设置」改为 Fraunces 衬线 + 负字距。</li>
+      <li><b>功能层：</b>无任何按钮 / 输入 / 表单 / 配置项被添加、删除、重命名、改语义。所有 onClick / onChange / 状态机均未触达。</li>
+      <li><b>其它 3 套主题：</b>bridge-dark / brand-dark / brand-light 在 Before/After 之间逐像素一致（utility 全部命中 display:none / 选择器不匹配）。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ========== §0 Appearance ========== -->
+<section class="module" id="m0">
+  <h2 class="module-title"><span class="num">§0</span>Appearance — 外观（语言 + 主题预设）</h2>
+  <div class="module-sub">该模块本身负责切换 5 套预设主题；其 UI 完全由 SettingsPage.tsx 承载，会受 <code>.atelier-card</code> + H1 <code>.atelier-display</code> 影响。</div>
+
+  <table class="feature-table">
+    <thead><tr><th style="width:32%">功能点</th><th>Before（main）</th><th>After（pilot）</th><th style="width:14%">Delta</th></tr></thead>
+    <tbody>
+      <tr class="same"><td class="field">语言切换（zh / en）</td><td class="before-val">2 个 toggle 按钮</td><td class="after-val">2 个 toggle 按钮</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">主题预设卡片（5 个）</td><td class="before-val">atelier-dark★ / bridge-dark / brand-dark / atelier-light / brand-light，含 base/primary/accent 三色块</td><td class="after-val">同上 · 卡片 props 未改</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">默认选中</td><td class="before-val">atelier-dark</td><td class="after-val">atelier-dark</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="diff"><td class="field">外层 section 卡片样式</td><td class="before-val">.glass-panel（1px 边框 + 模糊）</td><td class="after-val changed">+ .atelier-card（仅 atelier-* 触发：去边框、halation、内白线）</td><td class="delta">VISUAL</td></tr>
+      <tr class="diff"><td class="field">页面 H1「设置」字体</td><td class="before-val">font-display = Space Grotesk</td><td class="after-val changed">+ .atelier-display → Fraunces（仅 atelier-*）</td><td class="delta">VISUAL</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ========== §1 API ========== -->
+<section class="module" id="m1">
+  <h2 class="module-title"><span class="num">§1</span>API Configuration — API 配置</h2>
+  <div class="module-sub">最重的配置块。Before/After 在功能点上完全相同；仅外层 section 卡片接入 <code>.atelier-card</code>。</div>
+
+  <table class="feature-table">
+    <thead><tr><th style="width:32%">功能点</th><th>Before（main）</th><th>After（pilot）</th><th style="width:14%">Delta</th></tr></thead>
+    <tbody>
+      <tr class="same"><td class="field">DashScope API Key</td><td class="before-val">type=password, single-line</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">阿里云 Access Key ID</td><td class="before-val">text input</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">阿里云 Access Key Secret</td><td class="before-val">password input</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">OSS Mirror（bucket / endpoint / base path）</td><td class="before-val">3 字段子块</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">Kling Provider（dashscope / vendor）</td><td class="before-val">radio + access/secret 双字段（vendor 模式）</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">Vidu Provider（dashscope / vendor）</td><td class="before-val">radio + API key</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">MuleRun / MuleRouter 一键登录 + 手动 CLI 3 步</td><td class="before-val">按钮 + 折叠步骤</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">Advanced API Endpoints（4 base URL）</td><td class="before-val">DashScope / Kling / Vidu / MuleRouter</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">「保存配置」按钮 + Toast</td><td class="before-val">.primary CTA</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="diff"><td class="field">外层 section 卡片</td><td class="before-val">.glass-panel</td><td class="after-val changed">+ .atelier-card</td><td class="delta">VISUAL</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ========== §2 Default Models ========== -->
+<section class="module" id="m2">
+  <h2 class="module-title"><span class="num">§2</span>Default Model Settings — 默认模型</h2>
+  <table class="feature-table">
+    <thead><tr><th style="width:32%">功能点</th><th>Before（main）</th><th>After（pilot）</th><th style="width:14%">Delta</th></tr></thead>
+    <tbody>
+      <tr class="same"><td class="field">T2I 默认模型 grid</td><td class="before-val">model card 选择器</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">Character 默认宽高比</td><td class="before-val">aspect ratio toggle</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">Scene 默认宽高比</td><td class="before-val">aspect ratio toggle</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">Prop 默认宽高比</td><td class="before-val">aspect ratio toggle</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">Storyboard i2i 默认模型 + 比例</td><td class="before-val">model + ratio</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">Motion i2v 默认模型</td><td class="before-val">model select</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">R2V 默认模型</td><td class="before-val">model select</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">「保存默认」按钮</td><td class="before-val">.primary CTA</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="diff"><td class="field">外层 section 卡片</td><td class="before-val">.glass-panel</td><td class="after-val changed">+ .atelier-card</td><td class="delta">VISUAL</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ========== §3 Default Prompt ========== -->
+<section class="module" id="m3">
+  <h2 class="module-title"><span class="num">§3</span>Default Prompt Config — 默认 Prompt</h2>
+  <table class="feature-table">
+    <thead><tr><th style="width:32%">功能点</th><th>Before（main）</th><th>After（pilot）</th><th style="width:14%">Delta</th></tr></thead>
+    <tbody>
+      <tr class="same"><td class="field">storyboard_polish textarea</td><td class="before-val">多行编辑 + reset</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">video_polish textarea</td><td class="before-val">多行编辑 + reset</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">r2v_polish textarea</td><td class="before-val">多行编辑 + reset</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">「保存默认」按钮</td><td class="before-val">.primary CTA</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="diff"><td class="field">外层 section 卡片</td><td class="before-val">.glass-panel</td><td class="after-val changed">+ .atelier-card</td><td class="delta">VISUAL</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ========== LumenXBranding ========== -->
+<section class="module" id="m-branding">
+  <h2 class="module-title"><span class="num">CMP</span>LumenXBranding — 左侧栏 Logo + Slogan</h2>
+  <div class="module-sub">Workspace 首页（<code>/</code>）左下角组件，包含 5 主题 logo 映射 + slogan「Render Noise into Narrative」。下方截图取自空状态首页，重点观察左下 logo 区。</div>
+
+  <div class="compare-strip">
+    <div class="row">
+      <div class="theme"><span class="name">atelier-dark</span><span class="badge" style="background:var(--diff-bg);color:var(--accent);border:1px solid var(--diff-bd)">签名触发</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/home-atelier-dark.png" alt="home atelier-dark before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/home-atelier-dark.png" alt="home atelier-dark after" loading="lazy"/></div>
+    </div>
+    <div class="row">
+      <div class="theme"><span class="name">atelier-light</span><span class="badge" style="background:var(--diff-bg);color:var(--accent);border:1px solid var(--diff-bd)">签名触发</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/home-atelier-light.png" alt="home atelier-light before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/home-atelier-light.png" alt="home atelier-light after" loading="lazy"/></div>
+    </div>
+    <div class="row">
+      <div class="theme"><span class="name">bridge-dark</span><span class="badge" style="background:var(--same-bg);color:var(--ok);border:1px solid var(--same-bd)">未变</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/home-bridge-dark.png" alt="home bridge-dark before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/home-bridge-dark.png" alt="home bridge-dark after" loading="lazy"/></div>
+    </div>
+    <div class="row">
+      <div class="theme"><span class="name">brand-dark</span><span class="badge" style="background:var(--same-bg);color:var(--ok);border:1px solid var(--same-bd)">未变</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/home-brand-dark.png" alt="home brand-dark before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/home-brand-dark.png" alt="home brand-dark after" loading="lazy"/></div>
+    </div>
+    <div class="row">
+      <div class="theme"><span class="name">brand-light</span><span class="badge" style="background:var(--same-bg);color:var(--ok);border:1px solid var(--same-bd)">未变</span></div>
+      <div class="shot before"><div class="cap before">BEFORE · main</div><img src="./review-assets/before/home-brand-light.png" alt="home brand-light before" loading="lazy"/></div>
+      <div class="shot after"><div class="cap after">AFTER · pilot</div><img src="./review-assets/after/home-brand-light.png" alt="home brand-light after" loading="lazy"/></div>
+    </div>
+  </div>
+
+  <table class="feature-table">
+    <thead><tr><th style="width:32%">功能点</th><th>Before（main）</th><th>After（pilot）</th><th style="width:14%">Delta</th></tr></thead>
+    <tbody>
+      <tr class="same"><td class="field">LOGO_SRC 主题映射</td><td class="before-val">atelier-dark/bridge-dark/brand-dark→logo-dark.png · atelier-light→logo-light-teal.png · brand-light→logo-light.png</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">atelier-dark hue-rotate filter</td><td class="before-val">hue-rotate(-64deg) saturate(1.35) brightness(1.08)</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">hydration mounted gate</td><td class="before-val">SSR-safe，避免主题闪烁</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">「LUMEN / X / Studio」文字结构</td><td class="before-val">3 段 span，X 取 primary 色</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="diff"><td class="field">slogan 字体类</td><td class="before-val">font-mono · 8px · tracking 0.15em · uppercase</td><td class="after-val changed">+ atelier-display（atelier-* 下：11px / italic / tracking 0.02em / Fraunces · 其它主题：原样）</td><td class="delta">VISUAL</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ========== Empty State ========== -->
+<section class="module" id="m-empty">
+  <h2 class="module-title"><span class="num">CMP</span>Workspace Empty State — 「还没有项目」</h2>
+  <div class="module-sub">page.tsx 的空状态 H3，从 sans-medium 21px → 在 atelier-* 下切换为 Fraunces semibold 24px。</div>
+
+  <table class="feature-table">
+    <thead><tr><th style="width:32%">功能点</th><th>Before（main）</th><th>After（pilot）</th><th style="width:14%">Delta</th></tr></thead>
+    <tbody>
+      <tr class="same"><td class="field">空状态文案 key</td><td class="before-val">t("empty")</td><td class="after-val">t("empty")</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="same"><td class="field">"新建项目" CTA</td><td class="before-val">按钮 + onClick 行为</td><td class="after-val">同左</td><td class="delta">UNCHANGED</td></tr>
+      <tr class="diff"><td class="field">H3 字号 / 字体</td><td class="before-val">text-xl font-medium</td><td class="after-val changed">text-2xl font-display + atelier-display → atelier-* 下 Fraunces</td><td class="delta">VISUAL</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ========== 差异矩阵 ========== -->
+<section class="module" id="diff-matrix">
+  <h2 class="module-title"><span class="num">Δ</span>功能点差异矩阵（汇总）</h2>
+  <table class="feature-table">
+    <thead><tr><th>组件</th><th>新增功能</th><th>删除功能</th><th>语义/行为变更</th><th>视觉变更（受 5 主题门控）</th></tr></thead>
+    <tbody>
+      <tr class="same"><td>SettingsPage / §0 Appearance</td><td>0</td><td>0</td><td>0</td><td>section 容器 → .atelier-card；H1 → .atelier-display</td></tr>
+      <tr class="same"><td>SettingsPage / §1 API</td><td>0</td><td>0</td><td>0</td><td>section 容器 → .atelier-card</td></tr>
+      <tr class="same"><td>SettingsPage / §2 Models</td><td>0</td><td>0</td><td>0</td><td>section 容器 → .atelier-card</td></tr>
+      <tr class="same"><td>SettingsPage / §3 Prompt</td><td>0</td><td>0</td><td>0</td><td>section 容器 → .atelier-card</td></tr>
+      <tr class="same"><td>SettingsPage / 页面背景</td><td>0</td><td>0</td><td>0</td><td>新增 .atelier-page-bloom + .atelier-page-grain 两层 fixed 装饰</td></tr>
+      <tr class="same"><td>LumenXBranding / slogan</td><td>0</td><td>0</td><td>0</td><td>仅 atelier-* 下：11px / italic / Fraunces</td></tr>
+      <tr class="same"><td>Workspace / 空状态 H3</td><td>0</td><td>0</td><td>0</td><td>atelier-* 下：text-2xl / Fraunces / semibold</td></tr>
+      <tr class="same"><td>其它 ~120 组件 / 路由 / store / API</td><td>0</td><td>0</td><td>0</td><td>无</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ========== 风险 ========== -->
+<section class="module" id="risk">
+  <h2 class="module-title"><span class="num">⚠</span>风险 · 残留 · 验证账单</h2>
+
+  <div class="analysis">
+    <h3>已验证（evidence-based）</h3>
+    <ul>
+      <li><b>tsc：</b><code>npx tsc --noEmit</code> 通过，0 error。</li>
+      <li><b>颜色契约：</b><code>npm run check:colors</code> 通过（无 token escape）。</li>
+      <li><b>视觉回归（pixel）：</b>3 套非 atelier 主题（bridge-dark / brand-dark / brand-light）在 Settings + Home 两个页面下 Before/After 完全一致 — 通过本页 5×2 对照可逐一核对。</li>
+      <li><b>HANDOFF §11 冻结清单：</b>api 签名 / projectStore / 轮询防抖 / localStorage key / buildAssembledPrompt 均未触达。</li>
+    </ul>
+
+    <h3 style="margin-top:14px;">残留 · 待 Tier 2 滚动</h3>
+    <ul>
+      <li><b>ShotCard：</b>选中态 take 的 amber halation ★签名（atelier-* 触发）。</li>
+      <li><b>Playground ResultCard：</b>无框漂浮 + 单角 bloom。</li>
+      <li><b>CompareModal / Lightbox：</b>背景 bloom + 媒体 halation。</li>
+      <li><b>scene-skyline.png：</b>仍为 shot-01.png 副本（ImageGen 限流时未补；与本试点无关）。</li>
+    </ul>
+
+    <h3 style="margin-top:14px;">需要 reviewer 拍板</h3>
+    <ul>
+      <li>atelier-light 下 H1 Fraunces 是否过于编辑性？是否需要再压 1 档字号？</li>
+      <li>slogan 在 atelier-* 下从 8px uppercase → 11px italic 是否破坏了「极小工业铭文」气质？保留原 8px、仅切字体也是选项。</li>
+      <li>4 个 section 同时去边框 + halation 后，atelier-light 下边界稍弱（图见上）。是否给 atelier-light 单独保留 1px subtle border？</li>
+    </ul>
+
+    <div class="kv">
+      <b>Commit</b><span><code>e7aaf1d</code> · feat(theme): atelier pilot — SettingsPage + LumenXBranding</span>
+      <b>分支</b><span><code>feat/atelier-pilot-20260611-161001</code> (worktree, based on <code>feat/multi-theme-system</code>)</span>
+      <b>影响文件</b><span>frontend/src/app/globals.css · frontend/src/app/page.tsx · frontend/src/components/settings/SettingsPage.tsx · frontend/src/components/layout/LumenXBranding.tsx</span>
+      <b>评审 URL</b><span>Before <code>http://localhost:3008/#/settings</code> · After <code>http://localhost:3009/#/settings</code></span>
+    </div>
+  </div>
+</section>
+
+<div class="ftr">
+  <span>LumenX · Atelier Pilot Review · generated 2026-06-11 · Tasty Sam</span>
+  <span>render: open this file directly in browser · screenshots are local PNG under ./review-assets/</span>
+</div>
+
+</div>
+</body>
+</html>

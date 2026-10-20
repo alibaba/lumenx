@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LumenX Studio — 剧本编辑器重塑调研报告</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#FFFFFF;
+  --bg-alt:#F7F7F5;
+  --text:#111111;
+  --text-2:#444444;
+  --text-3:#888888;
+  --accent:#1a56db;
+  --accent-bg:rgba(26,86,219,0.04);
+  --green:#16803c;
+  --red:#c0392b;
+  --amber:#b8860b;
+  --border:#E8E8E8;
+  --font-display:'Playfair Display',Georgia,serif;
+  --font-body:'Inter',-apple-system,sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+  --max-w:680px;
+  --gutter:2rem;
+}
+html{font-size:16px;scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-body);line-height:1.7;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* === HERO === */
+.hero{
+  max-width:900px;margin:0 auto;
+  padding:10rem var(--gutter) 5rem;
+  display:grid;grid-template-columns:1fr 280px;gap:4rem;
+  align-items:end;
+}
+.hero-main h1{
+  font-family:var(--font-display);font-size:3.2rem;
+  font-weight:800;line-height:1.1;letter-spacing:-.03em;
+  margin-bottom:1.5rem;
+}
+.hero-main .subtitle{
+  font-size:1rem;color:var(--text-2);line-height:1.8;
+  max-width:440px;
+}
+.hero-side{
+  border-left:1px solid var(--border);padding-left:2rem;
+  font-size:.78rem;color:var(--text-3);line-height:2.2;
+}
+.hero-side strong{color:var(--text);font-weight:500;display:block;margin-bottom:.3rem}
+
+/* === NAV === */
+.toc{
+  position:sticky;top:0;z-index:100;
+  background:rgba(255,255,255,0.97);backdrop-filter:blur(6px);
+  border-bottom:1px solid var(--border);
+  padding:.7rem var(--gutter);
+  max-width:900px;margin:0 auto;
+  display:flex;gap:2rem;overflow-x:auto;scrollbar-width:none;
+}
+.toc::-webkit-scrollbar{display:none}
+.toc a{
+  color:var(--text-3);text-decoration:none;font-size:.72rem;
+  white-space:nowrap;font-weight:500;letter-spacing:.03em;
+  transition:color .15s;
+}
+.toc a:hover{color:var(--accent)}
+
+/* === SECTION === */
+.section{max-width:var(--max-w);margin:0 auto;padding:5rem var(--gutter)}
+.section h2{
+  font-family:var(--font-display);font-size:2rem;font-weight:700;
+  margin-bottom:.3rem;letter-spacing:-.02em;line-height:1.2;
+}
+.section h2 .num{
+  display:block;font-family:var(--font-mono);font-size:.65rem;
+  color:var(--text-3);margin-bottom:.5rem;letter-spacing:.15em;
+  font-weight:400;
+}
+.section .lead{
+  color:var(--text-2);margin-bottom:3rem;font-size:.92rem;
+  line-height:1.9;max-width:55ch;
+}
+.section h3{
+  font-size:.72rem;font-weight:600;color:var(--text-3);
+  margin:3rem 0 1.2rem;letter-spacing:.1em;text-transform:uppercase;
+}
+.divider{width:3rem;height:2px;background:var(--border);margin:5rem auto}
+
+/* === STATS === */
+.stats{display:flex;gap:0;margin:2.5rem 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.stat{flex:1;padding:1.5rem 0;text-align:center;border-right:1px solid var(--border)}
+.stat:last-child{border-right:none}
+.stat .value{font-family:var(--font-display);font-size:2.2rem;font-weight:700;color:var(--text)}
+.stat .label{font-size:.68rem;color:var(--text-3);margin-top:.2rem;letter-spacing:.02em}
+
+/* === CARDS === */
+.card-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin:2rem 0}
+.card{padding:1.5rem 0;border-top:2px solid var(--border)}
+.card .tag{font-size:.6rem;text-transform:uppercase;letter-spacing:.12em;color:var(--accent);margin-bottom:.5rem;font-weight:600}
+.card .title{font-family:var(--font-display);font-size:1rem;font-weight:600;margin-bottom:.4rem;line-height:1.3}
+.card .desc{font-size:.82rem;color:var(--text-2);line-height:1.7}
+
+/* === TABLE === */
+.table-wrap{overflow-x:auto;margin:1.5rem 0}
+table{width:100%;border-collapse:collapse;font-size:.8rem}
+th{color:var(--text-3);font-weight:500;text-align:left;padding:.8rem 0;border-bottom:2px solid var(--text);font-size:.68rem;text-transform:uppercase;letter-spacing:.08em}
+td{padding:.7rem 0;border-bottom:1px solid var(--border);color:var(--text-2);padding-right:1rem}
+tr:last-child td{border-bottom:none}
+td strong{color:var(--text)}
+
+/* === COMPARE === */
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem;margin:2rem 0}
+.compare-col h4{font-size:.85rem;font-weight:600;margin-bottom:.8rem;display:flex;align-items:center;gap:.4rem}
+.compare-col h4 .dot{width:6px;height:6px;border-radius:50%}
+.compare-col ul{list-style:none}
+.compare-col li{padding:.3rem 0;font-size:.8rem;color:var(--text-2);line-height:1.7}
+
+/* === TIMELINE === */
+.timeline{margin:2.5rem 0}
+.tl-item{display:grid;grid-template-columns:100px 1fr;gap:2rem;padding:1.5rem 0;border-top:1px solid var(--border)}
+.tl-item .tl-left{}
+.tl-item .tl-phase{font-family:var(--font-display);font-size:1rem;font-weight:600}
+.tl-item .tl-time{font-size:.68rem;color:var(--accent);font-family:var(--font-mono);margin-top:.2rem}
+.tl-item .tl-list{list-style:none}
+.tl-item .tl-list li{font-size:.8rem;color:var(--text-2);padding:.2rem 0;line-height:1.7}
+
+/* === CODE === */
+.code-block{background:var(--bg-alt);padding:1.5rem 2rem;font-family:var(--font-mono);font-size:.75rem;line-height:2;overflow-x:auto;color:var(--text-2);margin:1.5rem 0;border-left:3px solid var(--accent)}
+.code-block .kw{color:var(--text-3)}
+.code-block .tp{color:var(--accent)}
+.code-block .str{color:var(--text)}
+
+/* === QUOTE === */
+.quote{margin:2.5rem 0;padding:2rem 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.quote p{font-family:var(--font-display);font-style:italic;font-size:1.2rem;line-height:1.6;color:var(--text);max-width:50ch}
+.quote .src{font-size:.68rem;color:var(--text-3);margin-top:.8rem;font-family:var(--font-mono)}
+
+/* === FOOTER === */
+footer{max-width:var(--max-w);margin:0 auto;padding:5rem var(--gutter);font-size:.7rem;color:var(--text-3);font-family:var(--font-mono);border-top:1px solid var(--border)}
+
+@media(max-width:768px){
+  .hero{grid-template-columns:1fr;gap:2rem;padding:5rem var(--gutter) 3rem}
+  .hero-side{border-left:none;padding-left:0;border-top:1px solid var(--border);padding-top:1rem}
+  .compare,.card-grid{grid-template-columns:1fr}
+  .stats{flex-wrap:wrap}.stat{flex:1 1 45%}
+  .tl-item{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-main">
+    <h1>剧本编辑器<br>重塑调研报告</h1>
+    <p class="subtitle">基于 40+ 信息来源的多维度深度调研，为 LumenX Studio 剧本编辑环节提供技术、设计与功能发展路线参考。</p>
+  </div>
+  <div class="hero-side">
+    <strong>Report Info</strong>
+    Version 6.0<br>
+    2026-07-03<br>
+    LumenX Studio<br>
+    40+ sources<br>
+    9 sections
+  </div>
+</section>
+
+<nav class="toc">
+  <a href="#summary">执行摘要</a>
+  <a href="#status">现状评估</a>
+  <a href="#opensource">开源工具</a>
+  <a href="#competitor">竞品分析</a>
+  <a href="#trends">业界趋势</a>
+  <a href="#tech">技术方向</a>
+  <a href="#design">设计方向</a>
+  <a href="#roadmap">路线图</a>
+  <a href="#sources">来源</a>
+</nav>
+
+<section class="section" id="summary">
+  <h2><span class="num">SECTION 01</span>执行摘要</h2>
+  <p class="lead">当前剧本编辑器为纯 textarea，与行业存在严重差距。市场处于 17–19% 高速增长，LumenX 需抓住中文短剧×AI 视频交叉机会窗口。</p>
+  <div class="stats">
+    <div class="stat"><div class="value">$860M</div><div class="label">2034 全球市场预测</div></div>
+    <div class="stat"><div class="value">19.2%</div><div class="label">亚太 CAGR</div></div>
+    <div class="stat"><div class="value">78%</div><div class="label">编剧已使用 AI</div></div>
+    <div class="stat"><div class="value">63%</div><div class="label">愿迁移至云端</div></div>
+  </div>
+  <div class="card-grid">
+    <div class="card"><div class="tag">技术选型</div><div class="title">Tiptap + Yjs + Fountain.js</div><div class="desc">三层架构：规则优先→LLM 兜底→用户做主。低上手成本，CRDT 协作就绪。</div></div>
+    <div class="card"><div class="tag">竞品洞察</div><div class="title">laper.ai CRDT + Multi-agent</div><div class="desc">格式化与协作兼得，但缺失视频管线和 API——LumenX 核心差异化所在。</div></div>
+    <div class="card"><div class="tag">优先级路径</div><div class="title">P0 格式引擎 → P1 AI+导出</div><div class="desc">4 阶段递进路线：格式引擎→结构化+AI→协作→生态。</div></div>
+    <div class="card"><div class="tag">设计方向</div><div class="title">沉浸式创作座舱</div><div class="desc">Block 编辑 + 三栏布局 + AI 气泡 + 场景色带签名元素。</div></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="status">
+  <h2><span class="num">SECTION 02</span>现状评估</h2>
+  <p class="lead">ScriptProcessor.tsx 仍为纯 textarea，格式引擎/高亮/解析/导出/协作全部缺失。但已具备完整视频管线和两阶段实体提取等差异化能力。</p>
+  <div class="compare">
+    <div class="compare-col">
+      <h4><span class="dot" style="background:var(--green)"></span>已有优势</h4>
+      <ul>
+        <li>两阶段实体提取（extractPreview → confirm）</li>
+        <li>系列感知（ReconcileModal 跨集合并）</li>
+        <li>完整视频管线（剧本→分镜→视频）</li>
+        <li>两层保存（Zustand + blur 持久化）</li>
+        <li>完整 REST API（可编程集成）</li>
+      </ul>
+    </div>
+    <div class="compare-col">
+      <h4><span class="dot" style="background:var(--red)"></span>关键缺口</h4>
+      <ul>
+        <li>格式引擎：无自动排版（P0）</li>
+        <li>语法高亮：元素无区分（P0）</li>
+        <li>Fountain 解析：无结构识别（P0）</li>
+        <li>格式导出：无 FDX/PDF/Fountain（P1）</li>
+        <li>内联 AI：无上下文续写（P1）</li>
+        <li>协作：无实时多人（P3）</li>
+      </ul>
+    </div>
+  </div>
+  <div class="code-block">
+    <span class="kw">// 当前数据流</span><br>
+    textarea → onChange: <span class="tp">setScript</span> + <span class="tp">updateProject</span>(Zustand)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; → onBlur: <span class="str">PUT /projects/{id}/text</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; → 「提取实体」: <span class="str">POST /extract_preview</span> → LLM<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; → EntityConfirmModal → <span class="str">PUT /reparse</span>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="opensource">
+  <h2><span class="num">SECTION 03</span>主流开源工具对比</h2>
+  <p class="lead">Fountain 生态是零成本高价值起点，BetterFountain 是编辑器交互金标准，screenplay-tools 提供可复用数据模型。</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>工具</th><th>语言</th><th>核心能力</th><th>FDX</th><th>LumenX 价值</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Fountain.js</strong></td><td>JS</td><td>AST 解析 + HTML 输出</td><td>否</td><td>前端集成</td></tr>
+        <tr><td><strong>screenplay-tools</strong></td><td>C++/JS/Py/C#</td><td>跨语言模型 + Fountain↔FDX</td><td>是</td><td>数据模型</td></tr>
+        <tr><td><strong>BetterFountain</strong></td><td>VSCode</td><td>高亮+补全+大纲+预览+统计+PDF</td><td>否</td><td>交互金标准</td></tr>
+        <tr><td><strong>Afterwriting</strong></td><td>Web</td><td>编辑+PDF+分析</td><td>入</td><td>分析面板</td></tr>
+        <tr><td><strong>Trelby</strong></td><td>Python</td><td>格式强制+分页+20万名库</td><td>是</td><td>桌面参考</td></tr>
+        <tr><td><strong>KIT Scenarist</strong></td><td>跨平台</td><td>卡片看板+AI+全格式</td><td>是</td><td>大纲+多格式</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>商业工具关键数据</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>工具</th><th>定位</th><th>协作</th><th>定价</th><th>AI 深度</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Final Draft 13</strong></td><td>行业标准（95% 好莱坞）</td><td>有限</td><td>$199.99 一次性</td><td>最小</td></tr>
+        <tr><td><strong>WriterDuet</strong></td><td>云端协作核心</td><td>实时</td><td>$11.99/月</td><td>生成式</td></tr>
+        <tr><td><strong>Arc Studio Pro</strong></td><td>现代编辑器</td><td>实时</td><td>$69–99/年</td><td>基础</td></tr>
+        <tr><td><strong>创一AI</strong></td><td>短剧专属</td><td>有</td><td>未公开</td><td>全流程</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="competitor">
+  <h2><span class="num">SECTION 04</span>竞品分析 — laper.ai</h2>
+  <p class="lead">CRDT + Multi-agent AI +「剧本即数据中心」，定位全流程 AI 原生剧本创作，但缺失视频管线和 API。</p>
+  <div class="quote">
+    <p>The screenplay is the source of truth — eliminates the friction of strict formatting rules and the chaos of sharing endless file versions.</p>
+    <div class="src">— AIDiveForge · laper.ai product listing</div>
+  </div>
+  <div class="card-grid">
+    <div class="card"><div class="tag">格式化引擎</div><div class="title">自动 US/UK/FR + CJK</div><div class="desc">多语言场景头，好莱坞↔亚洲一键切换。</div></div>
+    <div class="card"><div class="tag">协作架构</div><div class="title">CRDT 实时同步</div><div class="desc">已确认采用 CRDT 架构，支持多端实时协同。</div></div>
+    <div class="card"><div class="tag">AI 架构</div><div class="title">Multi-agent 叙事</div><div class="desc">模拟多元叙事视角，兼任格式化+续写+评估。</div></div>
+    <div class="card"><div class="tag">格式导出</div><div class="title">PDF / FDX / Fountain</div><div class="desc">覆盖行业标准导出格式。</div></div>
+  </div>
+  <h3>维度对标</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>维度</th><th>laper.ai</th><th>LumenX（现状）</th><th>差距</th></tr></thead>
+      <tbody>
+        <tr><td>格式引擎</td><td>自动 US/UK/FR+CJK</td><td>无（纯 textarea）</td><td style="color:var(--red)">严重落后</td></tr>
+        <tr><td>结构化 DB</td><td>自动提取+实时同步</td><td>手动触发 LLM</td><td style="color:var(--red)">落后</td></tr>
+        <tr><td>AI 深度</td><td>Multi-agent+续写</td><td>仅实体提取</td><td style="color:var(--red)">严重落后</td></tr>
+        <tr><td><strong>视频管线</strong></td><td>无</td><td>完整管线</td><td style="color:var(--green)"><strong>核心领先</strong></td></tr>
+        <tr><td><strong>API/集成</strong></td><td>无 API</td><td>完整 REST API</td><td style="color:var(--green)"><strong>显著优势</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="trends">
+  <h2><span class="num">SECTION 05</span>业界需求与趋势</h2>
+  <p class="lead">AI-Native 编辑、Block-Based 结构、格式互操作、AI as CRDT Peer 构成四大核心趋势方向。</p>
+  <div class="stats">
+    <div class="stat"><div class="value">$220M</div><div class="label">2025 市场规模</div></div>
+    <div class="stat"><div class="value">18.5%</div><div class="label">全球 CAGR</div></div>
+    <div class="stat"><div class="value">96%</div><div class="label">痛点：连贯性差</div></div>
+    <div class="stat"><div class="value">0%</div><div class="label">AI 对话满意度</div></div>
+  </div>
+  <div class="quote">
+    <p>AI 在早期构思阶段满意度达 100%，在对话生成阶段满意度为 0%。</p>
+    <div class="src">— arXiv 2502.16153v1 · ACM CHI 2025</div>
+  </div>
+  <h3>关键趋势矩阵</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>趋势</th><th>描述</th><th>LumenX 行动</th></tr></thead>
+      <tbody>
+        <tr><td>AI-Native 编辑流</td><td>AI 嵌入全流程</td><td>从按钮升级为 co-author</td></tr>
+        <tr><td>Block-Based 编辑</td><td>Notion/Craft 范式</td><td>textarea → Tiptap</td></tr>
+        <tr><td>格式互操作</td><td>Fountain/FDX 连接件</td><td>优先 Fountain + FDX</td></tr>
+        <tr><td>AI as CRDT Peer</td><td>AI 作文档对等节点</td><td>预留 Yjs 架构</td></tr>
+        <tr><td>CJK 本土化</td><td>中文格式+短剧</td><td>中文场景头+短剧格式</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="tech">
+  <h2><span class="num">SECTION 06</span>技术方向建议</h2>
+  <p class="lead">Tiptap 主编辑器 + Fountain.js 解析 + Yjs 协作，三层解析：规则→LLM→用户。</p>
+  <h3>框架选型</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>框架</th><th>定制性</th><th>协作</th><th>上手</th><th>推荐</th></tr></thead>
+      <tbody>
+        <tr><td>ProseMirror</td><td>极高</td><td>Yjs 原生</td><td>高</td><td>从零定制</td></tr>
+        <tr><td><strong>Tiptap</strong></td><td>高</td><td>内置 Yjs</td><td><strong>低</strong></td><td style="color:var(--accent)"><strong>★ 推荐</strong></td></tr>
+        <tr><td>CodeMirror 6</td><td>高</td><td>插件化</td><td>中</td><td>Fountain 模式</td></tr>
+        <tr><td>Slate</td><td>极高</td><td>slate-yjs</td><td>中</td><td>精细交互</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>三层解析架构</h3>
+  <div class="card-grid">
+    <div class="card"><div class="tag">Layer 1</div><div class="title">Fountain.js + 中文扩展</div><div class="desc">标准格式快速识别。延迟 &lt;1ms，零成本。</div></div>
+    <div class="card"><div class="tag">Layer 2</div><div class="title">DashScope / Qwen</div><div class="desc">中文非标段落识别。延迟 ~1s。</div></div>
+  </div>
+  <div class="code-block">
+    <span class="kw">interface</span> <span class="tp">ScriptDocument</span> {<br>
+    &nbsp;&nbsp;blocks: <span class="tp">ScriptBlock</span>[];<br>
+    &nbsp;&nbsp;meta: { title: <span class="str">string</span>; author: <span class="str">string</span>; };<br>
+    }<br><br>
+    <span class="kw">interface</span> <span class="tp">ScriptBlock</span> {<br>
+    &nbsp;&nbsp;id: <span class="str">string</span>;<br>
+    &nbsp;&nbsp;type: <span class="str">'scene_heading'</span> | <span class="str">'action'</span> | <span class="str">'dialogue'</span> | ...;<br>
+    &nbsp;&nbsp;text: <span class="str">string</span>;<br>
+    }
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="design">
+  <h2><span class="num">SECTION 07</span>前端设计方向</h2>
+  <p class="lead">从「空白 textarea」升级为「沉浸式创作座舱」——Block 编辑 + 三栏布局 + AI 气泡 + 场景情绪色带。</p>
+  <div class="card-grid">
+    <div class="card"><div class="tag">布局</div><div class="title">三栏：大纲 | 编辑 | 属性</div><div class="desc">左侧场景卡片可拖拽，中央 Block 编辑区，右侧属性面板。</div></div>
+    <div class="card"><div class="tag">字体</div><div class="title">JetBrains Mono + Space Grotesk</div><div class="desc">等宽字体保证格式对齐，界面保持品牌一致。</div></div>
+    <div class="card"><div class="tag">色彩</div><div class="title">深色主题 + 语义色带</div><div class="desc">场景/对白/动作各有独特色彩标识。</div></div>
+    <div class="card"><div class="tag">签名</div><div class="title">左侧场景情绪色带</div><div class="desc">通过颜色直觉标识场景氛围与节奏。</div></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="roadmap">
+  <h2><span class="num">SECTION 08</span>功能路线图</h2>
+  <p class="lead">4 阶段递进：格式引擎→结构化+AI→协作→生态。每阶段可独立交付价值。</p>
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-left">
+        <div class="tl-phase">Phase 1</div>
+        <div class="tl-time">4–6 周</div>
+      </div>
+      <ul class="tl-list">
+        <li>引入 Tiptap 替代 textarea</li>
+        <li>实现 Fountain Block 类型</li>
+        <li>中文场景头扩展</li>
+        <li>语法高亮 + 行号</li>
+        <li>基础大纲导航面板</li>
+      </ul>
+    </div>
+    <div class="tl-item">
+      <div class="tl-left">
+        <div class="tl-phase">Phase 2</div>
+        <div class="tl-time">6–8 周</div>
+      </div>
+      <ul class="tl-list">
+        <li>实体 DB 实时同步</li>
+        <li>Inline AI 续写/改写</li>
+        <li>/ 命令面板</li>
+        <li>Fountain / FDX / PDF 导出</li>
+        <li>统计面板</li>
+      </ul>
+    </div>
+    <div class="tl-item">
+      <div class="tl-left">
+        <div class="tl-phase">Phase 3</div>
+        <div class="tl-time">8–12 周</div>
+      </div>
+      <ul class="tl-list">
+        <li>Yjs 实时协作</li>
+        <li>版本历史 + 变更追踪</li>
+        <li>AI as CRDT Peer</li>
+        <li>分屏预览</li>
+      </ul>
+    </div>
+    <div class="tl-item">
+      <div class="tl-left">
+        <div class="tl-phase">Phase 4</div>
+        <div class="tl-time">12+ 周</div>
+      </div>
+      <ul class="tl-list">
+        <li>CJK 多语言排版</li>
+        <li>短剧模板</li>
+        <li>插件系统</li>
+        <li>Final Draft 导入/导出</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="section" id="sources">
+  <h2><span class="num">SECTION 09</span>参考来源</h2>
+  <p class="lead">基于 40+ 信息来源，覆盖学术论文、市场报告、开源仓库、竞品官网与项目代码。</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>来源</th><th>类型</th><th>置信度</th></tr></thead>
+      <tbody>
+        <tr><td>S1</td><td>Fortune Business Insights 市场报告</td><td>市场研究</td><td>高</td></tr>
+        <tr><td>S2</td><td>fountain.io 官方规范</td><td>直接</td><td>高</td></tr>
+        <tr><td>S3</td><td>Fountain.js GitHub</td><td>直接</td><td>高</td></tr>
+        <tr><td>S5</td><td>BetterFountain GitHub</td><td>直接</td><td>高</td></tr>
+        <tr><td>S21</td><td>arXiv 2502.16153v1</td><td>学术</td><td>高</td></tr>
+        <tr><td>S23</td><td>storyflow.so 2026 对比</td><td>直接</td><td>中-高</td></tr>
+        <tr><td>S28</td><td>tiptap.dev</td><td>直接</td><td>高</td></tr>
+        <tr><td>S32</td><td>tron-comic 代码库</td><td>直接</td><td>极高</td></tr>
+        <tr><td>S34</td><td>Straits Research</td><td>市场研究</td><td>高</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="quote">
+    <p>63% of users would consider switching if a cloud-native alternative supported the same FDX format reliably.</p>
+    <div class="src">— storyflow.so · Best Final Draft Alternatives 2026</div>
+  </div>
+</section>
+
+<footer>
+  LumenX Studio · Script Editor Research Report v6.0 · 2026-07-03
+</footer>
+
+</body>
+</html>

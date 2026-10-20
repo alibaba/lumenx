@@ -6,9 +6,13 @@
     "predev": "node scripts/dev-setup.js",
     "dev": "concurrently --kill-others-on-fail -n backend,frontend,open -c blue,green,cyan \"npm run dev:backend\" \"npm run dev:frontend\" \"node scripts/open-browser.js\"",
     "dev:backend": "node scripts/start-backend.js",
-    "dev:frontend": "cd frontend && npm run dev"
+    "dev:frontend": "cd frontend && npm run dev",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "concurrently": "^9.1.0",
     "cross-env": "^7.0.3"
   }

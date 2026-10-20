@@ -19,6 +19,11 @@ const getApiUrl = (): string => {
     if (typeof window !== 'undefined') {
         const { protocol, hostname, port } = window.location;
 
+        // Tauri desktop: frontend served via tauri:// protocol, backend on localhost.
+        if (protocol === 'tauri:' || protocol === 'https:' && hostname === 'tauri.localhost') {
+            return `http://127.0.0.1:${BACKEND_PORT}`;
+        }
+
         // Dev server: backend lives on a different port regardless of which
         // dev port Next.js picked (3008/3009/3018/...).
         if (process.env.NODE_ENV === 'development') {

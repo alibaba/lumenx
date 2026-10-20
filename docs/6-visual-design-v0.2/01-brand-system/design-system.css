@@ -1,0 +1,518 @@
+/*
+ * LumenX Studio — Cyber Brutalism × Cinematic Restraint Design System v0.2
+ * Direction: Dark-first cinematic restraint + cyber-brutalist brand identity
+ * Product: AI 短漫剧 pipeline-first 创作平台
+ *
+ * v0.2 visual refresh (2026-06-09 commit e6f86ea):
+ *   - Brand mark: angular geometric lotus (LumenX-cybr.png) replaces gradient square
+ *   - Wordmark: monospace LUMENX (LUMEN white + X #646cff bold) replaces gradient text
+ *   - Optional cyber-brutalist motifs (grid, scanlines) for splash / banners
+ *
+ * Token architecture: seed → semantic → component
+ * Seed layer is shared with Atelier for family alignment.
+ */
+
+:root {
+  /* ═══ SEED LAYER ═══
+     Brand DNA shared across the LumenX product family.
+     Atelier derives its own semantic tokens from these seeds. */
+  --seed-bg: #050508;
+  --seed-fg: #ededed;
+  --seed-primary: #646cff;
+  --seed-accent: #ff0080;
+  --seed-surface: rgba(255, 255, 255, 0.04);
+  --seed-radius: 8px;
+
+  /* ═══ PRIMITIVE LAYER ═══ */
+  --primitive-black: #050508;
+  --primitive-white: #ededed;
+  --primitive-gray-900: #0a0a0d;
+  --primitive-gray-800: #141416;
+  --primitive-gray-700: #1f1f23;
+  --primitive-gray-600: #2a2a2f;
+  --primitive-gray-500: #6b7280;
+  --primitive-gray-400: #9ca3af;
+  --primitive-blue: #646cff;
+  --primitive-blue-dim: #535bf2;
+  --primitive-pink: #ff0080;
+  --primitive-purple-gradient-start: #7c3aed;
+  --primitive-purple-gradient-mid: #4f46e5;
+  --primitive-purple-gradient-end: #ec4899;
+
+  /* ═══ SEMANTIC: BACKGROUND ═══ */
+  --color-bg-base: var(--seed-bg);
+  --color-bg-surface: var(--seed-surface);
+  --color-bg-elevated: var(--primitive-gray-800);
+  --color-bg-inset: rgba(255, 255, 255, 0.02);
+  --color-bg-hover: rgba(255, 255, 255, 0.06);
+  --color-bg-input: rgba(0, 0, 0, 0.3);
+  --color-glass: rgba(255, 255, 255, 0.03);
+
+  /* ═══ SEMANTIC: TEXT ═══ */
+  --color-text-primary: var(--seed-fg);
+  --color-text-secondary: var(--primitive-gray-400);
+  --color-text-muted: var(--primitive-gray-500);
+  --color-on-primary: #ffffff;
+
+  /* ═══ SEMANTIC: BORDER ═══ */
+  --color-border-default: rgba(255, 255, 255, 0.08);
+  --color-border-subtle: rgba(255, 255, 255, 0.04);
+  --color-border-focus: var(--seed-primary);
+
+  /* ═══ SEMANTIC: INTERACTIVE ═══ */
+  --color-primary: var(--seed-primary);
+  --color-primary-hover: var(--primitive-blue-dim);
+  --color-accent: var(--seed-accent);
+  --color-destructive: #dc2626;
+  --color-overlay: rgba(0, 0, 0, 0.85);
+
+  /* ═══ SEMANTIC: STATUS (OKLCH) ═══ */
+  --color-status-pending-fg: oklch(0.85 0.13 230);
+  --color-status-pending-border: oklch(0.75 0.16 230 / 0.45);
+  --color-status-pending-bg: oklch(0.75 0.16 230 / 0.10);
+
+  --color-status-processing-fg: oklch(0.88 0.16 80);
+  --color-status-processing-border: oklch(0.78 0.18 80 / 0.45);
+  --color-status-processing-bg: oklch(0.78 0.18 80 / 0.10);
+
+  --color-status-completed-fg: oklch(0.88 0.16 155);
+  --color-status-completed-border: oklch(0.78 0.18 155 / 0.45);
+  --color-status-completed-bg: oklch(0.78 0.18 155 / 0.10);
+
+  --color-status-failed-fg: oklch(0.78 0.20 25);
+  --color-status-failed-border: oklch(0.68 0.21 25 / 0.45);
+  --color-status-failed-bg: oklch(0.68 0.21 25 / 0.10);
+
+  --color-status-starred-fg: oklch(0.90 0.15 90);
+  --color-status-starred-border: oklch(0.85 0.16 90 / 0.55);
+  --color-status-starred-bg: oklch(0.85 0.16 90 / 0.18);
+  --color-status-starred-solid: oklch(0.85 0.16 90);
+
+  --color-on-warm: oklch(0.18 0.01 280);
+
+  /* ═══ TYPOGRAPHY ═══ */
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --text-chrome-sm: 10px;
+  --text-chrome: 11px;
+  --text-body-sm: 12px;
+  --text-body: 13px;
+  --text-display-sm: 14px;
+  --text-display: 16px;
+  --text-display-lg: 20px;
+  --text-hero: 28px;
+
+  --tracking-chrome: 0.18em;
+  --tracking-display: -0.01em;
+  --leading-chrome: 1.4;
+  --leading-body: 1.5;
+  --leading-display: 1.25;
+
+  /* ═══ SPACING (8px base grid) ═══ */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 40px;
+  --spacing-2xl: 64px;
+
+  /* ═══ RADIUS ═══ */
+  --radius-sm: 4px;
+  --radius-md: var(--seed-radius);
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* ═══ ELEVATION ═══ */
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.8);
+
+  /* ═══ MOTION ═══ */
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+  --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ═══ COMPONENT: BUTTON (CTA v0.2 — 三段渐变立体) ═══ */
+  --button-bg: linear-gradient(160deg, #6269e8 5%, #4a50c6 60%, #3d42a8 100%);
+  --button-fg: var(--color-on-primary);
+  --button-border: rgba(130, 140, 255, 0.28);
+  --button-bg-hover: linear-gradient(160deg, #6e75f0 5%, #5258d0 60%, #4548b2 100%);
+  --button-shadow: 0 0 14px rgba(100,108,255,0.2), inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.15);
+  --button-shadow-hover: 0 0 20px rgba(100,108,255,0.3), inset 0 1px 0 rgba(255,255,255,0.15), inset 0 -1px 0 rgba(0,0,0,0.12);
+  --button-radius: var(--radius-md);
+  --button-padding-x: var(--spacing-md);
+  --button-padding-y: var(--spacing-sm);
+
+  /* ═══ COMPONENT: CARD / PANEL ═══ */
+  --card-bg: var(--color-bg-surface);
+  --card-fg: var(--color-text-primary);
+  --card-border: var(--color-border-default);
+  --card-padding: var(--spacing-lg);
+  --card-radius: var(--radius-lg);
+  --card-shadow: var(--shadow-subtle);
+
+  /* ═══ COMPONENT: INPUT ═══ */
+  --input-bg: var(--color-bg-input);
+  --input-fg: var(--color-text-primary);
+  --input-border: var(--color-border-default);
+  --input-focus-ring: var(--color-border-focus);
+  --input-radius: var(--radius-md);
+  --input-padding-x: 12px;
+  --input-padding-y: 8px;
+
+  /* ═══ COMPONENT: SIDEBAR ═══ */
+  --sidebar-width: 224px;
+  --sidebar-bg: var(--color-bg-surface);
+  --sidebar-border: var(--color-border-default);
+  --sidebar-item-radius: var(--radius-md);
+  --sidebar-item-padding: var(--spacing-sm) var(--spacing-md);
+
+  /* ═══ COMPONENT: STATUS BADGE ═══ */
+  --badge-radius: var(--radius-sm);
+  --badge-padding: 2px 8px;
+  --badge-font-size: var(--text-chrome-sm);
+
+  /* ═══ COMPONENT: BRAND (v0.2 Cyber Brutalism) ═══ */
+  --brand-mark-size-sm: 24px;
+  --brand-mark-size-md: 28px;
+  --brand-mark-size-lg: 36px;
+  --brand-wordmark-font: var(--font-mono);
+  --brand-wordmark-size: 14px;
+  --brand-wordmark-lumen-weight: 700;
+  --brand-wordmark-lumen-color: var(--color-text-primary);
+  --brand-wordmark-x-weight: 900;
+  --brand-wordmark-x-color: var(--color-primary);
+  --brand-wordmark-tracking: -0.02em;
+  --brand-tag-size: 9px;
+  --brand-tag-tracking: 0.2em;
+  --brand-tag-color: rgba(255, 255, 255, 0.3);
+  --brand-slogan-size: 8px;
+  --brand-slogan-tracking: 0.15em;
+  --brand-slogan-color: rgba(255, 255, 255, 0.2);
+  /* Cyber-brutalist optional motifs (splash / banner only) */
+  --brutalist-grid-color: rgba(255, 255, 255, 0.04);
+  --brutalist-grid-size: 32px;
+  --brutalist-scanline-color: rgba(100, 108, 255, 0.06);
+}
+
+/* ─── BASE RESET ─── */
+body {
+  margin: 0;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── TYPOGRAPHY UTILITIES ─── */
+.ds-chrome {
+  font-family: var(--font-mono);
+  font-size: var(--text-chrome);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-chrome);
+  line-height: var(--leading-chrome);
+  color: var(--color-text-secondary);
+}
+
+.ds-chrome-sm {
+  font-family: var(--font-mono);
+  font-size: var(--text-chrome-sm);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-chrome);
+  line-height: var(--leading-chrome);
+  color: var(--color-text-muted);
+}
+
+.ds-body {
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  color: var(--color-text-primary);
+}
+
+.ds-display {
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-display);
+  color: var(--color-text-primary);
+}
+
+/* ─── BUTTON ─── */
+.ds-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  border: 1px solid var(--button-border);
+  border-radius: var(--button-radius);
+  background: var(--button-bg);
+  color: var(--button-fg);
+  padding: var(--button-padding-y) var(--button-padding-x);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--button-shadow);
+  transition: background var(--duration-fast) var(--ease-out-quart),
+              border-color var(--duration-fast) var(--ease-out-quart),
+              box-shadow var(--duration-fast) var(--ease-out-quart);
+}
+.ds-button:hover {
+  background: var(--button-bg-hover);
+  box-shadow: var(--button-shadow-hover);
+}
+.ds-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-bg-base), 0 0 0 4px var(--color-primary);
+}
+.ds-button:active {
+  transform: scale(0.97);
+}
+.ds-button:disabled,
+.ds-button[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Button variants */
+.ds-button--glass {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-default);
+  color: var(--color-text-primary);
+}
+.ds-button--glass:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ds-button--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-text-secondary);
+}
+.ds-button--ghost:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.ds-button--destructive {
+  background: var(--color-destructive);
+  border-color: var(--color-destructive);
+  color: #ffffff;
+}
+.ds-button--destructive:hover {
+  background: #b91c1c;
+}
+
+/* ─── CARD / PANEL ─── */
+.ds-card {
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+  color: var(--card-fg);
+  box-shadow: var(--card-shadow);
+  padding: var(--card-padding);
+  backdrop-filter: blur(4px);
+}
+
+.ds-panel {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(2px);
+}
+
+/* ─── INPUT ─── */
+.ds-input {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--input-border);
+  border-radius: var(--input-radius);
+  background: var(--input-bg);
+  color: var(--input-fg);
+  padding: var(--input-padding-y) var(--input-padding-x);
+  font-family: var(--font-body);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  transition: border-color var(--duration-fast) var(--ease-out-quart),
+              box-shadow var(--duration-fast) var(--ease-out-quart);
+}
+.ds-input::placeholder {
+  color: var(--color-text-muted);
+}
+.ds-input:focus-visible {
+  outline: none;
+  border-color: var(--input-focus-ring);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--input-focus-ring) 20%, transparent);
+}
+.ds-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ─── STATUS BADGE ─── */
+.ds-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--badge-padding);
+  border-radius: var(--badge-radius);
+  font-family: var(--font-mono);
+  font-size: var(--badge-font-size);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-chrome);
+}
+.ds-badge--pending {
+  color: var(--color-status-pending-fg);
+  background: var(--color-status-pending-bg);
+  border: 1px solid var(--color-status-pending-border);
+}
+.ds-badge--processing {
+  color: var(--color-status-processing-fg);
+  background: var(--color-status-processing-bg);
+  border: 1px solid var(--color-status-processing-border);
+}
+.ds-badge--completed {
+  color: var(--color-status-completed-fg);
+  background: var(--color-status-completed-bg);
+  border: 1px solid var(--color-status-completed-border);
+}
+.ds-badge--failed {
+  color: var(--color-status-failed-fg);
+  background: var(--color-status-failed-bg);
+  border: 1px solid var(--color-status-failed-border);
+}
+.ds-badge--starred {
+  color: var(--color-status-starred-fg);
+  background: var(--color-status-starred-bg);
+  border: 1px solid var(--color-status-starred-border);
+}
+
+/* ─── SECTION SHELL ─── */
+.ds-section-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+.ds-section-shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+/* ─── TOOLTIP ─── */
+.ds-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: var(--text-chrome-sm);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-text-secondary);
+  box-shadow: var(--shadow-elevated);
+  pointer-events: none;
+}
+
+/* ─── BRAND v0.2 (Cyber Brutalism) ─── */
+.ds-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ds-brand__mark {
+  width: var(--brand-mark-size-md);
+  height: var(--brand-mark-size-md);
+  object-fit: contain;
+  flex-shrink: 0;
+  /* Logo is white-on-transparent; no filter needed on dark bg */
+}
+.ds-brand__mark--sm { width: var(--brand-mark-size-sm); height: var(--brand-mark-size-sm); }
+.ds-brand__mark--lg { width: var(--brand-mark-size-lg); height: var(--brand-mark-size-lg); }
+.ds-brand__wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.ds-brand__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+}
+.ds-brand__lumen {
+  font-family: var(--brand-wordmark-font);
+  font-size: var(--brand-wordmark-size);
+  font-weight: var(--brand-wordmark-lumen-weight);
+  letter-spacing: var(--brand-wordmark-tracking);
+  color: var(--brand-wordmark-lumen-color);
+}
+.ds-brand__x {
+  font-family: var(--brand-wordmark-font);
+  font-size: var(--brand-wordmark-size);
+  font-weight: var(--brand-wordmark-x-weight);
+  letter-spacing: var(--brand-wordmark-tracking);
+  color: var(--brand-wordmark-x-color);
+}
+.ds-brand__tag {
+  font-family: var(--brand-wordmark-font);
+  font-size: var(--brand-tag-size);
+  text-transform: uppercase;
+  letter-spacing: var(--brand-tag-tracking);
+  color: var(--brand-tag-color);
+  margin-top: 2px;
+}
+.ds-brand__slogan {
+  font-family: var(--brand-wordmark-font);
+  font-size: var(--brand-slogan-size);
+  text-transform: uppercase;
+  letter-spacing: var(--brand-slogan-tracking);
+  color: var(--brand-slogan-color);
+  margin-top: 8px;
+  text-align: center;
+}
+
+/* Cyber-brutalist optional decorative layer (splash / banner) */
+.ds-brutalist-grid {
+  background-image:
+    linear-gradient(var(--brutalist-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--brutalist-grid-color) 1px, transparent 1px);
+  background-size: var(--brutalist-grid-size) var(--brutalist-grid-size);
+}
+.ds-brutalist-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0,
+    transparent 3px,
+    var(--brutalist-scanline-color) 3px,
+    var(--brutalist-scanline-color) 4px
+  );
+}
+
+/* ─── MOTION ─── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

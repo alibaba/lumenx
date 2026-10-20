@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-utils/schema.json",
+  "productName": "LumenX Studio",
+  "version": "1.2.1",
+  "identifier": "com.lumenx.studio",
+  "build": {
+    "frontendDist": "../frontend/out",
+    "devUrl": "http://localhost:3008",
+    "beforeBuildCommand": "cd frontend && TAURI_BUILD=true npm run build",
+    "beforeDevCommand": "cd frontend && npm run dev"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "title": "LumenX Studio",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "transparent": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; img-src 'self' http://127.0.0.1:* http://localhost:* data: blob: asset: https:; media-src 'self' http://127.0.0.1:* http://localhost:* data: blob: asset: https:; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; font-src 'self' data:; style-src 'self' 'unsafe-inline';"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/512x512.png",
+      "icons/512x512@2x.png",
+      "icons/icon.icns"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "externalBin": ["binaries/lumenx-backend"]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/alibaba/lumenx/releases/latest/download/latest.json"
+      ],
+      "pubkey": ""
+    }
+  }
+}

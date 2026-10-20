@@ -208,9 +208,9 @@ lumenx/
 |------|------|
 | [用户手册](USER_MANUAL.md) | 功能使用说明 |
 | [API 文档](http://localhost:17177/docs) | Swagger UI |
-| [模型接入](docs/model-onboarding-implementation.md) | 新模型接入指南 |
-| [Catalog 架构](docs/plans/2026-04-03-model-docs-and-catalog-architecture.md) | 模型目录设计 |
-| [Playground PRD](docs/plans/2026-06-06-playground-standalone-generation-prd.md) | 创作台设计文档 |
+| [模型接入](docs/2-model-catalog-design/model-onboarding-implementation.md) | 新模型接入指南 |
+| [Catalog 架构](docs/2-model-catalog-design/plans/2026-04-03-model-docs-and-catalog-architecture.md) | 模型目录设计 |
+| [Playground PRD](docs/5-playground-roadmap/2026-06-06-playground-standalone-generation-prd.md) | 创作台设计文档 |
 
 ---
 

@@ -90,7 +90,7 @@ cd frontend && npm run test:all
 cd frontend && npm run build
 ```
 
-Read [docs/model-onboarding-implementation.md](docs/model-onboarding-implementation.md) before large model-support changes. It explains exactly which files own what.
+Read [docs/2-model-catalog-design/model-onboarding-implementation.md](docs/2-model-catalog-design/model-onboarding-implementation.md) before large model-support changes. It explains exactly which files own what.
 
 ## 📝 Code Style Guidelines
 

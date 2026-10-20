@@ -166,7 +166,7 @@ export default function GalleryView({
           </span>
           {current.parameters.size && (
             <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
-              {(current.parameters.size as string).replace('*', '×').replace('x', '×')}
+              {(current.parameters.size as string).replace(/[*x]/g, '×')}
             </span>
           )}
           {current.parameters.resolution && !current.parameters.size && (

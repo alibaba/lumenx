@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=Noto+Serif+JP:wght@400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -442,13 +443,24 @@ body {
 }
 /* Firefox — both properties inherit, so html cascades to every scroll region */
 html {
-  /* T11 global type-scale knob: 112.5% of the 16px UA default = 18px root.
-     Keeps the Playground consistent with workspace/library (the app's own
-     scale) rather than the mockup's tighter chrome. Single source of truth
-     for app-wide font scaling — every rem-based token scales off this. */
-  font-size: 112.5%;
+  /* T11 global type-scale knob — responsive scaling.
+     Desktop app windows (≤1440px) get a tighter scale (87.5% = 14px) to
+     maximise usable area; full browser viewports keep 100% (16px).
+     Single source of truth for app-wide font scaling — every rem-based
+     token scales off this. */
+  font-size: 87.5%;
   scrollbar-width: thin;
   scrollbar-color: var(--p-graphite-700, #292430) transparent;
+}
+@media (min-width: 1440px) {
+  html {
+    font-size: 100%;
+  }
+}
+@media (min-width: 1920px) {
+  html {
+    font-size: 112.5%;
+  }
 }
 
 @layer utilities {
@@ -884,4 +896,185 @@ html.atelier-light .atelier-new-tile:hover {
 html.atelier-dark .atelier-new-tile:hover > span:first-child,
 html.atelier-light .atelier-new-tile:hover > span:first-child {
   box-shadow: var(--glow-primary);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   Script Editor Format Engine — CSS Variable System
+   ────────────────────────────────────────────────────────────────────
+   Two-dimensional system: format × rendering.
+   Container: .script-editor[data-format][data-rendering]
+   ════════════════════════════════════════════════════════════════════ */
+
+.script-editor {
+  --script-font-family: 'Courier Prime', 'Courier New', monospace;
+  --script-font-size: 12pt;
+  --script-line-height: 1.0;
+  --script-page-width: 8.5in;
+  --script-margin-left: 1.5in;
+  --script-margin-right: 1in;
+}
+
+/* Latin/Hollywood rendering */
+.script-editor[data-rendering="latin"] {
+  --script-font-family: 'Courier Prime', 'Courier New', monospace;
+  --script-font-size: 12pt;
+  --script-line-height: 1.0;
+}
+
+/* CJK Chinese rendering */
+.script-editor[data-rendering="cjk_zh"] {
+  --script-font-family: 'Noto Serif SC', 'SimSun', 'STSong', serif;
+  --script-font-size: 12pt;
+  --script-line-height: 1.6;
+}
+
+/* CJK Japanese rendering */
+.script-editor[data-rendering="cjk_ja"] {
+  --script-font-family: 'Noto Serif JP', 'Yu Mincho', serif;
+  --script-font-size: 10.5pt;
+  --script-line-height: 1.7;
+}
+
+/* Apply variables to ProseMirror content */
+.script-editor .ProseMirror {
+  font-family: var(--script-font-family);
+  font-size: var(--script-font-size);
+  line-height: var(--script-line-height);
+}
+
+/* === Format-specific indentation === */
+
+/* Hollywood format */
+.script-editor[data-format="hollywood"] .ProseMirror .scene-heading {
+  text-transform: uppercase;
+  font-weight: bold;
+}
+.script-editor[data-format="hollywood"] .ProseMirror .character-cue {
+  margin-left: 3.7in;
+  text-transform: uppercase;
+}
+.script-editor[data-format="hollywood"] .ProseMirror .dialogue {
+  margin-left: 2.5in;
+  margin-right: 2.5in;
+}
+.script-editor[data-format="hollywood"] .ProseMirror .parenthetical {
+  margin-left: 3.1in;
+  margin-right: 2.9in;
+}
+.script-editor[data-format="hollywood"] .ProseMirror .transition {
+  text-align: right;
+}
+
+/* Chinese Film format */
+.script-editor[data-format="chinese_film"] .ProseMirror .scene-heading {
+  font-weight: bold;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 0.25rem;
+}
+.script-editor[data-format="chinese_film"] .ProseMirror .character-cue {
+  text-align: center;
+}
+.script-editor[data-format="chinese_film"] .ProseMirror .dialogue {
+  margin-left: 2rem;
+  margin-right: 2rem;
+}
+
+/* Chinese Short-form format */
+.script-editor[data-format="chinese_short"] .ProseMirror .character-cue {
+  font-weight: bold;
+}
+.script-editor[data-format="chinese_short"] .ProseMirror .dialogue {
+  margin-left: 1rem;
+}
+
+/* Japanese Anime format */
+.script-editor[data-format="japanese_anime"] .ProseMirror .scene-heading {
+  border-left: 3px solid #666;
+  padding-left: 0.5rem;
+}
+.script-editor[data-format="japanese_anime"] .ProseMirror .character-cue {
+  font-weight: bold;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Scene Folding — CSS-only collapse for large documents (≥30 scenes)
+   ────────────────────────────────────────────────────────────────
+   DOM is fully preserved (no node deletion); only visual hiding.
+   Does NOT break ProseMirror position mapping, Cmd+F, or cursor nav.
+   Controlled by useSceneFolding hook via data attributes.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Collapsed scene heading: dimmed, clickable, with "expand" hint */
+.script-editor .ProseMirror h3[data-type="scene-heading"][data-scene-collapsed="true"] {
+  opacity: 0.6;
+  cursor: pointer;
+  position: relative;
+  padding-right: 120px;
+  border-left: 2px solid rgba(100, 100, 100, 0.3);
+  padding-left: 8px;
+  margin: 4px 0;
+}
+
+.script-editor .ProseMirror h3[data-type="scene-heading"][data-scene-collapsed="true"]::after {
+  content: "点击展开";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: #666;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.script-editor .ProseMirror h3[data-type="scene-heading"][data-scene-collapsed="true"]:hover {
+  opacity: 0.85;
+}
+
+.script-editor .ProseMirror h3[data-type="scene-heading"][data-scene-collapsed="true"]:hover::after {
+  color: var(--color-primary, #34d8c4);
+  background: rgba(52, 216, 196, 0.08);
+}
+
+/* Hide content blocks belonging to a collapsed scene */
+.script-editor .ProseMirror [data-scene-content-collapsed="true"] {
+  display: none;
+}
+
+/* ===== Tauri Desktop: Window Drag Region ===== */
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+[data-tauri-drag-region] button,
+[data-tauri-drag-region] a,
+[data-tauri-drag-region] input,
+[data-tauri-drag-region] [role="button"] {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Tauri desktop: Traffic Light avoidance padding */
+.tauri-titlebar-inset {
+  padding-top: 38px;
+}
+
+/* Tauri desktop: Top drag bar for window movement (drag via JS API) */
+.tauri-drag-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  z-index: 9999;
+  pointer-events: auto;
+  cursor: default;
+}
+
+.tauri-drag-bar button,
+.tauri-drag-bar a,
+.tauri-drag-bar input {
+  pointer-events: auto;
 }

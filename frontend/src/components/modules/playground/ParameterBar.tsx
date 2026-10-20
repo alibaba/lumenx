@@ -107,7 +107,7 @@ function ParamDropdown({
 
 /** Format image size with aspect ratio: "1024x1024" → "1024×1024 (1:1)" */
 function formatImageSize(size: string): string {
-  const normalized = size.replace('*', '×').replace('x', '×');
+  const normalized = size.replace(/[*x]/g, '×');
   const ratio = sizeToRatioLabel(size);
   return ratio ? `${normalized} (${ratio})` : normalized;
 }

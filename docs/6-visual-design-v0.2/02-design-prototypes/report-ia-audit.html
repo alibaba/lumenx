@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LumenX Studio — 现状分析与IA审计报告</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --seed-bg:#050508;--seed-fg:#ededed;--seed-primary:#646cff;--seed-secondary:#535bf2;--seed-accent:#ff0080;--seed-surface:rgba(255,255,255,0.04);--seed-radius:8px;
+  --color-bg-base:var(--seed-bg);--color-bg-surface:var(--seed-surface);--color-bg-elevated:#141416;--color-bg-inset:rgba(255,255,255,0.02);--color-bg-hover:rgba(255,255,255,0.06);--color-bg-input:rgba(0,0,0,0.3);
+  --color-text-primary:var(--seed-fg);--color-text-secondary:#9ca3af;--color-text-muted:#6b7280;
+  --color-border-default:rgba(255,255,255,0.08);--color-border-subtle:rgba(255,255,255,0.04);
+  --color-primary:var(--seed-primary);--color-accent:var(--seed-accent);
+  --font-display:'Space Grotesk',sans-serif;--font-body:'Inter',sans-serif;--font-mono:'JetBrains Mono',monospace;
+  --radius-sm:4px;--radius-md:8px;--radius-lg:12px;
+  --status-completed-fg:oklch(0.88 0.16 155);--status-completed-bg:oklch(0.78 0.18 155/0.10);
+  --status-processing-fg:oklch(0.88 0.16 80);--status-processing-bg:oklch(0.78 0.18 80/0.10);
+  --status-failed-fg:oklch(0.78 0.20 25);--status-failed-bg:oklch(0.68 0.21 25/0.10);
+  --status-pending-fg:oklch(0.85 0.13 230);--status-pending-bg:oklch(0.75 0.16 230/0.10);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--color-bg-base);color:var(--color-text-primary);font-family:var(--font-body);font-size:13.5px;line-height:1.7;padding:48px;-webkit-font-smoothing:antialiased;max-width:1100px;margin:0 auto;}
+
+/* Report Typography */
+.report-header{margin-bottom:48px;padding-bottom:32px;border-bottom:1px solid var(--color-border-default);}
+.doc-brand{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.doc-brand-mark{width:32px;height:32px;flex-shrink:0;background-image:url("LumenX-cybr.png");background-size:contain;background-repeat:no-repeat;background-position:center;}
+.doc-brand-wordmark{display:flex;flex-direction:column;line-height:1;}
+.doc-brand-wordmark .row{font-family:var(--font-mono);font-size:15px;font-weight:700;letter-spacing:-0.02em;color:var(--color-text-primary);}
+.doc-brand-wordmark .row .x{color:var(--color-primary);font-weight:900;}
+.doc-brand-wordmark .tag{font-family:var(--font-mono);font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-top:3px;}
+.report-eyebrow{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--color-text-muted);margin-bottom:10px;}
+.report-title{font-family:var(--font-display);font-size:32px;font-weight:700;letter-spacing:-0.03em;line-height:1.2;margin-bottom:12px;}
+.report-subtitle{color:var(--color-text-secondary);font-size:15px;max-width:720px;}
+.report-meta{margin-top:16px;display:flex;gap:24px;font-family:var(--font-mono);font-size:10px;letter-spacing:0.1em;color:var(--color-text-muted);text-transform:uppercase;}
+
+h2{font-family:var(--font-display);font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:48px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--color-border-subtle);}
+h3{font-family:var(--font-display);font-size:15px;font-weight:600;margin:28px 0 10px;color:var(--color-text-primary);}
+h4{font-family:var(--font-mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);margin:20px 0 8px;}
+p{margin-bottom:12px;color:var(--color-text-secondary);}
+strong{color:var(--color-text-primary);font-weight:600;}
+
+/* Metrics */
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0 28px;}
+.metric-card{background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-md);padding:16px;}
+.metric-value{font-family:var(--font-display);font-size:28px;font-weight:700;letter-spacing:-0.03em;margin-bottom:2px;}
+.metric-label{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);}
+.metric-card.highlight{border-color:rgba(100,108,255,0.3);background:rgba(100,108,255,0.04);}
+.metric-card.warn{border-color:oklch(0.78 0.20 25/0.4);background:oklch(0.68 0.21 25/0.04);}
+
+/* IA Tree */
+.ia-tree{background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-lg);padding:24px;margin:16px 0 24px;overflow-x:auto;}
+.ia-tree code{font-family:var(--font-mono);font-size:11.5px;line-height:1.9;color:var(--color-text-secondary);display:block;white-space:pre;}
+.ia-tree .folder{color:var(--color-primary);font-weight:500;}
+.ia-tree .count{color:var(--color-text-muted);font-size:10px;}
+.ia-tree .heavy{color:var(--status-processing-fg);}
+.ia-tree .issue{color:var(--status-failed-fg);}
+
+/* Findings table */
+.findings{width:100%;border-collapse:collapse;margin:16px 0 24px;}
+.findings th{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--color-text-muted);text-align:left;padding:8px 12px;border-bottom:1px solid var(--color-border-default);background:var(--color-bg-inset);}
+.findings td{padding:10px 12px;border-bottom:1px solid var(--color-border-subtle);font-size:12.5px;vertical-align:top;}
+.findings tr:hover td{background:var(--color-bg-hover);}
+.findings .path{font-family:var(--font-mono);font-size:11px;color:var(--color-primary);letter-spacing:0.02em;}
+.findings .severity{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;padding:2px 7px;border-radius:3px;display:inline-block;}
+.severity.high{color:var(--status-failed-fg);background:var(--status-failed-bg);}
+.severity.medium{color:var(--status-processing-fg);background:var(--status-processing-bg);}
+.severity.low{color:var(--status-pending-fg);background:var(--status-pending-bg);}
+
+/* Callout */
+.callout{background:var(--color-bg-elevated);border-left:3px solid var(--color-primary);border-radius:0 var(--radius-md) var(--radius-md) 0;padding:14px 18px;margin:16px 0;font-size:12.5px;}
+.callout.warn{border-left-color:var(--status-failed-fg);}
+.callout-title{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);margin-bottom:6px;}
+.callout p{margin-bottom:4px;color:var(--color-text-secondary);}
+
+/* Tag */
+.tag{display:inline-block;padding:2px 8px;border-radius:3px;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;margin-right:4px;margin-bottom:4px;}
+.tag-glass{color:rgba(180,140,255,0.9);background:rgba(180,140,255,0.08);border:1px solid rgba(180,140,255,0.2);}
+.tag-glow{color:rgba(255,160,60,0.9);background:rgba(255,160,60,0.08);border:1px solid rgba(255,160,60,0.2);}
+.tag-motion{color:rgba(100,200,255,0.9);background:rgba(100,200,255,0.08);border:1px solid rgba(100,200,255,0.2);}
+.tag-type{color:rgba(100,255,180,0.9);background:rgba(100,255,180,0.08);border:1px solid rgba(100,255,180,0.2);}
+.tag-arch{color:rgba(255,100,180,0.9);background:rgba(255,100,180,0.08);border:1px solid rgba(255,100,180,0.2);}
+
+ol,ul{padding-left:20px;margin-bottom:12px;}
+li{margin-bottom:6px;color:var(--color-text-secondary);}
+li strong{color:var(--color-text-primary);}
+
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<header class="report-header">
+  <div class="doc-brand">
+    <div class="doc-brand-mark"></div>
+    <div class="doc-brand-wordmark">
+      <span class="row">LUMEN<span class="x">X</span> STUDIO</span>
+      <span class="tag">Cyber Brutalism · Design Doc</span>
+    </div>
+  </div>
+  <div class="report-eyebrow">LUMENX STUDIO · 前端重塑 · 交付物 01/05</div>
+  <h1 class="report-title">现状分析与信息架构审计报告</h1>
+  <p class="report-subtitle">针对 Studio 前端 79+ 组件文件的信息架构层级、导航结构、组件分布、视觉一致性问题进行全量审计，输出改善建议。<br><em style="color:var(--color-primary);">v1.1 (2026-06-09): 纳入 Playground 独立生成模块 (feat/playground-standalone-gen)、SPA 路由改进专项分析、CTA 视觉规范更新。</em></p>
+  <div class="report-meta">
+    <span>日期 2026-06-09</span>
+    <span>版本 v1.1</span>
+    <span>范围 frontend/src/ + playground (planned)</span>
+    <span>技术栈 Next.js 14 + React 18 + Tailwind</span>
+  </div>
+</header>
+
+<!-- ═══ 总量指标 ═══ -->
+<h2>1 总量概览</h2>
+
+<div class="metrics-row">
+  <div class="metric-card highlight"><div class="metric-value">79+12</div><div class="metric-label">组件文件 (现有+Playground)</div></div>
+  <div class="metric-card"><div class="metric-value">17</div><div class="metric-label">目录 (+playground/)</div></div>
+  <div class="metric-card warn"><div class="metric-value">39</div><div class="metric-label">modules/ 内文件</div></div>
+  <div class="metric-card"><div class="metric-value">1</div><div class="metric-label">路由入口 (SPA)</div></div>
+</div>
+
+<p>Studio 是一个<strong>单页应用</strong>（SPA），所有视图由 <code>page.tsx</code> (35KB) 通过 hash router 切换。没有利用 Next.js App Router 的文件系统路由能力——这意味着无法享受自动 code-splitting、metadata API、loading.tsx 等框架特性。</p>
+
+<div class="callout warn">
+  <div class="callout-title">SPA 路由影响分析 (v1.1 新增)</div>
+  <p><strong>首屏全量加载 ~2.4MB</strong>：用户打开 Workspace 首页时，Script / ArtDirection / Cast / StoryboardR2V / Assembly / Library / Settings 所有模块 JS 一次性下载。新增 Playground (12 组件) 将进一步增加首屏负担。</p>
+  <p><strong>丢失的框架能力</strong>：①自动 code-splitting（按路由懒加载）②metadata API（路由级 title/OG 标签）③loading.tsx / error.tsx（路由级骨架屏和错误边界）④Streaming SSR（分段流式首屏输出）⑤React Suspense 边界自动绑定路由。</p>
+  <p><strong>3 级改进路径</strong>：</p>
+  <p><em style="color:var(--color-status-completed-fg);">Level 1 — Dynamic Import (最小侵入, 2-3d)：</em>保留 hash router，每个模块用 <code>React.lazy()</code> + <code>&lt;Suspense&gt;</code> 包裹。首屏只加载 Workspace (~200-400KB)，其余模块点到时才下载。</p>
+  <p><em style="color:var(--color-status-processing-fg);">Level 2 — Playground 作为 App Router 试点 (推荐, 3-5d)：</em>Playground 是全新模块无历史包袱，以 <code>app/studio/playground/page.tsx</code> 独立成 App Router route。验证后逐步迁移其它模块。</p>
+  <p><em style="color:var(--color-status-pending-fg);">Level 3 — 全量 App Router 迁移 (终极, 2-3w)：</em>每个 Pipeline step 独立 route segment，享受全部框架特性。配合 Phase 3 执行。</p>
+</div>
+
+<!-- ═══ 信息架构层级树 ═══ -->
+<h2>2 信息架构层级</h2>
+
+<h4>导航层级 (Hash Router)</h4>
+<div class="ia-tree"><code><span class="folder">#/</span> — Workspace 首页 (系列列表 + 项目列表) <span class="count">page.tsx</span>
+├── <span class="folder">#/series/{id}</span> — 系列详情
+│   └── <span class="folder">#/series/{id}/episode/{eid}</span> — 集次详情
+├── <span class="folder">#/project/{id}</span> — 项目 (Pipeline 入口) <span class="count">ProjectClient.tsx</span>
+│   ├── <span class="heavy">Script</span>       — ScriptProcessor.tsx
+│   ├── <span class="heavy">ArtDirection</span> — ArtDirection.tsx
+│   ├── <span class="heavy">Cast</span>         — Cast.tsx + cast/ (4 modals)
+│   ├── <span class="heavy">Storyboard</span>   — StoryboardR2V.tsx + storyboard-r2v/ (23 files!)
+│   ├── <span class="heavy">Motion</span>       — VideoGenerator + VideoCreator + VideoQueue
+│   └── <span class="heavy">Assembly</span>     — VideoAssembly.tsx + Timeline.tsx
+├── <span class="folder">#/library</span> — 全局资产库 <span class="count">library/ (1 file)</span>
+├── <span class="folder">#/playground</span> — <span class="heavy">Playground 独立生成</span> <span class="count">playground/ (12 files, NEW)</span>
+└── <span class="folder">#/settings</span> — 设置 <span class="count">settings/ (1 file)</span></code></div>
+
+<h4>Shell 层级</h4>
+<div class="ia-tree"><code><span class="folder">layout/</span> (6 files)
+├── AppShell.tsx — GlobalSidebar + children (home/library/settings/playground)
+├── GlobalSidebar.tsx — 品牌 + 4 导航项 (工作区/Playground/资产库/设置) + 版本号
+├── PipelineSidebar.tsx — 项目内步骤导航 (5-6 steps)
+├── EpisodeMiniList.tsx — 集次缩略列表
+├── PipelineTopBar.tsx — 项目顶栏 (返回 + 标题)
+└── ProjectModeBanner.tsx — 工作流模式指示</code></div>
+
+<div class="callout">
+  <div class="callout-title">关键发现</div>
+  <p><strong>Shell 分裂</strong>：Workspace 页面走 AppShell，Pipeline 页面绕开 AppShell 全屏布局。导致两套 layout 系统共存，sidebar 切换时有 unmount/remount 闪烁。</p>
+</div>
+
+<!-- ═══ 组件分布与密度 ═══ -->
+<h2>3 组件分布与密度</h2>
+
+<div class="ia-tree"><code><span class="folder">components/</span> (79 files + 12 planned)
+├── <span class="folder">canvas/</span>         1 file   — CreativeCanvas 背景动画
+├── <span class="folder">common/</span>         5 files  — AssetCard, GroupedModelGrid, ModelSettingsModal, VariantSelectors
+├── <span class="folder">layout/</span>         6 files  — Shell 框架
+├── <span class="folder">library/</span>        1 file   — LibraryPage (单一文件承担全部逻辑)
+├── <span class="folder">modals/</span>         1 file   — CreateSeriesDialog
+├── <span class="heavy">modules/</span>       39 files  — <span class="issue">⚠ 全站 49% 代码在此目录</span>
+│   ├── (root)              21 files (大量平铺，无子分类)
+│   ├── <span class="folder">cast/</span>         4 files  (Voice 相关 modals)
+│   └── <span class="folder">storyboard-r2v/</span> 14 files
+│       └── <span class="folder">shot-panel/</span>   10 files (最深嵌套)
+├── <span class="folder">playground/</span>    <strong style="color:var(--color-status-processing-fg);">12 files (NEW — feat/playground-standalone-gen)</strong>
+│   ├── PlaygroundLayout.tsx — 左右分栏主容器
+│   ├── ModeSelector.tsx — 6 模式 tab (t2i/i2i/t2v/i2v/r2v/v2v)
+│   ├── ModelPicker.tsx — 模型选择 (30+ models, 8 families)
+│   ├── MediaUploader.tsx — 参考图/视频上传 + 资产库选取
+│   ├── PromptEditor.tsx — 提示词 + 模板/历史/字数
+│   ├── ParamGrid.tsx — 参数网格 (分辨率/帧率/时长等)
+│   ├── BatchSelector.tsx — 批量 ×1~×4 选择
+│   ├── GenerateButton.tsx — 生成 CTA + 状态管理
+│   ├── ResultGallery.tsx — 结果画廊 (Grid + Lightbox)
+│   ├── ResultCard.tsx — 单结果卡片 (多状态)
+│   ├── SessionDivider.tsx — 会话时间分割线
+│   └── usePlaygroundStore.ts — Zustand 状态
+├── <span class="folder">project/</span>        6 files  — CRUD + config
+├── <span class="folder">series/</span>         9 files  — 管理 + 2 specs
+├── <span class="folder">settings/</span>       1 file
+└── <span class="folder">shared/</span>         8 files  — 跨模块复用</code></div>
+
+<div class="callout warn">
+  <div class="callout-title">密度警告</div>
+  <p><strong>modules/ 平铺 21 个组件文件</strong>无任何子目录分组。StoryboardR2V + 关联 23 文件形成"事实上的子应用"——建议拆分为独立 feature module。</p>
+  <p><strong style="color:var(--color-status-processing-fg);">Playground 新模块规划</strong>：PRD 设计 12 个前端文件 + 1 Zustand store，位于独立 <code>playground/</code> 目录。采用扁平结构但职责清晰（每个文件单一组件），是比 modules/ 更健康的组织方式，可作为新模块架构范例。</p>
+</div>
+
+<!-- ═══ 视觉一致性问题 ═══ -->
+<h2>4 视觉一致性审计</h2>
+
+<p>基于 <code>globals.css</code> 240行 + <code>tailwind.config.ts</code> 完整 token 系统分析，识别以下视觉债务分类：</p>
+
+<h4>问题分类标签</h4>
+<p>
+  <span class="tag tag-glass">GLASS 滥用</span>
+  <span class="tag tag-glow">GLOW 泛滥</span>
+  <span class="tag tag-motion">MOTION 不受控</span>
+  <span class="tag tag-type">TYPE 不一致</span>
+  <span class="tag tag-arch">ARCH 架构缺陷</span>
+</p>
+
+<table class="findings">
+<thead><tr><th>ID</th><th>问题</th><th>位置</th><th>严重度</th><th>说明</th></tr></thead>
+<tbody>
+<tr>
+  <td>V-01</td>
+  <td><span class="tag tag-glass">GLASS</span> backdrop-blur 过重</td>
+  <td class="path">globals.css .glass-panel<br>GlobalSidebar.tsx</td>
+  <td><span class="severity high">HIGH</span></td>
+  <td>多处使用 backdrop-blur-md (12px) + rgba(0,0,0,0.4) 黑色叠加层，造成"雾面遮罩"感，降低内容可读性，GPU 绘制成本高。</td>
+</tr>
+<tr>
+  <td>V-02</td>
+  <td><span class="tag tag-glow">GLOW</span> BorderGlow 装饰过度</td>
+  <td class="path">shared/BorderGlow/</td>
+  <td><span class="severity medium">MED</span></td>
+  <td>专门的 BorderGlow 组件 (CSS + TSX) 提供描边渐变发光。在非交互元素上使用时成为纯装饰噪音，争抢注意力。</td>
+</tr>
+<tr>
+  <td>V-03</td>
+  <td><span class="tag tag-glass">GLASS</span> glass-button / glass-input 滥用</td>
+  <td class="path">globals.css .glass-button<br>.glass-input</td>
+  <td><span class="severity medium">MED</span></td>
+  <td>所有按钮和输入框使用相同 glass 效果，导致层次扁平——按钮看起来像输入框，CTA 不突出。</td>
+</tr>
+<tr>
+  <td>V-04</td>
+  <td><span class="tag tag-motion">MOTION</span> 6+ 自定义 keyframe 无统一时间曲线</td>
+  <td class="path">globals.css @keyframes</td>
+  <td><span class="severity medium">MED</span></td>
+  <td>badgePulse / compareModalIn / queuePanelIn / shotPanelIn / fadeInBackdrop / lightboxFadeIn / lightboxScaleIn 各自硬编码 duration + easing，未复用 --duration / --ease token。</td>
+</tr>
+<tr>
+  <td>V-05</td>
+  <td><span class="tag tag-type">TYPE</span> 3-tier 类型系统未全面贯彻</td>
+  <td class="path">tailwind.config.ts<br>各 module 内联样式</td>
+  <td><span class="severity medium">MED</span></td>
+  <td>tailwind.config 定义了 chrome-sm/chrome/body-sm/body/display-sm/display 6 级，但大量组件使用内联 text-xs/text-sm，跳过语义 token。</td>
+</tr>
+<tr>
+  <td>V-06</td>
+  <td><span class="tag tag-arch">ARCH</span> Surface 层次不分</td>
+  <td class="path">globals.css :root vars</td>
+  <td><span class="severity high">HIGH</span></td>
+  <td>bg-surface / bg-elevated / bg-inset 仅有 token 定义但使用不规范——ShotCard、Sidebar、Modal 全部混用 bg-surface，缺乏 z-depth 语义。</td>
+</tr>
+<tr>
+  <td>V-07</td>
+  <td><span class="tag tag-glow">GLOW</span> .btn-tip tooltip 过度装饰</td>
+  <td class="path">globals.css .btn-tip</td>
+  <td><span class="severity low">LOW</span></td>
+  <td>Tooltip 使用渐变背景 + box-shadow glow + 额外 border-radius，视觉重量过大。</td>
+</tr>
+<tr>
+  <td>V-08</td>
+  <td><span class="tag tag-arch">ARCH</span> common/ vs shared/ 边界模糊</td>
+  <td class="path">components/common/<br>components/shared/</td>
+  <td><span class="severity medium">MED</span></td>
+  <td>两个目录都存放"可复用组件"，无清晰 ownership 规则：AssetCard 在 common/，Lightbox 在 shared/preview/，造成查找困惑。</td>
+</tr>
+<tr>
+  <td>V-09</td>
+  <td><span class="tag tag-arch">ARCH</span> page.tsx 35KB 超大单文件</td>
+  <td class="path">app/page.tsx (827 lines)</td>
+  <td><span class="severity high">HIGH</span></td>
+  <td>包含 Home + CreateSeriesDialog + hash routing + 全部 card 渲染。违背 SRP，无法 tree-shake，影响首屏性能。</td>
+</tr>
+<tr>
+  <td>V-10</td>
+  <td><span class="tag tag-arch">ARCH</span> Pipeline 双模式并存</td>
+  <td class="path">project/ProjectClient.tsx</td>
+  <td><span class="severity medium">MED</span></td>
+  <td>LEGACY_STEPS (6步) 与 UNIFIED_STEPS (5步) 同时存在，由 series.content_mode 分支。增加维护成本，新用户困惑。</td>
+</tr>
+<tr>
+  <td>V-11</td>
+  <td><span class="tag tag-motion">MOTION</span> CreativeCanvas 固定渲染</td>
+  <td class="path">canvas/CreativeCanvas.tsx<br>page.tsx (z-0 fixed)</td>
+  <td><span class="severity low">LOW</span></td>
+  <td>Workspace 首页始终渲染全屏 Canvas 背景动画 (Three.js)，即使用户已进入项目列表。GPU 常驻消耗，移动端性能隐患。</td>
+</tr>
+<tr>
+  <td>V-12</td>
+  <td><span class="tag tag-glass">GLASS</span> --color-glass token 定义过浓</td>
+  <td class="path">globals.css :root</td>
+  <td><span class="severity medium">MED</span></td>
+  <td>--color-glass: rgba(0,0,0,0.4) 配合 backdrop-blur-md 使所有面板感觉"下沉"于深色泥潭。与 Cinematic Restraint 方向相悖。</td>
+</tr>
+<tr>
+  <td>V-13</td>
+  <td><span class="tag tag-arch">ARCH</span> CTA 按钮无视觉层级</td>
+  <td class="path">全站 .btn-primary / .gen-btn</td>
+  <td><span class="severity medium" style="background:var(--color-status-completed-bg);border-color:var(--color-status-completed-border);color:var(--color-status-completed-fg);">RESOLVED</span></td>
+  <td>原 CTA 使用纯色 #646cff 实底，与次要按钮对比不足，视觉"死板"。已在 v0.2 Design System 中解决：采用三段渐变 (#6269e8→#4a50c6→#3d42a8) + 双向内影 + 微外光，建立 CTA 独立视觉层级。</td>
+</tr>
+<tr>
+  <td>V-14</td>
+  <td><span class="tag tag-arch">ARCH</span> Playground 模块需独立路由</td>
+  <td class="path">page.tsx (planned)</td>
+  <td><span class="severity medium" style="background:var(--color-status-processing-bg);border-color:var(--color-status-processing-border);color:var(--color-status-processing-fg);">NEW</span></td>
+  <td>Playground 12 组件作为独立功能模块加入时，若继续在 page.tsx 添加 hash 分支，将突破 40KB+ 并进一步恶化 V-09。建议作为 App Router 试点或至少 React.lazy 懒加载。</td>
+</tr>
+</tbody>
+</table>
+
+<!-- ═══ 导航体验问题 ═══ -->
+<h2>5 导航与路由体验</h2>
+
+<h3>5.1 当前路由策略问题</h3>
+<ol>
+  <li><strong>无 URL deep-link 支持</strong>：hash 路由下，Pipeline 步骤 (Script → R2V → Assembly) 无独立 URL。用户无法分享 "项目X 的分镜R2V" 链接。</li>
+  <li><strong>无 browser history 友好跳转</strong>：浏览器后退/前进按钮行为不可预期（hash 变化 vs 组件内 state 跳转混合）。</li>
+  <li><strong>无 code-splitting</strong>：所有 Pipeline 模块打包进同一 chunk。StoryboardR2V 23 文件 + Three.js Canvas 全量首屏加载。新增 Playground 12 文件将进一步加剧负担。</li>
+  <li><strong>Shell 状态不连续</strong>：从 Workspace → Project 时 AppShell unmount，GlobalSidebar 消失并重新挂载为 PipelineSidebar，产生布局闪烁。</li>
+  <li><strong style="color:var(--color-status-processing-fg);">Playground 路由归属问题 (NEW)</strong>：Playground 作为非 Project 模块，应走 AppShell 路径 (与 Workspace/Library/Settings 同级)。当前 hash router 下需在 page.tsx 新增 <code>#/playground</code> 分支——进一步膨胀已 35KB 的文件。</li>
+</ol>
+
+<h3>5.2 建议改进方向</h3>
+<div class="callout">
+  <div class="callout-title">提案 (v1.1 更新)</div>
+  <p><strong>推荐路径：以 Playground 为 App Router 试点。</strong></p>
+  <p>Playground 是全新模块、无历史包袱，天然适合第一个迁移至 <code>app/studio/playground/page.tsx</code> 的 App Router route。可验证：①文件系统路由 ②自动 code-splitting ③独立 loading.tsx 骨架屏 ④独立 error.tsx 错误边界 ⑤metadata API。成功后逐步迁移 Library → Settings → Pipeline。</p>
+  <p><strong>保守替代方案</strong>：至少对所有 hash 分支使用 <code>React.lazy()</code> + <code>&lt;Suspense&gt;</code> 包裹，实现按需加载。预计可减少首屏加载体积 40-60% (从 ~2.4MB 降至 ~800KB-1MB)。</p>
+</div>
+
+<!-- ═══ Token 架构审计 ═══ -->
+<h2>6 Token 架构审计</h2>
+
+<h3>6.1 现有 token 层级</h3>
+<div class="ia-tree"><code><span class="folder">globals.css :root</span>
+├── 背景: --color-bg-base / -surface / -elevated / -input / -hover / -inset
+├── 文字: --color-text-primary / -secondary / -muted
+├── 边框: --color-border-default / -subtle
+├── 语义: --color-glass / --color-overlay
+├── 状态: --color-{status}-fg / -border / -bg (×5 状态)
+└── 排版: chrome-sm / chrome / body-sm / body / display-sm / display
+
+<span class="folder">tailwind.config.ts</span>
+├── 重复声明上述所有 token 为 Tailwind 扩展
+├── 动画: fast / base / slow + ease-out-quart
+└── 字体: mono / sans / display</code></div>
+
+<h3>6.2 缺陷分析</h3>
+<table class="findings">
+<thead><tr><th>缺陷</th><th>影响</th><th>建议</th></tr></thead>
+<tbody>
+<tr><td><strong>无 seed 层</strong></td><td>品牌色 #646cff 硬编码在多处 Tailwind 类中，无法一处修改全站更新</td><td>引入 --seed-primary / --seed-accent / --seed-bg / --seed-fg 基础层</td></tr>
+<tr><td><strong>无组件 token</strong></td><td>Button/Card/Input 样式散落 Tailwind classes，无法统一批量调整</td><td>引入 --button-bg / --card-border / --input-border 组件层</td></tr>
+<tr><td><strong>状态 token 重复定义</strong></td><td>globals.css 和 tailwind.config.ts 双重定义同样 5 状态变量</td><td>统一以 CSS vars 为 single source of truth，Tailwind 引用 var()</td></tr>
+<tr><td><strong>Surface 语义缺失</strong></td><td>bg-surface / bg-elevated 无 z-depth 对应规则，使用随意</td><td>建立 Surface-0 ~ Surface-4 层级文档</td></tr>
+<tr><td><strong>Motion token 未连接</strong></td><td>keyframes 内硬编码 duration/easing，忽略 --duration-* / --ease-*</td><td>所有动画引用 token</td></tr>
+</tbody>
+</table>
+
+<!-- ═══ 组件可复用性 ═══ -->
+<h2>7 组件可复用性评估</h2>
+
+<h4>高可复用 (Shared-ready)</h4>
+<p><code>StepHeader</code> · <code>SectionShell</code> · <code>StatusBadge</code> · <code>WorkflowActionButton</code> · <code>ToastContainer</code> — 这些组件已在 shared/ 内，接口相对通用。</p>
+
+<h4>应抽象为 Shared (当前耦合 module)</h4>
+<p><code>ShotCard</code> 可复用于 I2V 工作流 · <code>CandidateThumb</code> 可复用于 ArtDirection 变体选择 · <code>FieldTagChip</code> 可用于 Script 实体标注 · <code>TaskQueuePanel</code> 可挂载任何 async job。</p>
+
+<h4 style="color:var(--color-status-processing-fg);">Playground 与现有组件的复用关系 (NEW)</h4>
+<p>Playground 的 <code>ResultCard</code> 与 StoryboardR2V 的 <code>CandidateThumb</code> 功能高度相似 (缩略图+状态+操作overlay)，建议提炼为共享 <code>MediaThumb</code> 组件。<code>MediaUploader</code> 的资产库集成逻辑与 Cast 模块的 <code>AssetPickerModal</code> 重叠，应抽象为统一 <code>AssetPicker</code> 服务层。<code>ModelPicker</code> 消费的 model_catalog.json 与 modules/ 中 <code>GroupedModelGrid</code> 相同数据源，应确保单一 API 入口。</p>
+
+<h4>建议拆分 (过大组件)</h4>
+<ol>
+  <li><strong>page.tsx (827 lines)</strong> → Home.tsx + CreateSeriesDialog.tsx + SeriesList.tsx + ProjectList.tsx + PlaygroundRoute (lazy)</li>
+  <li><strong>StoryboardR2V.tsx</strong> + 23 文件 → 独立 <code>features/r2v/</code> 目录，配合路由 lazy-load</li>
+  <li><strong>ProjectClient.tsx (277 lines)</strong> → Pipeline router + StepContainer + LegacyCompat adapter</li>
+  <li><strong>Playground (12 files, NEW)</strong> → 直接以 App Router 试点方式实现，避免进入 page.tsx 膨胀循环</li>
+</ol>
+
+<!-- ═══ 测试覆盖 ═══ -->
+<h2>8 测试覆盖</h2>
+
+<div class="metrics-row" style="grid-template-columns:repeat(3,1fr);">
+  <div class="metric-card warn"><div class="metric-value">2</div><div class="metric-label">测试文件</div></div>
+  <div class="metric-card warn"><div class="metric-value">2.5%</div><div class="metric-label">覆盖率 (文件级)</div></div>
+  <div class="metric-card"><div class="metric-value">0</div><div class="metric-label">modules/ 测试</div></div>
+</div>
+
+<p>仅 <code>series/__tests__/</code> 有 2 个 spec 文件 (ImportFileDialog + SeriesDetailPage)。核心 Pipeline 模块（Script/R2V/Cast/Assembly）零测试覆盖。重构时需优先为高风险组件补充 interaction test。</p>
+
+<!-- ═══ Atelier 边界合规 ═══ -->
+<h2>9 Atelier 边界合规检查</h2>
+
+<div class="callout">
+  <div class="callout-title">CLAUDE.MD 硬约束</div>
+  <p><code>components/atelier/ ↔ components/modules/</code> MUST NOT cross-import.</p>
+</div>
+
+<p><strong>当前状态：合规</strong>。components/ 目录内无 atelier/ 子目录（Atelier 在独立分支 feat/atelier-v4-canvas-uplift）。Store 层也未发现交叉引用。重构时需维持此隔离——新增 shared/ 组件如果同时被 Studio 和未来 Atelier 消费，必须放在不违反此约束的中立位置。</p>
+
+<!-- ═══ 总结与优先级 ═══ -->
+<h2>10 改善建议优先级排序</h2>
+
+<table class="findings">
+<thead><tr><th>优先级</th><th>建议</th><th>预期收益</th><th>工作量</th></tr></thead>
+<tbody>
+<tr>
+  <td><span class="severity high">P0</span></td>
+  <td>引入 3-layer token 架构 (seed → semantic → component)</td>
+  <td>全站一致性, Atelier 对齐, 批量主题调整能力</td>
+  <td>2-3d 设计 + 1-2d 注入</td>
+</tr>
+<tr>
+  <td><span class="severity high">P0</span></td>
+  <td>page.tsx 拆分 + Pipeline lazy-loading</td>
+  <td>首屏减负 40%+, DX 提升, 可测试性</td>
+  <td>3-5d</td>
+</tr>
+<tr>
+  <td><span class="severity high">P0</span></td>
+  <td>Surface z-depth 规范文档化并迁移</td>
+  <td>解决视觉扁平问题, 层次清晰</td>
+  <td>1-2d</td>
+</tr>
+<tr>
+  <td><span class="severity medium">P1</span></td>
+  <td>Glass 减量: blur 12px→2-4px, 黑叠加→白微透</td>
+  <td>内容可读性↑, GPU 负载↓, 现代感</td>
+  <td>1-2d</td>
+</tr>
+<tr>
+  <td><span class="severity medium">P1</span></td>
+  <td>Shell 统一: 单一 Layout 包裹 Workspace + Pipeline</td>
+  <td>消除 remount 闪烁, 一致导航体验</td>
+  <td>2-3d</td>
+</tr>
+<tr>
+  <td><span class="severity medium">P1</span></td>
+  <td>Storyboard R2V 独立 feature module 抽取</td>
+  <td>代码可维护性, 独立部署/测试可能</td>
+  <td>3-5d</td>
+</tr>
+<tr>
+  <td><span class="severity medium">P1</span></td>
+  <td>Motion token 连接所有 keyframe</td>
+  <td>动画一致性, reduce-motion 完整支持</td>
+  <td>1d</td>
+</tr>
+<tr>
+  <td><span class="severity low">P2</span></td>
+  <td>合并 common/ + shared/ 为统一 ui/ 库</td>
+  <td>组件发现效率, 减少重复</td>
+  <td>1d</td>
+</tr>
+<tr>
+  <td><span class="severity low">P2</span></td>
+  <td>Legacy Pipeline (6步) 废弃路线</td>
+  <td>减少分支维护, 新用户清晰度</td>
+  <td>需产品决策</td>
+</tr>
+<tr>
+  <td><span class="severity low">P2</span></td>
+  <td>CreativeCanvas 条件渲染 / IntersectionObserver</td>
+  <td>Workspace 列表页 GPU 释放</td>
+  <td>0.5d</td>
+</tr>
+</tbody>
+</table>
+
+<div class="callout">
+  <div class="callout-title">审计结论 (v1.1 更新)</div>
+  <p>Studio 前端已具备功能完整度，但在<strong>视觉层次（Glass 过重 / Surface 混用 / CTA 扁平→已解决）</strong>、<strong>架构颗粒度（单文件过大 / 模块平铺 / SPA 路由瓶颈）</strong>和<strong>token 治理（缺 seed 层 / 组件层 / motion 连接→部分已建立）</strong>三方面存在系统性技术债。</p>
+  <p>新增 Playground 模块是<strong>路由架构改进的最佳契机</strong>：作为无历史包袱的全新功能，它天然适合 App Router 试点（Level 2 方案），既避免 page.tsx 继续膨胀，又为后续模块迁移积累经验。建议按 P0→P1→P2 分 3 个 Phase 清偿，详见《重构方案与里程碑路线》。</p>
+</div>
+
+</body>
+</html>

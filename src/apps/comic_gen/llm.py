@@ -85,11 +85,16 @@ def _resolve_image_for_vision(url: str) -> Optional[str]:
         if cleaned.startswith(prefix):
             cleaned = cleaned[len(prefix):]
             break
-    candidates = [
-        os.path.join("output", cleaned),
-        cleaned,
-    ]
-    abs_path = next((p for p in candidates if os.path.exists(p) and os.path.isfile(p)), None)
+    # 只允许解析到 output/ 目录内的文件，防止路径穿越（../../etc/passwd）
+    out_base = os.path.realpath("output")
+    abs_path = None
+    for candidate in (os.path.join(out_base, cleaned), cleaned):
+        resolved = os.path.realpath(candidate)
+        if not resolved.startswith(out_base + os.sep):
+            continue
+        if os.path.isfile(resolved):
+            abs_path = resolved
+            break
     if not abs_path:
         return None
     ext = os.path.splitext(abs_path)[1].lower()

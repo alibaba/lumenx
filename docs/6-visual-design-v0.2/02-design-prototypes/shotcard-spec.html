@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>LumenX Studio — ShotCard 完整交互态 Spec</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --seed-bg:#050508;--seed-fg:#ededed;--seed-primary:#646cff;--seed-accent:#ff0080;--seed-surface:rgba(255,255,255,0.04);--seed-radius:8px;
+  --color-bg-base:#050508;--color-bg-surface:rgba(255,255,255,0.04);--color-bg-elevated:#141416;--color-bg-inset:rgba(255,255,255,0.02);--color-bg-hover:rgba(255,255,255,0.06);
+  --color-text-primary:#ededed;--color-text-secondary:#9ca3af;--color-text-muted:#6b7280;
+  --color-border-default:rgba(255,255,255,0.08);--color-border-subtle:rgba(255,255,255,0.04);
+  --color-primary:var(--seed-primary);--color-accent:var(--seed-accent);
+  --font-display:'Space Grotesk',sans-serif;--font-body:'Inter',sans-serif;--font-mono:'JetBrains Mono',monospace;
+  --radius-sm:4px;--radius-md:8px;--radius-lg:12px;
+  --status-pending-fg:oklch(0.85 0.13 230);--status-pending-border:oklch(0.75 0.16 230/0.45);--status-pending-bg:oklch(0.75 0.16 230/0.10);
+  --status-processing-fg:oklch(0.88 0.16 80);--status-processing-border:oklch(0.78 0.18 80/0.45);--status-processing-bg:oklch(0.78 0.18 80/0.10);
+  --status-completed-fg:oklch(0.88 0.16 155);--status-completed-border:oklch(0.78 0.18 155/0.45);--status-completed-bg:oklch(0.78 0.18 155/0.10);
+  --status-failed-fg:oklch(0.78 0.20 25);--status-failed-border:oklch(0.68 0.21 25/0.45);--status-failed-bg:oklch(0.68 0.21 25/0.10);
+  --status-starred-fg:oklch(0.90 0.15 90);--status-starred-border:oklch(0.85 0.16 90/0.55);--status-starred-bg:oklch(0.85 0.16 90/0.18);--status-starred-solid:oklch(0.85 0.16 90);
+  --duration-fast:150ms;--duration-base:250ms;--duration-slow:400ms;
+  --ease-out-quart:cubic-bezier(0.22,1,0.36,1);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--color-bg-base);color:var(--color-text-primary);font-family:var(--font-body);font-size:13px;line-height:1.7;-webkit-font-smoothing:antialiased;padding:48px;max-width:1200px;margin:0 auto;}
+
+/* Page Header */
+.spec-header{margin-bottom:48px;padding-bottom:32px;border-bottom:1px solid var(--color-border-default);}
+.doc-brand{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
+.doc-brand-mark{width:32px;height:32px;flex-shrink:0;background-image:url("LumenX-cybr.png");background-size:contain;background-repeat:no-repeat;background-position:center;}
+.doc-brand-wordmark{display:flex;flex-direction:column;line-height:1;}
+.doc-brand-wordmark .row{font-family:var(--font-mono);font-size:15px;font-weight:700;letter-spacing:-0.02em;color:var(--color-text-primary);}
+.doc-brand-wordmark .row .x{color:var(--color-primary);font-weight:900;}
+.doc-brand-wordmark .tag{font-family:var(--font-mono);font-size:9px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.3);margin-top:3px;}
+.spec-eyebrow{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.22em;color:var(--color-text-muted);margin-bottom:10px;}
+.spec-title{font-family:var(--font-display);font-size:28px;font-weight:700;letter-spacing:-0.03em;margin-bottom:10px;}
+.spec-desc{color:var(--color-text-secondary);font-size:14px;max-width:720px;}
+.spec-meta{margin-top:16px;display:flex;gap:20px;font-family:var(--font-mono);font-size:10px;letter-spacing:0.1em;color:var(--color-text-muted);text-transform:uppercase;flex-wrap:wrap;}
+
+h2{font-family:var(--font-display);font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:48px 0 16px;padding-bottom:8px;border-bottom:1px solid var(--color-border-subtle);}
+h3{font-family:var(--font-display);font-size:14px;font-weight:600;margin:24px 0 10px;}
+h4{font-family:var(--font-mono);font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);margin:16px 0 8px;}
+p{margin-bottom:10px;color:var(--color-text-secondary);font-size:12.5px;}
+code{font-family:var(--font-mono);font-size:11px;background:var(--color-bg-inset);border:1px solid var(--color-border-subtle);padding:1px 5px;border-radius:3px;}
+
+/* State overview grid */
+.state-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0 32px;}
+.state-chip{padding:10px 12px;border-radius:var(--radius-md);border:1px solid var(--color-border-default);background:var(--color-bg-surface);text-align:center;}
+.state-chip .name{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;}
+.state-chip .variant{font-size:10px;color:var(--color-text-muted);}
+
+/* Shot Card Rendered States */
+.state-section{margin:24px 0 32px;padding:20px;background:var(--color-bg-surface);border:1px solid var(--color-border-default);border-radius:var(--radius-lg);}
+.state-label{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.18em;color:var(--color-text-muted);margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.state-dot{width:8px;height:8px;border-radius:50%;}
+
+/* ShotCard base */
+.shot-card{background:var(--color-bg-elevated);border:1px solid var(--color-border-default);border-radius:var(--radius-md);transition:all var(--duration-base) var(--ease-out-quart);position:relative;overflow:hidden;}
+
+/* Collapsed */
+.shot-card.collapsed{padding:12px 16px;display:flex;align-items:center;gap:12px;}
+.shot-num{font-family:var(--font-mono);font-size:10px;color:var(--color-text-muted);min-width:28px;}
+.shot-thumb{width:40px;height:40px;border-radius:4px;background:rgba(255,255,255,0.05);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--color-text-muted);overflow:hidden;}
+.shot-info{flex:1;min-width:0;}
+.shot-prompt-preview{font-size:12px;color:var(--color-text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.shot-status{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.1em;padding:3px 7px;border-radius:3px;flex-shrink:0;}
+
+/* Expanded */
+.shot-card.expanded{padding:0;}
+.expanded-header{padding:14px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--color-border-subtle);}
+.expanded-body{padding:16px;}
+.prompt-area{background:var(--color-bg-inset);border-radius:6px;padding:12px;margin-bottom:12px;font-size:12px;color:var(--color-text-secondary);line-height:1.6;}
+.candidates-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px;}
+.candidate{aspect-ratio:1;background:rgba(255,255,255,0.05);border-radius:4px;border:1px solid var(--color-border-subtle);display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--color-text-muted);}
+
+/* Status variants */
+.shot-card.pending{border-color:var(--status-pending-border);}
+.shot-card.pending .shot-status{color:var(--status-pending-fg);background:var(--status-pending-bg);}
+
+.shot-card.processing{border-color:var(--status-processing-border);}
+.shot-card.processing .shot-status{color:var(--status-processing-fg);background:var(--status-processing-bg);}
+.shot-card.processing::after{content:'';position:absolute;bottom:0;left:0;height:2px;background:var(--status-processing-fg);animation:processingBar 2s ease-in-out infinite;border-radius:1px;}
+@keyframes processingBar{0%{width:0;opacity:0.7}50%{width:60%;opacity:1}100%{width:100%;opacity:0.3}}
+
+.shot-card.completed{border-color:var(--status-completed-border);}
+.shot-card.completed .shot-status{color:var(--status-completed-fg);background:var(--status-completed-bg);}
+
+.shot-card.failed{border-color:var(--status-failed-border);}
+.shot-card.failed .shot-status{color:var(--status-failed-fg);background:var(--status-failed-bg);}
+
+.shot-card.starred{border-color:var(--status-starred-border);}
+.shot-card.starred .shot-status{color:var(--status-starred-fg);background:var(--status-starred-bg);}
+.shot-card.starred .star-badge{position:absolute;top:-1px;right:-1px;width:18px;height:18px;background:var(--status-starred-solid);border-radius:0 var(--radius-md) 0 6px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#141416;font-weight:700;}
+
+/* Hover */
+.shot-card.hover-demo{border-color:rgba(255,255,255,0.12);background:rgba(255,255,255,0.02);}
+
+/* Spec table */
+.spec-table{width:100%;border-collapse:collapse;margin:12px 0;}
+.spec-table th{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--color-text-muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--color-border-default);background:var(--color-bg-inset);}
+.spec-table td{padding:8px 10px;border-bottom:1px solid var(--color-border-subtle);font-size:12px;vertical-align:top;color:var(--color-text-secondary);}
+.spec-table .prop{font-family:var(--font-mono);font-size:11px;color:var(--seed-primary);}
+.spec-table .val{font-family:var(--font-mono);font-size:11px;color:var(--status-completed-fg);}
+
+/* Transition diagram */
+.transition-diagram{background:var(--color-bg-inset);border:1px solid var(--color-border-subtle);border-radius:var(--radius-lg);padding:24px;margin:20px 0;overflow-x:auto;}
+.transition-diagram pre{font-family:var(--font-mono);font-size:11px;line-height:2;color:var(--color-text-secondary);white-space:pre;}
+.transition-diagram .st{color:var(--seed-primary);font-weight:500;}
+.transition-diagram .act{color:var(--status-processing-fg);}
+.transition-diagram .ar{color:var(--color-text-muted);}
+
+/* Interaction note */
+.interaction-note{background:var(--color-bg-elevated);border-left:3px solid var(--seed-primary);border-radius:0 var(--radius-md) var(--radius-md) 0;padding:12px 16px;margin:12px 0;font-size:12px;}
+.interaction-note .label{font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.15em;color:var(--color-text-muted);margin-bottom:4px;}
+.interaction-note p{color:var(--color-text-secondary);margin:0;}
+.interaction-note strong{color:var(--color-text-primary);}
+
+/* Chip demo */
+.chips{display:flex;gap:6px;margin:6px 0;flex-wrap:wrap;}
+.chip{padding:3px 8px;border-radius:4px;font-size:10px;font-family:var(--font-mono);letter-spacing:0.05em;}
+.chip.char{background:rgba(100,108,255,0.1);color:rgba(140,148,255,0.9);border:1px solid rgba(100,108,255,0.2);}
+.chip.scene{background:rgba(255,0,128,0.08);color:rgba(255,100,160,0.9);border:1px solid rgba(255,0,128,0.2);}
+.chip.prop{background:rgba(255,180,60,0.08);color:rgba(255,200,100,0.9);border:1px solid rgba(255,180,60,0.2);}
+
+@media(max-width:800px){.state-grid{grid-template-columns:repeat(2,1fr);}}
+</style>
+</head>
+<body>
+
+<header class="spec-header">
+  <div class="doc-brand">
+    <div class="doc-brand-mark"></div>
+    <div class="doc-brand-wordmark">
+      <span class="row">LUMEN<span class="x">X</span> STUDIO</span>
+      <span class="tag">Cyber Brutalism · Design Doc</span>
+    </div>
+  </div>
+  <div class="spec-eyebrow">LUMENX STUDIO · COMPONENT SPEC · R2V 工作台核心组件</div>
+  <h1 class="spec-title">ShotCard 完整交互态规范</h1>
+  <p class="spec-desc">覆盖 ShotCard 的 3 种视图变体 (Collapsed / Expanded / Processing) 和 8 种状态 (pending / processing / completed / failed / starred / hover / focused / disabled) 的完整交互规范。</p>
+  <div class="spec-meta">
+    <span>组件路径 storyboard-r2v/ShotCard.tsx</span>
+    <span>版本 v2.0 (Redesign)</span>
+    <span>依赖 FieldTagChip · StatusBadge · CandidateThumb</span>
+  </div>
+</header>
+
+<!-- ═══ 状态总览 ═══ -->
+<h2>1 状态总览</h2>
+
+<div class="state-grid">
+  <div class="state-chip"><div class="state-dot" style="background:var(--status-pending-fg);margin:0 auto 6px;"></div><div class="name">Pending</div><div class="variant">等待生成</div></div>
+  <div class="state-chip"><div class="state-dot" style="background:var(--status-processing-fg);margin:0 auto 6px;"></div><div class="name">Processing</div><div class="variant">生成中</div></div>
+  <div class="state-chip"><div class="state-dot" style="background:var(--status-completed-fg);margin:0 auto 6px;"></div><div class="name">Completed</div><div class="variant">生成完成</div></div>
+  <div class="state-chip"><div class="state-dot" style="background:var(--status-failed-fg);margin:0 auto 6px;"></div><div class="name">Failed</div><div class="variant">生成失败</div></div>
+  <div class="state-chip"><div class="state-dot" style="background:var(--status-starred-solid);margin:0 auto 6px;"></div><div class="name">Starred</div><div class="variant">已选定最终版</div></div>
+  <div class="state-chip"><div class="state-dot" style="background:rgba(255,255,255,0.3);margin:0 auto 6px;"></div><div class="name">Hover</div><div class="variant">鼠标悬停</div></div>
+  <div class="state-chip"><div class="state-dot" style="background:var(--seed-primary);margin:0 auto 6px;box-shadow:0 0 6px var(--seed-primary);"></div><div class="name">Focused</div><div class="variant">键盘焦点</div></div>
+  <div class="state-chip"><div class="state-dot" style="background:rgba(255,255,255,0.1);margin:0 auto 6px;"></div><div class="name">Disabled</div><div class="variant">不可交互</div></div>
+</div>
+
+<!-- ═══ 变体: Collapsed ═══ -->
+<h2>2 变体 A: Collapsed (默认列表视图)</h2>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:var(--status-pending-fg);"></div>COLLAPSED · PENDING</div>
+  <div class="shot-card collapsed pending">
+    <div class="shot-num">01</div>
+    <div class="shot-thumb">REF</div>
+    <div class="shot-info"><div class="shot-prompt-preview">星莲站在天台上，城市霓虹灯光映照在她身上...</div></div>
+    <div class="shot-status">PENDING</div>
+  </div>
+</div>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:var(--status-processing-fg);"></div>COLLAPSED · PROCESSING</div>
+  <div class="shot-card collapsed processing">
+    <div class="shot-num">02</div>
+    <div class="shot-thumb">REF</div>
+    <div class="shot-info"><div class="shot-prompt-preview">两人在雨中对峙，霓虹灯倒映在地面水洼中...</div></div>
+    <div class="shot-status">PROCESSING</div>
+  </div>
+</div>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:var(--status-completed-fg);"></div>COLLAPSED · COMPLETED</div>
+  <div class="shot-card collapsed completed">
+    <div class="shot-num">03</div>
+    <div class="shot-thumb" style="background:linear-gradient(135deg,#1a1040,#0a2030);">T3</div>
+    <div class="shot-info"><div class="shot-prompt-preview">全景镜头: 城市天际线，远处有微光...</div></div>
+    <div class="shot-status">COMPLETED</div>
+  </div>
+</div>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:var(--status-failed-fg);"></div>COLLAPSED · FAILED</div>
+  <div class="shot-card collapsed failed">
+    <div class="shot-num">04</div>
+    <div class="shot-thumb">ERR</div>
+    <div class="shot-info"><div class="shot-prompt-preview">特写: 手握魔法书，书页发光...</div></div>
+    <div class="shot-status">FAILED</div>
+  </div>
+</div>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:var(--status-starred-solid);"></div>COLLAPSED · STARRED</div>
+  <div class="shot-card collapsed starred">
+    <div class="star-badge">*</div>
+    <div class="shot-num">05</div>
+    <div class="shot-thumb" style="background:linear-gradient(135deg,#1a1040,#0a2030);">T2</div>
+    <div class="shot-info"><div class="shot-prompt-preview">中景: 星莲回头看向镜头，微笑...</div></div>
+    <div class="shot-status">STARRED</div>
+  </div>
+</div>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:rgba(255,255,255,0.3);"></div>COLLAPSED · HOVER</div>
+  <div class="shot-card collapsed completed hover-demo">
+    <div class="shot-num">06</div>
+    <div class="shot-thumb" style="background:linear-gradient(135deg,#1a1040,#0a2030);">T1</div>
+    <div class="shot-info"><div class="shot-prompt-preview">远景: 列车穿过隧道，光线从窗口闪过...</div></div>
+    <div class="shot-status" style="color:var(--status-completed-fg);background:var(--status-completed-bg);">COMPLETED</div>
+  </div>
+</div>
+
+<!-- ═══ 变体: Expanded ═══ -->
+<h2>3 变体 B: Expanded (点击展开)</h2>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:var(--status-completed-fg);"></div>EXPANDED · COMPLETED · WITH CANDIDATES</div>
+  <div class="shot-card expanded completed" style="border-color:rgba(100,108,255,0.25);">
+    <div class="expanded-header">
+      <div class="shot-num">03</div>
+      <div class="shot-thumb" style="background:linear-gradient(135deg,#1a1040,#0a2030);">T3</div>
+      <div class="shot-info"><div style="font-size:13px;font-weight:500;color:var(--color-text-primary);">Shot 03 — 全景天际线</div></div>
+      <div class="shot-status">COMPLETED</div>
+    </div>
+    <div class="expanded-body">
+      <h4>PROMPT</h4>
+      <div class="prompt-area">
+        全景镜头: 城市天际线，远处有微光闪烁。前景是天台栏杆，<span style="color:rgba(140,148,255,0.9)">@星莲</span> 的剪影站在画面左三分之一处。
+        <div class="chips" style="margin-top:8px;">
+          <span class="chip char">@星莲</span>
+          <span class="chip scene">#天际线夜景</span>
+          <span class="chip scene">#天台栏杆</span>
+        </div>
+      </div>
+      <h4>CANDIDATES (4 takes)</h4>
+      <div class="candidates-grid">
+        <div class="candidate">T1</div>
+        <div class="candidate" style="border:2px solid var(--status-starred-border);color:var(--status-starred-fg);position:relative;">T2<div style="position:absolute;top:-3px;right:-3px;width:10px;height:10px;background:var(--status-starred-solid);border-radius:50%;font-size:6px;display:flex;align-items:center;justify-content:center;color:#141416;font-weight:700;">*</div></div>
+        <div class="candidate">T3</div>
+        <div class="candidate">T4</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:var(--status-processing-fg);"></div>EXPANDED · PROCESSING (带进度条)</div>
+  <div class="shot-card expanded processing">
+    <div class="expanded-header">
+      <div class="shot-num">02</div>
+      <div class="shot-thumb">REF</div>
+      <div class="shot-info"><div style="font-size:13px;font-weight:500;color:var(--color-text-primary);">Shot 02 — 雨中对峙</div></div>
+      <div class="shot-status">PROCESSING</div>
+    </div>
+    <div class="expanded-body">
+      <h4>PROMPT</h4>
+      <div class="prompt-area">
+        两人在雨中对峙，霓虹灯倒映在地面水洼中。
+        <div class="chips" style="margin-top:8px;">
+          <span class="chip char">@星莲</span>
+          <span class="chip char">@暗影</span>
+          <span class="chip scene">#雨夜街道</span>
+        </div>
+      </div>
+      <h4>GENERATION PROGRESS</h4>
+      <div style="margin-top:8px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;"><div style="width:65%;height:100%;background:var(--status-processing-fg);border-radius:2px;"></div></div>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--status-processing-fg);">65%</span>
+        </div>
+        <div style="font-size:11px;color:var(--color-text-muted);">Generating frame 13/20... ETA ~45s</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="state-section">
+  <div class="state-label"><div class="state-dot" style="background:var(--status-failed-fg);"></div>EXPANDED · FAILED (带 Retry 操作)</div>
+  <div class="shot-card expanded failed">
+    <div class="expanded-header">
+      <div class="shot-num">04</div>
+      <div class="shot-thumb">ERR</div>
+      <div class="shot-info"><div style="font-size:13px;font-weight:500;color:var(--color-text-primary);">Shot 04 — 魔法书特写</div></div>
+      <div class="shot-status">FAILED</div>
+    </div>
+    <div class="expanded-body">
+      <div style="background:var(--status-failed-bg);border:1px solid var(--status-failed-border);border-radius:6px;padding:12px;margin-bottom:12px;">
+        <div style="font-size:12px;color:var(--status-failed-fg);font-weight:500;margin-bottom:4px;">Generation Failed</div>
+        <div style="font-size:11px;color:var(--color-text-muted);">Error: Model timeout after 120s. The prompt may be too complex for current model capacity.</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <div style="padding:6px 12px;border-radius:6px;background:rgba(100,108,255,0.12);border:1px solid rgba(100,108,255,0.25);font-size:11px;color:var(--color-text-primary);cursor:pointer;">Retry</div>
+        <div style="padding:6px 12px;border-radius:6px;background:var(--color-bg-surface);border:1px solid var(--color-border-default);font-size:11px;color:var(--color-text-secondary);cursor:pointer;">Edit Prompt</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 状态转移图 ═══ -->
+<h2>4 状态转移图</h2>
+
+<div class="transition-diagram">
+<pre><span class="st">[PENDING]</span> <span class="ar">────</span><span class="act"> click "Generate" </span><span class="ar">────→</span> <span class="st">[PROCESSING]</span>
+    <span class="ar">│</span>                                           <span class="ar">│</span>
+    <span class="ar">│</span>                                 <span class="act">success</span> <span class="ar">──┤──→</span> <span class="st">[COMPLETED]</span> <span class="ar">──</span><span class="act"> click star </span><span class="ar">──→</span> <span class="st">[STARRED]</span>
+    <span class="ar">│</span>                                           <span class="ar">│</span>                      <span class="ar">│</span>
+    <span class="ar">│</span>                                   <span class="act">error</span> <span class="ar">──┘──→</span> <span class="st">[FAILED]</span>            <span class="ar">│</span>
+    <span class="ar">│</span>                                                    <span class="ar">│</span>             <span class="ar">│</span>
+    <span class="ar">│</span>                                       <span class="act">click retry</span> <span class="ar">─┘──→</span> <span class="st">[PROCESSING]</span>   <span class="ar">│</span>
+    <span class="ar">│</span>                                                                    <span class="ar">│</span>
+    <span class="ar">└───────────────────────────────</span><span class="act"> click "Regenerate" </span><span class="ar">─────────────────────┘──→</span> <span class="st">[PROCESSING]</span>
+
+<span class="act">Unstar:</span> <span class="st">[STARRED]</span> <span class="ar">──</span><span class="act"> click starred candidate </span><span class="ar">──→</span> <span class="st">[COMPLETED]</span></pre>
+</div>
+
+<div class="interaction-note">
+  <div class="label">状态转移规则</div>
+  <p><strong>单向限制：</strong>Starred 不可直接回到 Pending（需先 unstar 回 Completed，再点 Regenerate）。Processing 过程中 CTA disabled。Failed 只能 Retry 或修改 prompt 后重新 Generate。</p>
+</div>
+
+<!-- ═══ Token 规范 ═══ -->
+<h2>5 Token 规范</h2>
+
+<h3>5.1 尺寸与间距</h3>
+<table class="spec-table">
+<thead><tr><th>属性</th><th>Collapsed</th><th>Expanded</th><th>Token</th></tr></thead>
+<tbody>
+<tr><td class="prop">padding</td><td class="val">12px 16px</td><td class="val">0 (header: 14px 16px; body: 16px)</td><td>--space-3 / --space-4</td></tr>
+<tr><td class="prop">border-radius</td><td class="val">8px</td><td class="val">8px</td><td>--seed-radius</td></tr>
+<tr><td class="prop">gap</td><td class="val">12px</td><td class="val">12px</td><td>--space-3</td></tr>
+<tr><td class="prop">thumb size</td><td class="val">40 x 40px</td><td class="val">40 x 40px</td><td>--shot-thumb-size</td></tr>
+<tr><td class="prop">min-height</td><td class="val">56px</td><td class="val">auto (content-driven)</td><td>—</td></tr>
+<tr><td class="prop">candidates gap</td><td class="val">—</td><td class="val">6px</td><td>--space-1.5</td></tr>
+</tbody>
+</table>
+
+<h3>5.2 颜色（按状态）</h3>
+<table class="spec-table">
+<thead><tr><th>状态</th><th>border-color</th><th>badge-fg</th><th>badge-bg</th><th>附加效果</th></tr></thead>
+<tbody>
+<tr><td>Default (idle)</td><td class="val">--color-border-default</td><td style="color:var(--color-text-muted)">—</td><td style="color:var(--color-text-muted)">—</td><td style="color:var(--color-text-muted)">无</td></tr>
+<tr><td>Pending</td><td class="val">--status-pending-border</td><td class="val">--status-pending-fg</td><td class="val">--status-pending-bg</td><td style="color:var(--color-text-muted)">无</td></tr>
+<tr><td>Processing</td><td class="val">--status-processing-border</td><td class="val">--status-processing-fg</td><td class="val">--status-processing-bg</td><td style="color:var(--color-text-secondary)">底部 2px 进度条动画</td></tr>
+<tr><td>Completed</td><td class="val">--status-completed-border</td><td class="val">--status-completed-fg</td><td class="val">--status-completed-bg</td><td style="color:var(--color-text-muted)">无</td></tr>
+<tr><td>Failed</td><td class="val">--status-failed-border</td><td class="val">--status-failed-fg</td><td class="val">--status-failed-bg</td><td style="color:var(--color-text-muted)">无</td></tr>
+<tr><td>Starred</td><td class="val">--status-starred-border</td><td class="val">--status-starred-fg</td><td class="val">--status-starred-bg</td><td style="color:var(--color-text-secondary)">右上角 18px 金色角标</td></tr>
+<tr><td>Hover</td><td class="val">rgba(255,255,255,0.12)</td><td style="color:var(--color-text-muted)">—</td><td style="color:var(--color-text-muted)">—</td><td style="color:var(--color-text-secondary)">bg → rgba(255,255,255,0.02)</td></tr>
+<tr><td>Focused</td><td class="val">--color-primary (2px ring)</td><td style="color:var(--color-text-muted)">—</td><td style="color:var(--color-text-muted)">—</td><td style="color:var(--color-text-secondary)">outline: 2px solid, offset 2px</td></tr>
+<tr><td>Disabled</td><td class="val">rgba(255,255,255,0.04)</td><td style="color:var(--color-text-muted)">—</td><td style="color:var(--color-text-muted)">—</td><td style="color:var(--color-text-secondary)">opacity: 0.5; pointer-events: none</td></tr>
+</tbody>
+</table>
+
+<h3>5.3 动画与过渡</h3>
+<table class="spec-table">
+<thead><tr><th>触发</th><th>属性</th><th>Duration</th><th>Easing</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>Hover in/out</td><td class="prop">border-color, background</td><td class="val">150ms</td><td class="val">ease-out-quart</td><td style="color:var(--color-text-secondary)">快速响应</td></tr>
+<tr><td>Collapse → Expand</td><td class="prop">max-height, padding, opacity</td><td class="val">250ms</td><td class="val">ease-out-quart</td><td style="color:var(--color-text-secondary)">展开内容区</td></tr>
+<tr><td>Expand → Collapse</td><td class="prop">max-height, padding, opacity</td><td class="val">200ms</td><td class="val">ease-in</td><td style="color:var(--color-text-secondary)">收起略快</td></tr>
+<tr><td>Status change</td><td class="prop">border-color</td><td class="val">400ms</td><td class="val">ease-out-quart</td><td style="color:var(--color-text-secondary)">颜色缓入</td></tr>
+<tr><td>Processing bar</td><td class="prop">width</td><td class="val">2s loop</td><td class="val">ease-in-out</td><td style="color:var(--color-text-secondary)">不确定进度指示</td></tr>
+<tr><td>Star badge appear</td><td class="prop">scale, opacity</td><td class="val">250ms</td><td class="val">spring(1,80,10)</td><td style="color:var(--color-text-secondary)">弹性出现</td></tr>
+</tbody>
+</table>
+
+<!-- ═══ 交互行为 ═══ -->
+<h2>6 交互行为详述</h2>
+
+<h3>6.1 点击展开/收起</h3>
+<div class="interaction-note">
+  <div class="label">行为</div>
+  <p>点击 collapsed card 任意区域 → 展开为 expanded。点击 expanded header 区域 → 收起。点击 expanded body 内容区域<strong>不触发收起</strong>（允许选择文字 / 操作 candidates）。<strong>排他展开</strong>：同一时刻只有 1 个 ShotCard 处于 expanded；展开新卡时旧卡自动收起 (accordion mode)。</p>
+</div>
+
+<h3>6.2 Candidates 选择 (Starring)</h3>
+<div class="interaction-note">
+  <div class="label">行为</div>
+  <p>在 expanded 态下，点击任意 candidate thumbnail → 该 candidate 获得 starred 样式 (金色 border + 角标)。卡片整体 status 变为 <strong>starred</strong>。<strong>单选</strong>：每个 shot 只能 star 1 个 candidate。点击已 starred 的 candidate → unstar，卡片回到 completed。</p>
+</div>
+
+<h3>6.3 右键菜单 / 长按</h3>
+<div class="interaction-note">
+  <div class="label">行为</div>
+  <p>右键任意 ShotCard 弹出 context menu：<strong>Regenerate</strong> / <strong>Edit Prompt</strong> / <strong>Compare Takes</strong> (打开 CompareModal) / <strong>Copy Prompt</strong> / <strong>Delete Shot</strong> (danger, 需二次确认)。长按 (mobile/tablet) 等效右键。</p>
+</div>
+
+<h3>6.4 拖拽排序</h3>
+<div class="interaction-note">
+  <div class="label">行为</div>
+  <p>Collapsed 态下可通过左侧 shot-num 区域拖拽重排序。拖拽中: <code>opacity: 0.6</code> + <code>scale(1.02)</code> + <code>box-shadow: 0 8px 24px rgba(0,0,0,0.4)</code>。放置目标位置显示 2px primary 水平指示线。<strong>Expanded 态不可拖拽</strong>。</p>
+</div>
+
+<h3>6.5 键盘导航</h3>
+<div class="interaction-note">
+  <div class="label">行为</div>
+  <p><strong>Arrow Up/Down</strong>：在 shot 列表间移动焦点。<strong>Enter / Space</strong>：展开/收起。<strong>Tab</strong>：在展开态内，焦点进入 candidates → action buttons。<strong>Escape</strong>：收起展开态。<strong>1-4 数字键</strong>：在展开态直接 star 对应编号 candidate。</p>
+</div>
+
+<h3>6.6 批量操作</h3>
+<div class="interaction-note">
+  <div class="label">行为</div>
+  <p><strong>Cmd/Ctrl + Click</strong>：多选 shot cards (collapsed 态)。选中后顶部浮现批量操作栏："Generate All" / "Delete Selected" / "Export Selected"。选中卡片获得左侧 2px primary indicator + 浅 primary bg tint rgba(100,108,255,0.04)。</p>
+</div>
+
+<!-- ═══ 无障碍 ═══ -->
+<h2>7 无障碍 (a11y)</h2>
+
+<table class="spec-table">
+<thead><tr><th>要求</th><th>实现方式</th></tr></thead>
+<tbody>
+<tr><td>Role</td><td class="val">role="listitem" (容器 role="list")</td></tr>
+<tr><td>Expandable</td><td class="val">aria-expanded="true|false"</td></tr>
+<tr><td>Status announce</td><td class="val">aria-label 包含状态 e.g. "Shot 3, completed, starred"</td></tr>
+<tr><td>Progress</td><td class="val">Processing 时: role="progressbar" aria-valuenow / aria-valuemax</td></tr>
+<tr><td>Contrast</td><td class="val">所有 status badge fg/bg 对比度 >= 4.5:1 (OKLCH 已校准)</td></tr>
+<tr><td>Reduced Motion</td><td class="val">prefers-reduced-motion → processingBar 用静态 opacity pulse</td></tr>
+<tr><td>Focus visible</td><td class="val">2px solid primary ring, offset 2px, radius inherit</td></tr>
+<tr><td>Screen reader</td><td class="val">Candidates: "Take 2, starred" via aria-selected + aria-label</td></tr>
+</tbody>
+</table>
+
+<!-- ═══ 组件 API ═══ -->
+<h2>8 组件 API (Props Interface)</h2>
+
+<table class="spec-table">
+<thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td class="prop">id</td><td>string</td><td>required</td><td>唯一 shot 标识</td></tr>
+<tr><td class="prop">shotIndex</td><td>number</td><td>required</td><td>序号 (1-based 显示用)</td></tr>
+<tr><td class="prop">status</td><td>'pending' | 'processing' | 'completed' | 'failed' | 'starred'</td><td>'pending'</td><td>当前业务状态</td></tr>
+<tr><td class="prop">prompt</td><td>string</td><td>''</td><td>Prompt 全文</td></tr>
+<tr><td class="prop">entities</td><td>Array&lt;{type: 'character'|'scene'|'prop', name: string}&gt;</td><td>[]</td><td>实体列表</td></tr>
+<tr><td class="prop">candidates</td><td>Array&lt;{id: string, url: string, starred: boolean}&gt;</td><td>[]</td><td>生成候选列表</td></tr>
+<tr><td class="prop">progress</td><td>number | null</td><td>null</td><td>0-100 生成进度</td></tr>
+<tr><td class="prop">thumbnailUrl</td><td>string | null</td><td>null</td><td>参考图缩略图 URL</td></tr>
+<tr><td class="prop">expanded</td><td>boolean</td><td>false</td><td>受控展开状态</td></tr>
+<tr><td class="prop">disabled</td><td>boolean</td><td>false</td><td>禁用所有交互</td></tr>
+<tr><td class="prop">selected</td><td>boolean</td><td>false</td><td>批量选中态</td></tr>
+<tr><td class="prop">errorMessage</td><td>string | null</td><td>null</td><td>失败时错误信息</td></tr>
+<tr><td class="prop">onToggle</td><td>() => void</td><td>—</td><td>展开/收起回调</td></tr>
+<tr><td class="prop">onStar</td><td>(candidateId: string) => void</td><td>—</td><td>Star 候选回调</td></tr>
+<tr><td class="prop">onGenerate</td><td>() => void</td><td>—</td><td>触发生成</td></tr>
+<tr><td class="prop">onRetry</td><td>() => void</td><td>—</td><td>重试失败</td></tr>
+<tr><td class="prop">onReorder</td><td>(fromIndex: number, toIndex: number) => void</td><td>—</td><td>拖拽排序</td></tr>
+<tr><td class="prop">onContextAction</td><td>(action: string) => void</td><td>—</td><td>右键菜单动作</td></tr>
+</tbody>
+</table>
+
+<!-- ═══ Component Tokens ═══ -->
+<h2>9 Component Token 映射</h2>
+
+<table class="spec-table">
+<thead><tr><th>Token</th><th>Value</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td class="prop">--shot-bg</td><td class="val">var(--color-bg-elevated)</td><td>卡片背景</td></tr>
+<tr><td class="prop">--shot-border</td><td class="val">var(--color-border-default)</td><td>默认边框</td></tr>
+<tr><td class="prop">--shot-border-hover</td><td class="val">rgba(255,255,255,0.12)</td><td>Hover 边框</td></tr>
+<tr><td class="prop">--shot-border-expanded</td><td class="val">rgba(100,108,255,0.25)</td><td>展开态 primary tint</td></tr>
+<tr><td class="prop">--shot-radius</td><td class="val">var(--seed-radius)</td><td>圆角</td></tr>
+<tr><td class="prop">--shot-thumb-size</td><td class="val">40px</td><td>缩略图尺寸</td></tr>
+<tr><td class="prop">--shot-num-color</td><td class="val">var(--color-text-muted)</td><td>序号文字色</td></tr>
+<tr><td class="prop">--shot-transition</td><td class="val">var(--duration-base) var(--ease-out-quart)</td><td>默认过渡曲线</td></tr>
+<tr><td class="prop">--shot-progress-height</td><td class="val">2px</td><td>底部进度条高度</td></tr>
+<tr><td class="prop">--shot-star-size</td><td class="val">18px</td><td>角标尺寸</td></tr>
+</tbody>
+</table>
+
+</body>
+</html>

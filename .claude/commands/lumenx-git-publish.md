@@ -9,11 +9,12 @@ description: LumenX GitHub 发布流程 - 安全提交、敏感数据扫描、�
 ## 核心规则
 
 - **禁止直接推送 `main` 分支** — 必须通过 feature 分支 + PR
+- **只推送 `github` remote**，发布时忽略 `origin`（已废弃的 GitLab）
 - **推送前必须执行敏感数据扫描**
 - **Commit Message 遵循 Conventional Commits** (`feat:` / `fix:` / `docs:` / `refactor:` / `chore:`)
 - **GitHub remote 名称为 `github`**，仓库地址：`https://github.com/alibaba/lumenx.git`
 - **GitHub 镜像提交的作者固定为** `Mike4Ellis <1007062267@qq.com>`
-- **GitHub PR 统一由** `Star-Lotus` **账号发起**；如果 `Mike4Ellis` 无法创建 PR，需要先切换 `gh` 活跃账号再执行 `gh pr create`
+- **GitHub PR 统一由** `Star-Lotus` **账号发起**；如果 `Mike4Ellis` 缺少 `createPullRequest` 权限，需要先切换 `gh` 活跃账号再执行 `gh pr create`
 
 ## 阶段一：提交前检查
 
@@ -60,6 +61,16 @@ grep -E "^\.env|^\.agent|^CLAUDE\.md|^output/" .gitignore
 ```
 
 确保至少包含：`.env`、`.agent/`、`CLAUDE.md`、`output/`
+
+### 4. 镜像工作流对等性检查（如改动了 workflow 镜像）
+
+如果本次改动涉及 `.claude/commands/` 或 `.codex/workflows/`，必须运行：
+
+```bash
+python3 scripts/check_workflow_parity.py
+```
+
+比对失败时：同步两侧镜像文件，或在脚本的 `WAIVERS` 中记录有意分歧及理由。
 
 ## 阶段二：代码质量（可选但推荐）
 

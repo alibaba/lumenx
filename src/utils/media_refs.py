@@ -34,11 +34,9 @@ def _output_root(project_root: Optional[str] = None) -> Path:
 
 
 def _is_under(path: Path, parent: Path) -> bool:
-    try:
-        path.resolve().relative_to(parent.resolve())
-        return True
-    except ValueError:
-        return False
+    resolved = os.path.realpath(str(path))
+    parent_real = os.path.realpath(str(parent))
+    return resolved == parent_real or resolved.startswith(parent_real + os.sep)
 
 
 def _normalized_oss_base_path(oss_base_path: Optional[str] = None) -> str:
@@ -93,11 +91,13 @@ def resolve_local_media_path(value: str, *, project_root: Optional[str] = None) 
         return None
 
     raw = value.strip()
-    output_root = _output_root(project_root).resolve()
+    output_root = os.path.realpath(str(_output_root(project_root)))
 
     if os.path.isabs(raw):
-        abs_path = Path(raw).resolve()
-        return str(abs_path) if _is_under(abs_path, output_root) else None
+        abs_path = os.path.realpath(raw)
+        if abs_path.startswith(output_root + os.sep):
+            return abs_path
+        return None
 
     relative = raw.lstrip("/")
     if relative.startswith("output/"):
@@ -105,8 +105,10 @@ def resolve_local_media_path(value: str, *, project_root: Optional[str] = None) 
     elif relative.startswith("outputs/"):
         relative = relative[len("outputs/") :]
 
-    abs_path = (output_root / relative).resolve()
-    return str(abs_path) if _is_under(abs_path, output_root) else None
+    abs_path = os.path.realpath(os.path.join(output_root, relative))
+    if abs_path.startswith(output_root + os.sep):
+        return abs_path
+    return None
 
 
 def is_remote_media_ref(value: str) -> bool:

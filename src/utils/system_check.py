@@ -103,7 +103,9 @@ def check_ffmpeg() -> Tuple[bool, str]:
     except subprocess.TimeoutExpired:
         return False, f"FFmpeg at {ffmpeg_path} timed out"
     except Exception as e:
-        return False, f"FFmpeg found at {ffmpeg_path} but not working: {str(e)}"
+        # Log details server-side; don't expose exception text to API callers
+        logger.warning(f"FFmpeg check failed at {ffmpeg_path}: {e}")
+        return False, f"FFmpeg found at {ffmpeg_path} but not working ({type(e).__name__})"
 
 
 def get_system_info() -> Dict[str, str]:

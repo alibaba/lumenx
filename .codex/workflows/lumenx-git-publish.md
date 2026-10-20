@@ -79,7 +79,17 @@ Expected coverage includes:
 - `CLAUDE.md`
 - `output/`
 
-## Step 4: Optional Quality Checks
+## Step 4: Workflow Mirror Parity Check (when workflow mirrors changed)
+
+If the change touches `.claude/commands/` or `.codex/workflows/`, run:
+
+```bash
+python3 scripts/check_workflow_parity.py
+```
+
+On failure: sync the mirrored files on both sides, or record an intentional divergence with its reason in the script's `WAIVERS`.
+
+## Step 5: Optional Quality Checks
 
 Run relevant checks when the changed files warrant them.
 
@@ -96,7 +106,7 @@ Frontend lint:
 cd frontend && npm run lint
 ```
 
-## Step 5: Stage Carefully
+## Step 6: Stage Carefully
 
 Stage only the intended files. Do not use `git add .`.
 
@@ -104,7 +114,7 @@ Stage only the intended files. Do not use `git add .`.
 git add <specific-files>
 ```
 
-## Step 6: Commit
+## Step 7: Commit
 
 Create an English Conventional Commit message:
 
@@ -132,7 +142,7 @@ Common prefixes:
 - `test:`
 - `chore:`
 
-## Step 7: Push to GitHub
+## Step 8: Push to GitHub
 
 Push the current branch to the `github` remote:
 
@@ -140,7 +150,7 @@ Push the current branch to the `github` remote:
 git push -u github <branch-name>
 ```
 
-## Step 8: Create a Pull Request
+## Step 9: Create a Pull Request
 
 Use GitHub CLI to open the PR:
 
@@ -160,7 +170,7 @@ EOF
 )"
 ```
 
-## Step 9: Post-Push Verification
+## Step 10: Post-Push Verification
 
 - Confirm the branch and PR are visible on GitHub.
 - Check README rendering if docs changed.
@@ -174,4 +184,4 @@ If the commit has not been pushed yet:
 git reset --soft HEAD~1
 ```
 
-If sensitive data was already pushed, stop and escalate to the team for history cleanup.
+If sensitive data was already pushed, the history must be cleaned with BFG Repo-Cleaner and force pushed. Contact the team for assistance.

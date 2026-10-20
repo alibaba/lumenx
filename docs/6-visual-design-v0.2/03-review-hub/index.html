@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LumenX 前端重构 · 设计评审中心</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    /* Neutral "control room" palette — deliberately distinct from all 4 reviewed styles */
+    --bg:        #0b0c0f;
+    --bg-2:      #111319;
+    --bg-3:      #161922;
+    --bg-card:   #14171e;
+    --line:      rgba(255,255,255,0.08);
+    --line-2:    rgba(255,255,255,0.045);
+    --fg:        #e9ebf0;
+    --fg-2:      #9aa1b1;
+    --fg-3:      #646b7d;
+    --accent:    #7dd3c0;   /* muted neutral teal — the hub's own voice */
+    --accent-2:  #f0a868;   /* warm secondary */
+    --radius:    14px;
+
+    /* per-style identity dots */
+    --c-original:  #8b93a7;
+    --c-qoderwork: #646cff;
+    --c-linea:     #ff3d80;
+    --c-lineb:     #34d8c4;
+
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Space Grotesk', system-ui, sans-serif;
+    --serif:'Newsreader', Georgia, serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);
+    color:var(--fg);
+    font-family:var(--sans);
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(60% 50% at 12% -5%, rgba(125,211,192,0.06), transparent 70%),
+      radial-gradient(50% 40% at 100% 0%, rgba(240,168,104,0.05), transparent 70%);
+    background-attachment:fixed;
+  }
+  ::selection{background:rgba(125,211,192,0.25)}
+
+  /* ───────── Header ───────── */
+  header.hub{
+    padding:34px clamp(20px,4vw,56px) 22px;
+    border-bottom:1px solid var(--line);
+    position:relative;
+  }
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:0.22em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:14px;
+  }
+  h1.hub{
+    font-size:clamp(28px,4vw,42px);font-weight:700;letter-spacing:-0.02em;line-height:1.05;
+  }
+  h1.hub em{font-family:var(--serif);font-style:italic;font-weight:500;color:var(--accent)}
+  .sub{color:var(--fg-2);margin-top:12px;max-width:64ch;font-size:15px}
+
+  /* legend of 4 styles */
+  .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .lg{
+    display:flex;align-items:center;gap:8px;padding:7px 13px;border:1px solid var(--line);
+    border-radius:999px;background:var(--bg-2);font-size:12.5px;
+  }
+  .lg .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .lg b{font-weight:600}
+  .lg span{color:var(--fg-3);font-family:var(--mono);font-size:10.5px}
+
+  /* ───────── Tab nav ───────── */
+  nav.tabs{
+    position:sticky;top:0;z-index:40;
+    display:flex;gap:2px;flex-wrap:wrap;
+    padding:0 clamp(20px,4vw,56px);
+    background:rgba(11,12,15,0.86);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  nav.tabs button{
+    appearance:none;border:none;background:none;cursor:pointer;
+    font-family:var(--sans);font-size:13.5px;font-weight:500;color:var(--fg-2);
+    padding:16px 16px 14px;position:relative;transition:color .18s;
+    white-space:nowrap;
+  }
+  nav.tabs button:hover{color:var(--fg)}
+  nav.tabs button.active{color:var(--fg)}
+  nav.tabs button.active::after{
+    content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:2px;
+    background:var(--accent);border-radius:2px;
+  }
+  nav.tabs button .idx{font-family:var(--mono);font-size:10px;color:var(--fg-3);margin-right:7px}
+  nav.tabs button.active .idx{color:var(--accent)}
+
+  /* ───────── Panels ───────── */
+  main{padding:clamp(24px,4vw,44px) clamp(20px,4vw,56px) 80px;max-width:1640px;margin:0 auto}
+  .panel{display:none;animation:fade .35s ease}
+  .panel.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* compare toolbar */
+  .cmp-intro{margin-bottom:22px;max-width:74ch}
+  .cmp-intro h2{font-size:22px;font-weight:600;letter-spacing:-0.01em;margin-bottom:8px}
+  .cmp-intro p{color:var(--fg-2);font-size:14px}
+
+  .toolbar{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+    margin:18px 0 26px;padding:14px 16px;border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--bg-2);position:sticky;top:53px;z-index:30;backdrop-filter:blur(8px);
+  }
+  .toolbar .filters{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+  .toolbar .flbl{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--fg-3);margin-right:4px}
+  .chip{
+    appearance:none;cursor:pointer;border:1px solid var(--line);background:var(--bg-3);
+    color:var(--fg-2);font-family:var(--sans);font-size:12.5px;font-weight:500;
+    padding:6px 13px;border-radius:999px;display:inline-flex;align-items:center;gap:7px;transition:all .16s;
+  }
+  .chip .dot{width:8px;height:8px;border-radius:50%}
+  .chip:hover{border-color:var(--line);color:var(--fg);background:var(--bg-card)}
+  .chip.on{border-color:rgba(125,211,192,0.5);color:var(--fg);background:rgba(125,211,192,0.1)}
+  .jump{display:flex;flex-wrap:wrap;gap:6px}
+  .jump a{font-family:var(--mono);font-size:11px;color:var(--fg-3);text-decoration:none;padding:5px 9px;border-radius:7px;transition:all .16s}
+  .jump a:hover{color:var(--accent);background:var(--bg-3)}
+
+  /* module section */
+  .mod{margin-bottom:46px;scroll-margin-top:130px}
+  .mod-head{display:flex;align-items:baseline;gap:14px;margin-bottom:6px;padding-bottom:12px;border-bottom:1px solid var(--line-2)}
+  .mod-head .num{font-family:var(--mono);font-size:13px;color:var(--accent)}
+  .mod-head h3{font-size:20px;font-weight:600;letter-spacing:-0.01em}
+  .mod-head .en{font-family:var(--mono);font-size:11px;color:var(--fg-3);letter-spacing:0.1em;text-transform:uppercase}
+  .mod-desc{color:var(--fg-2);font-size:13.5px;margin:12px 0 18px;max-width:80ch}
+  .mod-desc .gap{color:var(--accent-2);font-weight:500}
+
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  @media(max-width:1180px){.grid4{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:620px){.grid4{grid-template-columns:1fr}}
+
+  .shot{
+    border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:var(--bg-card);
+    display:flex;flex-direction:column;transition:transform .2s,border-color .2s,box-shadow .2s;
+  }
+  .shot:hover{transform:translateY(-3px);border-color:rgba(255,255,255,0.18);box-shadow:0 16px 40px rgba(0,0,0,0.5)}
+  .shot.hidden{display:none}
+  .shot .cap{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--line-2)}
+  .shot .cap .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+  .shot .cap b{font-size:13px;font-weight:600}
+  .shot .cap .tag{margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--fg-3);border:1px solid var(--line);padding:2px 6px;border-radius:5px}
+  .shot .thumb{position:relative;display:block;aspect-ratio:1440/900;background:var(--bg-3);overflow:hidden}
+  .shot .thumb img{width:100%;height:100%;object-fit:cover;object-position:top center;display:block;transition:transform .4s}
+  .shot:hover .thumb img{transform:scale(1.03)}
+  .shot .thumb .open{
+    position:absolute;inset:0;display:flex;align-items:flex-end;justify-content:flex-end;
+    padding:12px;opacity:0;transition:opacity .2s;
+    background:linear-gradient(to top,rgba(0,0,0,0.55),transparent 45%);
+  }
+  .shot:hover .thumb .open{opacity:1}
+  .shot .thumb .open span{
+    font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;color:#fff;
+    background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.25);padding:5px 10px;border-radius:7px;
+    backdrop-filter:blur(4px);
+  }
+  .shot .foot{padding:9px 13px;display:flex;gap:8px;align-items:center;border-top:1px solid var(--line-2);margin-top:auto}
+  .shot .foot a{font-family:var(--mono);font-size:10.5px;text-decoration:none;color:var(--fg-2);display:inline-flex;align-items:center;gap:4px;transition:color .16s}
+  .shot .foot a:hover{color:var(--accent)}
+  .shot .foot a.live{color:var(--fg-3)}
+  .shot .foot .sep{color:var(--fg-3);font-size:10px}
+  .shot .note{font-size:11.5px;color:var(--fg-3);padding:0 13px 11px}
+  .shot .note.miss{color:var(--accent-2)}
+
+  /* analysis prose */
+  .analysis{margin-top:60px;border-top:1px solid var(--line);padding-top:42px}
+  .analysis .kicker{font-family:var(--mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+  .analysis h2{font-size:clamp(24px,3vw,32px);font-weight:600;letter-spacing:-0.02em;margin-bottom:8px}
+  .analysis h2 em{font-family:var(--serif);font-style:italic;color:var(--accent)}
+  .analysis .lede{font-family:var(--serif);font-size:18px;line-height:1.65;color:var(--fg);max-width:74ch;margin-bottom:36px}
+  .analysis h3{font-size:18px;font-weight:600;margin:34px 0 14px;display:flex;align-items:center;gap:10px}
+  .analysis h3 .hn{font-family:var(--mono);font-size:12px;color:var(--accent)}
+  .analysis p{color:var(--fg-2);max-width:80ch;margin-bottom:14px;font-size:14.5px}
+  .analysis p strong{color:var(--fg);font-weight:600}
+  .analysis ul{margin:0 0 16px 0;padding-left:0;list-style:none;max-width:80ch}
+  .analysis ul li{position:relative;padding-left:22px;margin-bottom:9px;color:var(--fg-2);font-size:14px}
+  .analysis ul li::before{content:"▸";position:absolute;left:4px;color:var(--accent);font-size:12px;top:2px}
+  .analysis ul li b{color:var(--fg)}
+
+  /* comparison table */
+  .tbl-wrap{overflow-x:auto;margin:20px 0 30px;border:1px solid var(--line);border-radius:var(--radius)}
+  table.cmp{border-collapse:collapse;width:100%;min-width:760px;font-size:13px}
+  table.cmp th,table.cmp td{padding:13px 15px;text-align:left;border-bottom:1px solid var(--line-2);vertical-align:top}
+  table.cmp thead th{background:var(--bg-2);font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--fg-2);position:sticky;top:0}
+  table.cmp thead th .d{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  table.cmp tbody th{font-weight:600;color:var(--fg);font-size:12.5px;background:var(--bg-2);white-space:nowrap}
+  table.cmp td{color:var(--fg-2)}
+  table.cmp tr:last-child td,table.cmp tr:last-child th{border-bottom:none}
+
+  /* verdict cards */
+  .verdicts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;margin:22px 0 8px}
+  .vc{border:1px solid var(--line);border-radius:var(--radius);padding:18px;background:var(--bg-card);position:relative;overflow:hidden}
+  .vc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--vcc,var(--accent))}
+  .vc .vh{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+  .vc .vh .dot{width:10px;height:10px;border-radius:50%}
+  .vc .vh b{font-size:14.5px;font-weight:600}
+  .vc .score{font-family:var(--mono);font-size:11px;color:var(--fg-3);margin-left:auto}
+  .vc .verdict{font-size:13px;color:var(--fg-2);margin-bottom:10px}
+  .vc .pro,.vc .con{font-size:12.5px;display:flex;gap:7px;margin-bottom:5px;color:var(--fg-2)}
+  .vc .pro span:first-child{color:#62d68f}
+  .vc .con span:first-child{color:#ef6f7b}
+
+  .rec{
+    margin-top:36px;border:1px solid rgba(125,211,192,0.3);border-radius:var(--radius);
+    padding:26px;background:linear-gradient(135deg,rgba(125,211,192,0.07),rgba(240,168,104,0.04));
+  }
+  .rec .rk{font-family:var(--mono);font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+  .rec h3{font-size:20px;font-weight:600;margin-bottom:14px}
+  .rec p{color:var(--fg);max-width:82ch;font-size:14.5px;margin-bottom:12px}
+  .rec ol{margin:14px 0 4px;padding-left:20px;max-width:82ch}
+  .rec ol li{margin-bottom:10px;color:var(--fg-2);font-size:14px}
+  .rec ol li b{color:var(--fg)}
+
+  /* doc/report panels (iframe) */
+  .doc-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+  .doc-head h2{font-size:22px;font-weight:600}
+  .doc-head p{color:var(--fg-2);font-size:13.5px;margin-top:4px}
+  .doc-head .open-new{font-family:var(--mono);font-size:11.5px;text-decoration:none;color:var(--accent);border:1px solid rgba(125,211,192,0.35);padding:8px 14px;border-radius:8px;transition:all .16s}
+  .doc-head .open-new:hover{background:rgba(125,211,192,0.1)}
+  .frame{width:100%;height:calc(100vh - 220px);min-height:560px;border:1px solid var(--line);border-radius:var(--radius);background:#050508}
+
+  /* design system rendered */
+  .ds{max-width:none}
+  .ds-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:28px;align-items:start}
+  @media(max-width:900px){.ds-grid{grid-template-columns:1fr}}
+  .swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:16px 0 24px}
+  .sw{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .sw .chip-color{height:54px}
+  .sw .meta{padding:8px 10px;font-size:11px}
+  .sw .meta b{display:block;font-size:12px;margin-bottom:2px}
+  .sw .meta code{font-family:var(--mono);font-size:10px;color:var(--fg-3)}
+  .ds-card{border:1px solid var(--line);border-radius:var(--radius);padding:20px;background:var(--bg-card);margin-bottom:18px}
+  .ds-card h4{font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .ds-card h4 .hn{font-family:var(--mono);font-size:11px;color:var(--accent)}
+  .ds-card ul{list-style:none;padding:0}
+  .ds-card ul li{font-size:13px;color:var(--fg-2);padding:5px 0;border-bottom:1px solid var(--line-2);display:flex;justify-content:space-between;gap:12px}
+  .ds-card ul li:last-child{border-bottom:none}
+  .ds-card ul li code{font-family:var(--mono);font-size:11px;color:var(--accent-2)}
+  .ds-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+  .ds-links a{font-family:var(--mono);font-size:11.5px;text-decoration:none;color:var(--fg-2);border:1px solid var(--line);padding:8px 13px;border-radius:8px;transition:all .16s;display:inline-flex;gap:6px;align-items:center}
+  .ds-links a:hover{color:var(--accent);border-color:rgba(125,211,192,0.4)}
+
+  .callout{border-left:3px solid var(--accent);background:var(--bg-2);padding:14px 18px;border-radius:0 10px 10px 0;margin:18px 0;font-size:13.5px;color:var(--fg-2)}
+  .callout b{color:var(--fg)}
+
+  footer.hub{border-top:1px solid var(--line);padding:28px clamp(20px,4vw,56px);color:var(--fg-3);font-size:12px;font-family:var(--mono);display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between}
+</style>
+</head>
+<body>
+
+<header class="hub">
+  <div class="eyebrow">LumenX Studio · Frontend Redesign Review</div>
+  <h1 class="hub">前端重构 · <em>设计评审中心</em></h1>
+  <p class="sub">一站式横向对比四套 UI 方案 —— 按核心模块对齐缩略图、点击进入真实页面交互测试，并附 QoderWork 的信息架构审计、重构路线、ShotCard 交互规范与设计系统文档。</p>
+  <div class="legend">
+    <div class="lg"><span class="dot" style="background:var(--c-original)"></span><b>原版 LumenX</b><span>当前生产前端</span></div>
+    <div class="lg"><span class="dot" style="background:var(--c-qoderwork)"></span><b>QoderWork</b><span>ReDesign 方案</span></div>
+    <div class="lg"><span class="dot" style="background:var(--c-linea)"></span><b>Line A · Cyber Refined</b><span>Tasty Sam 延续线</span></div>
+    <div class="lg"><span class="dot" style="background:var(--c-lineb)"></span><b>Line B · Luminous Atelier</b><span>Tasty Sam 突破线</span></div>
+  </div>
+</header>
+
+<nav class="tabs" id="tabnav">
+  <button class="active" data-tab="compare"><span class="idx">01</span>四风格对比</button>
+  <button data-tab="ia"><span class="idx">02</span>信息架构审计</button>
+  <button data-tab="roadmap"><span class="idx">03</span>重构方案与路线</button>
+  <button data-tab="shotcard"><span class="idx">04</span>ShotCard 交互规范</button>
+  <button data-tab="ds"><span class="idx">05</span>设计系统</button>
+  <button data-tab="beforeafter"><span class="idx">06</span>Before → After</button>
+</nav>
+
+<main>
+
+<!-- ════════════ TAB 1 · COMPARE ════════════ -->
+<section class="panel active" id="tab-compare">
+  <div class="cmp-intro">
+    <h2>按模块对齐的四风格对比</h2>
+    <p>每个核心模块横向并排四套风格的真实渲染截图。<b style="color:var(--fg)">点击缩略图</b>在新标签打开可交互页面：静态方案打开高保真 HTML 原型，原版打开运行中的应用（需本地 <code style="font-family:var(--mono);font-size:12px">localhost:3008</code>）。用上方筛选器可只看某一两套风格。</p>
+  </div>
+
+  <div class="toolbar">
+    <div class="filters">
+      <span class="flbl">风格筛选</span>
+      <button class="chip on" data-style="original"><span class="dot" style="background:var(--c-original)"></span>原版</button>
+      <button class="chip on" data-style="qoderwork"><span class="dot" style="background:var(--c-qoderwork)"></span>QoderWork</button>
+      <button class="chip on" data-style="linea"><span class="dot" style="background:var(--c-linea)"></span>Line A</button>
+      <button class="chip on" data-style="lineb"><span class="dot" style="background:var(--c-lineb)"></span>Line B</button>
+    </div>
+    <div class="jump">
+      <a href="#m-workspace">工作区</a>
+      <a href="#m-storyboard">分镜台</a>
+      <a href="#m-pipeline">流程步骤</a>
+      <a href="#m-library">资产库</a>
+      <a href="#m-settings">设置</a>
+      <a href="#m-playground">创作台</a>
+      <a href="#m-modals">模态框</a>
+      <a href="#analysis">↓ 分析</a>
+    </div>
+  </div>
+
+  <div id="modules"></div>
+
+  <!-- ───── written analysis ───── -->
+  <div class="analysis" id="analysis">
+    <div class="kicker">Analysis · 异同与取舍</div>
+    <h2>四套方案，<em>同一个命题</em>的四种答法</h2>
+    <p class="lede">四套界面回答的是同一道题：让一个 pipeline-first 的 AI 短漫剧工具，把「脚本 → 美术 → Cast → 分镜 R2V → 合成」这条创作流，装进一个 dark-first、内容为王的创作者驾驶舱里。它们的分歧不在功能，而在<strong style="color:var(--fg)">「UI chrome 该有多大声量」</strong>与<strong style="color:var(--fg)">「用什么视觉母语跟创作者对话」</strong>。</p>
+
+    <h3><span class="hn">A</span>共同的地基（四者一致）</h3>
+    <ul>
+      <li><b>Dark-first 不可动摇</b>：四套都用深色底，让图像/视频/分镜缩略图自发光成为主角，没有任何一套考虑亮色模式。</li>
+      <li><b>左侧全局导航 + 内容主区</b>：工作区/资产库/设置/创作台的顶层结构一致；项目内都走「步骤式 Pipeline 侧栏」。</li>
+      <li><b>内容为王是共识</b>：媒体区块永远比文字/控件占更大视觉权重，chrome 在不需要时退到背景。</li>
+      <li><b>5 态语义系统</b>：pending / processing / completed / failed / starred 五种状态在每套里都有专属色彩表达，语义一致只是色相不同。</li>
+    </ul>
+
+    <h3><span class="hn">B</span>关键差异（逐维拆解）</h3>
+    <div class="tbl-wrap">
+      <table class="cmp">
+        <thead>
+          <tr>
+            <th>维度</th>
+            <th><span class="d" style="background:var(--c-original)"></span>原版 LumenX</th>
+            <th><span class="d" style="background:var(--c-qoderwork)"></span>QoderWork</th>
+            <th><span class="d" style="background:var(--c-linea)"></span>Line A · Cyber Refined</th>
+            <th><span class="d" style="background:var(--c-lineb)"></span>Line B · Atelier</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><th>视觉基调</th><td>玻璃拟态 + 霓虹蓝粉，星空背景，偏「科技感 SaaS」</td><td>赛博粗野 × 电影克制，棱角莲花徽标 + 扫描线网格</td><td>同 QoderWork 框架内做精：层次更清晰、blur 减量、CTA 更突出</td><td>暖石墨暗房底 + 电影 teal↔amber 互补色，近无框浮起卡片</td></tr>
+          <tr><th>底色</th><td>纯冷黑 #050508 + 全局星空粒子</td><td>纯冷黑 #050508</td><td>纯冷黑 #050508（沿用品牌）</td><td>暖中性深石墨 #0c0b0e</td></tr>
+          <tr><th>强调色</th><td>电蓝 #646cff + 霓虹粉 #ff0080</td><td>电蓝 + 霓虹粉（同源）</td><td>电蓝 + 热粉（收敛使用频率）</td><td>电影 teal #34d8c4 + amber #ffa94d</td></tr>
+          <tr><th>字体</th><td>Space Grotesk / Inter / JetBrains Mono</td><td>JetBrains Mono 字标主导，工程/终端感</td><td>Space Grotesk + Inter + Mono</td><td>Fraunces 高对比衬线 + Space Grotesk</td></tr>
+          <tr><th>容器语言</th><td>玻璃面板 + backdrop-blur（偏多）</td><td>棱角硬边框 + brutalist 网格</td><td>实色分层卡片，blur ≤2px，靠光而非雾建立层次</td><td>近无框浮起卡片 + 内容 halation 光晕</td></tr>
+          <tr><th>氛围层</th><td>星空粒子（与内容竞争注意力）</td><td>scanlines + grid 母题</td><td>克制扫描线，仅生成中状态点缀</td><td>极细胶片颗粒 + 光晕泄漏 + 柔和景深</td></tr>
+          <tr><th>响应式</th><td>桌面为主，未见明确断点策略</td><td>全 1440 桌面稿，无响应式说明</td><td>1440/1024/768 三档断点行为已定义</td><td>1440/1024/768 三档 + 画廊式留白降级</td></tr>
+          <tr><th>真实媒体验证</th><td>生产环境，天然有真实内容</td><td>占位色块为主，未用真实媒体压测</td><td>ImageGen 真实分镜/视频帧填充</td><td>同上，真实 noir 媒体 + 光晕</td></tr>
+          <tr><th>落地成本</th><td>—（现状基线）</td><td>中：换框架母题，需重做 chrome</td><td><b style="color:#62d68f">低</b>：同品牌色系，token 可直接映射现有 Tailwind</td><td>高：换底色/字体/强调色，等于一次品牌焕新</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3><span class="hn">C</span>逐方案判词</h3>
+    <div class="verdicts">
+      <div class="vc" style="--vcc:var(--c-original)">
+        <div class="vh"><span class="dot" style="background:var(--c-original)"></span><b>原版 LumenX</b><span class="score">基线</span></div>
+        <div class="verdict">功能最完整、唯一经真实数据与用户验证，但视觉是「能用」而非「有主张」。</div>
+        <div class="pro"><span>+</span><span>真实可用、数据完整、零迁移风险</span></div>
+        <div class="con"><span>–</span><span>玻璃拟态 + 星空粒子与内容争注意力；层级靠颜色而非结构；chrome 偏吵</span></div>
+      </div>
+      <div class="vc" style="--vcc:var(--c-qoderwork)">
+        <div class="vh"><span class="dot" style="background:var(--c-qoderwork)"></span><b>QoderWork</b><span class="score">方向佳</span></div>
+        <div class="verdict">建立了清晰的设计系统与 IA 审计，方向正确，但执行停在占位稿。</div>
+        <div class="pro"><span>+</span><span>三层 token 架构、IA 审计、ShotCard 规范完备</span></div>
+        <div class="con"><span>–</span><span>全占位色块未压测真实内容；无响应式；动效/全局态覆盖不全</span></div>
+      </div>
+      <div class="vc" style="--vcc:var(--c-linea)">
+        <div class="vh"><span class="dot" style="background:var(--c-linea)"></span><b>Line A · Cyber Refined</b><span class="score">推荐主线</span></div>
+        <div class="verdict">在 QoderWork 同框架内补齐所有执行短板，风险最低、可立即落地。</div>
+        <div class="pro"><span>+</span><span>沿用品牌色；真实媒体；三档响应式；完整 motion/态覆盖；CTA 更突出</span></div>
+        <div class="con"><span>–</span><span>视觉惊喜度有限——它是「做对」而非「做新」</span></div>
+      </div>
+      <div class="vc" style="--vcc:var(--c-lineb)">
+        <div class="vh"><span class="dot" style="background:var(--c-lineb)"></span><b>Line B · Atelier</b><span class="score">最大胆</span></div>
+        <div class="verdict">用电影调色母语（teal-orange + 暖暗房底 + 衬线）重塑气质，最贴合「把噪声渲染成叙事」的产品灵魂。</div>
+        <div class="pro"><span>+</span><span>差异化最强、最有作者感与电影感；光晕/颗粒赋予内容仪式感</span></div>
+        <div class="con"><span>–</span><span>等于品牌焕新，落地成本最高；衬线/暖底需团队审美认同</span></div>
+      </div>
+    </div>
+
+    <div class="rec">
+      <div class="rk">Recommendation · 我的建议</div>
+      <h3>主线走 Line A，把 Line B 作为「品牌焕新」备选押注</h3>
+      <p>如果目标是<strong>稳健落地、尽快收敛</strong>：选 <b style="color:var(--fg)">Line A · Cyber Refined</b>。它与现有品牌色和 Tailwind token 同源，迁移风险最低，且已经把 QoderWork 最大的三个短板（真实内容压测、响应式、全局态/动效）全部补齐——本质是「把已经认可的方向真正执行到位」。</p>
+      <p>如果团队愿意为<strong>差异化与品牌记忆点</strong>投入一次焕新：<b style="color:var(--fg)">Line B · Atelier</b> 是更有野心的答案。teal-orange 是电影调色的母语，暖暗房底是创作工坊的母语，对一个视频创作工具而言，它比冷硬赛博终端更贴合内容本身。建议先用 Line B 的 storyboard 工作台做一次小范围用户测试再决策。</p>
+      <p style="margin-top:6px"><b style="color:var(--fg)">务实的折中路径（我最推荐）：</b></p>
+      <ol>
+        <li><b>以 Line A 为骨架先落地</b>——结构、间距、组件、响应式、状态系统全部采用，快速替换现有玻璃拟态 chrome。</li>
+        <li><b>移植 Line B 的两个「signature」</b>到 Line A：选中镜头的 amber halation 光晕 + 极细胶片颗粒氛围层。这两点几乎零结构成本，却能立刻把「能用」拉到「有质感」。</li>
+        <li><b>去掉原版的全局星空粒子</b>——它是当前最明显的「与内容争注意力」来源，四套新方案都已摒弃。</li>
+        <li><b>补齐缺口模块</b>：原版的 modals 仅有建项目流程，建议照 QoderWork/Line 的 Lightbox / Compare / 任务队列规范补全。</li>
+        <li><b>把 Line B 完整保留为 v2 品牌焕新提案</b>，待 Atelier 产品线成熟、需要与 Studio 做视觉区分时启用。</li>
+      </ol>
+    </div>
+
+    <div class="callout" style="margin-top:30px">
+      <b>关于数据真实性：</b>本页四套截图均为真实渲染——原版取自运行中的生产前端（「爆心街区-R2V」60 帧已渲染分镜、76 个资产、真实创作台结果）；三套静态方案由高保真 HTML 原型 + ImageGen 真实媒体渲染。无任何占位假图，确保对比可信。
+    </div>
+  </div>
+</section>
+
+<!-- ════════════ TAB 2 · IA AUDIT ════════════ -->
+<section class="panel" id="tab-ia">
+  <div class="doc-head">
+    <div>
+      <h2>信息架构审计报告</h2>
+      <p>QoderWork 对现状 IA 的问题盘点与重构建议（现状分析 · 导航层级 · 信息密度）。</p>
+    </div>
+    <a class="open-new" href="../02-design-prototypes/report-ia-audit.html" target="_blank" rel="noopener">↗ 新标签打开</a>
+  </div>
+  <iframe class="frame" data-src="../02-design-prototypes/report-ia-audit.html" title="信息架构审计报告"></iframe>
+</section>
+
+<!-- ════════════ TAB 3 · ROADMAP ════════════ -->
+<section class="panel" id="tab-roadmap">
+  <div class="doc-head">
+    <div>
+      <h2>重构方案与里程碑路线</h2>
+      <p>QoderWork 的分阶段重构路线、优先级排序与里程碑规划。</p>
+    </div>
+    <a class="open-new" href="../02-design-prototypes/report-refactor-roadmap.html" target="_blank" rel="noopener">↗ 新标签打开</a>
+  </div>
+  <iframe class="frame" data-src="../02-design-prototypes/report-refactor-roadmap.html" title="重构方案与里程碑路线"></iframe>
+</section>
+
+<!-- ════════════ TAB 4 · SHOTCARD ════════════ -->
+<section class="panel" id="tab-shotcard">
+  <div class="doc-head">
+    <div>
+      <h2>ShotCard 完整交互态规范</h2>
+      <p>分镜卡片的全状态规范：default / hover / focus / 生成中 / 完成 / 失败 / 选中 + 候选与对比交互。</p>
+    </div>
+    <a class="open-new" href="../02-design-prototypes/shotcard-spec.html" target="_blank" rel="noopener">↗ 新标签打开</a>
+  </div>
+  <iframe class="frame" data-src="../02-design-prototypes/shotcard-spec.html" title="ShotCard 交互态规范"></iframe>
+</section>
+
+<!-- ════════════ TAB 5 · DESIGN SYSTEM ════════════ -->
+<section class="panel ds" id="tab-ds">
+  <div class="doc-head">
+    <div>
+      <h2>设计系统 · Design System</h2>
+      <p>LumenX Studio 设计系统 v0.2 —— Cyber Brutalism × Cinematic Restraint，三层 token 架构（seed → semantic → component）。下方为核心摘要，完整文件见链接。</p>
+    </div>
+    <div class="ds-links">
+      <a href="../01-brand-system/DESIGN.md" target="_blank" rel="noopener">↗ DESIGN.md</a>
+      <a href="../01-brand-system/design-system.css" target="_blank" rel="noopener">↗ design-system.css</a>
+      <a href="../01-brand-system/design-system.json" target="_blank" rel="noopener">↗ design-system.json</a>
+    </div>
+  </div>
+
+  <h3 style="font-size:15px;font-family:var(--mono);letter-spacing:0.08em;color:var(--fg-2);margin:8px 0 4px">SEED / SEMANTIC 色板</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chip-color" style="background:#050508"></div><div class="meta"><b>bg-base</b><code>#050508</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:#646cff"></div><div class="meta"><b>primary</b><code>#646cff</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:#ff0080"></div><div class="meta"><b>accent</b><code>#ff0080</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:#141416"></div><div class="meta"><b>elevated</b><code>#141416</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:#ededed"></div><div class="meta"><b>text-primary</b><code>#ededed</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:#9ca3af"></div><div class="meta"><b>text-secondary</b><code>#9ca3af</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:oklch(0.85 0.13 250)"></div><div class="meta"><b>pending</b><code>hue 250</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:oklch(0.88 0.16 80)"></div><div class="meta"><b>processing</b><code>hue 80</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:oklch(0.88 0.16 155)"></div><div class="meta"><b>completed</b><code>hue 155</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:oklch(0.78 0.20 25)"></div><div class="meta"><b>failed</b><code>hue 25</code></div></div>
+    <div class="sw"><div class="chip-color" style="background:oklch(0.90 0.15 90)"></div><div class="meta"><b>starred</b><code>hue 90</code></div></div>
+  </div>
+
+  <div class="ds-grid">
+    <div>
+      <div class="ds-card">
+        <h4><span class="hn">01</span>Typography · 三字体三层级</h4>
+        <ul>
+          <li><span><b>Chrome</b> · JetBrains Mono</span><code>UPPER 10–11px / 0.18em</code></li>
+          <li><span><b>Body</b> · Inter</span><code>12–13px</code></li>
+          <li><span><b>Display</b> · Space Grotesk</span><code>600 / 14–16px</code></li>
+        </ul>
+      </div>
+      <div class="ds-card">
+        <h4><span class="hn">02</span>Spacing · 8px 基准</h4>
+        <ul>
+          <li><span>xs / sm</span><code>4 / 8px</code></li>
+          <li><span>md / lg</span><code>16 / 24px</code></li>
+          <li><span>xl</span><code>40px</code></li>
+        </ul>
+      </div>
+      <div class="ds-card">
+        <h4><span class="hn">03</span>Radius / Elevation</h4>
+        <ul>
+          <li><span>radius sm / md / lg</span><code>4 / 8 / 12px</code></li>
+          <li><span>shadow subtle</span><code>0 1px 2px /.4</code></li>
+          <li><span>shadow elevated</span><code>0 8px 32px /.6</code></li>
+        </ul>
+      </div>
+      <div class="ds-card">
+        <h4><span class="hn">04</span>Motion · ease-out-quart</h4>
+        <ul>
+          <li><span>fast — hover/toggle</span><code>150ms</code></li>
+          <li><span>base — panel/modal</span><code>250ms</code></li>
+          <li><span>slow — reveals</span><code>400ms</code></li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <div class="ds-card">
+        <h4><span class="hn">05</span>5 层 Surface 语汇</h4>
+        <ul>
+          <li><span>Base</span><code>页面底色 · 最暗</code></li>
+          <li><span>Surface</span><code>面板/卡片</code></li>
+          <li><span>Elevated</span><code>浮层/modal</code></li>
+          <li><span>Inset</span><code>嵌套区域</code></li>
+          <li><span>Overlay</span><code>backdrop 暗幕</code></li>
+        </ul>
+      </div>
+      <div class="ds-card">
+        <h4><span class="hn">06</span>核心组件库</h4>
+        <ul>
+          <li><span>Shell</span><code>GlobalSidebar · PipelineSidebar</code></li>
+          <li><span>Surfaces</span><code>GlassPanel · Card · SectionShell</code></li>
+          <li><span>Workbench</span><code>ShotCard · ShotPanel · PolishPanel</code></li>
+          <li><span>Content</span><code>CompareModal · Lightbox</code></li>
+          <li><span>Tasks</span><code>TaskQueue · Candidates</code></li>
+          <li><span>Feedback</span><code>Toast · Skeleton · EmptyState</code></li>
+        </ul>
+      </div>
+      <div class="callout" style="margin-top:0">
+        <b>品牌 v0.2：</b>棱角几何莲花徽标 + 等宽 LUMENX 字标（X 为 #646cff 加粗焦点），仅纯白 + 纯黑底 + #646cff，禁渐变。Slogan「Render Noise into Narrative」仅在品牌强化时刻出现。
+      </div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>Tasty Sam 双线 token 对照：</b>两条线各自实现同名 semantic token，可一处改 seed 主色驱动全局。
+    <span style="display:inline-flex;gap:14px;margin-top:8px;flex-wrap:wrap">
+      <a href="../../design/tasty-sam/line-a-cyber/tokens.css" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11.5px;color:var(--c-linea);text-decoration:none">↗ Line A tokens.css</a>
+      <a href="../../design/tasty-sam/line-a-cyber/DESIGN.md" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11.5px;color:var(--c-linea);text-decoration:none">↗ Line A DESIGN.md</a>
+      <a href="../../design/tasty-sam/line-b-atelier/tokens.css" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11.5px;color:var(--c-lineb);text-decoration:none">↗ Line B tokens.css</a>
+      <a href="../../design/tasty-sam/line-b-atelier/DESIGN.md" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11.5px;color:var(--c-lineb);text-decoration:none">↗ Line B DESIGN.md</a>
+      <a href="../../design/tasty-sam/README.md" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11.5px;color:var(--accent);text-decoration:none">↗ Tasty Sam README</a>
+      <a href="../../design/tasty-sam/REFACTOR-STRATEGY.md" target="_blank" rel="noopener" style="font-family:var(--mono);font-size:11.5px;color:var(--accent);text-decoration:none">↗ REFACTOR-STRATEGY</a>
+    </span>
+  </div>
+</section>
+
+<!-- ════════════ TAB 6 · BEFORE/AFTER ════════════ -->
+<section class="panel" id="tab-beforeafter">
+  <div class="doc-head">
+    <div>
+      <h2>视觉差异注释 · Before → After</h2>
+      <p>QoderWork 标注的逐项视觉改动对照（现状 → 重构后）。</p>
+    </div>
+    <a class="open-new" href="../02-design-prototypes/comparison-before-after.html" target="_blank" rel="noopener">↗ 新标签打开</a>
+  </div>
+  <iframe class="frame" data-src="../02-design-prototypes/comparison-before-after.html" title="Before After 对比"></iframe>
+</section>
+
+</main>
+
+<footer class="hub">
+  <span>LumenX Studio · Frontend Redesign Review Hub</span>
+  <span>by Tasty Sam · 零侵入聚合 · docs/design/review-hub/</span>
+</footer>
+
+<script>
+// ───────── module + style data ─────────
+const STYLES = [
+  {key:"original",  label:"原版 LumenX",            color:"var(--c-original)",  tag:"PROD"},
+  {key:"qoderwork", label:"QoderWork",              color:"var(--c-qoderwork)", tag:"REDESIGN"},
+  {key:"linea",     label:"Line A · Cyber",         color:"var(--c-linea)",     tag:"延续线"},
+  {key:"lineb",     label:"Line B · Atelier",       color:"var(--c-lineb)",     tag:"突破线"},
+];
+const DIR = {original:"original", qoderwork:"qoderwork", linea:"line-a", lineb:"line-b"};
+
+// live link resolvers per module
+const EP = "958c10cd-7738-4115-b08d-287b910f8e55", EID="fe6d51f3-c746-4726-ac1b-e9cd520ca953";
+const ORIG="http://localhost:3008";
+const liveOriginal = {
+  workspace:`${ORIG}/#/`,
+  storyboard:`${ORIG}/#/series/${EP}/episode/${EID}`,
+  pipeline:`${ORIG}/#/series/${EP}/episode/${EID}`,
+  library:`${ORIG}/#/library`,
+  settings:`${ORIG}/#/settings`,
+  playground:`${ORIG}/#/playground`,
+  modals:`${ORIG}/#/`,
+};
+const QW = {workspace:"mock-01-workspace",storyboard:"mock-02-storyboard-r2v",pipeline:"mock-03-pipeline-modules",library:"mock-04-library",settings:"mock-05-settings",modals:"mock-06-modals",playground:"mock-07-playground"};
+const LINEFILE = {workspace:"workspace",storyboard:"storyboard-r2v",pipeline:"pipeline-steps",library:"library",settings:"settings",modals:"modals",playground:"playground"};
+const SHOT = {workspace:"workspace",storyboard:"storyboard",pipeline:"pipeline-steps",library:"library",settings:"settings",modals:"modals",playground:"playground"};
+
+function liveURL(styleKey, modKey){
+  if(styleKey==="original") return liveOriginal[modKey];
+  if(styleKey==="qoderwork") return modKey==="storyboard" ? "../../design/mock-02-storyboard-r2v.html" : `../02-design-prototypes/${QW[modKey]}.html`;
+  if(styleKey==="linea") return `../../design/tasty-sam/line-a-cyber/${LINEFILE[modKey]}.html`;
+  if(styleKey==="lineb") return `../../design/tasty-sam/line-b-atelier/${LINEFILE[modKey]}.html`;
+}
+function thumbURL(styleKey, modKey){
+  return `./screenshots/thumbs/${DIR[styleKey]}/${SHOT[modKey]}.jpg`;
+}
+function fullURL(styleKey, modKey){
+  return `./screenshots/${DIR[styleKey]}/${SHOT[modKey]}.png`;
+}
+
+const MODULES = [
+  {id:"m-workspace", key:"workspace",  num:"01", zh:"工作区",   en:"Workspace",        desc:"项目/系列的总入口：列表、卡片、创建与导入。<span class='gap'>原版以真实 27 个项目呈现，信息密度最高；三套方案在层级与留白上各有取舍。</span>"},
+  {id:"m-storyboard",key:"storyboard", num:"02", zh:"分镜工作台", en:"Storyboard R2V",   desc:"产品最复杂、价值最高的界面：ShotCard × 多态 + 候选 + 对比 + 任务队列。<span class='gap'>横向对比此屏是判断方案优劣的关键。</span>"},
+  {id:"m-pipeline",  key:"pipeline",   num:"03", zh:"流程步骤",  en:"Pipeline Steps",   desc:"Script · ArtDirection · Cast · Assembly 的步骤式编辑。原版以脚本编辑器步骤呈现；静态方案合并四步于一屏说明。"},
+  {id:"m-library",   key:"library",    num:"04", zh:"资产库",    en:"Library",          desc:"系列共享的角色/场景/道具资产池，多变体管理。原版含 76 个真实资产与角色三视图。"},
+  {id:"m-settings",  key:"settings",   num:"05", zh:"设置",      en:"Settings",         desc:"外观 / API 配置 / 默认模型设置。结构四套相近，差异主要在表单视觉与分组节奏。"},
+  {id:"m-playground",key:"playground", num:"06", zh:"创作台",    en:"Playground",       desc:"独立的图像/视频生成台，结果网格 + 参数面板。原版含真实生成结果回流。"},
+  {id:"m-modals",    key:"modals",     num:"07", zh:"模态框",    en:"Modals",           desc:"建项目 / Lightbox / Compare / 任务队列等浮层集合。<span class='gap'>原版当前仅捕获到建系列流程，Lightbox / Compare / 任务队列建议照规范补全。</span>"},
+];
+
+const activeStyles = new Set(STYLES.map(s=>s.key));
+
+function buildModules(){
+  const root = document.getElementById("modules");
+  root.innerHTML = MODULES.map(m=>{
+    const cards = STYLES.map(s=>{
+      const live = liveURL(s.key, m.key);
+      const liveLabel = s.key==="original" ? "运行中应用" : "交互原型";
+      const noteOriginalModal = (s.key==="original" && m.key==="modals")
+        ? `<div class="note miss">仅捕获建系列流程 · 其余浮层待补</div>` : "";
+      return `<div class="shot" data-style="${s.key}">
+        <div class="cap">
+          <span class="dot" style="background:${s.color}"></span>
+          <b>${s.label}</b>
+          <span class="tag">${s.tag}</span>
+        </div>
+        <a class="thumb" href="${live}" target="_blank" rel="noopener" title="点击打开${s.label} · ${m.zh}">
+          <img loading="lazy" src="${thumbURL(s.key,m.key)}" alt="${s.label} ${m.zh}" />
+          <span class="open"><span>↗ 打开页面</span></span>
+        </a>
+        ${noteOriginalModal}
+        <div class="foot">
+          <a href="${live}" target="_blank" rel="noopener" class="live">▶ ${liveLabel}</a>
+          <span class="sep">·</span>
+          <a href="${fullURL(s.key,m.key)}" target="_blank" rel="noopener">看原图</a>
+        </div>
+      </div>`;
+    }).join("");
+    return `<div class="mod" id="${m.id}">
+      <div class="mod-head">
+        <span class="num">${m.num}</span>
+        <h3>${m.zh}</h3>
+        <span class="en">${m.en}</span>
+      </div>
+      <div class="mod-desc">${m.desc}</div>
+      <div class="grid4">${cards}</div>
+    </div>`;
+  }).join("");
+}
+buildModules();
+
+// ───────── style filters ─────────
+document.querySelectorAll(".chip[data-style]").forEach(chip=>{
+  chip.addEventListener("click",()=>{
+    const k = chip.dataset.style;
+    if(activeStyles.has(k) && activeStyles.size>1){ activeStyles.delete(k); chip.classList.remove("on"); }
+    else { activeStyles.add(k); chip.classList.add("on"); }
+    document.querySelectorAll(".shot[data-style]").forEach(s=>{
+      s.classList.toggle("hidden", !activeStyles.has(s.dataset.style));
+    });
+    // re-layout grid columns to active count
+    const cols = Math.max(1, activeStyles.size);
+    document.querySelectorAll(".grid4").forEach(g=>{
+      g.style.gridTemplateColumns = window.innerWidth>1180 ? `repeat(${cols},1fr)` : "";
+    });
+  });
+});
+
+// ───────── tabs ─────────
+const tabBtns = document.querySelectorAll("#tabnav button");
+function activateTab(name){
+  tabBtns.forEach(b=>b.classList.toggle("active", b.dataset.tab===name));
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id==="tab-"+name));
+  // lazy-load iframes on first activation
+  const panel = document.getElementById("tab-"+name);
+  const f = panel && panel.querySelector("iframe[data-src]");
+  if(f && !f.src){ f.src = f.dataset.src; }
+  window.scrollTo({top:0,behavior:"instant"});
+}
+tabBtns.forEach(b=>b.addEventListener("click",()=>activateTab(b.dataset.tab)));
+</script>
+</body>
+</html>

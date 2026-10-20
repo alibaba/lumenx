@@ -1,0 +1,24 @@
+{
+  "identifier": "default",
+  "description": "Default permissions for LumenX Studio",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:default",
+    "core:window:allow-close",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-start-dragging",
+    "shell:allow-spawn",
+    "shell:allow-execute",
+    "notification:default",
+    "notification:allow-notify",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "updater:default",
+    "process:default",
+    "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save"
+  ]
+}

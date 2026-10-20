@@ -24,11 +24,13 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, R
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
+import concurrent.futures
+import hashlib
 import json
 import os
 import shutil
@@ -113,6 +115,28 @@ app.mount("/files/playground", StaticFiles(directory="output/playground"), name=
 
 # Initialize pipeline
 pipeline = ComicGenPipeline()
+
+# Allow-list map for uploaded file extensions: keys come from the (untrusted)
+# client filename, values are trusted literals safe to embed in server paths.
+_UPLOAD_EXT_MAP = {
+    ".png": ".png", ".jpg": ".jpg", ".jpeg": ".jpeg", ".webp": ".webp",
+    ".gif": ".gif", ".bmp": ".bmp", ".svg": ".svg", ".ico": ".ico",
+    ".mp4": ".mp4", ".mov": ".mov", ".webm": ".webm", ".avi": ".avi",
+    ".mkv": ".mkv", ".mp3": ".mp3", ".wav": ".wav", ".m4a": ".m4a",
+    ".aac": ".aac", ".ogg": ".ogg", ".flac": ".flac",
+    ".txt": ".txt", ".md": ".md", ".pdf": ".pdf", ".json": ".json",
+}
+
+
+def _safe_upload_ext(filename: Optional[str]) -> str:
+    """Return a trusted file extension literal for an uploaded filename.
+
+    Unknown/missing extensions fall back to empty string so the stored file
+    is still saved under its random UUID name.
+    """
+    ext = os.path.splitext(filename or "")[1].lower()
+    return _UPLOAD_EXT_MAP.get(ext, "")
+
 
 @app.get("/debug/config")
 def debug_config():
@@ -259,7 +283,7 @@ def check_system():
 def upload_file(file: UploadFile = File(...)):
     """Uploads a file and returns its URL (OSS if configured, else local)."""
     try:
-        file_ext = os.path.splitext(file.filename)[1]
+        file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
         file_path = os.path.join("output/uploads", filename)
 
@@ -301,7 +325,7 @@ def upload_asset(
     """
     try:
         # 1. Save file locally first
-        file_ext = os.path.splitext(file.filename)[1]
+        file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
         file_path = os.path.join("output/uploads", filename)
         
@@ -924,7 +948,7 @@ def upload_library_asset_image(file: UploadFile = File(...)):
     returns the {image_url} contract the library UI expects.
     """
     try:
-        file_ext = os.path.splitext(file.filename or "")[1]
+        file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
         file_path = os.path.join("output/uploads", filename)
         with open(file_path, "wb") as buffer:
@@ -3356,7 +3380,7 @@ def upload_frame_image(script_id: str, frame_id: str, file: UploadFile = File(..
     """Upload an image as a variant for a frame's rendered_image_asset."""
     try:
         # Save file locally first
-        file_ext = os.path.splitext(file.filename)[1]
+        file_ext = _safe_upload_ext(file.filename)
         filename = f"{uuid.uuid4()}{file_ext}"
         file_path = os.path.join("output/uploads", filename)
 
@@ -3984,3 +4008,856 @@ def delete_prop(script_id: str, prop_id: str):
     pipeline._save_data()
 
     return signed_response(script)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Document CRUD — Script Editor document persistence
+# ─────────────────────────────────────────────────────────────────────────────
+
+from pathlib import Path
+from datetime import datetime, timezone
+
+_TRON_PROJECTS_DIR = Path.home() / ".tron" / "comic" / "projects"
+
+
+class SaveDocumentRequest(BaseModel):
+    content: dict  # Tiptap JSON document
+    create_snapshot: bool = False
+
+
+class DocumentSnapshotInfo(BaseModel):
+    timestamp: str  # ISO format
+    size_bytes: int
+
+
+def _get_project_dir(project_id: str) -> Path:
+    """Return the project directory, raising 404 if it doesn't exist."""
+    project_dir = _TRON_PROJECTS_DIR / project_id
+    if not project_dir.exists():
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project_dir
+
+
+def _ensure_history_dir(project_dir: Path) -> Path:
+    """Ensure history/ subdirectory exists and return its path."""
+    history_dir = project_dir / "history"
+    history_dir.mkdir(parents=True, exist_ok=True)
+    return history_dir
+
+
+def _create_snapshot(project_dir: Path) -> None:
+    """Create a timestamped snapshot of the current document.json."""
+    doc_path = project_dir / "document.json"
+    if not doc_path.exists():
+        return
+    history_dir = _ensure_history_dir(project_dir)
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%S")
+    snapshot_path = history_dir / f"{ts}.json"
+    shutil.copy2(str(doc_path), str(snapshot_path))
+
+
+@app.post("/projects/{project_id}/document")
+def save_document(project_id: str, request: SaveDocumentRequest):
+    """Save the Tiptap JSON document for a project."""
+    project_dir = _TRON_PROJECTS_DIR / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    doc_path = project_dir / "document.json"
+
+    # Optionally create a snapshot before overwriting
+    if request.create_snapshot and doc_path.exists():
+        _create_snapshot(project_dir)
+
+    try:
+        with open(doc_path, "w", encoding="utf-8") as f:
+            json.dump(request.content, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save document: {e}")
+
+    return {"status": "ok", "size_bytes": doc_path.stat().st_size}
+
+
+@app.get("/projects/{project_id}/document")
+def load_document(project_id: str):
+    """Load the Tiptap JSON document for a project."""
+    project_dir = _TRON_PROJECTS_DIR / project_id
+    doc_path = project_dir / "document.json"
+
+    if not doc_path.exists():
+        return {"type": "doc", "content": []}
+
+    try:
+        with open(doc_path, "r", encoding="utf-8") as f:
+            content = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load document: {e}")
+
+    return content
+
+
+@app.get("/projects/{project_id}/document/snapshots")
+def list_document_snapshots(project_id: str):
+    """List all document snapshots for a project, ordered by time descending."""
+    project_dir = _get_project_dir(project_id)
+    history_dir = project_dir / "history"
+
+    if not history_dir.exists():
+        return []
+
+    snapshots = []
+    for f in history_dir.iterdir():
+        if f.suffix == ".json" and f.is_file():
+            snapshots.append(
+                DocumentSnapshotInfo(
+                    timestamp=f.stem,
+                    size_bytes=f.stat().st_size,
+                )
+            )
+
+    # Sort by timestamp descending
+    snapshots.sort(key=lambda s: s.timestamp, reverse=True)
+    return snapshots
+
+
+@app.post("/projects/{project_id}/document/snapshots")
+def create_document_snapshot(project_id: str):
+    """Create a snapshot of the current document."""
+    project_dir = _get_project_dir(project_id)
+    doc_path = project_dir / "document.json"
+
+    if not doc_path.exists():
+        raise HTTPException(status_code=404, detail="No document to snapshot")
+
+    _create_snapshot(project_dir)
+    return {"status": "ok"}
+
+
+@app.post("/projects/{project_id}/document/snapshots/{timestamp}/restore")
+def restore_document_snapshot(project_id: str, timestamp: str):
+    """Restore a document from a snapshot."""
+    project_dir = _get_project_dir(project_id)
+    history_dir = project_dir / "history"
+    snapshot_path = history_dir / f"{timestamp}.json"
+
+    if not snapshot_path.exists():
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+
+    doc_path = project_dir / "document.json"
+
+    try:
+        shutil.copy2(str(snapshot_path), str(doc_path))
+        with open(doc_path, "r", encoding="utf-8") as f:
+            content = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise HTTPException(status_code=500, detail=f"Failed to restore snapshot: {e}")
+
+    return content
+
+
+# ═══════════════════════════════════════════════════════════════
+# Document Import/Export
+# ═══════════════════════════════════════════════════════════════
+
+
+class ImportDocRequest(BaseModel):
+    filename: str
+    content: str  # base64 encoded file content
+    file_type: str  # "fdx" | "fountain" | "txt"
+
+
+class ExportDocRequest(BaseModel):
+    content: dict  # Tiptap JSON document
+    format: str  # "pdf" | "docx"
+    options: dict = {}
+
+
+def _parse_fdx(xml_text: str) -> dict:
+    """Parse FDX (Final Draft XML) into Tiptap JSON."""
+    import re
+    from xml.etree.ElementTree import ParseError
+
+    # defusedxml guards against entity-expansion attacks (XML bomb).
+    # Hard dependency (declared in requirements.txt) so the parse path is
+    # always the hardened one; no stdlib fallback.
+    from defusedxml.ElementTree import fromstring as _xml_fromstring
+
+    # Reject DTD/entity declarations outright (defense-in-depth;
+    # FDX files never legitimately contain them)
+    if "<!DOCTYPE" in xml_text or "<!ENTITY" in xml_text:
+        raise HTTPException(status_code=400, detail="FDX XML with DTD/entity declarations is not allowed")
+
+    FDX_TO_NODE: dict = {
+        "Scene Heading": "sceneHeading",
+        "Action": "action",
+        "Character": "characterCue",
+        "Dialogue": "dialogue",
+        "Parenthetical": "parenthetical",
+        "Transition": "transition",
+    }
+
+    try:
+        root = _xml_fromstring(xml_text)
+    except (ParseError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid FDX XML: {e}")
+
+    content_nodes = []
+    # Find all Paragraph elements (support both with and without Content wrapper)
+    paragraphs = root.findall(".//Paragraph")
+
+    for para in paragraphs:
+        para_type = para.get("Type", "Action")
+        node_type = FDX_TO_NODE.get(para_type, "action")
+
+        # Extract text from Text elements
+        texts = []
+        for text_el in para.findall(".//Text"):
+            text_content = text_el.text or ""
+            style = text_el.get("Style", "")
+            marks = []
+            if "Bold" in style:
+                marks.append({"type": "bold"})
+            if "Italic" in style:
+                marks.append({"type": "italic"})
+            if "Underline" in style:
+                marks.append({"type": "underline"})
+
+            text_node: dict = {"type": "text", "text": text_content}
+            if marks:
+                text_node["marks"] = marks
+            texts.append(text_node)
+
+        if not texts:
+            texts = [{"type": "text", "text": ""}]
+
+        node: dict = {"type": node_type, "content": texts}
+
+        # Add attributes for scene headings
+        if node_type == "sceneHeading":
+            full_text = "".join(t.get("text", "") for t in texts)
+            match = re.match(r"^(INT|EXT|INT/EXT|I/E)[\./\s]", full_text, re.IGNORECASE)
+            attrs: dict = {"id": str(uuid.uuid4())}
+            if match:
+                attrs["intExt"] = match.group(1).upper()
+            node["attrs"] = attrs
+
+        content_nodes.append(node)
+
+    return {"type": "doc", "content": content_nodes}
+
+
+def _parse_fountain(text: str) -> dict:
+    """Parse Fountain format text into Tiptap JSON."""
+    import re
+
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    content_nodes = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # Empty lines - skip
+        if not stripped:
+            i += 1
+            continue
+
+        # Forced scene heading (starts with .)
+        if stripped.startswith(".") and len(stripped) > 1 and not stripped.startswith(".."):
+            heading_text = stripped[1:]
+            match = re.match(r"^(INT|EXT|INT/EXT|I/E)[\./\s]", heading_text, re.IGNORECASE)
+            attrs: dict = {"id": str(uuid.uuid4())}
+            if match:
+                attrs["intExt"] = match.group(1).upper()
+            content_nodes.append({
+                "type": "sceneHeading",
+                "attrs": attrs,
+                "content": [{"type": "text", "text": heading_text}],
+            })
+            i += 1
+            continue
+
+        # Scene heading: INT./EXT. pattern
+        if re.match(r"^(INT|EXT|INT/EXT|I/E)[\./\s]", stripped, re.IGNORECASE):
+            match = re.match(r"^(INT|EXT|INT/EXT|I/E)", stripped, re.IGNORECASE)
+            attrs = {"id": str(uuid.uuid4())}
+            if match:
+                attrs["intExt"] = match.group(1).upper()
+            content_nodes.append({
+                "type": "sceneHeading",
+                "attrs": attrs,
+                "content": [{"type": "text", "text": stripped}],
+            })
+            i += 1
+            continue
+
+        # Transition: all caps ending with colon, or starts with >
+        if stripped.startswith(">"):
+            t_text = stripped[1:].strip()
+            content_nodes.append({
+                "type": "transition",
+                "content": [{"type": "text", "text": t_text}],
+            })
+            i += 1
+            continue
+
+        if (
+            stripped.isupper()
+            and stripped.endswith(":")
+            and len(stripped) > 2
+            and not stripped.startswith("(")
+        ):
+            content_nodes.append({
+                "type": "transition",
+                "content": [{"type": "text", "text": stripped}],
+            })
+            i += 1
+            continue
+
+        # Character cue: all uppercase, preceded by empty line (check)
+        # In Fountain spec: a line of all-uppercase text
+        if (
+            stripped.isupper()
+            and len(stripped) > 1
+            and not stripped.endswith(":")
+            and (i == 0 or not lines[i - 1].strip())
+        ):
+            content_nodes.append({
+                "type": "characterCue",
+                "content": [{"type": "text", "text": stripped}],
+            })
+            i += 1
+
+            # Following lines until empty line are dialogue/parenthetical
+            while i < len(lines) and lines[i].strip():
+                dline = lines[i].strip()
+                if dline.startswith("(") and dline.endswith(")"):
+                    content_nodes.append({
+                        "type": "parenthetical",
+                        "content": [{"type": "text", "text": dline}],
+                    })
+                else:
+                    content_nodes.append({
+                        "type": "dialogue",
+                        "content": [{"type": "text", "text": dline}],
+                    })
+                i += 1
+            continue
+
+        # Default: Action
+        content_nodes.append({
+            "type": "action",
+            "content": [{"type": "text", "text": stripped}],
+        })
+        i += 1
+
+    return {"type": "doc", "content": content_nodes}
+
+
+def _parse_txt(text: str) -> dict:
+    """Parse plain text into Tiptap JSON (all as action nodes)."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    content_nodes = []
+
+    for line in lines:
+        if line.strip():
+            content_nodes.append({
+                "type": "action",
+                "content": [{"type": "text", "text": line.strip()}],
+            })
+
+    if not content_nodes:
+        content_nodes = [{"type": "action", "content": [{"type": "text", "text": ""}]}]
+
+    return {"type": "doc", "content": content_nodes}
+
+
+@app.post("/projects/{project_id}/document/import")
+def import_document(project_id: str, req: ImportDocRequest):
+    """Import FDX/Fountain/TXT file and convert to Tiptap JSON."""
+    import base64
+
+    try:
+        raw_bytes = base64.b64decode(req.content)
+        text = raw_bytes.decode("utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to decode file content: {e}")
+
+    file_type = req.file_type.lower()
+
+    if file_type == "fdx":
+        doc = _parse_fdx(text)
+    elif file_type == "fountain":
+        doc = _parse_fountain(text)
+    elif file_type == "txt":
+        doc = _parse_txt(text)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file_type}")
+
+    return {"content": doc, "filename": req.filename, "file_type": file_type}
+
+
+@app.post("/projects/{project_id}/document/export")
+def export_document(project_id: str, req: ExportDocRequest):
+    """Export Tiptap JSON to PDF/DOCX. Returns HTML fallback if libraries unavailable."""
+    from fastapi.responses import Response
+
+    doc = req.content
+    fmt = req.format.lower()
+
+    # Helper to extract plain text from Tiptap doc
+    def extract_text(node: dict) -> str:
+        if node.get("text"):
+            return node["text"]
+        children = node.get("content", [])
+        return "".join(extract_text(c) for c in children)
+
+    def doc_to_lines(doc: dict) -> list:
+        lines = []
+        for node in doc.get("content", []):
+            node_type = node.get("type", "action")
+            text = extract_text(node)
+            lines.append((node_type, text))
+        return lines
+
+    if fmt == "pdf":
+        # Try reportlab first, fallback to HTML
+        try:
+            from reportlab.lib.pagesizes import letter
+            from reportlab.lib.units import inch
+            from reportlab.platypus import SimpleDocTemplate, Paragraph as RLParagraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+            import io
+
+            buffer = io.BytesIO()
+            doc_pdf = SimpleDocTemplate(buffer, pagesize=letter,
+                                        leftMargin=1.5 * inch, rightMargin=1 * inch,
+                                        topMargin=1 * inch, bottomMargin=1 * inch)
+
+            styles = getSampleStyleSheet()
+            styles.add(ParagraphStyle("SceneHeading", parent=styles["Heading3"],
+                                      fontName="Helvetica-Bold", fontSize=12,
+                                      spaceAfter=6, spaceBefore=18))
+            styles.add(ParagraphStyle("CharacterCue", parent=styles["Normal"],
+                                      fontName="Helvetica-Bold", fontSize=10,
+                                      alignment=TA_CENTER, spaceBefore=12))
+            styles.add(ParagraphStyle("DialogueStyle", parent=styles["Normal"],
+                                      fontName="Helvetica", fontSize=10,
+                                      leftIndent=1.5 * inch, rightIndent=1.5 * inch))
+            styles.add(ParagraphStyle("TransitionStyle", parent=styles["Normal"],
+                                      fontName="Helvetica-Bold", fontSize=10,
+                                      alignment=TA_RIGHT, spaceBefore=12))
+
+            story = []
+            lines = doc_to_lines(doc)
+            style_map = {
+                "sceneHeading": "SceneHeading",
+                "characterCue": "CharacterCue",
+                "dialogue": "DialogueStyle",
+                "transition": "TransitionStyle",
+            }
+
+            for node_type, text in lines:
+                style_name = style_map.get(node_type, "Normal")
+                story.append(RLParagraph(text or " ", styles[style_name]))
+
+            doc_pdf.build(story)
+            pdf_bytes = buffer.getvalue()
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="script.pdf"'},
+            )
+
+        except ImportError:
+            # Fallback: generate printable HTML
+            from html import escape as _esc
+
+            lines = doc_to_lines(doc)
+            html_parts = [
+                "<!DOCTYPE html><html><head><meta charset='utf-8'>",
+                "<title>Script Export</title>",
+                "<style>body{font-family:Courier,monospace;max-width:7in;margin:1in auto;}",
+                ".scene-heading{font-weight:bold;text-transform:uppercase;margin-top:1.5em;}",
+                ".character-cue{text-align:center;font-weight:bold;margin-top:1em;text-transform:uppercase;}",
+                ".dialogue{margin-left:1.5in;margin-right:1.5in;}",
+                ".parenthetical{margin-left:2in;margin-right:1.5in;font-style:italic;}",
+                ".transition{text-align:right;font-weight:bold;margin-top:1em;}",
+                "</style></head><body>",
+            ]
+            for node_type, text in lines:
+                css_class = {
+                    "sceneHeading": "scene-heading",
+                    "characterCue": "character-cue",
+                    "dialogue": "dialogue",
+                    "parenthetical": "parenthetical",
+                    "transition": "transition",
+                    "action": "action",
+                }.get(node_type, "action")
+                html_parts.append(f'<p class="{css_class}">{_esc(text)}</p>')
+            html_parts.append("</body></html>")
+            html_content = "\n".join(html_parts)
+
+            return Response(
+                content=html_content.encode("utf-8"),
+                media_type="text/html",
+                headers={
+                    "Content-Disposition": 'attachment; filename="script.html"',
+                    "X-Export-Fallback": "true",
+                },
+            )
+
+    elif fmt == "docx":
+        # Try python-docx, fallback to plain text
+        try:
+            from docx import Document as DocxDocument
+            from docx.shared import Pt, Inches
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            import io
+
+            document = DocxDocument()
+            lines = doc_to_lines(doc)
+
+            for node_type, text in lines:
+                if node_type == "sceneHeading":
+                    p = document.add_paragraph()
+                    p.style = document.styles["Heading 3"]
+                    run = p.add_run(text.upper())
+                    run.bold = True
+                elif node_type == "characterCue":
+                    p = document.add_paragraph()
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    run = p.add_run(text.upper())
+                    run.bold = True
+                elif node_type == "dialogue":
+                    p = document.add_paragraph()
+                    p.paragraph_format.left_indent = Inches(1.5)
+                    p.paragraph_format.right_indent = Inches(1.5)
+                    p.add_run(text)
+                elif node_type == "transition":
+                    p = document.add_paragraph()
+                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    run = p.add_run(text.upper())
+                    run.bold = True
+                else:
+                    document.add_paragraph(text)
+
+            buffer = io.BytesIO()
+            document.save(buffer)
+            docx_bytes = buffer.getvalue()
+
+            return Response(
+                content=docx_bytes,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                headers={"Content-Disposition": 'attachment; filename="script.docx"'},
+            )
+
+        except ImportError:
+            # Fallback: plain text
+            lines = doc_to_lines(doc)
+            text_parts = []
+            for node_type, text in lines:
+                if node_type == "sceneHeading":
+                    text_parts.append(f"\n{text.upper()}\n")
+                elif node_type == "characterCue":
+                    text_parts.append(f"\n    {text.upper()}")
+                elif node_type == "dialogue":
+                    text_parts.append(f"        {text}")
+                elif node_type == "transition":
+                    text_parts.append(f"\n{'':>60}{text.upper()}")
+                else:
+                    text_parts.append(text)
+            plain = "\n".join(text_parts)
+
+            return Response(
+                content=plain.encode("utf-8"),
+                media_type="text/plain",
+                headers={
+                    "Content-Disposition": 'attachment; filename="script.txt"',
+                    "X-Export-Fallback": "true",
+                },
+            )
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported export format: {fmt}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# Script Editor - Derivation Sync & Pipeline Integration
+# ═══════════════════════════════════════════════════════════════
+
+
+class SyncDerivationRequest(BaseModel):
+    scenes: List[Dict[str, Any]] = Field(default_factory=list)
+    characters: List[Dict[str, Any]] = Field(default_factory=list)
+    locations: List[str] = Field(default_factory=list)
+    estimated_duration: float = 0
+    word_count: int = 0
+    confidence_score: float = 0
+
+
+class DeriveGapEntity(BaseModel):
+    type: str  # 'character' | 'prop' | 'beat' | 'location'
+    name: str
+    description: Optional[str] = None
+    confidence: float  # 0.0-1.0
+    scene_index: Optional[int] = None  # 关联场景
+
+
+class DeriveGapsResponse(BaseModel):
+    entities: List[DeriveGapEntity]
+    cached: bool = False  # 是否来自缓存
+
+
+class DeriveGapsRequest(BaseModel):
+    already_extracted: Optional[Dict[str, List[str]]] = None  # {"scenes": [...], "characters": [...]}
+    gaps: List[str] = Field(default_factory=lambda: ["characters", "props", "beats", "locations"])
+    raw_text_blocks: Optional[List[str]] = None  # 原始文本块（可选，否则从项目文档读取）
+
+
+class ConfirmShotBlockRequest(BaseModel):
+    shot_type: Optional[str] = None
+    camera_movement: Optional[str] = None
+    duration: Optional[float] = None
+    description: Optional[str] = None
+    characters: List[str] = Field(default_factory=list)
+
+
+@app.post("/projects/{project_id}/sync_derivation")
+def sync_derivation(project_id: str, req: SyncDerivationRequest):
+    """前端推送 L1 派生结果到后端存储"""
+    project_dir = _get_project_dir(project_id)
+    derivation_path = project_dir / "derivation.json"
+
+    data = {
+        "scenes": req.scenes,
+        "characters": req.characters,
+        "locations": req.locations,
+        "estimated_duration": req.estimated_duration,
+        "word_count": req.word_count,
+        "confidence_score": req.confidence_score,
+        "synced_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    derivation_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    return {"status": "ok", "synced_at": data["synced_at"]}
+
+
+# ── derive_gaps cache & helpers ──────────────────────────────────────────
+_derive_cache: Dict[str, Tuple[float, List[dict]]] = {}
+_DERIVE_CACHE_TTL = 6 * 3600  # 6 hours
+
+
+def _derive_cache_key(text_blocks: List[str], gaps: List[str]) -> str:
+    content = "".join(text_blocks) + "|" + "|".join(sorted(gaps))
+    return hashlib.md5(content.encode()).hexdigest()
+
+
+def _derive_cache_get(key: str) -> Optional[List[dict]]:
+    if key in _derive_cache:
+        timestamp, result = _derive_cache[key]
+        if time.time() - timestamp < _DERIVE_CACHE_TTL:
+            return result
+        del _derive_cache[key]
+    return None
+
+
+def _build_derive_gaps_prompt(
+    text_blocks: List[str],
+    gaps: List[str],
+    already_extracted: Dict[str, List[str]],
+) -> str:
+    """Construct the LLM prompt for incremental gap extraction."""
+    text_content = "\n---\n".join(text_blocks)
+
+    already_section = ""
+    if already_extracted:
+        parts = []
+        for k, v in already_extracted.items():
+            parts.append(f"  - {k}: {', '.join(v)}")
+        already_section = (
+            "\n\n以下内容已被提取，请勿重复输出：\n" + "\n".join(parts)
+        )
+
+    gap_descriptions = {
+        "characters": "角色（人物名称、简短描述）",
+        "props": "道具（从动作描述中识别关键道具）",
+        "beats": "节拍（场景中的情感转折点或关键节奏）",
+        "locations": "地点（从场景描述中提取具体地点）",
+    }
+    requested = ", ".join(gap_descriptions.get(g, g) for g in gaps)
+
+    return f"""你是一名专业的剧本分析助手。请从以下文本中提取缺失的结构化信息。
+
+需要提取的类型：{requested}
+{already_section}
+
+请以 JSON 数组格式返回结果，每个元素包含：
+- type: 类型（"character" | "prop" | "beat" | "location"）
+- name: 名称
+- description: 简短描述（可选）
+- confidence: 置信度 0.0-1.0
+- scene_index: 关联场景序号（从 0 开始，可选）
+
+仅返回 JSON 数组，不要包含其他文字。
+
+# 文本内容
+{text_content}"""
+
+
+def _call_llm_for_gaps(
+    text_blocks: List[str],
+    gaps: List[str],
+    already_extracted: Dict[str, List[str]],
+) -> List[DeriveGapEntity]:
+    """Call LLM (Qwen) for incremental gap extraction with 2s timeout."""
+    from .llm_adapter import LLMAdapter
+    from .llm import _strip_markdown_json
+
+    adapter = LLMAdapter()
+    if not adapter.is_configured:
+        logger.warning("derive_gaps: LLM not configured, returning empty")
+        return []
+
+    prompt = _build_derive_gaps_prompt(text_blocks, gaps, already_extracted)
+    messages = [{"role": "user", "content": prompt}]
+
+    def _do_call():
+        return adapter.chat(
+            messages=messages,
+            response_format={"type": "json_object"},
+        )
+
+    # Timeout control: 2 seconds
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_do_call)
+            raw = future.result(timeout=2)
+    except concurrent.futures.TimeoutError:
+        logger.warning("derive_gaps: LLM call timed out (2s), returning empty")
+        return []
+    except Exception as e:
+        logger.error(f"derive_gaps: LLM call failed: {e}")
+        return []
+
+    # Parse response
+    try:
+        raw = _strip_markdown_json(raw)
+        data = json.loads(raw)
+        # Handle both top-level array and {"entities": [...]}
+        if isinstance(data, dict):
+            data = data.get("entities", data.get("items", []))
+        if not isinstance(data, list):
+            data = []
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("derive_gaps: failed to parse LLM JSON response")
+        return []
+
+    entities = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        entity_type = item.get("type", "")
+        name = item.get("name", "")
+        if not entity_type or not name:
+            continue
+        entities.append(DeriveGapEntity(
+            type=entity_type,
+            name=name,
+            description=item.get("description"),
+            confidence=max(0.0, min(1.0, float(item.get("confidence", 0.5)))),
+            scene_index=item.get("scene_index"),
+        ))
+    return entities
+
+
+@app.post("/projects/{project_id}/derive_gaps")
+def derive_gaps(project_id: str, req: DeriveGapsRequest):
+    """L3 LLM 增量补全：支持缓存、超时降级、增量去重。"""
+    project_dir = _get_project_dir(project_id)
+
+    # 1. Resolve text blocks
+    text_blocks = req.raw_text_blocks
+    if not text_blocks:
+        # Fallback: try to read project script file
+        script_path = project_dir / "script.json"
+        if script_path.exists():
+            try:
+                script_data = json.loads(script_path.read_text(encoding="utf-8"))
+                scenes = script_data.get("scenes", [])
+                text_blocks = [s.get("description", "") or s.get("name", "") for s in scenes if isinstance(s, dict)]
+            except Exception:
+                text_blocks = []
+        if not text_blocks:
+            return DeriveGapsResponse(entities=[], cached=False)
+
+    # 2. Check cache
+    cache_key = _derive_cache_key(text_blocks, req.gaps)
+    cached_result = _derive_cache_get(cache_key)
+    if cached_result is not None:
+        entities = [DeriveGapEntity(**e) for e in cached_result]
+        # Filter against already_extracted even for cached results
+        if req.already_extracted:
+            entities = _filter_already_extracted(entities, req.already_extracted)
+        return DeriveGapsResponse(entities=entities, cached=True)
+
+    # 3. Call LLM
+    already = req.already_extracted or {}
+    entities = _call_llm_for_gaps(text_blocks, req.gaps, already)
+
+    # 4. Filter duplicates against already_extracted
+    if req.already_extracted:
+        entities = _filter_already_extracted(entities, req.already_extracted)
+
+    # 5. Store in cache
+    _derive_cache[cache_key] = (time.time(), [e.dict() for e in entities])
+
+    return DeriveGapsResponse(entities=entities, cached=False)
+
+
+def _filter_already_extracted(
+    entities: List[DeriveGapEntity],
+    already_extracted: Dict[str, List[str]],
+) -> List[DeriveGapEntity]:
+    """Remove entities whose name already appears in already_extracted."""
+    # Build a set of known names (normalized)
+    known_names: set = set()
+    for names_list in already_extracted.values():
+        for n in names_list:
+            known_names.add(n.strip().lower())
+    return [e for e in entities if e.name.strip().lower() not in known_names]
+
+
+@app.post("/projects/{project_id}/shot_blocks/{shot_id}/confirm")
+def confirm_shot_block(project_id: str, shot_id: str, req: ConfirmShotBlockRequest):
+    """确认 ShotBlock，更新状态为 confirmed"""
+    project_dir = _get_project_dir(project_id)
+    shot_blocks_path = project_dir / "shot_blocks.json"
+
+    # Load existing shot_blocks or create empty dict
+    if shot_blocks_path.exists():
+        shot_blocks = json.loads(shot_blocks_path.read_text(encoding="utf-8"))
+    else:
+        shot_blocks = {}
+
+    # Build the confirmed shot block entry
+    confirmed = {
+        "shot_id": shot_id,
+        "status": "confirmed",
+        "shot_type": req.shot_type,
+        "camera_movement": req.camera_movement,
+        "duration": req.duration,
+        "description": req.description,
+        "characters": req.characters,
+        "confirmed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    shot_blocks[shot_id] = confirmed
+
+    shot_blocks_path.write_text(
+        json.dumps(shot_blocks, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    return confirmed
