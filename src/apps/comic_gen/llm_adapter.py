@@ -15,7 +15,7 @@ Configuration via environment variables:
   LLM_PROVIDER=minimax
   MINIMAX_API_KEY=...
   MINIMAX_BASE_URL=https://api.minimax.io/v1
-  MINIMAX_MODEL=MiniMax-M3
+  MINIMAX_MODEL=MiniMax-M3.1-Flash
 """
 
 import logging
@@ -78,7 +78,7 @@ class LLMAdapter:
 
     def _get_default_model(self) -> str:
         if self.provider == "minimax":
-            return os.getenv("MINIMAX_MODEL", "MiniMax-M3")
+            return os.getenv("MINIMAX_MODEL", "MiniMax-M3.1-Flash")
         if self.provider == "openai":
             return os.getenv("OPENAI_MODEL", "gpt-4o")
         return self._DASHSCOPE_MODEL_FALLBACK_CHAIN[0]
