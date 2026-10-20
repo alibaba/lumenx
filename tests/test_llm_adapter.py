@@ -147,7 +147,12 @@ def test_minimax_does_not_fallback_on_missing_model(minimax_transport):
 @pytest.mark.parametrize(
     "provider,key_env,expected_model,expected_url",
     [
-        (None, "DASHSCOPE_API_KEY", "qwen3.7-plus", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+        (
+            None,
+            "DASHSCOPE_API_KEY",
+            "qwen3.7-plus",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        ),
         ("openai", "OPENAI_API_KEY", "gpt-4o", "https://api.openai.com/v1"),
     ],
 )
