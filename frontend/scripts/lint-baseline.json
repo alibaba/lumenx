@@ -1,0 +1,1262 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "commit": "013897a3651ae53c4188f57a63b6a2de3c547cc5",
+    "reportSha256": "b7082f09a464c3c3307cdb3aaabf0425cb9a3415e456affffa1f96bb86e6bd3f",
+    "archivedReport": "docs/agents/deliverables/lumenx-refactor/P9/2026-10-29-final-gates/frontend/lint.json.gz",
+    "archiveLocation": "Preserved development branch feat/lumenx-core-foundation; raw evidence is not part of the public release.",
+    "diagnostics": 416,
+    "errors": 334,
+    "warnings": 82
+  },
+  "normalization": "Ignore diagnostic coordinates. Only normalize the referenced line in the exact existing react-hooks/exhaustive-deps useCallback logical-expression message; retain all other wording and numbers.",
+  "policy": "No automatic baseline regeneration. Review any allowance change against the fixed source evidence; do not accept new diagnostics by refreshing this file.",
+  "diagnostics": [
+    {
+      "file": "src/__tests__/interactive-polish.test.ts",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/__tests__/studio-full-body-edit-request.test.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_init' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/__tests__/studio-full-body-edit-request.test.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_url' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/app/page.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/AssetCard.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/ModelSettingsModal.tsx",
+      "ruleId": "jsx-a11y/alt-text",
+      "severity": 1,
+      "message": "Image elements must have an alt prop, either with meaningful text, or an empty string for decorative images.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VariantSelector.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 3
+    },
+    {
+      "file": "src/components/common/VariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ChevronLeft' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ChevronRight' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ImageVariant' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'apiBase' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VideoVariantSelector.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VideoVariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Maximize2' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VideoVariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Pause' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VideoVariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'apiBase' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/common/VideoVariantSelector.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'onSelect' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/layout/EpisodeMiniList.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/layout/LumenXBranding.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/layout/PipelineSidebar.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/layout/TauriDragBar.tsx",
+      "ruleId": "react-hooks/rules-of-hooks",
+      "severity": 2,
+      "message": "React Hook \"useCallback\" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?",
+      "count": 1
+    },
+    {
+      "file": "src/components/library/AssetInspector.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 3
+    },
+    {
+      "file": "src/components/library/AssetLibraryPage.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 3
+    },
+    {
+      "file": "src/components/library/NewLibraryAssetDialog.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modals/UploadAssetModal.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modals/UploadAssetModal.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/ArtDirection.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 3
+    },
+    {
+      "file": "src/components/modules/Cast.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 17
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 8
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'API_URL' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'AlertTriangle' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Maximize2' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Unlock' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'isGeneratingVideo' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'onDeleteVideo' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'onUpdateDescription' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useEffect has missing dependencies: 'fullBodyAudioUrl', 'fullBodyMotionPrompt', 'fullBodyPrompt', 'getMotionDefault', 'headshotAudioUrl', 'headshotMotionPrompt', 'headshotPrompt', 'threeViewPrompt', and 'videoPrompt'. Either include them or remove the dependency array. You can also replace multiple useState variables with useReducer if 'setFullBodyMotionPrompt' needs the current value of 'fullBodyAudioUrl'.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/CharacterWorkbench.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useEffect has missing dependencies: 'fullBodyPrompt', 'getInitialPrompt', 'headshotPrompt', and 'threeViewPrompt'. Either include them or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ConsistencyVault.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ConsistencyVault.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 6
+    },
+    {
+      "file": "src/components/modules/ConsistencyVault.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'LinkIcon' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ConsistencyVault.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Settings' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ConsistencyVault.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useEffect has a missing dependency: 'videoPrompt'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PreviousEpisodeSummary.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 5
+    },
+    {
+      "file": "src/components/modules/PreviousEpisodeSummary.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ArrowRight' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PromptBuilder.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ChevronDown' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PromptBuilder.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'User' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PromptBuilder.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Video' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PromptBuilder.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'X' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PromptBuilder.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'findCameraOption' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PromptBuilder.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'thumbnail' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PromptBuilder.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'useLayoutEffect' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/PromptBuilder.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useEffect has a missing dependency: 'value'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ReconcileModal.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/ScriptEditorShell.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'foldingTotal' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/dialogs/ExportDialog.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/dialogs/ExportDialog.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useCallback has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/dialogs/ImportDialog.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 3
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/dialogs/ImportDialog.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useCallback has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/extensions/CharacterMention.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'query' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/hooks/useContinuityCheck.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'DerivedCharacter' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/hooks/useEditorSetup.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_editor' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/hooks/usePasteHandler.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_slice' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/hooks/usePasteHandler.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'handleEditorPaste' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/panels/CharacterPanel.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'editor' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/panels/LocationPanel.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'editor' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/panels/NotesPanel.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useMemo has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/panels/PipelinePanel.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/panels/PipelinePanel.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'projectId' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/panels/PropsPanel.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useMemo has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/panels/ShotPanel.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'derivedScenes' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/panels/ShotPanel.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useMemo has an unnecessary dependency: 'editor.state.doc'. Either exclude it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/sidebar/OutlineView.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useMemo has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/sidebar/SceneNavigator.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_e' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/sidebar/SceneNavigator.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_targetId' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/sidebar/SearchPanel.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useMemo has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/views/StoryboardView.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/views/StoryboardView.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 3
+    },
+    {
+      "file": "src/components/modules/ScriptEditor/views/StoryboardView.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'useRef' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/ScriptProcessor.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/StoryboardComposer.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardComposer.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 19
+    },
+    {
+      "file": "src/components/modules/StoryboardComposer.tsx",
+      "ruleId": "react/no-unescaped-entities",
+      "severity": 2,
+      "message": "`\"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'API_URL' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'AlertTriangle' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'AnimatePresence' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Check' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ChevronRight' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ImageIcon' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Lock' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Maximize2' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'RefreshCw' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Unlock' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'handleSavePrompt' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useMemo has an unnecessary dependency: 'initialFrame.id'. Either exclude it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardFrameEditor.tsx",
+      "ruleId": "react/no-unescaped-entities",
+      "severity": 2,
+      "message": "`\"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/StoryboardR2V.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 26
+    },
+    {
+      "file": "src/components/modules/StoryboardR2V.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useCallback has missing dependencies: 'handleUpdateField', 'shots', and 'videoConfig.duration'. Either include them or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardR2V.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useMemo has a complex expression in the dependency array. Extract it to a separate variable so it can be statically checked.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/StoryboardR2V.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "The 'characters' logical expression could make the dependencies of useCallback Hook (at line <line>) change on every render. To fix this, wrap the initialization of 'characters' in its own useMemo() Hook.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/StoryboardR2V.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "The 'props' logical expression could make the dependencies of useCallback Hook (at line <line>) change on every render. To fix this, wrap the initialization of 'props' in its own useMemo() Hook.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/StoryboardR2V.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "The 'scenes' logical expression could make the dependencies of useCallback Hook (at line <line>) change on every render. To fix this, wrap the initialization of 'scenes' in its own useMemo() Hook.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/VideoAssembly.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoAssembly.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 9
+    },
+    {
+      "file": "src/components/modules/VideoAssembly.tsx",
+      "ruleId": "jsx-a11y/alt-text",
+      "severity": 1,
+      "message": "img elements must have an alt prop, either with meaningful text, or an empty string for decorative images.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoAssembly.tsx",
+      "ruleId": "react/no-unescaped-entities",
+      "severity": 2,
+      "message": "`\"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 8
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 28
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ChevronDown' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'ChevronUp' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Users' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'handleReferenceVideoSelect' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'setShowCameraDropdown' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'showCameraDropdown' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoCreator.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useEffect has a missing dependency: 'handleSubmit'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoGenerator.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/VideoQueue.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/VideoSidebar.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/cast/CastWorkbenchModal.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/cast/CastWorkbenchModal.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 19
+    },
+    {
+      "file": "src/components/modules/cast/VoiceCloneModal.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/cast/VoiceDesignModal.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 3
+    },
+    {
+      "file": "src/components/modules/cast/VoicePickerModal.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/playground/AssetPickerModal.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/playground/AssetPickerModal.tsx",
+      "ruleId": "jsx-a11y/alt-text",
+      "severity": 1,
+      "message": "Image elements must have an alt prop, either with meaningful text, or an empty string for decorative images.",
+      "count": 3
+    },
+    {
+      "file": "src/components/modules/playground/DetailPanel.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/playground/GalleryView.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/playground/MediaInput.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 2
+    },
+    {
+      "file": "src/components/modules/playground/ResultCard.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/AssetChipBar.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 6
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/AssetChipBar.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'t' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/AssetDrawer.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 9
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/FieldTagChip.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'colors' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/PolishPanel.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 3
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/ShotCard.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useMemo has a missing dependency: 'shot'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/StoryboardGenerateDialog.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 3
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/VideoConfigModal.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/modules/storyboard-r2v/VideoConfigModal.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'Check' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/project/CreateProjectDialog.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/project/ProjectCard.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/project/ProjectCard.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 5
+    },
+    {
+      "file": "src/components/project/ProjectSettings.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 4
+    },
+    {
+      "file": "src/components/project/PromptConfigModal.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useEffect has missing dependencies: 'currentProject' and 't'. Either include them or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/ImportAssetsDialog.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 4
+    },
+    {
+      "file": "src/components/series/ImportFileDialog.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/ImportFileDialog.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useCallback has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/SeriesArtDirectionPanel.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 3
+    },
+    {
+      "file": "src/components/series/SeriesArtDirectionPanel.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/SeriesDetailPage.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/SeriesDetailPage.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'seriesId' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/SeriesModelSettingsModal.tsx",
+      "ruleId": "jsx-a11y/alt-text",
+      "severity": 1,
+      "message": "Image elements must have an alt prop, either with meaningful text, or an empty string for decorative images.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/SeriesModelSettingsModal.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useEffect has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/SeriesPromptConfigModal.tsx",
+      "ruleId": "react-hooks/exhaustive-deps",
+      "severity": 1,
+      "message": "React Hook useEffect has a missing dependency: 't'. Either include it or remove the dependency array.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/__tests__/ImportFileDialog.spec.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 12
+    },
+    {
+      "file": "src/components/series/__tests__/ImportFileDialog.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'animate' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/__tests__/ImportFileDialog.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'exit' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/__tests__/ImportFileDialog.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'initial' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/__tests__/ImportFileDialog.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'size' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/__tests__/ImportFileDialog.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'whileHover' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 10
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'animate' is assigned a value but never used.",
+      "count": 3
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'exit' is assigned a value but never used.",
+      "count": 2
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'initial' is assigned a value but never used.",
+      "count": 3
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'layoutId' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'transition' is assigned a value but never used.",
+      "count": 3
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'variants' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'whileHover' is assigned a value but never used.",
+      "count": 2
+    },
+    {
+      "file": "src/components/series/__tests__/SeriesDetailPage.spec.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'whileTap' is assigned a value but never used.",
+      "count": 2
+    },
+    {
+      "file": "src/components/settings/SettingsControls.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_eyebrow' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/settings/SettingsControls.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_index' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/components/shared/preview/LightboxProvider.tsx",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'_removed' is assigned a value but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/lib/api.ts",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 13
+    },
+    {
+      "file": "src/lib/scriptEditorApi.ts",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 2
+    },
+    {
+      "file": "src/lib/utils.ts",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 1
+    },
+    {
+      "file": "src/store/editorStore.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 2,
+      "message": "'state' is defined but never used.",
+      "count": 1
+    },
+    {
+      "file": "src/store/projectStore.ts",
+      "ruleId": "@typescript-eslint/no-explicit-any",
+      "severity": 2,
+      "message": "Unexpected any. Specify a different type.",
+      "count": 5
+    }
+  ]
+}

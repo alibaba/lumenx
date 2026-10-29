@@ -1,12 +1,4 @@
-# Minimal mechanical validation gate for merging into main.
-#
-# Runs the Python test suite and the model catalog validation script on
-# every pull request targeting main (and on pushes to main as a post-merge
-# safety net). Local development flow is unchanged — this only enforces
-# the checks that CLAUDE.md already declares.
-#
-# To make this a hard gate, enable branch protection on main with
-# "backend-tests" as a required status check.
+# Require backend-tests in branch protection to make this a merge gate.
 
 name: Backend CI
 
@@ -22,27 +14,105 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The reviewed 9,460-test suite took about 29 minutes before installation.
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Prepare result directory
+        run: mkdir -p "$RUNNER_TEMP/lumenx-backend-reports"
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-docker.txt
+          cache-dependency-path: |
+            requirements-docker.txt
+            requirements-ci-constraints.txt
+
+      - name: Check macOS icon recipe with fake converters
+        # Independent stdlib/shell check; never run through the product-test guard.
+        run: python -I -B -S scripts/check_macos_icon_recipe.py --tmp-root "$RUNNER_TEMP/lumenx-icon-recipe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 
       - name: Install dependencies
         # requirements-docker.txt is the headless subset of requirements.txt
         # (no pywebview / demucs); the test suite only needs these.
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-docker.txt pytest
+          pip install -r requirements-docker.txt -c requirements-ci-constraints.txt pytest
+          python --version > "$RUNNER_TEMP/lumenx-backend-reports/python-version.txt"
+          python -m pip freeze > "$RUNNER_TEMP/lumenx-backend-reports/installed-requirements.txt"
+
+      - name: Require media tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -version > "$RUNNER_TEMP/lumenx-backend-reports/ffmpeg-version.txt"
+          ffprobe -version > "$RUNNER_TEMP/lumenx-backend-reports/ffprobe-version.txt"
 
       - name: Run Python test suite
-        run: python -m pytest
+        run: |
+          python -S scripts/run_tests_isolated.py \
+            --keep-temp --tmp-root "$RUNNER_TEMP/lumenx-backend-tests-$GITHUB_RUN_ATTEMPT" \
+            -- tests src/apps/comic_gen/test_shared_asset_pool.py src/apps/comic_gen/test_shared_asset_channels.py \
+            -q -ra --junitxml=results.xml -o tmp_path_retention_policy=failed \
+            2>&1 | tee "$RUNNER_TEMP/lumenx-backend-reports/pytest.log"
+
+      - name: Check test results and unexpected skips
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+          import xml.etree.ElementTree as ET
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          runs = root / ("lumenx-backend-tests-" + os.environ["GITHUB_RUN_ATTEMPT"])
+          reports = list(runs.glob("lumenx-pytest-run-*/results.xml"))
+          if len(reports) != 1:
+              raise SystemExit("Expected exactly one completed pytest JUnit report")
+          destination = root / "lumenx-backend-reports"
+          destination.mkdir(exist_ok=True)
+          shutil.copyfile(reports[0], destination / "results.xml")
+          document = ET.parse(reports[0]).getroot()
+          counts = {key: 0 for key in ("tests", "failures", "errors", "skipped")}
+          for suite in document.iter("testsuite"):
+              for key in counts:
+                  counts[key] += int(suite.get(key, "0"))
+          skipped_cases = [
+              {"class": case.get("classname"), "name": case.get("name"),
+               "reason": skipped.get("message", ""), "detail": skipped.text or ""}
+              for case in document.iter("testcase") for skipped in case.findall("skipped")
+          ]
+          summary = {"counts": counts, "skipped_cases": skipped_cases, "platform": "ubuntu"}
+          (destination / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+          print(json.dumps(summary))
+          # There are no reviewed Ubuntu skips. Windows-only fsync exclusions
+          # do not apply here; missing media tools or symlinks must remain visible.
+          if counts["tests"] == 0 or any(counts[key] for key in ("failures", "errors", "skipped")):
+              raise SystemExit("Backend gate requires tests with no failures, errors, or unreviewed skips")
+          PY
 
       - name: Validate model catalog
-        run: python scripts/validate_model_catalog.py
+        run: python -B scripts/validate_model_catalog.py 2>&1 | tee "$RUNNER_TEMP/lumenx-backend-reports/catalog.log"
+
+      - name: Check workflow mirror parity
+        run: python -B scripts/check_workflow_parity.py 2>&1 | tee "$RUNNER_TEMP/lumenx-backend-reports/workflow-parity.log"
+
+      - name: Retain backend verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-verification-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lumenx-backend-reports/
+          retention-days: 14
+          if-no-files-found: warn
