@@ -57,12 +57,37 @@ jobs:
           ffmpeg -version > "$RUNNER_TEMP/lumenx-backend-reports/ffmpeg-version.txt"
           ffprobe -version > "$RUNNER_TEMP/lumenx-backend-reports/ffprobe-version.txt"
 
+      - name: Check real media portability before the full suite
+        run: |
+          if python -S scripts/run_tests_isolated.py \
+            --keep-temp --tmp-root "$RUNNER_TEMP/lumenx-media-preflight-$GITHUB_RUN_ATTEMPT" \
+            -- tests/test_atelier_sequence_render.py -q -x --tb=long --junitxml=results.xml \
+            -o tmp_path_retention_policy=failed \
+            2>&1 | tee "$RUNNER_TEMP/lumenx-backend-reports/media-preflight.log"; then
+            media_preflight_status=0
+          else
+            media_preflight_status=$?
+          fi
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import shutil
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          runs = root / ("lumenx-media-preflight-" + os.environ["GITHUB_RUN_ATTEMPT"])
+          reports = list(runs.glob("lumenx-pytest-run-*/results.xml"))
+          if len(reports) != 1:
+              raise SystemExit("Expected one media preflight report")
+          shutil.copyfile(reports[0], root / "lumenx-backend-reports" / "media-preflight.xml")
+          PY
+          exit "$media_preflight_status"
+
       - name: Run Python test suite
         run: |
           python -S scripts/run_tests_isolated.py \
             --keep-temp --tmp-root "$RUNNER_TEMP/lumenx-backend-tests-$GITHUB_RUN_ATTEMPT" \
             -- tests src/apps/comic_gen/test_shared_asset_pool.py src/apps/comic_gen/test_shared_asset_channels.py \
-            -q -ra --junitxml=results.xml -o tmp_path_retention_policy=failed \
+            -q -ra --maxfail=1 --junitxml=results.xml -o tmp_path_retention_policy=failed \
             2>&1 | tee "$RUNNER_TEMP/lumenx-backend-reports/pytest.log"
 
       - name: Check test results and unexpected skips

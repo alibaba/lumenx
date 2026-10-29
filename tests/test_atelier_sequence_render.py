@@ -17,6 +17,7 @@ from src.apps.atelier.sequence import resolve_sequence_snapshot
 from src.apps.atelier.sequence_render import (
     SequenceRenderCancelToken,
     SequenceRenderCancelled,
+    SequenceRenderError,
     publish_sequence_render,
     render_sequence_to_private_file,
 )
@@ -118,7 +119,7 @@ def _make_tone(path: Path, *, duration: float = 0.35, frequency: int = 880) -> b
     return path.read_bytes()
 
 
-def _probe(path: Path) -> dict:
+def _probe(path: Path, *, frames: bool = False) -> dict:
     ffprobe = _tool("ffprobe")
     result = subprocess.run(
         [
@@ -127,6 +128,7 @@ def _probe(path: Path) -> dict:
             "error",
             "-show_streams",
             "-show_format",
+            *(["-show_frames"] if frames else []),
             "-of",
             "json",
             str(path),
@@ -137,6 +139,56 @@ def _probe(path: Path) -> dict:
         timeout=30,
     )
     return json.loads(result.stdout)
+
+
+@contextmanager
+def _render_timing_diagnostics(monkeypatch, directory: Path, expected_duration: float):
+    """Keep stage timing evidence when a platform's real media render fails."""
+    stages = []
+    real_run = SequenceRenderCancelToken.run
+
+    def record_stage(self, cmd, *, timeout):
+        result = real_run(self, cmd, timeout=timeout)
+        output = Path(cmd[-1])
+        if output.name.startswith("segment-") or output.name in {"joined.mkv", "rendered.mp4"}:
+            info = _probe(output, frames=True)
+            frame_timing = {}
+            for kind in ("video", "audio"):
+                frames = [item for item in info.get("frames", []) if item.get("media_type") == kind]
+                frame_timing[kind] = {
+                    "count": len(frames),
+                    "first": {key: frames[0].get(key) for key in (
+                        "pts_time", "best_effort_timestamp_time", "pkt_duration_time", "duration_time",
+                    )} if frames else None,
+                    "last": {key: frames[-1].get(key) for key in (
+                        "pts_time", "best_effort_timestamp_time", "pkt_duration_time", "duration_time",
+                    )} if frames else None,
+                }
+            stages.append({
+                "stage": output.name,
+                "duration": info.get("format", {}).get("duration"),
+                "frame_timing": frame_timing,
+                "streams": [
+                    {key: stream.get(key) for key in (
+                        "codec_type", "codec_name", "start_time", "duration",
+                        "avg_frame_rate", "time_base", "nb_frames", "tags",
+                    )}
+                    for stream in info.get("streams", [])
+                ],
+            })
+        return result
+
+    monkeypatch.setattr(SequenceRenderCancelToken, "run", record_stage)
+    try:
+        yield
+    except SequenceRenderError as exc:
+        exc.add_note(json.dumps({"expected_duration": expected_duration, "stages": stages}, sort_keys=True))
+        raise
+    finally:
+        (directory / "render-timing.json").write_text(
+            json.dumps({"expected_duration": expected_duration, "stages": stages}, indent=2),
+            encoding="utf-8",
+        )
 
 
 def _project() -> AtelierProject:
@@ -201,11 +253,11 @@ def _snapshot(owner):
     )
 
 
-def test_render_uses_frozen_snapshot_bytes_and_cleans_private_file(owner):
+def test_render_uses_frozen_snapshot_bytes_and_cleans_private_file(owner, monkeypatch):
     snapshot = _snapshot(owner)
     _make_clip(owner.root / "uploads" / "red.mp4", color="green", duration=0.9, frequency=330)
 
-    with render_sequence_to_private_file(snapshot, media_scope=owner.scope) as result:
+    with _render_timing_diagnostics(monkeypatch, owner.root.parent, snapshot["duration"]), render_sequence_to_private_file(snapshot, media_scope=owner.scope) as result:
         assert result.path.exists()
         assert result.size_bytes == result.path.stat().st_size
         assert len(result.sha256) == 64
