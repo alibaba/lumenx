@@ -1,14 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
 import { Image as ImageIcon, Play, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
+import { getAssetUrl } from "@/lib/utils";
 import type { Series, Character, Scene, Prop, Project } from "@/store/projectStore";
 import AssetCard from "@/components/common/AssetCard";
 import { useTranslations } from "next-intl";
 import SeriesSidebar, { type SidebarItem } from "./SeriesSidebar";
+import { persistenceFailure, type PersistenceFailure } from "@/lib/persistenceFeedback";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import {
+  beginSeriesEpisodeRequest, readSeriesEpisodeRequest, resolveSeriesEpisodeRequest, SeriesEpisodeJournalError,
+  type CreateSeriesEpisodeRequest, type SeriesEpisodeCreationReceipt,
+} from "@/lib/seriesEpisodeRequest";
 
 const SeriesModelSettingsModal = dynamic(() => import("./SeriesModelSettingsModal"), { ssr: false });
 const SeriesPromptConfigModal = dynamic(() => import("./SeriesPromptConfigModal"), { ssr: false });
@@ -20,6 +27,7 @@ interface SeriesDetailPageProps {
 }
 
 type AssetTab = "characters" | "scenes" | "props";
+const responseStatus = (error: unknown) => (error as { response?: { status?: number } } | null)?.response?.status;
 
 export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
   const [series, setSeries] = useState<Series | null>(null);
@@ -28,15 +36,33 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
   const [activeItem, setActiveItem] = useState<SidebarItem>({ kind: "asset", tab: "characters" });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
+  const [titleRevision, setTitleRevision] = useState<number>();
+  const [titleError, setTitleError] = useState<PersistenceFailure | null>(null);
+  const [titleSaving, setTitleSaving] = useState(false);
+  const titleRequests = useRef(new Set<object>());
+  const environment = useSyncExternalStore(subscribeRuntimeEnvironment, getRuntimeEnvironment, () => null);
+  const view = useMemo(() => ({ seriesId, environment }), [seriesId, environment]);
+  const episodeOwner = useMemo(() => environment ? { environment, seriesId } : null, [environment, seriesId]);
+  const activeView = useRef<typeof view | null>(view);
+  activeView.current = view;
+  const latestSeries = useRef<Series | null>(null);
   const [showAddEpisode, setShowAddEpisode] = useState(false);
   const [newEpisodeTitle, setNewEpisodeTitle] = useState("");
   const [isCreatingEpisode, setIsCreatingEpisode] = useState(false);
+  const [episodeError, setEpisodeError] = useState<string | null>(null);
+  const [episodePending, setEpisodePending] = useState(false);
+  const [episodeCanRetry, setEpisodeCanRetry] = useState(false);
+  const [episodeConfirmed, setEpisodeConfirmed] = useState(false);
+  const episodeOperation = useRef<object | null>(null);
+  const pendingEpisode = useRef<Readonly<CreateSeriesEpisodeRequest> | null>(null);
+  const confirmedEpisode = useRef<SeriesEpisodeCreationReceipt | null>(null);
   const [showModelSettings, setShowModelSettings] = useState(false);
   const [showPromptConfig, setShowPromptConfig] = useState(false);
   const [showImportAssets, setShowImportAssets] = useState(false);
 
   const t = useTranslations("series");
   const tc = useTranslations("common");
+  const tp = useTranslations("persistence");
 
   const ASSET_LABELS: Record<AssetTab, string> = {
     characters: t("characterLabel"),
@@ -44,7 +70,131 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
     props: t("propLabel"),
   };
 
+  const acceptSeriesSnapshot = useCallback((snapshot: Series) => {
+    if (activeView.current !== view || snapshot.id !== seriesId) return false;
+    if (latestSeries.current?.id === seriesId && latestSeries.current.revision > snapshot.revision) return false;
+    latestSeries.current = snapshot;
+    setSeries(snapshot);
+    return true;
+  }, [seriesId, view]);
+
+  const runEpisodeRequest = useCallback(async (allowPost: boolean, draft?: { title: string; revision: number }) => {
+    if (!episodeOwner || activeView.current !== view || episodeOperation.current
+      || !isCurrentRuntimeEnvironment(episodeOwner.environment.key, episodeOwner.environment.generation)) return;
+    const operation = {};
+    episodeOperation.current = operation;
+    const stillCurrent = () => activeView.current === view && episodeOperation.current === operation
+      && isCurrentRuntimeEnvironment(episodeOwner.environment.key, episodeOwner.environment.generation);
+    const reload = async () => {
+      const [saved, savedEpisodes] = await Promise.all([api.getSeries(seriesId), api.getSeriesEpisodes(seriesId)]);
+      if (!stillCurrent()) return null;
+      if (!Array.isArray(savedEpisodes) || !acceptSeriesSnapshot(saved)) throw new Error('Invalid series snapshot');
+      setEpisodes(savedEpisodes);
+      return savedEpisodes as Project[];
+    };
+    setEpisodeError(null);
+    try {
+      const existing = pendingEpisode.current ?? readSeriesEpisodeRequest(episodeOwner);
+      if (!existing && !draft) return;
+      const request = existing ?? beginSeriesEpisodeRequest(episodeOwner, draft!.title, draft!.revision);
+      pendingEpisode.current = request;
+      setEpisodePending(true);
+      setShowAddEpisode(true);
+      setNewEpisodeTitle(request.title);
+      setIsCreatingEpisode(true);
+      let receipt = confirmedEpisode.current;
+      if (!receipt && existing) {
+        try {
+          receipt = await api.getSeriesEpisodeRequest(seriesId, request.client_request_id);
+          if (!stillCurrent()) return;
+        } catch (error) {
+          if (!stillCurrent()) return;
+          if (responseStatus(error) !== 404) throw error;
+          if (!allowPost) {
+            setEpisodeCanRetry(true);
+            setEpisodeError(t('episodeNotConfirmed'));
+            return;
+          }
+        }
+      }
+      if (!receipt) {
+        try {
+          receipt = await api.createEpisodeForSeries(seriesId, request);
+          if (!stillCurrent()) return;
+        } catch (error) {
+          if (!stillCurrent()) return;
+          try {
+            receipt = await api.getSeriesEpisodeRequest(seriesId, request.client_request_id);
+            if (!stillCurrent()) return;
+          } catch (readError) {
+            if (!stillCurrent()) return;
+            const absent = responseStatus(readError) === 404;
+            if (absent && [409, 422].includes(responseStatus(error) ?? 0)) {
+              // The server explicitly rejected this identity and a read found no receipt.
+              resolveSeriesEpisodeRequest(episodeOwner, request.client_request_id);
+              pendingEpisode.current = null;
+              setEpisodePending(false);
+              setEpisodeCanRetry(false);
+              await reload();
+              if (stillCurrent()) setEpisodeError(t('episodeChanged'));
+            } else {
+              setEpisodeCanRetry(absent);
+              setEpisodeError(t('episodeNotConfirmed'));
+            }
+            return;
+          }
+        }
+      }
+      if (receipt.title !== request.title) throw new Error('Episode receipt does not match the original request');
+      confirmedEpisode.current = receipt;
+      setEpisodeConfirmed(true);
+      const savedEpisodes = await reload();
+      if (!stillCurrent() || !savedEpisodes) return;
+      resolveSeriesEpisodeRequest(episodeOwner, request.client_request_id);
+      pendingEpisode.current = null;
+      confirmedEpisode.current = null;
+      setEpisodePending(false);
+      setEpisodeConfirmed(false);
+      setEpisodeCanRetry(false);
+      if (!savedEpisodes.some(episode => episode.id === receipt.episode_id && episode.series_id === seriesId)) {
+        setEpisodeError(t('episodeNoLongerLinked'));
+      } else {
+        setNewEpisodeTitle('');
+        setShowAddEpisode(false);
+      }
+    } catch (error) {
+      if (!stillCurrent()) return;
+      setShowAddEpisode(true);
+      setEpisodeError(error instanceof SeriesEpisodeJournalError
+        ? t(error.code === 'corrupt' ? 'episodeJournalCorrupt' : 'episodeJournalUnavailable')
+        : t(confirmedEpisode.current ? 'episodeCreatedRefreshFailed' : 'episodeNotConfirmed'));
+    } finally {
+      if (stillCurrent()) {
+        episodeOperation.current = null;
+        setIsCreatingEpisode(false);
+      }
+    }
+  }, [episodeOwner, view, seriesId, acceptSeriesSnapshot, t]);
+
   useEffect(() => {
+    let cancelled = false;
+    activeView.current = view;
+    latestSeries.current = null;
+    setSeries(null);
+    setEpisodes([]);
+    setIsEditingTitle(false);
+    setTitleError(null);
+    setTitleSaving(titleRequests.current.has(view));
+    episodeOperation.current = null;
+    pendingEpisode.current = null;
+    confirmedEpisode.current = null;
+    setShowAddEpisode(false);
+    setNewEpisodeTitle('');
+    setIsCreatingEpisode(false);
+    setEpisodeError(null);
+    setEpisodePending(false);
+    setEpisodeCanRetry(false);
+    setEpisodeConfirmed(false);
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -52,63 +202,71 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
           api.getSeries(seriesId),
           api.getSeriesEpisodes(seriesId),
         ]);
-        setSeries(seriesData);
+        if (cancelled) return;
+        if (!acceptSeriesSnapshot(seriesData)) return;
         setEpisodes(episodesData);
         setEditTitle(seriesData.title);
+        void runEpisodeRequest(false);
       } catch (error) {
         console.error("Failed to fetch series data:", error);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
     fetchData();
-  }, [seriesId]);
+    return () => {
+      cancelled = true;
+      if (activeView.current === view) activeView.current = null;
+    };
+  }, [seriesId, view, acceptSeriesSnapshot, runEpisodeRequest]);
 
   const handleBackToHome = () => {
     window.location.hash = "";
   };
 
-  const handleTitleSave = async () => {
-    if (!editTitle.trim() || !series) return;
+  const handleTitleSave = async (retry = false) => {
+    if (!editTitle.trim() || !series || titleRequests.current.has(view) || titleError === "conflict" || (titleError && !retry)) return;
+    if (editTitle.trim() === series.title) { setIsEditingTitle(false); return; }
+    if (!Number.isSafeInteger(titleRevision) || titleRevision! < 0) { setTitleError("missingRevision"); return; }
+    titleRequests.current.add(view);
+    setTitleSaving(true);
+    setTitleError(null);
     try {
-      await api.updateSeries(seriesId, { title: editTitle.trim() });
-      setSeries({ ...series, title: editTitle.trim() });
+      const saved = await api.updateSeries(seriesId, { title: editTitle.trim(), expected_revision: titleRevision! });
+      if (activeView.current !== view) return;
+      acceptSeriesSnapshot(saved);
+      setTitleRevision(saved.revision);
+      setEditTitle(saved.title);
+      setIsEditingTitle(false);
     } catch (error) {
-      console.error("Failed to update series title:", error);
-      setEditTitle(series.title);
+      if (activeView.current === view) setTitleError(persistenceFailure(error));
+    } finally {
+      titleRequests.current.delete(view);
+      if (activeView.current === view) setTitleSaving(false);
     }
-    setIsEditingTitle(false);
   };
 
   const handleTitleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleTitleSave();
+    if (e.key === "Enter") void handleTitleSave(true);
     if (e.key === "Escape") {
       setEditTitle(series?.title || "");
       setIsEditingTitle(false);
+      setTitleError(null);
     }
   };
 
   const handleAddEpisode = async () => {
-    if (!newEpisodeTitle.trim()) return;
-    setIsCreatingEpisode(true);
-    try {
-      const nextEpNum = episodes.length + 1;
-      const workflowMode = series?.workflow_mode || "i2v_legacy";
-      await api.createEpisodeForSeries(seriesId, newEpisodeTitle.trim(), nextEpNum, workflowMode);
-      const updatedEpisodes = await api.getSeriesEpisodes(seriesId);
-      setEpisodes(updatedEpisodes);
-      setNewEpisodeTitle("");
-      setShowAddEpisode(false);
-    } catch (error) {
-      console.error("Failed to add episode:", error);
-    } finally {
-      setIsCreatingEpisode(false);
+    if (!newEpisodeTitle.trim() || !series) return;
+    if (!Number.isSafeInteger(series.revision) || series.revision < 0) {
+      setEpisodeError(tp('missingRevision'));
+      return;
     }
+    await runEpisodeRequest(!episodePending || episodeCanRetry, { title: newEpisodeTitle, revision: series.revision });
   };
 
   const handleAddEpisodeKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") handleAddEpisode();
-    if (e.key === "Escape") setShowAddEpisode(false);
+    if (e.key === "Escape" && !episodePending && !isCreatingEpisode) setShowAddEpisode(false);
   };
 
   const handleOpenEpisode = (episodeId: string) => {
@@ -121,7 +279,7 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         api.getSeries(seriesId),
         api.getSeriesEpisodes(seriesId),
       ]);
-      setSeries(seriesData);
+      if (!acceptSeriesSnapshot(seriesData)) return;
       setEpisodes(episodesData);
     } catch (error) {
       console.error("Failed to refresh series data:", error);
@@ -172,13 +330,18 @@ export default function SeriesDetailPage({ seriesId }: SeriesDetailPageProps) {
         onBack={handleBackToHome}
         isEditingTitle={isEditingTitle}
         editTitle={editTitle}
+        titleSaving={titleSaving}
+        titleError={titleError ? tp(titleError) : undefined}
         onEditTitleChange={setEditTitle}
-        onTitleDoubleClick={() => setIsEditingTitle(true)}
-        onTitleSave={handleTitleSave}
+        onTitleDoubleClick={() => { setEditTitle(series.title); setTitleRevision(series.revision); setTitleError(null); setIsEditingTitle(true); }}
+        onTitleSave={() => void handleTitleSave()}
         onTitleKeyDown={handleTitleKeyDown}
         showAddEpisode={showAddEpisode}
         newEpisodeTitle={newEpisodeTitle}
         isCreatingEpisode={isCreatingEpisode}
+        episodeError={episodeError ?? undefined}
+        episodePending={episodePending}
+        episodeActionLabel={episodeConfirmed ? t('episodeRefreshResult') : episodePending ? t(episodeCanRetry ? 'episodeRetryCreation' : 'episodeCheckResult') : undefined}
         onShowAddEpisode={setShowAddEpisode}
         onNewEpisodeTitleChange={setNewEpisodeTitle}
         onAddEpisode={handleAddEpisode}
@@ -415,7 +578,7 @@ function EpisodeContentPanel({
                 >
                   {frame.rendered_image_url ? (
                     <img
-                      src={frame.rendered_image_url}
+                      src={/^(?:data:|blob:)/i.test(frame.rendered_image_url) ? frame.rendered_image_url : getAssetUrl(frame.rendered_image_url)}
                       alt={`#${i + 1}`}
                       className="w-full h-full object-cover"
                     />

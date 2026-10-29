@@ -1,0 +1,73 @@
+{
+  "admission": {
+    "contract_version": "studio-asset-image-request-v1",
+    "reason": null,
+    "replayed": false,
+    "request": {
+      "asset_id": "f",
+      "asset_type": "storyboard_frame",
+      "channel": "image",
+      "client_request_id": "frame-request",
+      "entrypoint": "studio.storyboard.image.v1",
+      "id": "dfed2789-9384-45b0-b2d6-fea71094f659",
+      "members": [
+        {
+          "attempt_id": "ea8d3dde-97ee-4699-9fb6-35a8dca679dc",
+          "reason": null,
+          "status": "pending",
+          "variant_id": "ea8d3dde-97ee-4699-9fb6-35a8dca679dc"
+        }
+      ],
+      "owner_id": "p",
+      "owner_kind": "script",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "1b98819fb8a5e1bae80731d534cac8408ef84dfe090cb31a9687dcbc051b640d",
+      "request_root_id": "p",
+      "request_root_kind": "project",
+      "request_root_scope_id": "5d1b6ecd-3194-48be-a54c-9730f2c3d7ba",
+      "request_root_series_id": null
+    },
+    "schema_version": 1
+  },
+  "body": {
+    "asset_id": "f",
+    "asset_type": "storyboard_frame",
+    "batch_size": 1,
+    "client_request_id": "frame-request",
+    "composition_data": {},
+    "expected_revision": 0,
+    "generation_type": "all",
+    "prompt": "Author prompt"
+  },
+  "readback": {
+    "contract_version": "studio-asset-image-request-v1",
+    "reason": null,
+    "replayed": true,
+    "request": {
+      "asset_id": "f",
+      "asset_type": "storyboard_frame",
+      "channel": "image",
+      "client_request_id": "frame-request",
+      "entrypoint": "studio.storyboard.image.v1",
+      "id": "dfed2789-9384-45b0-b2d6-fea71094f659",
+      "members": [
+        {
+          "attempt_id": "ea8d3dde-97ee-4699-9fb6-35a8dca679dc",
+          "output_ref": "assets/studio/ea8d3dde-97ee-4699-9fb6-35a8dca679dc.png",
+          "reason": null,
+          "status": "completed",
+          "variant_id": "ea8d3dde-97ee-4699-9fb6-35a8dca679dc"
+        }
+      ],
+      "owner_id": "p",
+      "owner_kind": "script",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "1b98819fb8a5e1bae80731d534cac8408ef84dfe090cb31a9687dcbc051b640d",
+      "request_root_id": "p",
+      "request_root_kind": "project",
+      "request_root_scope_id": "5d1b6ecd-3194-48be-a54c-9730f2c3d7ba",
+      "request_root_series_id": null
+    },
+    "schema_version": 1
+  }
+}

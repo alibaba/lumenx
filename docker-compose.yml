@@ -1,28 +1,30 @@
-version: "3.8"
-
+# Local trial only. For ECS HTTPS and proxy trust, follow P10/HEADLESS-TRIAL.md.
 services:
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    container_name: lumenx-backend
     env_file:
       - .env
     environment:
       - NO_PROXY=*.aliyuncs.com,localhost,127.0.0.1
     volumes:
-      - ./output:/app/output
+      - lumenx_user_data:/var/lib/lumenx
+      # Preserve existing host projects while persisting configuration/logs too.
+      - ./output:/var/lib/lumenx/output
     ports:
-      - "17177:17177"
+      - "127.0.0.1:17177:17177"
     restart: unless-stopped
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    container_name: lumenx-frontend
     ports:
-      - "3000:80"
+      - "127.0.0.1:3000:80"
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  lumenx_user_data:

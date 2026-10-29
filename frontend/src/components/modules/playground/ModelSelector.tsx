@@ -5,6 +5,7 @@ import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import { getModelsForMode, getModelDisplayInfo, type PlaygroundModelOption } from './playgroundModels';
+import { resolvePlaygroundCatalogModelId } from './playgroundModelAliases';
 
 export default function ModelSelector() {
   const mode = usePlaygroundStore((s) => s.mode);
@@ -16,6 +17,7 @@ export default function ModelSelector() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const availableModels = useMemo(() => getModelsForMode(mode), [mode]);
+  const resolvedModelId = useMemo(() => resolvePlaygroundCatalogModelId(modelId), [modelId]);
 
   const selected = useMemo(() => {
     const info = getModelDisplayInfo(modelId);
@@ -35,10 +37,16 @@ export default function ModelSelector() {
   }, [open]);
 
   useEffect(() => {
-    if (availableModels.length > 0 && !availableModels.some((m) => m.id === modelId)) {
+    if (availableModels.length === 0) return;
+    const matched = availableModels.find((m) => resolvePlaygroundCatalogModelId(m.id) === resolvedModelId);
+    if (matched && matched.id !== modelId) {
+      setModelId(matched.id);
+      return;
+    }
+    if (!matched) {
       setModelId(availableModels[0].id);
     }
-  }, [availableModels, modelId, setModelId]);
+  }, [availableModels, modelId, resolvedModelId, setModelId]);
 
   function handleSelect(id: string) {
     setModelId(id);
@@ -104,7 +112,7 @@ export default function ModelSelector() {
                   type="button"
                   onClick={() => handleSelect(m.id)}
                   className={`flex items-center gap-[10px] w-full px-3 py-2 text-left transition-colors hover:bg-hover-bg ${
-                    m.id === modelId ? 'bg-elevated text-foreground' : 'text-foreground/80'
+                    resolvePlaygroundCatalogModelId(m.id) === resolvedModelId ? 'bg-elevated text-foreground' : 'text-foreground/80'
                   }`}
                 >
                   <span className="flex-1 text-[0.8125rem] font-medium truncate">
@@ -115,7 +123,7 @@ export default function ModelSelector() {
                       {t('model.recommended')}
                     </span>
                   )}
-                  {m.id === modelId && (
+                  {resolvePlaygroundCatalogModelId(m.id) === resolvedModelId && (
                     <span className="text-primary shrink-0">✓</span>
                   )}
                 </button>

@@ -17,6 +17,8 @@
 
 [English](README_EN.md) · [中文](README.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
+[开发原则与重构材料](docs/agents/context/lumenx-first-principles/README.md) · [实施进度与验证证据](docs/agents/context/lumenx-first-principles/EXECUTION-STATUS.md)
+
 </div>
 
 ---

@@ -92,6 +92,8 @@ def _bare_pipeline(tmp_path, library=None, series_store=None, scripts=None,
     """Bare ComicGenPipeline with temp persistence paths and only the
     attributes the exercised methods read/write."""
     p = object.__new__(ComicGenPipeline)
+    p._closed = False
+    p._storage_failed = None
     p.library_store = library if library is not None else GlobalAssetLibrary()
     p.series_store = series_store if series_store is not None else {}
     p.scripts = scripts if scripts is not None else {}
@@ -101,6 +103,14 @@ def _bare_pipeline(tmp_path, library=None, series_store=None, scripts=None,
     p.series_data_file = str(tmp_path / "series.json")
     if script_processor is not None:
         p.script_processor = script_processor
+    from pathlib import Path
+    from src.utils.json_transactions import JsonFileTransaction
+    from src.utils.json_storage import DirectoryWriterLock
+    p._writer_lock = DirectoryWriterLock(Path(p.library_data_file).parent)
+    p._storage = JsonFileTransaction(Path(p.library_data_file).parent, (
+        "projects.json", "series.json", "library_assets.json",
+    ))
+    p._committed = p._storage_payloads(("projects.json", "series.json", "library_assets.json"))
     return p
 
 

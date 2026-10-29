@@ -1,46 +1,66 @@
+import { parsePlaygroundCapabilities } from './playgroundCapabilities';
 import axios from "axios";
+import { diagnosticsApi } from "@/lib/diagnosticsApi";
+import { appAccessFetch } from "@/lib/appAccess";
+import { API_URL } from "@/lib/apiUrl";
+import { consumeRefineStream, type RefineBatchComplete, type RefineSSEEvent } from "@/lib/refineSse";
+export type { RefineSSEEvent } from "@/lib/refineSse";
 import { DEFAULT_I2V_MODEL_ID } from "@/lib/modelCatalog";
+import { filenameFromContentDisposition } from "@/lib/projectPackage";
+import { isCurrentRuntimeEnvironment, requireActiveRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import { parseSeriesEpisodeReceipt, type CreateSeriesEpisodeRequest } from "@/lib/seriesEpisodeRequest";
 
-// Dynamic API URL detection (no port enumeration):
-// 1. Explicit override: NEXT_PUBLIC_API_URL (any env / proxy setup).
-// 2. Dev mode (`next dev`, NODE_ENV==='development'): backend runs on a separate
-//    port, so target the same host on the backend port — works for ANY dev port.
-// 3. Production / packaged (Electron): frontend is served by the backend, so use
-//    the same origin.
-const BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT || "17177";
-
-const getApiUrl = (): string => {
-    // Explicit override always wins (strip any trailing slash).
-    const override = process.env.NEXT_PUBLIC_API_URL;
-    if (override && override.trim()) {
-        return override.trim().replace(/\/+$/, "");
-    }
-
-    if (typeof window !== 'undefined') {
-        const { protocol, hostname, port } = window.location;
-
-        // Tauri desktop: frontend served via tauri:// protocol, backend on localhost.
-        if (protocol === 'tauri:' || protocol === 'https:' && hostname === 'tauri.localhost') {
-            return `http://127.0.0.1:${BACKEND_PORT}`;
-        }
-
-        // Dev server: backend lives on a different port regardless of which
-        // dev port Next.js picked (3008/3009/3018/...).
-        if (process.env.NODE_ENV === 'development') {
-            return `${protocol}//${hostname}:${BACKEND_PORT}`;
-        }
-
-        // Production / packaged: frontend is served by the backend → same origin.
-        return `${protocol}//${hostname}${port ? ':' + port : ''}`;
-    }
-
-    // SSR fallback
-    return `http://localhost:${BACKEND_PORT}`;
-};
-
-export const API_URL = getApiUrl();
+export { API_URL } from "@/lib/apiUrl";
 
 export type ProviderMode = "dashscope" | "vendor";
+
+export interface SeriesImportEpisodePreview {
+    episode_number: number;
+    title: string;
+    summary?: string;
+    start_marker?: string;
+    end_marker?: string;
+    estimated_duration?: string;
+}
+
+export interface SeriesImportPreview {
+    import_id: string;
+    filename: string;
+    text_length: number;
+    suggested_episodes: number;
+    episodes: SeriesImportEpisodePreview[];
+}
+
+export interface SeriesImportResult {
+    series: { id: string; episode_ids: string[] };
+    episodes: { id: string; title: string; episode_number: number; text_length: number }[];
+}
+
+export type SeriesImportStatus =
+    | { import_id: string; status: 'preview'; expires_at: number }
+    | { import_id: string; status: 'completed'; result: SeriesImportResult };
+
+async function errorFromResponse(response: Response, fallback: string) {
+    let detail = fallback;
+    let body: unknown = null;
+    try { body = await response.json(); } catch { /* Keep fallback for non-JSON errors. */ }
+    if (body && typeof body === "object" && "detail" in body) {
+        const raw = (body as { detail?: unknown }).detail;
+        if (typeof raw === "string") {
+            detail = raw;
+        } else if (Array.isArray(raw)) {
+            detail = raw.map(item => {
+                if (!item || typeof item !== "object") return String(item);
+                const msg = "msg" in item && typeof item.msg === "string" ? item.msg : JSON.stringify(item);
+                const loc = "loc" in item && Array.isArray(item.loc) ? item.loc.join(".") : "";
+                return loc ? `${loc}: ${msg}` : msg;
+            }).join("; ");
+        } else if (raw !== undefined) {
+            detail = JSON.stringify(raw);
+        }
+    }
+    return Object.assign(new Error(detail), { response: { status: response.status, data: body }, status: response.status });
+}
 
 /**
  * PR-3g #3 · TTS voice metadata returned by GET /voices.
@@ -100,6 +120,25 @@ export interface EnvConfigPayload {
     [key: string]: string | Record<string, string> | Record<string, boolean> | boolean | undefined;
 }
 
+export interface ProjectPackageExportResult {
+    blob: Blob;
+    filename?: string;
+    cacheControl?: string | null;
+}
+
+export class ProjectPackageImportError extends Error {
+    readonly outcomeUnknown: boolean;
+
+    constructor(message: string, outcomeUnknown: boolean, options?: { cause?: unknown }) {
+        super(message);
+        this.name = "ProjectPackageImportError";
+        this.outcomeUnknown = outcomeUnknown;
+        if (options && "cause" in options) {
+            Object.assign(this, { cause: options.cause });
+        }
+    }
+}
+
 // R2V v2 Phase 4 — Cross-episode reconcile types
 export interface ReconcileSuggestion {
     local_id: string;
@@ -116,10 +155,129 @@ export interface BgmPreset {
     url: string;
 }
 
+export interface DialogueAudioOptionsPatch {
+    speed?: number | null;
+    pitch?: number | null;
+    volume?: number | null;
+    instructions?: string | null;
+}
+
+export interface DialogueAudioState {
+    project_id: string;
+    frame_id: string;
+    read_versions: {
+        project: number;
+        series: { id: string; revision: number | null } | null;
+        library: number;
+    };
+    audio_url?: string | null;
+    audio_error?: string | null;
+    historical_instructions?: string | null;
+    dialogue?: string | null;
+    voice_id?: string | null;
+    options: DialogueAudioOptionsPatch;
+    resolved_request?: Record<string, unknown> | null;
+    sources?: Record<string, string> | null;
+    prepared?: Record<string, unknown> | null;
+    freshness: "missing" | "current" | "stale" | "unknown";
+    reason?: string | null;
+    error?: unknown;
+}
+
 export interface ReconcileAction {
     local_id: string;
     action: "merge_into_series" | "create_new_in_series" | "skip";
     target_series_id?: string;
+}
+
+export interface MediaRefs {
+    video_url?: string;
+    audio_url?: string;
+    image_url?: string;
+    reference_video_urls?: Array<string | null>;
+    reference_image_urls?: Array<string | null>;
+    reference_audio_urls?: Array<string | null>;
+    [key: string]: unknown;
+}
+
+export type VideoTaskStatus = "pending" | "processing" | "completed" | "failed" | "needs_confirmation";
+
+export interface ProviderExecutionRecord {
+    attempt_id: string;
+    phase: "accepted" | "cancelled" | "submitting" | "submitted" | "observed" | "completed";
+    fingerprint: string;
+    handle?: Record<string, unknown> | null;
+    observation?: Record<string, unknown> | null;
+    prepared_artifact?: Record<string, unknown> | null;
+    artifact?: Record<string, unknown> | null;
+    [key: string]: unknown;
+}
+
+export interface ProviderVideoContinueIdentity {
+    expected_attempt_id: string;
+    expected_fingerprint: string;
+}
+
+export interface StudioMotionAssetOwner {
+    kind: 'script' | 'series' | 'global';
+    id: string;
+}
+
+export interface StudioMotionEligibility {
+    project_id: string;
+    asset_id: string;
+    asset_type: 'full_body' | 'head_shot' | 'scene' | 'prop';
+    eligible: boolean;
+    model_id: string;
+    reason: string | null;
+    owner: StudioMotionAssetOwner;
+    selected_image_id: string | null;
+    source_kind: 'local_path' | 'data_uri' | 'remote_url' | 'object_key' | 'blob_url' | 'unknown';
+    expected_target: string;
+}
+
+export interface StudioMotionRequestBody {
+    client_request_id: string;
+    expected_target: string;
+    asset_id: string;
+    asset_type: 'full_body' | 'head_shot' | 'scene' | 'prop';
+    prompt?: string | null;
+    audio_url?: null;
+    duration?: number;
+    batch_size?: 1;
+}
+
+export interface StudioMotionReceiptIdentity {
+    schema_version: 3;
+    entrypoint: 'studio.motion_reference.v1';
+    request_contract_version: 'request-json-v1';
+    client_request_id: string;
+    request_fingerprint: string;
+    execution_fingerprint: string;
+    task_id: string;
+    attempt_id: string;
+    owner_kind: StudioMotionAssetOwner['kind'];
+    owner_id: string;
+    asset_id: string;
+    asset_type: 'full_body' | 'head_shot' | 'scene' | 'prop';
+    created_at: number;
+}
+
+export interface StudioMotionBinding {
+    channel: 'full_body' | 'head_shot' | 'scene' | 'prop';
+    client_request_id: string;
+    owner_kind: StudioMotionAssetOwner['kind'];
+    owner_id: string;
+    source_image_id: string;
+    target_fingerprint: string;
+}
+
+export interface StudioMotionReceipt {
+    task_id: string;
+    request: StudioMotionReceiptIdentity;
+    task: (Omit<VideoTask, 'frame_id'> & { frame_id?: null; asset_id: string; motion_reference: StudioMotionBinding }) | null;
+    reason: string | null;
+    replayed?: boolean;
 }
 
 export interface VideoTask {
@@ -127,8 +285,9 @@ export interface VideoTask {
     project_id: string;
     image_url: string;
     prompt: string;
-    status: "pending" | "processing" | "completed" | "failed";
+    status: VideoTaskStatus;
     video_url?: string;
+    media_refs?: MediaRefs | null;
     duration: number;
     seed?: number;
     resolution: string;
@@ -140,8 +299,10 @@ export interface VideoTask {
     model?: string;
     frame_id?: string;
     generation_mode?: string;
+    last_frame_url?: string | null;
     reference_video_urls?: string[];
     reference_image_urls?: string[];
+    reference_audio_urls?: string[];
     ratio?: string;
     /** Failure reason set by pipeline / cancel / orphan recovery. */
     error?: string | null;
@@ -163,6 +324,7 @@ export interface VideoTask {
     provider_name?: string | null;
     provider_task_id?: string | null;
     provider_request_id?: string | null;
+    provider_execution?: ProviderExecutionRecord | null;
 }
 
 // ─── Storyboard Schema v2 types ─────────────────────────────────────────────
@@ -207,13 +369,6 @@ export interface LightingData {
     description?: string | null;
 }
 
-export interface RefineSSEEvent {
-    type: "frame_refine_start" | "frame_refine_complete" | "frame_refine_error" | "batch_complete";
-    frame_id?: string;
-    frame_index?: number;
-    total?: number;
-    error?: string;
-}
 
 export const api = {
     createProject: async (title: string, text: string, skipAnalysis: boolean = false, workflowMode: string = "r2v", seriesId?: string) => {
@@ -233,6 +388,61 @@ export const api = {
         return { ...res.data, originalText: res.data.original_text };
     },
 
+    exportProjectPackage: async (scriptId: string): Promise<ProjectPackageExportResult> => {
+        const environment = requireActiveRuntimeEnvironment();
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/package/export`, {
+            method: "GET",
+            headers: { "Accept": "application/zip" },
+            cache: "no-store",
+        });
+        if (!response.ok) throw await errorFromResponse(response, "Project package export failed");
+        const blob = await response.blob();
+        if (!isCurrentRuntimeEnvironment(environment.key, environment.generation)) {
+            throw new Error("Runtime environment changed during project package export");
+        }
+        return {
+            blob,
+            filename: filenameFromContentDisposition(response.headers.get("Content-Disposition")),
+            cacheControl: response.headers.get("Cache-Control"),
+        };
+    },
+
+    importProjectPackage: async (file: File | Blob) => {
+        const environment = requireActiveRuntimeEnvironment();
+        let packageBytes: ArrayBuffer;
+        try {
+            packageBytes = await file.arrayBuffer();
+        } catch (error) {
+            throw new ProjectPackageImportError("Project package import file could not be read", false, { cause: error });
+        }
+        if (!isCurrentRuntimeEnvironment(environment.key, environment.generation)) {
+            throw new ProjectPackageImportError("Runtime environment changed during project package import", false);
+        }
+        let response: Response;
+        try {
+            response = await appAccessFetch(`${API_URL}/projects/package/import`, {
+                method: "POST",
+                headers: { "Content-Type": "application/zip", "Accept": "application/json" },
+                body: packageBytes,
+            });
+        } catch (error) {
+            throw new ProjectPackageImportError("Project package import outcome is unknown", true, { cause: error });
+        }
+        if (!response.ok) {
+            const error = await errorFromResponse(response, "Project package import failed");
+            const status = (error as { status?: number }).status;
+            const knownRejectedStatuses = new Set([400, 401, 403, 413, 415, 422]);
+            if (status && knownRejectedStatuses.has(status)) throw error;
+            throw new ProjectPackageImportError(error.message, true, { cause: error });
+        }
+        try {
+            const data = await response.json();
+            return { ...data, originalText: data.original_text };
+        } catch (error) {
+            throw new ProjectPackageImportError("Project package import acknowledgement could not be parsed", true, { cause: error });
+        }
+    },
+
     deleteProject: async (scriptId: string) => {
         const res = await axios.delete(`${API_URL}/projects/${scriptId}`);
         return res.data;
@@ -245,8 +455,8 @@ export const api = {
         return res.data;
     },
 
-    reparseProject: async (scriptId: string, text: string) => {
-        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text });
+    reparseProject: async (scriptId: string, text: string, expectedRevision: number) => {
+        const res = await axios.put(`${API_URL}/projects/${scriptId}/reparse`, { text, expected_revision: expectedRevision });
         return { ...res.data, originalText: res.data.original_text };
     },
 
@@ -257,8 +467,8 @@ export const api = {
 
     /** Persist `original_text` without LLM reparse. Used for textarea
      *  blur-saves so navigation/reload doesn't drop in-progress drafts. */
-    updateScriptText: async (scriptId: string, text: string) => {
-        const res = await axios.put(`${API_URL}/projects/${scriptId}/text`, { text });
+    updateScriptText: async (scriptId: string, text: string, expectedRevision: number) => {
+        const res = await axios.put(`${API_URL}/projects/${scriptId}/text`, { text, expected_revision: expectedRevision });
         return { ...res.data, originalText: res.data.original_text };
     },
 
@@ -269,6 +479,16 @@ export const api = {
 
     generateAssets: async (scriptId: string) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/generate_assets`);
+        return res.data;
+    },
+
+    createProviderVideoTasks: async (id: string, payload: Record<string, unknown>) => {
+        const res = await axios.post(`${API_URL}/projects/${id}/provider_video_tasks`, payload);
+        return res.data;
+    },
+
+    continueProviderVideoTask: async (id: string, taskId: string, identity: ProviderVideoContinueIdentity): Promise<VideoTask> => {
+        const res = await axios.post(`${API_URL}/projects/${id}/provider_video_tasks/${taskId}/continue`, identity);
         return res.data;
     },
 
@@ -377,6 +597,7 @@ export const api = {
             t2i_image_urls?: string[];
             t2i_selected_index?: number;
             workbench_generate_count?: number;
+            last_frame_url?: string | null;
         },
     ) => {
         const res = await axios.patch(
@@ -387,10 +608,10 @@ export const api = {
     },
 
 
-    uploadFile: async (file: File) => {
+    uploadFile: async (file: File): Promise<{ url: string; local_url?: string }> => {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await fetch(`${API_URL}/upload`, {
+        const response = await appAccessFetch(`${API_URL}/upload`, {
             method: "POST",
             body: formData,
         });
@@ -401,16 +622,7 @@ export const api = {
     /** Lightweight liveness probe + log path. Used by the Diagnose UI
      *  on stuck tasks. 5s timeout because it's only meant to confirm
      *  the backend is alive, not to wait through a slow request. */
-    healthCheck: async (): Promise<{
-        ok: boolean;
-        time: number;
-        log_file: string;
-        log_dir: string;
-        studio_projects: number;
-    }> => {
-        const res = await axios.get(`${API_URL}/health`, { timeout: 5000 });
-        return res.data;
-    },
+    healthCheck: diagnosticsApi.healthCheck,
 
     /** System dependency report (ffmpeg detection + version) used by
      *  Settings → About. ffmpeg -version can be slightly slow, so a
@@ -429,20 +641,7 @@ export const api = {
     /** Return last N lines of the backend log + any ERROR-flavored
      *  lines, for the Diagnose UI on stuck tasks. Backend caps at
      *  1000 lines so a runaway client can't drag the server. */
-    diagnoseLogTail: async (lines: number = 200): Promise<{
-        path: string;
-        total_lines?: number;
-        returned_lines?: number;
-        lines: string[];
-        errors: string[];
-        missing: boolean;
-    }> => {
-        const res = await axios.get(`${API_URL}/diagnose/log_tail`, {
-            params: { lines },
-            timeout: 8000,
-        });
-        return res.data;
-    },
+    diagnoseLogTail: diagnosticsApi.diagnoseLogTail,
 
     /** Set the user's star + label annotations on a video task. Used
      *  by Storyboard's candidates panel (shortlist + free-text note).
@@ -492,7 +691,7 @@ export const api = {
             params.append("description", description);
         }
 
-        const response = await fetch(
+        const response = await appAccessFetch(
             `${API_URL}/projects/${scriptId}/assets/${assetType}/${assetId}/upload?${params.toString()}`,
             {
                 method: "POST",
@@ -711,12 +910,13 @@ export const api = {
         return res.data;
     },
 
-    saveArtDirection: async (scriptId: string, selectedStyleId: string, styleConfig: any, customStyles: any[] = [], aiRecommendations: any[] = []) => {
+    saveArtDirection: async (scriptId: string, selectedStyleId: string, styleConfig: any, customStyles: any[] = [], aiRecommendations: any[] = [], expectedRevision: number) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/art_direction/save`, {
             selected_style_id: selectedStyleId,
             style_config: styleConfig,
             custom_styles: customStyles,
-            ai_recommendations: aiRecommendations
+            ai_recommendations: aiRecommendations,
+            expected_revision: expectedRevision,
         });
         return res.data;
     },
@@ -807,6 +1007,7 @@ export const api = {
     updateFrame: async (scriptId: string, frameId: string, data: {
         image_prompt?: string;
         action_description?: string;
+        visual_description?: string;
         dialogue?: string;
         camera_angle?: string;
         scene_id?: string;
@@ -815,10 +1016,11 @@ export const api = {
         shot_size?: string;
         camera_movement_description?: string;
         transition_hint?: string;
-    }) => {
+    }, expectedRevision: number) => {
         const res = await axios.post(`${API_URL}/projects/${scriptId}/frames/update`, {
             frame_id: frameId,
-            ...data
+            ...data,
+            expected_revision: expectedRevision
         });
         return res.data;
     },
@@ -874,7 +1076,7 @@ export const api = {
     },
 
     getVoices: async (): Promise<VoiceMeta[]> => {
-        const response = await fetch(`${API_URL}/voices`);
+        const response = await appAccessFetch(`${API_URL}/voices`);
         if (!response.ok) throw new Error("Failed to fetch voices");
         return response.json();
     },
@@ -893,7 +1095,7 @@ export const api = {
         volume?: number;
         instructions?: string;
     }): Promise<{ url: string; cached: boolean }> => {
-        const response = await fetch(`${API_URL}/voice/preview`, {
+        const response = await appAccessFetch(`${API_URL}/voice/preview`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -926,7 +1128,7 @@ export const api = {
         label: string;
         target_model?: string;
     }): Promise<CustomVoice> => {
-        const response = await fetch(`${API_URL}/voice/clone`, {
+        const response = await appAccessFetch(`${API_URL}/voice/clone`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -945,14 +1147,14 @@ export const api = {
 
     /** PR-3h · List custom voices (clones + designs) on a series. */
     listCustomVoices: async (seriesId: string): Promise<CustomVoice[]> => {
-        const response = await fetch(`${API_URL}/series/${seriesId}/custom_voices`);
+        const response = await appAccessFetch(`${API_URL}/series/${seriesId}/custom_voices`);
         if (!response.ok) throw new Error("Failed to list custom voices");
         return response.json();
     },
 
     /** PR-3h · Remove a custom voice. Does NOT delete on dashscope side. */
     deleteCustomVoice: async (seriesId: string, voiceId: string): Promise<{ removed: boolean }> => {
-        const response = await fetch(`${API_URL}/series/${seriesId}/custom_voices/${voiceId}`, {
+        const response = await appAccessFetch(`${API_URL}/series/${seriesId}/custom_voices/${voiceId}`, {
             method: "DELETE",
         });
         if (!response.ok) throw new Error("Failed to delete custom voice");
@@ -968,7 +1170,7 @@ export const api = {
         preview_text?: string;
         target_model?: string;
     }): Promise<{ voice_id: string; preview_url: string; target_model: string }> => {
-        const response = await fetch(`${API_URL}/voice/design/preview`, {
+        const response = await appAccessFetch(`${API_URL}/voice/design/preview`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -992,7 +1194,7 @@ export const api = {
         label: string;
         target_model?: string;
     }): Promise<CustomVoice> => {
-        const response = await fetch(`${API_URL}/voice/design/accept`, {
+        const response = await appAccessFetch(`${API_URL}/voice/design/accept`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -1012,7 +1214,7 @@ export const api = {
 
     /** PR-3i · LLM helper — translate character.description → CosyVoice voice_prompt. */
     translateVoicePrompt: async (description: string): Promise<{ voice_prompt: string }> => {
-        const response = await fetch(`${API_URL}/voice/design/translate`, {
+        const response = await appAccessFetch(`${API_URL}/voice/design/translate`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ description }),
@@ -1024,45 +1226,64 @@ export const api = {
         return response.json();
     },
 
-    bindVoice: async (scriptId: string, charId: string, voiceId: string, voiceName: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice`, {
+    bindVoice: async (scriptId: string, charId: string, voiceId: string, voiceName: string): Promise<unknown> => {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ voice_id: voiceId, voice_name: voiceName }),
         });
-        if (!response.ok) throw new Error("Failed to bind voice");
+        if (!response.ok) {
+            const body: unknown = await response.json().catch(() => null);
+            const detail = body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string'
+                ? body.detail : 'Failed to bind voice';
+            throw Object.assign(new Error(detail), { response: { status: response.status } });
+        }
         return response.json();
     },
 
     generateAudio: async (scriptId: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/generate_audio`, {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/generate_audio`, {
             method: "POST",
         });
         if (!response.ok) throw new Error("Failed to generate audio");
         return response.json();
     },
 
+    getDialogueAudioState: async (scriptId: string, frameId: string): Promise<DialogueAudioState> => {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/audio/state`, {
+            method: "GET",
+            cache: "no-store",
+            headers: { "Cache-Control": "no-store" },
+        });
+        if (!response.ok) throw await errorFromResponse(response, "Failed to read dialogue audio state");
+        return response.json();
+    },
+
     generateLineAudio: async (
         scriptId: string,
         frameId: string,
-        speed: number,
-        pitch: number,
-        volume: number = 50,
-        instructions?: string,
+        options: DialogueAudioOptionsPatch = {},
     ) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/audio`, {
+        for (const field of ["speed", "pitch", "volume"] as const) {
+            const value = options[field];
+            if (value != null && (typeof value !== "number" || !Number.isFinite(value)
+                || (field === "volume" && !Number.isInteger(value)))) {
+                throw new Error(`Invalid ${field}: enter a finite ${field === "volume" ? "integer" : "number"}`);
+            }
+        }
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/audio`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ speed, pitch, volume, instructions: instructions || null }),
+            body: JSON.stringify(options),
         });
-        if (!response.ok) throw new Error("Failed to generate line audio");
+        if (!response.ok) throw await errorFromResponse(response, "Failed to generate line audio");
         return response.json();
     },
 
     /** PR-3j · Generate dialogue audio for every frame with dialogue.
      *  Skips frames whose snapshot hash still matches. */
     generateDialogueAudioBatch: async (scriptId: string): Promise<{ _batch_stats: { generated: number; skipped: number; failed: number; no_voice: number } }> => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/dialogue_audio/batch`, {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/dialogue_audio/batch`, {
             method: "POST",
         });
         if (!response.ok) throw new Error("Failed to generate dialogue audio batch");
@@ -1089,7 +1310,7 @@ export const api = {
 
     /** Schema v2 · Refine a single frame (Phase 2 rich fields). */
     refineSingleFrame: async (scriptId: string, frameId: string) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/refine`, {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/frames/${frameId}/refine`, {
             method: "POST",
         });
         if (!response.ok) throw new Error("Failed to refine frame");
@@ -1100,38 +1321,23 @@ export const api = {
     refineBatchFrames: async (
         scriptId: string,
         onEvent: (event: RefineSSEEvent) => void,
-    ): Promise<void> => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/storyboard/refine_batch`, {
-            method: "POST",
-        });
-        if (!response.ok) throw new Error("Failed to start batch refine");
-        const reader = response.body?.getReader();
-        if (!reader) return;
-        const decoder = new TextDecoder();
-        let buffer = "";
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() || "";
-            let currentEventType = "";
-            for (const line of lines) {
-                if (line.startsWith("event: ")) {
-                    currentEventType = line.slice(7).trim();
-                } else if (line.startsWith("data: ")) {
-                    try {
-                        const data = JSON.parse(line.slice(6));
-                        onEvent({ type: currentEventType as RefineSSEEvent["type"], ...data });
-                    } catch { /* skip malformed lines */ }
-                }
-            }
+    ): Promise<RefineBatchComplete> => {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/storyboard/refine_batch`, { method: "POST" });
+        if (!response.ok) {
+            let detail = 'Failed to start batch refinement';
+            try {
+                const data: unknown = await response.json();
+                if (data && typeof data === 'object' && 'detail' in data && typeof data.detail === 'string') detail = data.detail;
+            } catch { /* Non-JSON errors still preserve their HTTP status. */ }
+            throw Object.assign(new Error(detail), { status: response.status });
         }
+        if (!response.body) throw new Error('Refinement response has no stream');
+        return consumeRefineStream(response.body, onEvent);
     },
 
     /** PR-3k · BGM preset catalog for Assembly Mix phase. */
     listBgmPresets: async (): Promise<BgmPreset[]> => {
-        const response = await fetch(`${API_URL}/bgm/presets`);
+        const response = await appAccessFetch(`${API_URL}/bgm/presets`);
         if (!response.ok) throw new Error("Failed to list bgm presets");
         return response.json();
     },
@@ -1143,7 +1349,7 @@ export const api = {
         bgm_volume?: number;
         sfx_volume?: number;
     }) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/audio_mix`, {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/audio_mix`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
@@ -1152,18 +1358,23 @@ export const api = {
         return response.json();
     },
 
-    updateVoiceParams: async (scriptId: string, charId: string, speed: number, pitch: number, volume: number) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice_params`, {
+    updateVoiceParams: async (scriptId: string, charId: string, speed: number, pitch: number, volume: number): Promise<unknown> => {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/characters/${charId}/voice_params`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ speed, pitch, volume }),
         });
-        if (!response.ok) throw new Error("Failed to update voice params");
+        if (!response.ok) {
+            const body: unknown = await response.json().catch(() => null);
+            const detail = body && typeof body === 'object' && 'detail' in body && typeof body.detail === 'string'
+                ? body.detail : 'Failed to update voice params';
+            throw Object.assign(new Error(detail), { response: { status: response.status } });
+        }
         return response.json();
     },
 
     exportProject: async (scriptId: string, options: any) => {
-        const response = await fetch(`${API_URL}/projects/${scriptId}/export`, {
+        const response = await appAccessFetch(`${API_URL}/projects/${scriptId}/export`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(options),
@@ -1204,7 +1415,7 @@ export const api = {
     uploadFrameImage: async (scriptId: string, frameId: string, file: File) => {
         const formData = new FormData();
         formData.append("file", file);
-        const response = await fetch(
+        const response = await appAccessFetch(
             `${API_URL}/projects/${scriptId}/frames/${frameId}/upload_image`,
             { method: "POST", body: formData }
         );
@@ -1307,7 +1518,7 @@ export const api = {
     },
     updateSeries: async (
         seriesId: string,
-        data: { title?: string; description?: string; art_direction?: any },
+        data: { expected_revision: number; title?: string; description?: string; art_direction?: any },
     ) => {
         const response = await axios.put(`${API_URL}/series/${seriesId}`, data);
         return response.data;
@@ -1379,8 +1590,8 @@ export const api = {
     },
 
     /** R2V v2 Phase 2 — clear project-level art_direction (return to series inherit). */
-    clearProjectArtDirection: async (scriptId: string) => {
-        const res = await axios.post(`${API_URL}/projects/${scriptId}/art_direction/clear`);
+    clearProjectArtDirection: async (scriptId: string, expectedRevision: number) => {
+        const res = await axios.post(`${API_URL}/projects/${scriptId}/art_direction/clear`, { expected_revision: expectedRevision });
         return res.data;
     },
 
@@ -1482,16 +1693,18 @@ export const api = {
         return response.data;
     },
 
-    // Helper: create a project and add it as an episode to a series
-    createEpisodeForSeries: async (seriesId: string, title: string, episodeNumber: number, workflowMode: string = "r2v") => {
-        const project = await api.createProject(title, "", true, workflowMode);
-        await api.addEpisodeToSeries(seriesId, project.id, episodeNumber);
-        const refreshed = await api.getProject(project.id);
-        return refreshed;
+    // One saved command creates the project and association with a replay identity.
+    createEpisodeForSeries: async (seriesId: string, request: CreateSeriesEpisodeRequest) => {
+        const response = await axios.post(`${API_URL}/series/${encodeURIComponent(seriesId)}/episode_requests`, request);
+        return parseSeriesEpisodeReceipt(response.data, seriesId, request.client_request_id);
+    },
+    getSeriesEpisodeRequest: async (seriesId: string, requestId: string) => {
+        const response = await axios.get(`${API_URL}/series/${encodeURIComponent(seriesId)}/episode_requests/${encodeURIComponent(requestId)}`);
+        return parseSeriesEpisodeReceipt(response.data, seriesId, requestId);
     },
 
     // File Import
-    importFilePreview: async (file: File, suggestedEpisodes: number = 3) => {
+    importFilePreview: async (file: File, suggestedEpisodes: number = 3): Promise<SeriesImportPreview> => {
         const formData = new FormData();
         formData.append('file', file);
         const response = await axios.post(`${API_URL}/series/import/preview?suggested_episodes=${suggestedEpisodes}`, formData, {
@@ -1499,8 +1712,12 @@ export const api = {
         });
         return response.data;
     },
-    importFileConfirm: async (data: { title: string; description?: string; text: string; episodes: any[] }) => {
+    importFileConfirm: async (data: { title: string; description?: string; import_id: string; episodes: SeriesImportEpisodePreview[] }): Promise<SeriesImportResult> => {
         const response = await axios.post(`${API_URL}/series/import/confirm`, data);
+        return response.data;
+    },
+    importFileStatus: async (importId: string): Promise<SeriesImportStatus> => {
+        const response = await axios.get(`${API_URL}/series/import/${encodeURIComponent(importId)}`);
         return response.data;
     },
 };
@@ -1596,23 +1813,27 @@ export const crudApi = {
 // ─── Playground API ─────────────────────────────────────────────────────────
 
 export interface PlaygroundGenerateRequest {
+  client_request_id: string;
   mode: string;
   model_id: string;
   prompt: string;
   negative_prompt?: string;
   input_media?: string[];
-  parameters?: Record<string, any>;
+  parameters?: Record<string, unknown>;
   batch_size?: number;
 }
 
 export interface PlaygroundGenerationResponse {
   id: string;
+  client_request_id?: string;
+  request_contract_version?: string;
+  request_fingerprint?: string;
   mode: string;
   model_id: string;
   prompt: string;
   negative_prompt?: string;
   input_media: string[];
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   batch_size: number;
   outputs: Array<{
     id: string;
@@ -1620,10 +1841,37 @@ export interface PlaygroundGenerationResponse {
     media_type: string;
     thumbnail_path?: string;
     saved_to_library: boolean;
+    attempt_id?: string;
+  }>;
+  attempts?: Array<{
+    attempt_id: string;
+    ordinal: number;
+    status: string;
+    error?: string | null;
+    provider_execution?: ProviderExecutionRecord | null;
   }>;
   status: string;
-  error?: string;
+  error?: string | null;
   created_at: string;
+}
+
+export interface PlaygroundRequestTombstoneResponse {
+  record_type: "tombstone";
+  schema_version: 1;
+  client_request_id: string;
+  request_contract_version?: string;
+  request_fingerprint: string;
+  generation_id: string;
+  deleted_at: string;
+  deleted_status: string;
+}
+
+export interface PlaygroundRequestReceiptResponse {
+  schema_version: 1;
+  replayed: boolean;
+  request_status: "accepted" | "deleted";
+  generation: PlaygroundGenerationResponse | null;
+  tombstone: PlaygroundRequestTombstoneResponse | null;
 }
 
 export interface PlaygroundTemplateResponse {
@@ -1634,14 +1882,20 @@ export interface PlaygroundTemplateResponse {
   negative_prompt?: string;
   default_mode?: string;
   default_model_id?: string;
-  default_parameters: Record<string, any>;
+  default_parameters: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
 
 export const playgroundApi = {
+  getCapabilities: () =>
+    axios.get<unknown>(API_URL + "/playground/capabilities").then(r => parsePlaygroundCapabilities(r.data)),
+
   generate: (data: PlaygroundGenerateRequest) =>
-    axios.post<PlaygroundGenerationResponse>(API_URL + "/playground/generate", data).then(r => r.data),
+    axios.post<PlaygroundRequestReceiptResponse>(API_URL + "/playground/generate", data).then(r => r.data),
+
+  getRequestReceipt: (clientRequestId: string) =>
+    axios.get<PlaygroundRequestReceiptResponse>(API_URL + "/playground/requests/" + encodeURIComponent(clientRequestId)).then(r => r.data),
 
   getHistory: (limit = 50, offset = 0) =>
     axios.get<PlaygroundGenerationResponse[]>(API_URL + "/playground/history", { params: { limit, offset } }).then(r => r.data),
@@ -1650,7 +1904,7 @@ export const playgroundApi = {
     axios.get<PlaygroundGenerationResponse>(API_URL + "/playground/history/" + id).then(r => r.data),
 
   getGenerationStatus: (id: string) =>
-    axios.get<{ id: string; status: string; outputs: any[]; error?: string }>(API_URL + "/playground/history/" + id + "/status").then(r => r.data),
+    axios.get<{ id: string; status: string; outputs: unknown[]; error?: string }>(API_URL + "/playground/history/" + id + "/status").then(r => r.data),
 
   deleteGeneration: (id: string) =>
     axios.delete(API_URL + "/playground/history/" + id).then(r => r.data),
@@ -1661,10 +1915,10 @@ export const playgroundApi = {
   getTemplates: () =>
     axios.get<PlaygroundTemplateResponse[]>(API_URL + "/playground/templates").then(r => r.data),
 
-  createTemplate: (data: { name: string; category?: string; prompt: string; negative_prompt?: string; default_mode?: string; default_model_id?: string; default_parameters?: Record<string, any> }) =>
+  createTemplate: (data: { name: string; category?: string; prompt: string; negative_prompt?: string; default_mode?: string; default_model_id?: string; default_parameters?: Record<string, unknown> }) =>
     axios.post<PlaygroundTemplateResponse>(API_URL + "/playground/templates", data).then(r => r.data),
 
-  updateTemplate: (id: string, data: Partial<{ name: string; category: string; prompt: string; negative_prompt: string; default_mode: string; default_model_id: string; default_parameters: Record<string, any> }>) =>
+  updateTemplate: (id: string, data: Partial<{ name: string; category: string; prompt: string; negative_prompt: string; default_mode: string; default_model_id: string; default_parameters: Record<string, unknown> }>) =>
     axios.put<PlaygroundTemplateResponse>(API_URL + "/playground/templates/" + id, data).then(r => r.data),
 
   deleteTemplate: (id: string) =>

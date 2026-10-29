@@ -1,0 +1,297 @@
+{
+  "attempt": {
+    "attempt_id": "attempt-1",
+    "attempt_revision": 0,
+    "candidate_id": "candidate-1",
+    "created_at": 10.0,
+    "error_code": null,
+    "first_frame_source": {
+      "media_url": "uploads/frame.png",
+      "node_id": "image"
+    },
+    "node_id": "video",
+    "output_ref": null,
+    "project_id": "project-1",
+    "provider_execution": {
+      "artifact": null,
+      "attempt_id": "attempt-1",
+      "credential_ref": "credential-ref",
+      "fingerprint": "78e3629a0df5db6a18ae9b6747fccd13147eb85107abc9dac6f9ad716b77ed32",
+      "handle": null,
+      "intent": {
+        "catalog_mode": "i2v",
+        "mode": "i2v",
+        "model_id": "wan/wan2.7-video#i2v",
+        "params": {
+          "duration": 5,
+          "resolution": "1080p"
+        },
+        "preset_id": null,
+        "preset_version": null,
+        "prompt": "Slow sunrise",
+        "request_fields": [
+          "mode",
+          "model_id",
+          "params.duration",
+          "params.resolution",
+          "prompt"
+        ],
+        "rules_version": "generation-parameters-v1",
+        "scope": "parameters-only",
+        "sources": {
+          "mode": "request",
+          "model_id": "request",
+          "params.duration": "request",
+          "params.resolution": "request",
+          "prompt": "request"
+        }
+      },
+      "media": [
+        {
+          "declared_media_type": "image/png",
+          "ordinal": 0,
+          "role": "first_frame",
+          "schema_version": 1,
+          "sha256": "1ba05c474761e0ddb53dce893d2883fa50d58905f57f1166d372968d5ec6567d",
+          "size_bytes": 68
+        }
+      ],
+      "observation": null,
+      "phase": "accepted",
+      "prepared_artifact": null,
+      "provider_model_id": "wan2.7-i2v",
+      "schema_version": 1,
+      "scope": {
+        "account_identity": null,
+        "backend": "dashscope",
+        "base_url": "https://dashscope.aliyuncs.com",
+        "gateway": "dashscope",
+        "provider": "dashscope",
+        "region": "cn-beijing",
+        "workspace_id": null
+      }
+    },
+    "schema_version": 1,
+    "status": "pending",
+    "updated_at": 10.0
+  },
+  "candidate": {
+    "attempt_id": "attempt-1",
+    "created_at": 10.0,
+    "error_code": null,
+    "execution_contract": "atelier-provider-video-v1",
+    "id": "candidate-1",
+    "media_kind": "video",
+    "status": "pending",
+    "updated_at": 10.0,
+    "video_url": null
+  },
+  "new_candidate_ids": [
+    "candidate-1"
+  ],
+  "project": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1.0
+    },
+    "agent_turns": [],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 1.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [
+      {
+        "attempt_id": "attempt-1",
+        "attempt_revision": 0,
+        "candidate_id": "candidate-1",
+        "created_at": 10.0,
+        "error_code": null,
+        "first_frame_source": {
+          "media_url": "uploads/frame.png",
+          "node_id": "image"
+        },
+        "node_id": "video",
+        "output_ref": null,
+        "project_id": "project-1",
+        "provider_execution": {
+          "artifact": null,
+          "attempt_id": "attempt-1",
+          "credential_ref": "credential-ref",
+          "fingerprint": "78e3629a0df5db6a18ae9b6747fccd13147eb85107abc9dac6f9ad716b77ed32",
+          "handle": null,
+          "intent": {
+            "catalog_mode": "i2v",
+            "mode": "i2v",
+            "model_id": "wan/wan2.7-video#i2v",
+            "params": {
+              "duration": 5,
+              "resolution": "1080p"
+            },
+            "preset_id": null,
+            "preset_version": null,
+            "prompt": "Slow sunrise",
+            "request_fields": [
+              "mode",
+              "model_id",
+              "params.duration",
+              "params.resolution",
+              "prompt"
+            ],
+            "rules_version": "generation-parameters-v1",
+            "scope": "parameters-only",
+            "sources": {
+              "mode": "request",
+              "model_id": "request",
+              "params.duration": "request",
+              "params.resolution": "request",
+              "prompt": "request"
+            }
+          },
+          "media": [
+            {
+              "declared_media_type": "image/png",
+              "ordinal": 0,
+              "role": "first_frame",
+              "schema_version": 1,
+              "sha256": "1ba05c474761e0ddb53dce893d2883fa50d58905f57f1166d372968d5ec6567d",
+              "size_bytes": 68
+            }
+          ],
+          "observation": null,
+          "phase": "accepted",
+          "prepared_artifact": null,
+          "provider_model_id": "wan2.7-i2v",
+          "schema_version": 1,
+          "scope": {
+            "account_identity": null,
+            "backend": "dashscope",
+            "base_url": "https://dashscope.aliyuncs.com",
+            "gateway": "dashscope",
+            "provider": "dashscope",
+            "region": "cn-beijing",
+            "workspace_id": null
+          }
+        },
+        "schema_version": 1,
+        "status": "pending",
+        "updated_at": 10.0
+      }
+    ],
+    "generation_request_receipts": [
+      {
+        "attempt_id": "attempt-1",
+        "base_revision": 0,
+        "candidate_id": "candidate-1",
+        "client_request_id": "request-1",
+        "committed_revision": 1,
+        "created_at": 10.0,
+        "entrypoint": "atelier.provider_video.v1",
+        "execution_fingerprint": "78e3629a0df5db6a18ae9b6747fccd13147eb85107abc9dac6f9ad716b77ed32",
+        "node_id": "video",
+        "project_id": "project-1",
+        "request_contract_version": "request-json-v1",
+        "request_fingerprint": "2fd77c4a4e0988022fccc361eb5f6711374416ae020db84b0d4f82312e5c4bb0",
+        "schema_version": 1
+      }
+    ],
+    "id": "project-1",
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 1.0,
+        "created_by": "user",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "image",
+        "media_urls": [
+          "uploads/frame.png"
+        ],
+        "project_id": "project-1",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "completed",
+        "title": "",
+        "type": "image",
+        "updated_at": 1.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      {
+        "asset_id": null,
+        "created_at": 1.0,
+        "created_by": "user",
+        "data": {
+          "candidates": [
+            {
+              "attempt_id": "attempt-1",
+              "created_at": 10.0,
+              "error_code": null,
+              "execution_contract": "atelier-provider-video-v1",
+              "id": "candidate-1",
+              "media_kind": "video",
+              "status": "pending",
+              "updated_at": 10.0,
+              "video_url": null
+            }
+          ],
+          "reference_image_urls": [
+            "uploads/frame.png"
+          ],
+          "reference_node_ids": [
+            "image"
+          ]
+        },
+        "frame_id": null,
+        "height": 180.0,
+        "id": "video",
+        "media_urls": [],
+        "project_id": "project-1",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "",
+        "type": "video",
+        "updated_at": 10.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 1,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Generation Contract Canvas",
+    "updated_at": 10.0
+  },
+  "reason": null,
+  "receipt": {
+    "attempt_id": "attempt-1",
+    "base_revision": 0,
+    "candidate_id": "candidate-1",
+    "client_request_id": "request-1",
+    "committed_revision": 1,
+    "created_at": 10.0,
+    "entrypoint": "atelier.provider_video.v1",
+    "execution_fingerprint": "78e3629a0df5db6a18ae9b6747fccd13147eb85107abc9dac6f9ad716b77ed32",
+    "node_id": "video",
+    "project_id": "project-1",
+    "request_contract_version": "request-json-v1",
+    "request_fingerprint": "2fd77c4a4e0988022fccc361eb5f6711374416ae020db84b0d4f82312e5c4bb0",
+    "schema_version": 1
+  },
+  "replayed": false
+}

@@ -12,7 +12,8 @@
 import { useRef, useState } from "react";
 import { X, Upload, Loader2, Check, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { api, type CustomVoice } from "@/lib/api";
+import { API_URL, api, type CustomVoice } from "@/lib/api";
+import { appAccessFetch } from "@/lib/appAccess";
 
 const ALLOWED_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave", "audio/x-m4a", "audio/mp4"];
 const ALLOWED_EXTS = [".mp3", ".wav", ".m4a"];
@@ -95,7 +96,7 @@ export default function VoiceCloneModal({ isOpen, onClose, seriesId, characterNa
         try {
             const formData = new FormData();
             formData.append("file", file);
-            const uploadResp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "/api"}/upload`, {
+            const uploadResp = await appAccessFetch(`${API_URL}/upload`, {
                 method: "POST",
                 body: formData,
             });

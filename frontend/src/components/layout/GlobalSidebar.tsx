@@ -1,12 +1,12 @@
 "use client";
 
-import { LayoutGrid, Layers, Wand2, Settings, FileText } from "lucide-react";
+import { LayoutGrid, Layers, Wand2, Settings, FileText, Workflow } from "lucide-react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import LumenXBranding from "./LumenXBranding";
 import { isTauri } from "@/lib/transport";
 
-export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "settings";
+export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "atelier" | "settings";
 
 interface GlobalSidebarProps {
   activeTab: GlobalTab;
@@ -20,6 +20,7 @@ export const GLOBAL_NAV_ITEMS: { id: GlobalTab; icon: typeof LayoutGrid; hash: s
   { id: "library", icon: Layers, hash: "#/library" },
   { id: "editor", icon: FileText, hash: "#/studio/editor" },
   { id: "playground", icon: Wand2, hash: "#/playground" },
+  { id: "atelier", icon: Workflow, hash: "#/atelier" },
   { id: "settings", icon: Settings, hash: "#/settings" },
 ];
 
@@ -103,7 +104,7 @@ export default function GlobalSidebar({ activeTab, onTabChange }: GlobalSidebarP
 
       {/* Primary navigation */}
       <nav className="flex-1 flex flex-col gap-0.5 p-2.5" aria-label={t("mainNavAria")}>
-        {GLOBAL_NAV_ITEMS.slice(0, 4).map((item) => (
+        {GLOBAL_NAV_ITEMS.filter((item) => item.id !== "settings").map((item) => (
           <NavButton
             key={item.id}
             active={activeTab === item.id}

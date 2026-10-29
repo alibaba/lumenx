@@ -42,8 +42,9 @@ models:
       badges: [new]
     params:
       size:
-        options: ["1024*1024", "1280*1280", "1440*1440", "2048*2048", "1280*720", "720*1280"]
+        options: ["1024*1024", "1280*1280", "1440*1440", "2048*2048", "1280*720", "720*1280", "576*1024", "768*1024", "1024*768", "1024*576"]
         default: "1280*1280"
+        allow_custom_modes: [i2i]
       negativePrompt: true
       promptExtend: true
       watermark: true
@@ -66,8 +67,9 @@ models:
       order: 90
     params:
       size:
-        options: ["1024*1024", "1280*1280", "1440*1440", "2048*2048", "1280*720", "720*1280"]
+        options: ["1024*1024", "1280*1280", "1440*1440", "2048*2048", "1280*720", "720*1280", "576*1024", "768*1024", "1024*768", "1024*576"]
         default: "1280*1280"
+        allow_custom_modes: [i2i]
       negativePrompt: true
       promptExtend: true
       watermark: true

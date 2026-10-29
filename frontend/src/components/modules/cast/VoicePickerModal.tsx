@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { X, Play, Pause, Check, Sparkles, Loader2, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api, type VoiceMeta, type CustomVoice } from "@/lib/api";
+import { voiceBindingFailure } from "@/lib/voiceBindingFeedback";
 import { getAssetUrl } from "@/lib/utils";
 import VoiceCloneModal from "./VoiceCloneModal";
 import VoiceDesignModal from "./VoiceDesignModal";
@@ -44,7 +45,8 @@ interface VoicePickerModalProps {
      *  (Q5 A3 preferred). When null/undefined, uses character-name template. */
     previewText?: string;
     currentVoiceId?: string;
-    onApply: (voiceId: string, voiceName: string) => void;
+    onApply: (voiceId: string, voiceName: string) => Promise<void>;
+    isSaving?: boolean;
     /** PR-3h · Series id enables the 我的复刻 / 我的设计 tabs. When null,
      *  those tabs show "请先关联到系列" message (orphan projects). */
     seriesId?: string | null;
@@ -62,6 +64,7 @@ export default function VoicePickerModal({
     previewText,
     currentVoiceId,
     onApply,
+    isSaving = false,
     seriesId,
     characterDescription,
 }: VoicePickerModalProps) {
@@ -71,17 +74,51 @@ export default function VoicePickerModal({
     const [customVoices, setCustomVoices] = useState<CustomVoice[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [saving, setSaving] = useState(false);
+    const pending = useRef(false);
+    const mounted = useRef(true);
     const [selectedId, setSelectedId] = useState<string | undefined>(currentVoiceId);
+    const selectedRef = useRef(selectedId);
+    selectedRef.current = selectedId;
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [previewingId, setPreviewingId] = useState<string | null>(null);
     const [cloneModalOpen, setCloneModalOpen] = useState(false);
     const [designModalOpen, setDesignModalOpen] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Sync selected when current changes / modal opens
+    const wasOpen = useRef(false);
+    // Initialize a fresh session; background ACKs must not replace its draft.
     useEffect(() => {
-        if (isOpen) setSelectedId(currentVoiceId);
+        if (isOpen && !wasOpen.current) {
+            setSelectedId(currentVoiceId);
+            setSaveError(null);
+        }
+        wasOpen.current = isOpen;
     }, [isOpen, currentVoiceId]);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; };
+    }, []);
+
+    const handleApply = async () => {
+        if (!selectedId || pending.current || isSaving) return;
+        const submittedId = selectedId;
+        const name = voices.find(v => v.id === submittedId)?.name
+            || customVoices.find(v => v.id === submittedId)?.label || submittedId;
+        pending.current = true;
+        setSaving(true);
+        setSaveError(null);
+        try {
+            await onApply(submittedId, name);
+            if (mounted.current && selectedRef.current === submittedId) onClose();
+        } catch (cause: unknown) {
+            if (mounted.current) setSaveError(t(`saveErrors.${voiceBindingFailure(cause)}`));
+        } finally {
+            pending.current = false;
+            if (mounted.current) setSaving(false);
+        }
+    };
 
     // PR-3h · refresh custom voices list (called on open + after clone)
     const refreshCustomVoices = useCallback(async () => {
@@ -233,6 +270,9 @@ export default function VoicePickerModal({
     return (
         <div className="fixed inset-0 z-[100] grid place-items-center bg-overlay backdrop-blur-sm" onClick={onClose}>
             <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={`${t("title")} — ${characterName}`}
                 className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-2xl border border-glass-border bg-elevated shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7)]"
                 onClick={(e) => e.stopPropagation()}
             >
@@ -279,6 +319,11 @@ export default function VoicePickerModal({
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar">
+                    {saveError && (
+                        <div role="alert" className="mb-3 rounded-md border border-status-failed-border bg-status-failed-bg p-3 text-body-sm text-status-failed-fg">
+                            {saveError}
+                        </div>
+                    )}
                     {loading && (
                         <div className="grid place-items-center py-12 text-text-muted">
                             <Loader2 className="animate-spin" size={20} />
@@ -388,19 +433,11 @@ export default function VoicePickerModal({
                             {t("cancel")}
                         </button>
                         <button
-                            onClick={() => {
-                                if (!selectedId) return;
-                                // PR-3h · lookup in both system + custom pools
-                                const systemMeta = voices.find(v => v.id === selectedId);
-                                const customMeta = customVoices.find(cv => cv.id === selectedId);
-                                const name = systemMeta?.name || customMeta?.label || selectedId;
-                                onApply(selectedId, name);
-                                onClose();
-                            }}
-                            disabled={!selectedId || selectedId === currentVoiceId}
+                            onClick={handleApply}
+                            disabled={saving || isSaving || !selectedId || selectedId === currentVoiceId}
                             className="inline-flex items-center px-4 py-2 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.75rem] font-semibold"
                         >
-                            {t("apply")}
+                            {t(saving || isSaving ? "saving" : "apply")}
                         </button>
                     </div>
                 </div>
@@ -491,6 +528,14 @@ function VoiceCard({
 }) {
     return (
         <div
+            role="radio"
+            aria-label={voice.name}
+            aria-checked={selected}
+            tabIndex={0}
+            onKeyDown={event => {
+                if (event.target !== event.currentTarget) return;
+                if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(); }
+            }}
             onClick={onSelect}
             className={`relative cursor-pointer rounded-lg border p-3 transition-colors ${
                 selected

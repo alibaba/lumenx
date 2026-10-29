@@ -1,0 +1,1132 @@
+{
+  "project": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1791731227.060995
+    },
+    "agent_turns": [
+      {
+        "completed_at": 1791731227.182813,
+        "completion_tokens_reserved": 0,
+        "completion_tokens_used": 3,
+        "created_at": 1791731227.165492,
+        "generation_cost_quotes": {},
+        "id": "loop-http-model",
+        "iteration_count": 1,
+        "iterations": [
+          {
+            "completed_at": 1791731227.1759832,
+            "completion_tokens": 0,
+            "error": null,
+            "idx": 1,
+            "latency_ms": 0.0,
+            "model_id": "model_adapter",
+            "prompt_tokens": 0,
+            "provider": "local",
+            "started_at": 1791731227.1759832,
+            "tool_call_ids": [
+              "6193fcbd64514011a432d03c95c10c44"
+            ],
+            "total_tokens": 0
+          }
+        ],
+        "loop_start_context": {
+          "max_iterations": 1,
+          "planner": "model_adapter",
+          "schema_version": 1,
+          "selected_node_id": "video",
+          "skill_name": null,
+          "user_message": "生成视频"
+        },
+        "max_iterations": 1,
+        "messages_history": [
+          {
+            "content": "Inspect via model planner.",
+            "iteration_fingerprint": {
+              "assistant_message": "Inspect via model planner.",
+              "iteration_index": 1,
+              "planner": "model_adapter",
+              "stop_reason": null,
+              "tool_calls": [
+                {
+                  "approval_granted": false,
+                  "approval_required": false,
+                  "arguments": {},
+                  "call_id": "6193fcbd64514011a432d03c95c10c44",
+                  "completed_at": null,
+                  "created_at": 1791731227.175976,
+                  "error": null,
+                  "result_snapshot": null,
+                  "status": "proposed",
+                  "tool_name": "canvas.readProject"
+                }
+              ]
+            },
+            "role": "assistant"
+          },
+          {
+            "content": {
+              "node_count": 2,
+              "node_ids": [
+                "image",
+                "video"
+              ],
+              "project_id": "p",
+              "revision": 4,
+              "tool_name": "canvas.readProject"
+            },
+            "name": "canvas.readProject",
+            "role": "tool",
+            "tool_call_id": "6193fcbd64514011a432d03c95c10c44"
+          }
+        ],
+        "node_reservations": {},
+        "pending_tool_calls": [],
+        "planner_invocations": [
+          {
+            "budget_completion_tokens": 2048,
+            "charged_completion_tokens": 3,
+            "claim_fingerprint": "9b9a141daf759ddc70e9fcb2dfbe4d1b649aa68661381209e785146c4685fe62",
+            "claim_request_id": "loop-http-model:iteration:1:claim",
+            "claimed_at": 1791731227.169724,
+            "config_fingerprint": "753ad2adb617446a31492d83628e9858bef07205e9984257d6f97da1d1bfcb92",
+            "config_identity": {
+              "model_config_version": "fixture-model",
+              "provider_scope": "fixture-provider-compatible-5891aed827c4",
+              "runtime_config_id": "llm-endpoint-5891aed827c4e67b2d7c0c73",
+              "storage_identity": "9406670b-5288-404d-9171-aa3adea33582"
+            },
+            "input_fingerprint": "10ca86155c715a7a2346aad83549ea4ae8a4d8af4cbddace7a22359d0fcd01e9",
+            "input_messages": [
+              {
+                "content": "You are LumenX Atelier's bounded planner. Return strict JSON with assistant_message, tool_calls, and optional stop_reason. Use only the tool names and schemas listed in the user message. Do not invent tools or omit required output fields.",
+                "role": "system"
+              },
+              {
+                "content": "{\"allowed_tool_schemas\":[{\"description\":\"Read a sanitized snapshot of the current Atelier project.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"read\",\"name\":\"canvas.readProject\",\"proposal_only\":false,\"required_permission\":\"read\",\"requires_approval\":false,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose a durable video-candidate creation command for a video node. This read-only planner surface does not admit, submit, or execute the generation.\",\"input_schema\":{\"$defs\":{\"FirstFrameSelection\":{\"additionalProperties\":false,\"properties\":{\"media_url\":{\"minLength\":1,\"title\":\"Media Url\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"}},\"required\":[\"node_id\",\"media_url\"],\"title\":\"FirstFrameSelection\",\"type\":\"object\"}},\"additionalProperties\":false,\"description\":\"Read-only Agent proposal arguments for a future CreateVideoCandidateCommand. The planner supplies node_id, while expected_revision and client_request_id are intentionally omitted because this surface does not admit or execute work.\",\"properties\":{\"first_frame\":{\"$ref\":\"#/$defs/FirstFrameSelection\"},\"mode\":{\"const\":\"i2v\",\"title\":\"Mode\",\"type\":\"string\"},\"model_id\":{\"enum\":[\"wan/wan2.7-video#i2v\"],\"minLength\":1,\"title\":\"Model Id\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"},\"params\":{\"additionalProperties\":true,\"title\":\"Params\",\"type\":\"object\"},\"prompt\":{\"title\":\"Prompt\",\"type\":\"string\"}},\"required\":[\"node_id\",\"model_id\",\"mode\",\"prompt\",\"first_frame\"],\"title\":\"AtelierGenerationCreateVideoCandidatesProposal\",\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"generation_write\",\"name\":\"generation.createVideoCandidates\",\"proposal_only\":true,\"required_permission\":\"generation_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose creation of one video node on the Atelier canvas; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"height\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"type\":{\"enum\":[\"video\"],\"type\":\"string\"},\"width\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"x\":{\"type\":\"number\"},\"y\":{\"type\":\"number\"}},\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.createVideoNode\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"},{\"description\":\"Propose prompt/title changes for one existing Atelier node; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"node_id\":{\"minLength\":1,\"type\":\"string\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[\"node_id\",\"prompt\"],\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.updateNodePrompt\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"}],\"nodes\":[{\"id\":\"image\",\"media_urls\":[\"uploads/frame.png\"],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":null,\"status\":\"draft\",\"title\":\"\",\"type\":\"image\"},{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"}],\"output_contract\":{\"additionalProperties\":false,\"properties\":{\"assistant_message\":{\"type\":\"string\"},\"stop_reason\":{\"type\":\"string\"},\"tool_calls\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"arguments\":{\"type\":\"object\"},\"tool_name\":{\"enum\":[\"canvas.createVideoNode\",\"canvas.readProject\",\"canvas.updateNodePrompt\",\"generation.createVideoCandidates\"],\"type\":\"string\"}},\"required\":[\"tool_name\",\"arguments\"],\"type\":\"object\"},\"type\":\"array\"}},\"required\":[\"assistant_message\",\"tool_calls\"],\"type\":\"object\"},\"policy_snapshot\":{\"allowed_tools\":[],\"approval_mode\":\"untrusted\",\"enable_reviewer\":false,\"max_generation_cost_per_turn\":5.0,\"max_nodes_per_action\":8,\"max_tokens_per_turn\":2048,\"updated_at\":1791731227.060995},\"prior_messages\":[],\"project_id\":\"p\",\"revision\":1,\"selected_node_id\":\"video\",\"selected_node_snapshot\":{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"},\"tool_schema_version\":\"atelier.tools.readonly.v1\",\"user_message\":\"\\u751f\\u6210\\u89c6\\u9891\"}",
+                "role": "user"
+              }
+            ],
+            "invocation_id": "loop-http-model:iteration:1",
+            "iteration_index": 1,
+            "max_completion_tokens": 1024,
+            "model_id": "fixture-model",
+            "outcome": "success",
+            "planner": "model_adapter",
+            "project_id": "p",
+            "provider_id": "fixture-provider",
+            "provider_model": "fixture-provider-model",
+            "reserved_completion_tokens": 1024,
+            "result_content": "{\"assistant_message\": \"Inspect via model planner.\", \"tool_calls\": [{\"tool_name\": \"canvas.readProject\", \"arguments\": {}}]}",
+            "schema_version": 1,
+            "settled_at": 1791731227.172725,
+            "settlement_fingerprint": "0c7977ebfd6e07f9ebb473ed3bde2c2fb295cc6c62a43a1afbd9b39f05ffde4f",
+            "status": "settled",
+            "timeout_seconds": 60.0,
+            "turn_id": "loop-http-model",
+            "usage": {
+              "completion_tokens": 3,
+              "prompt_tokens": 11,
+              "total_tokens": 14
+            }
+          }
+        ],
+        "preview": false,
+        "project_id": "p",
+        "response": "iteration_limit",
+        "session_id": null,
+        "skill_name": null,
+        "start_request_fingerprint": "ebcc871a736a3b8547a5a69351084d7ec40f1e1c302c4978dc5be5794f70f61b",
+        "status": "completed",
+        "tool_calls": [
+          {
+            "approval_granted": false,
+            "approval_required": false,
+            "arguments": {},
+            "call_id": "6193fcbd64514011a432d03c95c10c44",
+            "completed_at": 1791731227.179248,
+            "created_at": 1791731227.175976,
+            "error": null,
+            "result_snapshot": {
+              "node_count": 2,
+              "node_ids": [
+                "image",
+                "video"
+              ],
+              "project_id": "p",
+              "revision": 4,
+              "tool_name": "canvas.readProject"
+            },
+            "status": "completed",
+            "tool_name": "canvas.readProject"
+          }
+        ],
+        "user_message": "生成视频"
+      }
+    ],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 1.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "p",
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 1791731227.0609841,
+        "created_by": "user",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "image",
+        "media_urls": [
+          "uploads/frame.png"
+        ],
+        "project_id": "p",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "",
+        "type": "image",
+        "updated_at": 1791731227.060985,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      {
+        "asset_id": null,
+        "created_at": 1791731227.0609899,
+        "created_by": "user",
+        "data": {
+          "reference_node_ids": [
+            "image"
+          ]
+        },
+        "frame_id": null,
+        "height": 180.0,
+        "id": "video",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "",
+        "type": "video",
+        "updated_at": 1791731227.0609899,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 6,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Independent canvas",
+    "updated_at": 1791731227.182813
+  },
+  "read": {
+    "events": [],
+    "generation": null,
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 1791731227.060995
+      },
+      "agent_turns": [
+        {
+          "completed_at": 1791731227.182813,
+          "completion_tokens_reserved": 0,
+          "completion_tokens_used": 3,
+          "created_at": 1791731227.165492,
+          "generation_cost_quotes": {},
+          "id": "loop-http-model",
+          "iteration_count": 1,
+          "iterations": [
+            {
+              "completed_at": 1791731227.1759832,
+              "completion_tokens": 0,
+              "error": null,
+              "idx": 1,
+              "latency_ms": 0.0,
+              "model_id": "model_adapter",
+              "prompt_tokens": 0,
+              "provider": "local",
+              "started_at": 1791731227.1759832,
+              "tool_call_ids": [
+                "6193fcbd64514011a432d03c95c10c44"
+              ],
+              "total_tokens": 0
+            }
+          ],
+          "loop_start_context": {
+            "max_iterations": 1,
+            "planner": "model_adapter",
+            "schema_version": 1,
+            "selected_node_id": "video",
+            "skill_name": null,
+            "user_message": "生成视频"
+          },
+          "max_iterations": 1,
+          "messages_history": [
+            {
+              "content": "Inspect via model planner.",
+              "iteration_fingerprint": {
+                "assistant_message": "Inspect via model planner.",
+                "iteration_index": 1,
+                "planner": "model_adapter",
+                "stop_reason": null,
+                "tool_calls": [
+                  {
+                    "approval_granted": false,
+                    "approval_required": false,
+                    "arguments": {},
+                    "call_id": "6193fcbd64514011a432d03c95c10c44",
+                    "completed_at": null,
+                    "created_at": 1791731227.175976,
+                    "error": null,
+                    "result_snapshot": null,
+                    "status": "proposed",
+                    "tool_name": "canvas.readProject"
+                  }
+                ]
+              },
+              "role": "assistant"
+            },
+            {
+              "content": {
+                "node_count": 2,
+                "node_ids": [
+                  "image",
+                  "video"
+                ],
+                "project_id": "p",
+                "revision": 4,
+                "tool_name": "canvas.readProject"
+              },
+              "name": "canvas.readProject",
+              "role": "tool",
+              "tool_call_id": "6193fcbd64514011a432d03c95c10c44"
+            }
+          ],
+          "node_reservations": {},
+          "pending_tool_calls": [],
+          "planner_invocations": [
+            {
+              "budget_completion_tokens": 2048,
+              "charged_completion_tokens": 3,
+              "claim_fingerprint": "9b9a141daf759ddc70e9fcb2dfbe4d1b649aa68661381209e785146c4685fe62",
+              "claim_request_id": "loop-http-model:iteration:1:claim",
+              "claimed_at": 1791731227.169724,
+              "config_fingerprint": "753ad2adb617446a31492d83628e9858bef07205e9984257d6f97da1d1bfcb92",
+              "config_identity": {
+                "model_config_version": "fixture-model",
+                "provider_scope": "fixture-provider-compatible-5891aed827c4",
+                "runtime_config_id": "llm-endpoint-5891aed827c4e67b2d7c0c73",
+                "storage_identity": "9406670b-5288-404d-9171-aa3adea33582"
+              },
+              "input_fingerprint": "10ca86155c715a7a2346aad83549ea4ae8a4d8af4cbddace7a22359d0fcd01e9",
+              "input_messages": [
+                {
+                  "content": "You are LumenX Atelier's bounded planner. Return strict JSON with assistant_message, tool_calls, and optional stop_reason. Use only the tool names and schemas listed in the user message. Do not invent tools or omit required output fields.",
+                  "role": "system"
+                },
+                {
+                  "content": "{\"allowed_tool_schemas\":[{\"description\":\"Read a sanitized snapshot of the current Atelier project.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"read\",\"name\":\"canvas.readProject\",\"proposal_only\":false,\"required_permission\":\"read\",\"requires_approval\":false,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose a durable video-candidate creation command for a video node. This read-only planner surface does not admit, submit, or execute the generation.\",\"input_schema\":{\"$defs\":{\"FirstFrameSelection\":{\"additionalProperties\":false,\"properties\":{\"media_url\":{\"minLength\":1,\"title\":\"Media Url\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"}},\"required\":[\"node_id\",\"media_url\"],\"title\":\"FirstFrameSelection\",\"type\":\"object\"}},\"additionalProperties\":false,\"description\":\"Read-only Agent proposal arguments for a future CreateVideoCandidateCommand. The planner supplies node_id, while expected_revision and client_request_id are intentionally omitted because this surface does not admit or execute work.\",\"properties\":{\"first_frame\":{\"$ref\":\"#/$defs/FirstFrameSelection\"},\"mode\":{\"const\":\"i2v\",\"title\":\"Mode\",\"type\":\"string\"},\"model_id\":{\"enum\":[\"wan/wan2.7-video#i2v\"],\"minLength\":1,\"title\":\"Model Id\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"},\"params\":{\"additionalProperties\":true,\"title\":\"Params\",\"type\":\"object\"},\"prompt\":{\"title\":\"Prompt\",\"type\":\"string\"}},\"required\":[\"node_id\",\"model_id\",\"mode\",\"prompt\",\"first_frame\"],\"title\":\"AtelierGenerationCreateVideoCandidatesProposal\",\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"generation_write\",\"name\":\"generation.createVideoCandidates\",\"proposal_only\":true,\"required_permission\":\"generation_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose creation of one video node on the Atelier canvas; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"height\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"type\":{\"enum\":[\"video\"],\"type\":\"string\"},\"width\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"x\":{\"type\":\"number\"},\"y\":{\"type\":\"number\"}},\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.createVideoNode\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"},{\"description\":\"Propose prompt/title changes for one existing Atelier node; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"node_id\":{\"minLength\":1,\"type\":\"string\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[\"node_id\",\"prompt\"],\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.updateNodePrompt\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"}],\"nodes\":[{\"id\":\"image\",\"media_urls\":[\"uploads/frame.png\"],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":null,\"status\":\"draft\",\"title\":\"\",\"type\":\"image\"},{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"}],\"output_contract\":{\"additionalProperties\":false,\"properties\":{\"assistant_message\":{\"type\":\"string\"},\"stop_reason\":{\"type\":\"string\"},\"tool_calls\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"arguments\":{\"type\":\"object\"},\"tool_name\":{\"enum\":[\"canvas.createVideoNode\",\"canvas.readProject\",\"canvas.updateNodePrompt\",\"generation.createVideoCandidates\"],\"type\":\"string\"}},\"required\":[\"tool_name\",\"arguments\"],\"type\":\"object\"},\"type\":\"array\"}},\"required\":[\"assistant_message\",\"tool_calls\"],\"type\":\"object\"},\"policy_snapshot\":{\"allowed_tools\":[],\"approval_mode\":\"untrusted\",\"enable_reviewer\":false,\"max_generation_cost_per_turn\":5.0,\"max_nodes_per_action\":8,\"max_tokens_per_turn\":2048,\"updated_at\":1791731227.060995},\"prior_messages\":[],\"project_id\":\"p\",\"revision\":1,\"selected_node_id\":\"video\",\"selected_node_snapshot\":{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"},\"tool_schema_version\":\"atelier.tools.readonly.v1\",\"user_message\":\"\\u751f\\u6210\\u89c6\\u9891\"}",
+                  "role": "user"
+                }
+              ],
+              "invocation_id": "loop-http-model:iteration:1",
+              "iteration_index": 1,
+              "max_completion_tokens": 1024,
+              "model_id": "fixture-model",
+              "outcome": "success",
+              "planner": "model_adapter",
+              "project_id": "p",
+              "provider_id": "fixture-provider",
+              "provider_model": "fixture-provider-model",
+              "reserved_completion_tokens": 1024,
+              "result_content": "{\"assistant_message\": \"Inspect via model planner.\", \"tool_calls\": [{\"tool_name\": \"canvas.readProject\", \"arguments\": {}}]}",
+              "schema_version": 1,
+              "settled_at": 1791731227.172725,
+              "settlement_fingerprint": "0c7977ebfd6e07f9ebb473ed3bde2c2fb295cc6c62a43a1afbd9b39f05ffde4f",
+              "status": "settled",
+              "timeout_seconds": 60.0,
+              "turn_id": "loop-http-model",
+              "usage": {
+                "completion_tokens": 3,
+                "prompt_tokens": 11,
+                "total_tokens": 14
+              }
+            }
+          ],
+          "preview": false,
+          "project_id": "p",
+          "response": "iteration_limit",
+          "session_id": null,
+          "skill_name": null,
+          "start_request_fingerprint": "ebcc871a736a3b8547a5a69351084d7ec40f1e1c302c4978dc5be5794f70f61b",
+          "status": "completed",
+          "tool_calls": [
+            {
+              "approval_granted": false,
+              "approval_required": false,
+              "arguments": {},
+              "call_id": "6193fcbd64514011a432d03c95c10c44",
+              "completed_at": 1791731227.179248,
+              "created_at": 1791731227.175976,
+              "error": null,
+              "result_snapshot": {
+                "node_count": 2,
+                "node_ids": [
+                  "image",
+                  "video"
+                ],
+                "project_id": "p",
+                "revision": 4,
+                "tool_name": "canvas.readProject"
+              },
+              "status": "completed",
+              "tool_name": "canvas.readProject"
+            }
+          ],
+          "user_message": "生成视频"
+        }
+      ],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 1.0,
+      "description": "",
+      "exports": [],
+      "generation_attempts": [],
+      "generation_request_receipts": [],
+      "id": "p",
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 1791731227.0609841,
+          "created_by": "user",
+          "data": {},
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [
+            "uploads/frame.png"
+          ],
+          "project_id": "p",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "image",
+          "updated_at": 1791731227.060985,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset_id": null,
+          "created_at": 1791731227.0609899,
+          "created_by": "user",
+          "data": {
+            "reference_node_ids": [
+              "image"
+            ]
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "video",
+          "media_urls": [],
+          "project_id": "p",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "video",
+          "updated_at": 1791731227.0609899,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 6,
+      "sequence": [],
+      "sequence_export_jobs": [],
+      "source_project_id": null,
+      "title": "Independent canvas",
+      "updated_at": 1791731227.182813
+    },
+    "replayed": true,
+    "schedule_error": null,
+    "scheduled": false,
+    "turn": {
+      "completed_at": 1791731227.182813,
+      "completion_tokens_reserved": 0,
+      "completion_tokens_used": 3,
+      "created_at": 1791731227.165492,
+      "generation_cost_quotes": {},
+      "id": "loop-http-model",
+      "iteration_count": 1,
+      "iterations": [
+        {
+          "completed_at": 1791731227.1759832,
+          "completion_tokens": 0,
+          "error": null,
+          "idx": 1,
+          "latency_ms": 0.0,
+          "model_id": "model_adapter",
+          "prompt_tokens": 0,
+          "provider": "local",
+          "started_at": 1791731227.1759832,
+          "tool_call_ids": [
+            "6193fcbd64514011a432d03c95c10c44"
+          ],
+          "total_tokens": 0
+        }
+      ],
+      "loop_start_context": {
+        "max_iterations": 1,
+        "planner": "model_adapter",
+        "schema_version": 1,
+        "selected_node_id": "video",
+        "skill_name": null,
+        "user_message": "生成视频"
+      },
+      "max_iterations": 1,
+      "messages_history": [
+        {
+          "content": "Inspect via model planner.",
+          "iteration_fingerprint": {
+            "assistant_message": "Inspect via model planner.",
+            "iteration_index": 1,
+            "planner": "model_adapter",
+            "stop_reason": null,
+            "tool_calls": [
+              {
+                "approval_granted": false,
+                "approval_required": false,
+                "arguments": {},
+                "call_id": "6193fcbd64514011a432d03c95c10c44",
+                "completed_at": null,
+                "created_at": 1791731227.175976,
+                "error": null,
+                "result_snapshot": null,
+                "status": "proposed",
+                "tool_name": "canvas.readProject"
+              }
+            ]
+          },
+          "role": "assistant"
+        },
+        {
+          "content": {
+            "node_count": 2,
+            "node_ids": [
+              "image",
+              "video"
+            ],
+            "project_id": "p",
+            "revision": 4,
+            "tool_name": "canvas.readProject"
+          },
+          "name": "canvas.readProject",
+          "role": "tool",
+          "tool_call_id": "6193fcbd64514011a432d03c95c10c44"
+        }
+      ],
+      "node_reservations": {},
+      "pending_tool_calls": [],
+      "planner_invocations": [
+        {
+          "budget_completion_tokens": 2048,
+          "charged_completion_tokens": 3,
+          "claim_fingerprint": "9b9a141daf759ddc70e9fcb2dfbe4d1b649aa68661381209e785146c4685fe62",
+          "claim_request_id": "loop-http-model:iteration:1:claim",
+          "claimed_at": 1791731227.169724,
+          "config_fingerprint": "753ad2adb617446a31492d83628e9858bef07205e9984257d6f97da1d1bfcb92",
+          "config_identity": {
+            "model_config_version": "fixture-model",
+            "provider_scope": "fixture-provider-compatible-5891aed827c4",
+            "runtime_config_id": "llm-endpoint-5891aed827c4e67b2d7c0c73",
+            "storage_identity": "9406670b-5288-404d-9171-aa3adea33582"
+          },
+          "input_fingerprint": "10ca86155c715a7a2346aad83549ea4ae8a4d8af4cbddace7a22359d0fcd01e9",
+          "input_messages": [
+            {
+              "content": "You are LumenX Atelier's bounded planner. Return strict JSON with assistant_message, tool_calls, and optional stop_reason. Use only the tool names and schemas listed in the user message. Do not invent tools or omit required output fields.",
+              "role": "system"
+            },
+            {
+              "content": "{\"allowed_tool_schemas\":[{\"description\":\"Read a sanitized snapshot of the current Atelier project.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"read\",\"name\":\"canvas.readProject\",\"proposal_only\":false,\"required_permission\":\"read\",\"requires_approval\":false,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose a durable video-candidate creation command for a video node. This read-only planner surface does not admit, submit, or execute the generation.\",\"input_schema\":{\"$defs\":{\"FirstFrameSelection\":{\"additionalProperties\":false,\"properties\":{\"media_url\":{\"minLength\":1,\"title\":\"Media Url\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"}},\"required\":[\"node_id\",\"media_url\"],\"title\":\"FirstFrameSelection\",\"type\":\"object\"}},\"additionalProperties\":false,\"description\":\"Read-only Agent proposal arguments for a future CreateVideoCandidateCommand. The planner supplies node_id, while expected_revision and client_request_id are intentionally omitted because this surface does not admit or execute work.\",\"properties\":{\"first_frame\":{\"$ref\":\"#/$defs/FirstFrameSelection\"},\"mode\":{\"const\":\"i2v\",\"title\":\"Mode\",\"type\":\"string\"},\"model_id\":{\"enum\":[\"wan/wan2.7-video#i2v\"],\"minLength\":1,\"title\":\"Model Id\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"},\"params\":{\"additionalProperties\":true,\"title\":\"Params\",\"type\":\"object\"},\"prompt\":{\"title\":\"Prompt\",\"type\":\"string\"}},\"required\":[\"node_id\",\"model_id\",\"mode\",\"prompt\",\"first_frame\"],\"title\":\"AtelierGenerationCreateVideoCandidatesProposal\",\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"generation_write\",\"name\":\"generation.createVideoCandidates\",\"proposal_only\":true,\"required_permission\":\"generation_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose creation of one video node on the Atelier canvas; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"height\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"type\":{\"enum\":[\"video\"],\"type\":\"string\"},\"width\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"x\":{\"type\":\"number\"},\"y\":{\"type\":\"number\"}},\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.createVideoNode\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"},{\"description\":\"Propose prompt/title changes for one existing Atelier node; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"node_id\":{\"minLength\":1,\"type\":\"string\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[\"node_id\",\"prompt\"],\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.updateNodePrompt\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"}],\"nodes\":[{\"id\":\"image\",\"media_urls\":[\"uploads/frame.png\"],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":null,\"status\":\"draft\",\"title\":\"\",\"type\":\"image\"},{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"}],\"output_contract\":{\"additionalProperties\":false,\"properties\":{\"assistant_message\":{\"type\":\"string\"},\"stop_reason\":{\"type\":\"string\"},\"tool_calls\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"arguments\":{\"type\":\"object\"},\"tool_name\":{\"enum\":[\"canvas.createVideoNode\",\"canvas.readProject\",\"canvas.updateNodePrompt\",\"generation.createVideoCandidates\"],\"type\":\"string\"}},\"required\":[\"tool_name\",\"arguments\"],\"type\":\"object\"},\"type\":\"array\"}},\"required\":[\"assistant_message\",\"tool_calls\"],\"type\":\"object\"},\"policy_snapshot\":{\"allowed_tools\":[],\"approval_mode\":\"untrusted\",\"enable_reviewer\":false,\"max_generation_cost_per_turn\":5.0,\"max_nodes_per_action\":8,\"max_tokens_per_turn\":2048,\"updated_at\":1791731227.060995},\"prior_messages\":[],\"project_id\":\"p\",\"revision\":1,\"selected_node_id\":\"video\",\"selected_node_snapshot\":{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"},\"tool_schema_version\":\"atelier.tools.readonly.v1\",\"user_message\":\"\\u751f\\u6210\\u89c6\\u9891\"}",
+              "role": "user"
+            }
+          ],
+          "invocation_id": "loop-http-model:iteration:1",
+          "iteration_index": 1,
+          "max_completion_tokens": 1024,
+          "model_id": "fixture-model",
+          "outcome": "success",
+          "planner": "model_adapter",
+          "project_id": "p",
+          "provider_id": "fixture-provider",
+          "provider_model": "fixture-provider-model",
+          "reserved_completion_tokens": 1024,
+          "result_content": "{\"assistant_message\": \"Inspect via model planner.\", \"tool_calls\": [{\"tool_name\": \"canvas.readProject\", \"arguments\": {}}]}",
+          "schema_version": 1,
+          "settled_at": 1791731227.172725,
+          "settlement_fingerprint": "0c7977ebfd6e07f9ebb473ed3bde2c2fb295cc6c62a43a1afbd9b39f05ffde4f",
+          "status": "settled",
+          "timeout_seconds": 60.0,
+          "turn_id": "loop-http-model",
+          "usage": {
+            "completion_tokens": 3,
+            "prompt_tokens": 11,
+            "total_tokens": 14
+          }
+        }
+      ],
+      "preview": false,
+      "project_id": "p",
+      "response": "iteration_limit",
+      "session_id": null,
+      "skill_name": null,
+      "start_request_fingerprint": "ebcc871a736a3b8547a5a69351084d7ec40f1e1c302c4978dc5be5794f70f61b",
+      "status": "completed",
+      "tool_calls": [
+        {
+          "approval_granted": false,
+          "approval_required": false,
+          "arguments": {},
+          "call_id": "6193fcbd64514011a432d03c95c10c44",
+          "completed_at": 1791731227.179248,
+          "created_at": 1791731227.175976,
+          "error": null,
+          "result_snapshot": {
+            "node_count": 2,
+            "node_ids": [
+              "image",
+              "video"
+            ],
+            "project_id": "p",
+            "revision": 4,
+            "tool_name": "canvas.readProject"
+          },
+          "status": "completed",
+          "tool_name": "canvas.readProject"
+        }
+      ],
+      "user_message": "生成视频"
+    }
+  },
+  "schema_version": 1,
+  "start": {
+    "events": [
+      {
+        "approval_id": null,
+        "attempt_id": null,
+        "call_id": null,
+        "candidate_id": null,
+        "decision": null,
+        "iteration": null,
+        "message": null,
+        "replayed": false,
+        "status": null,
+        "tool_name": null,
+        "turn_id": "loop-http-model",
+        "type": "loop_started"
+      },
+      {
+        "approval_id": null,
+        "attempt_id": null,
+        "call_id": null,
+        "candidate_id": null,
+        "decision": null,
+        "iteration": 1,
+        "message": null,
+        "replayed": false,
+        "status": null,
+        "tool_name": null,
+        "turn_id": "loop-http-model",
+        "type": "iteration_started"
+      },
+      {
+        "approval_id": null,
+        "attempt_id": null,
+        "call_id": null,
+        "candidate_id": null,
+        "decision": null,
+        "iteration": 1,
+        "message": null,
+        "replayed": false,
+        "status": null,
+        "tool_name": null,
+        "turn_id": "loop-http-model",
+        "type": "iteration_saved"
+      },
+      {
+        "approval_id": null,
+        "attempt_id": null,
+        "call_id": "6193fcbd64514011a432d03c95c10c44",
+        "candidate_id": null,
+        "decision": null,
+        "iteration": null,
+        "message": null,
+        "replayed": false,
+        "status": null,
+        "tool_name": "canvas.readProject",
+        "turn_id": "loop-http-model",
+        "type": "tool_started"
+      },
+      {
+        "approval_id": null,
+        "attempt_id": null,
+        "call_id": "6193fcbd64514011a432d03c95c10c44",
+        "candidate_id": null,
+        "decision": null,
+        "iteration": null,
+        "message": null,
+        "replayed": false,
+        "status": null,
+        "tool_name": "canvas.readProject",
+        "turn_id": "loop-http-model",
+        "type": "tool_done"
+      },
+      {
+        "approval_id": null,
+        "attempt_id": null,
+        "call_id": null,
+        "candidate_id": null,
+        "decision": null,
+        "iteration": null,
+        "message": null,
+        "replayed": false,
+        "status": "completed",
+        "tool_name": null,
+        "turn_id": "loop-http-model",
+        "type": "loop_terminal"
+      }
+    ],
+    "generation": null,
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 1791731227.060995
+      },
+      "agent_turns": [
+        {
+          "completed_at": 1791731227.182813,
+          "completion_tokens_reserved": 0,
+          "completion_tokens_used": 3,
+          "created_at": 1791731227.165492,
+          "generation_cost_quotes": {},
+          "id": "loop-http-model",
+          "iteration_count": 1,
+          "iterations": [
+            {
+              "completed_at": 1791731227.1759832,
+              "completion_tokens": 0,
+              "error": null,
+              "idx": 1,
+              "latency_ms": 0.0,
+              "model_id": "model_adapter",
+              "prompt_tokens": 0,
+              "provider": "local",
+              "started_at": 1791731227.1759832,
+              "tool_call_ids": [
+                "6193fcbd64514011a432d03c95c10c44"
+              ],
+              "total_tokens": 0
+            }
+          ],
+          "loop_start_context": {
+            "max_iterations": 1,
+            "planner": "model_adapter",
+            "schema_version": 1,
+            "selected_node_id": "video",
+            "skill_name": null,
+            "user_message": "生成视频"
+          },
+          "max_iterations": 1,
+          "messages_history": [
+            {
+              "content": "Inspect via model planner.",
+              "iteration_fingerprint": {
+                "assistant_message": "Inspect via model planner.",
+                "iteration_index": 1,
+                "planner": "model_adapter",
+                "stop_reason": null,
+                "tool_calls": [
+                  {
+                    "approval_granted": false,
+                    "approval_required": false,
+                    "arguments": {},
+                    "call_id": "6193fcbd64514011a432d03c95c10c44",
+                    "completed_at": null,
+                    "created_at": 1791731227.175976,
+                    "error": null,
+                    "result_snapshot": null,
+                    "status": "proposed",
+                    "tool_name": "canvas.readProject"
+                  }
+                ]
+              },
+              "role": "assistant"
+            },
+            {
+              "content": {
+                "node_count": 2,
+                "node_ids": [
+                  "image",
+                  "video"
+                ],
+                "project_id": "p",
+                "revision": 4,
+                "tool_name": "canvas.readProject"
+              },
+              "name": "canvas.readProject",
+              "role": "tool",
+              "tool_call_id": "6193fcbd64514011a432d03c95c10c44"
+            }
+          ],
+          "node_reservations": {},
+          "pending_tool_calls": [],
+          "planner_invocations": [
+            {
+              "budget_completion_tokens": 2048,
+              "charged_completion_tokens": 3,
+              "claim_fingerprint": "9b9a141daf759ddc70e9fcb2dfbe4d1b649aa68661381209e785146c4685fe62",
+              "claim_request_id": "loop-http-model:iteration:1:claim",
+              "claimed_at": 1791731227.169724,
+              "config_fingerprint": "753ad2adb617446a31492d83628e9858bef07205e9984257d6f97da1d1bfcb92",
+              "config_identity": {
+                "model_config_version": "fixture-model",
+                "provider_scope": "fixture-provider-compatible-5891aed827c4",
+                "runtime_config_id": "llm-endpoint-5891aed827c4e67b2d7c0c73",
+                "storage_identity": "9406670b-5288-404d-9171-aa3adea33582"
+              },
+              "input_fingerprint": "10ca86155c715a7a2346aad83549ea4ae8a4d8af4cbddace7a22359d0fcd01e9",
+              "input_messages": [
+                {
+                  "content": "You are LumenX Atelier's bounded planner. Return strict JSON with assistant_message, tool_calls, and optional stop_reason. Use only the tool names and schemas listed in the user message. Do not invent tools or omit required output fields.",
+                  "role": "system"
+                },
+                {
+                  "content": "{\"allowed_tool_schemas\":[{\"description\":\"Read a sanitized snapshot of the current Atelier project.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"read\",\"name\":\"canvas.readProject\",\"proposal_only\":false,\"required_permission\":\"read\",\"requires_approval\":false,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose a durable video-candidate creation command for a video node. This read-only planner surface does not admit, submit, or execute the generation.\",\"input_schema\":{\"$defs\":{\"FirstFrameSelection\":{\"additionalProperties\":false,\"properties\":{\"media_url\":{\"minLength\":1,\"title\":\"Media Url\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"}},\"required\":[\"node_id\",\"media_url\"],\"title\":\"FirstFrameSelection\",\"type\":\"object\"}},\"additionalProperties\":false,\"description\":\"Read-only Agent proposal arguments for a future CreateVideoCandidateCommand. The planner supplies node_id, while expected_revision and client_request_id are intentionally omitted because this surface does not admit or execute work.\",\"properties\":{\"first_frame\":{\"$ref\":\"#/$defs/FirstFrameSelection\"},\"mode\":{\"const\":\"i2v\",\"title\":\"Mode\",\"type\":\"string\"},\"model_id\":{\"enum\":[\"wan/wan2.7-video#i2v\"],\"minLength\":1,\"title\":\"Model Id\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"},\"params\":{\"additionalProperties\":true,\"title\":\"Params\",\"type\":\"object\"},\"prompt\":{\"title\":\"Prompt\",\"type\":\"string\"}},\"required\":[\"node_id\",\"model_id\",\"mode\",\"prompt\",\"first_frame\"],\"title\":\"AtelierGenerationCreateVideoCandidatesProposal\",\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"generation_write\",\"name\":\"generation.createVideoCandidates\",\"proposal_only\":true,\"required_permission\":\"generation_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose creation of one video node on the Atelier canvas; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"height\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"type\":{\"enum\":[\"video\"],\"type\":\"string\"},\"width\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"x\":{\"type\":\"number\"},\"y\":{\"type\":\"number\"}},\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.createVideoNode\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"},{\"description\":\"Propose prompt/title changes for one existing Atelier node; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"node_id\":{\"minLength\":1,\"type\":\"string\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[\"node_id\",\"prompt\"],\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.updateNodePrompt\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"}],\"nodes\":[{\"id\":\"image\",\"media_urls\":[\"uploads/frame.png\"],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":null,\"status\":\"draft\",\"title\":\"\",\"type\":\"image\"},{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"}],\"output_contract\":{\"additionalProperties\":false,\"properties\":{\"assistant_message\":{\"type\":\"string\"},\"stop_reason\":{\"type\":\"string\"},\"tool_calls\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"arguments\":{\"type\":\"object\"},\"tool_name\":{\"enum\":[\"canvas.createVideoNode\",\"canvas.readProject\",\"canvas.updateNodePrompt\",\"generation.createVideoCandidates\"],\"type\":\"string\"}},\"required\":[\"tool_name\",\"arguments\"],\"type\":\"object\"},\"type\":\"array\"}},\"required\":[\"assistant_message\",\"tool_calls\"],\"type\":\"object\"},\"policy_snapshot\":{\"allowed_tools\":[],\"approval_mode\":\"untrusted\",\"enable_reviewer\":false,\"max_generation_cost_per_turn\":5.0,\"max_nodes_per_action\":8,\"max_tokens_per_turn\":2048,\"updated_at\":1791731227.060995},\"prior_messages\":[],\"project_id\":\"p\",\"revision\":1,\"selected_node_id\":\"video\",\"selected_node_snapshot\":{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"},\"tool_schema_version\":\"atelier.tools.readonly.v1\",\"user_message\":\"\\u751f\\u6210\\u89c6\\u9891\"}",
+                  "role": "user"
+                }
+              ],
+              "invocation_id": "loop-http-model:iteration:1",
+              "iteration_index": 1,
+              "max_completion_tokens": 1024,
+              "model_id": "fixture-model",
+              "outcome": "success",
+              "planner": "model_adapter",
+              "project_id": "p",
+              "provider_id": "fixture-provider",
+              "provider_model": "fixture-provider-model",
+              "reserved_completion_tokens": 1024,
+              "result_content": "{\"assistant_message\": \"Inspect via model planner.\", \"tool_calls\": [{\"tool_name\": \"canvas.readProject\", \"arguments\": {}}]}",
+              "schema_version": 1,
+              "settled_at": 1791731227.172725,
+              "settlement_fingerprint": "0c7977ebfd6e07f9ebb473ed3bde2c2fb295cc6c62a43a1afbd9b39f05ffde4f",
+              "status": "settled",
+              "timeout_seconds": 60.0,
+              "turn_id": "loop-http-model",
+              "usage": {
+                "completion_tokens": 3,
+                "prompt_tokens": 11,
+                "total_tokens": 14
+              }
+            }
+          ],
+          "preview": false,
+          "project_id": "p",
+          "response": "iteration_limit",
+          "session_id": null,
+          "skill_name": null,
+          "start_request_fingerprint": "ebcc871a736a3b8547a5a69351084d7ec40f1e1c302c4978dc5be5794f70f61b",
+          "status": "completed",
+          "tool_calls": [
+            {
+              "approval_granted": false,
+              "approval_required": false,
+              "arguments": {},
+              "call_id": "6193fcbd64514011a432d03c95c10c44",
+              "completed_at": 1791731227.179248,
+              "created_at": 1791731227.175976,
+              "error": null,
+              "result_snapshot": {
+                "node_count": 2,
+                "node_ids": [
+                  "image",
+                  "video"
+                ],
+                "project_id": "p",
+                "revision": 4,
+                "tool_name": "canvas.readProject"
+              },
+              "status": "completed",
+              "tool_name": "canvas.readProject"
+            }
+          ],
+          "user_message": "生成视频"
+        }
+      ],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 1.0,
+      "description": "",
+      "exports": [],
+      "generation_attempts": [],
+      "generation_request_receipts": [],
+      "id": "p",
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 1791731227.0609841,
+          "created_by": "user",
+          "data": {},
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [
+            "uploads/frame.png"
+          ],
+          "project_id": "p",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "image",
+          "updated_at": 1791731227.060985,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset_id": null,
+          "created_at": 1791731227.0609899,
+          "created_by": "user",
+          "data": {
+            "reference_node_ids": [
+              "image"
+            ]
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "video",
+          "media_urls": [],
+          "project_id": "p",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "video",
+          "updated_at": 1791731227.0609899,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 6,
+      "sequence": [],
+      "sequence_export_jobs": [],
+      "source_project_id": null,
+      "title": "Independent canvas",
+      "updated_at": 1791731227.182813
+    },
+    "replayed": false,
+    "schedule_error": null,
+    "scheduled": false,
+    "turn": {
+      "completed_at": 1791731227.182813,
+      "completion_tokens_reserved": 0,
+      "completion_tokens_used": 3,
+      "created_at": 1791731227.165492,
+      "generation_cost_quotes": {},
+      "id": "loop-http-model",
+      "iteration_count": 1,
+      "iterations": [
+        {
+          "completed_at": 1791731227.1759832,
+          "completion_tokens": 0,
+          "error": null,
+          "idx": 1,
+          "latency_ms": 0.0,
+          "model_id": "model_adapter",
+          "prompt_tokens": 0,
+          "provider": "local",
+          "started_at": 1791731227.1759832,
+          "tool_call_ids": [
+            "6193fcbd64514011a432d03c95c10c44"
+          ],
+          "total_tokens": 0
+        }
+      ],
+      "loop_start_context": {
+        "max_iterations": 1,
+        "planner": "model_adapter",
+        "schema_version": 1,
+        "selected_node_id": "video",
+        "skill_name": null,
+        "user_message": "生成视频"
+      },
+      "max_iterations": 1,
+      "messages_history": [
+        {
+          "content": "Inspect via model planner.",
+          "iteration_fingerprint": {
+            "assistant_message": "Inspect via model planner.",
+            "iteration_index": 1,
+            "planner": "model_adapter",
+            "stop_reason": null,
+            "tool_calls": [
+              {
+                "approval_granted": false,
+                "approval_required": false,
+                "arguments": {},
+                "call_id": "6193fcbd64514011a432d03c95c10c44",
+                "completed_at": null,
+                "created_at": 1791731227.175976,
+                "error": null,
+                "result_snapshot": null,
+                "status": "proposed",
+                "tool_name": "canvas.readProject"
+              }
+            ]
+          },
+          "role": "assistant"
+        },
+        {
+          "content": {
+            "node_count": 2,
+            "node_ids": [
+              "image",
+              "video"
+            ],
+            "project_id": "p",
+            "revision": 4,
+            "tool_name": "canvas.readProject"
+          },
+          "name": "canvas.readProject",
+          "role": "tool",
+          "tool_call_id": "6193fcbd64514011a432d03c95c10c44"
+        }
+      ],
+      "node_reservations": {},
+      "pending_tool_calls": [],
+      "planner_invocations": [
+        {
+          "budget_completion_tokens": 2048,
+          "charged_completion_tokens": 3,
+          "claim_fingerprint": "9b9a141daf759ddc70e9fcb2dfbe4d1b649aa68661381209e785146c4685fe62",
+          "claim_request_id": "loop-http-model:iteration:1:claim",
+          "claimed_at": 1791731227.169724,
+          "config_fingerprint": "753ad2adb617446a31492d83628e9858bef07205e9984257d6f97da1d1bfcb92",
+          "config_identity": {
+            "model_config_version": "fixture-model",
+            "provider_scope": "fixture-provider-compatible-5891aed827c4",
+            "runtime_config_id": "llm-endpoint-5891aed827c4e67b2d7c0c73",
+            "storage_identity": "9406670b-5288-404d-9171-aa3adea33582"
+          },
+          "input_fingerprint": "10ca86155c715a7a2346aad83549ea4ae8a4d8af4cbddace7a22359d0fcd01e9",
+          "input_messages": [
+            {
+              "content": "You are LumenX Atelier's bounded planner. Return strict JSON with assistant_message, tool_calls, and optional stop_reason. Use only the tool names and schemas listed in the user message. Do not invent tools or omit required output fields.",
+              "role": "system"
+            },
+            {
+              "content": "{\"allowed_tool_schemas\":[{\"description\":\"Read a sanitized snapshot of the current Atelier project.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"read\",\"name\":\"canvas.readProject\",\"proposal_only\":false,\"required_permission\":\"read\",\"requires_approval\":false,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose a durable video-candidate creation command for a video node. This read-only planner surface does not admit, submit, or execute the generation.\",\"input_schema\":{\"$defs\":{\"FirstFrameSelection\":{\"additionalProperties\":false,\"properties\":{\"media_url\":{\"minLength\":1,\"title\":\"Media Url\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"}},\"required\":[\"node_id\",\"media_url\"],\"title\":\"FirstFrameSelection\",\"type\":\"object\"}},\"additionalProperties\":false,\"description\":\"Read-only Agent proposal arguments for a future CreateVideoCandidateCommand. The planner supplies node_id, while expected_revision and client_request_id are intentionally omitted because this surface does not admit or execute work.\",\"properties\":{\"first_frame\":{\"$ref\":\"#/$defs/FirstFrameSelection\"},\"mode\":{\"const\":\"i2v\",\"title\":\"Mode\",\"type\":\"string\"},\"model_id\":{\"enum\":[\"wan/wan2.7-video#i2v\"],\"minLength\":1,\"title\":\"Model Id\",\"type\":\"string\"},\"node_id\":{\"minLength\":1,\"title\":\"Node Id\",\"type\":\"string\"},\"params\":{\"additionalProperties\":true,\"title\":\"Params\",\"type\":\"object\"},\"prompt\":{\"title\":\"Prompt\",\"type\":\"string\"}},\"required\":[\"node_id\",\"model_id\",\"mode\",\"prompt\",\"first_frame\"],\"title\":\"AtelierGenerationCreateVideoCandidatesProposal\",\"type\":\"object\"},\"mutates_canvas\":false,\"mutation_scope\":\"generation_write\",\"name\":\"generation.createVideoCandidates\",\"proposal_only\":true,\"required_permission\":\"generation_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.tools.readonly.v1\"},{\"description\":\"Propose creation of one video node on the Atelier canvas; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"height\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"type\":{\"enum\":[\"video\"],\"type\":\"string\"},\"width\":{\"exclusiveMinimum\":0,\"type\":\"number\"},\"x\":{\"type\":\"number\"},\"y\":{\"type\":\"number\"}},\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.createVideoNode\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"},{\"description\":\"Propose prompt/title changes for one existing Atelier node; approval is required before mutation.\",\"input_schema\":{\"additionalProperties\":false,\"properties\":{\"node_id\":{\"minLength\":1,\"type\":\"string\"},\"prompt\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"}},\"required\":[\"node_id\",\"prompt\"],\"type\":\"object\"},\"mutates_canvas\":true,\"mutation_scope\":\"canvas_write\",\"name\":\"canvas.updateNodePrompt\",\"proposal_only\":false,\"required_permission\":\"canvas_write\",\"requires_approval\":true,\"tool_schema_version\":\"atelier.canvas.tools.v1\"}],\"nodes\":[{\"id\":\"image\",\"media_urls\":[\"uploads/frame.png\"],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":null,\"status\":\"draft\",\"title\":\"\",\"type\":\"image\"},{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"}],\"output_contract\":{\"additionalProperties\":false,\"properties\":{\"assistant_message\":{\"type\":\"string\"},\"stop_reason\":{\"type\":\"string\"},\"tool_calls\":{\"items\":{\"additionalProperties\":false,\"properties\":{\"arguments\":{\"type\":\"object\"},\"tool_name\":{\"enum\":[\"canvas.createVideoNode\",\"canvas.readProject\",\"canvas.updateNodePrompt\",\"generation.createVideoCandidates\"],\"type\":\"string\"}},\"required\":[\"tool_name\",\"arguments\"],\"type\":\"object\"},\"type\":\"array\"}},\"required\":[\"assistant_message\",\"tool_calls\"],\"type\":\"object\"},\"policy_snapshot\":{\"allowed_tools\":[],\"approval_mode\":\"untrusted\",\"enable_reviewer\":false,\"max_generation_cost_per_turn\":5.0,\"max_nodes_per_action\":8,\"max_tokens_per_turn\":2048,\"updated_at\":1791731227.060995},\"prior_messages\":[],\"project_id\":\"p\",\"revision\":1,\"selected_node_id\":\"video\",\"selected_node_snapshot\":{\"id\":\"video\",\"media_urls\":[],\"prompt\":\"\",\"reference_image_urls\":null,\"reference_node_ids\":[\"image\"],\"status\":\"draft\",\"title\":\"\",\"type\":\"video\"},\"tool_schema_version\":\"atelier.tools.readonly.v1\",\"user_message\":\"\\u751f\\u6210\\u89c6\\u9891\"}",
+              "role": "user"
+            }
+          ],
+          "invocation_id": "loop-http-model:iteration:1",
+          "iteration_index": 1,
+          "max_completion_tokens": 1024,
+          "model_id": "fixture-model",
+          "outcome": "success",
+          "planner": "model_adapter",
+          "project_id": "p",
+          "provider_id": "fixture-provider",
+          "provider_model": "fixture-provider-model",
+          "reserved_completion_tokens": 1024,
+          "result_content": "{\"assistant_message\": \"Inspect via model planner.\", \"tool_calls\": [{\"tool_name\": \"canvas.readProject\", \"arguments\": {}}]}",
+          "schema_version": 1,
+          "settled_at": 1791731227.172725,
+          "settlement_fingerprint": "0c7977ebfd6e07f9ebb473ed3bde2c2fb295cc6c62a43a1afbd9b39f05ffde4f",
+          "status": "settled",
+          "timeout_seconds": 60.0,
+          "turn_id": "loop-http-model",
+          "usage": {
+            "completion_tokens": 3,
+            "prompt_tokens": 11,
+            "total_tokens": 14
+          }
+        }
+      ],
+      "preview": false,
+      "project_id": "p",
+      "response": "iteration_limit",
+      "session_id": null,
+      "skill_name": null,
+      "start_request_fingerprint": "ebcc871a736a3b8547a5a69351084d7ec40f1e1c302c4978dc5be5794f70f61b",
+      "status": "completed",
+      "tool_calls": [
+        {
+          "approval_granted": false,
+          "approval_required": false,
+          "arguments": {},
+          "call_id": "6193fcbd64514011a432d03c95c10c44",
+          "completed_at": 1791731227.179248,
+          "created_at": 1791731227.175976,
+          "error": null,
+          "result_snapshot": {
+            "node_count": 2,
+            "node_ids": [
+              "image",
+              "video"
+            ],
+            "project_id": "p",
+            "revision": 4,
+            "tool_name": "canvas.readProject"
+          },
+          "status": "completed",
+          "tool_name": "canvas.readProject"
+        }
+      ],
+      "user_message": "生成视频"
+    }
+  }
+}

@@ -51,6 +51,36 @@ export interface ParamsState {
     watermark?: boolean;
 }
 
+
+const MODEL_MENU_GAP = 4;
+const MODEL_MENU_MARGIN = 8;
+const MODEL_MENU_MIN_WIDTH = 192;
+const MODEL_MENU_MAX_HEIGHT = 240;
+
+interface ModelMenuPlacement {
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+}
+
+function clamp(value: number, min: number, max: number) {
+    return Math.min(Math.max(value, min), max);
+}
+
+function getModelMenuPlacement(rect: DOMRect, viewportWidth: number, viewportHeight: number): ModelMenuPlacement {
+    const availableWidth = Math.max(1, viewportWidth - MODEL_MENU_MARGIN * 2);
+    const width = Math.min(Math.max(rect.width, MODEL_MENU_MIN_WIDTH), availableWidth);
+    const maxHeight = Math.max(1, Math.min(MODEL_MENU_MAX_HEIGHT, viewportHeight - MODEL_MENU_MARGIN * 2));
+    const bottomLimit = Math.max(MODEL_MENU_MARGIN, viewportHeight - MODEL_MENU_MARGIN - maxHeight);
+    const belowTop = rect.bottom + MODEL_MENU_GAP;
+    const belowFits = belowTop + maxHeight <= viewportHeight - MODEL_MENU_MARGIN;
+    const top = clamp(belowFits ? belowTop : rect.top - MODEL_MENU_GAP - maxHeight, MODEL_MENU_MARGIN, bottomLimit);
+    const rightLimit = Math.max(MODEL_MENU_MARGIN, viewportWidth - MODEL_MENU_MARGIN - width);
+    const left = clamp(rect.left, MODEL_MENU_MARGIN, rightLimit);
+    return { top, left, width, maxHeight };
+}
+
 interface ParamsSectionProps {
     shotId: string;
     /** Pickable models for this section (already filtered for the
@@ -89,24 +119,34 @@ export default function ParamsSection({
     const [open, setOpen] = usePanelSectionState(shotId, "params", true);
     const [advOpen, setAdvOpen] = usePanelSectionState(shotId, "params-advanced", false);
     const [modelOpen, setModelOpen] = useState(false);
-    const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+    const [menuPos, setMenuPos] = useState<ModelMenuPlacement | null>(null);
     const trigRef = useRef<HTMLButtonElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
     // Position the dropdown via a portal (escapes the shot card's stacking
     // context so it isn't covered by the next shot's frame) + close on
-    // scroll/resize so it never floats away from its trigger.
+    // outside scroll/resize so it never floats away from its trigger.
     useEffect(() => {
         if (!modelOpen) { setMenuPos(null); return; }
         const trig = trigRef.current;
         if (trig) {
-            const r = trig.getBoundingClientRect();
-            setMenuPos({ top: r.bottom + 4, left: r.left });
+            setMenuPos(getModelMenuPlacement(trig.getBoundingClientRect(), window.innerWidth, window.innerHeight));
         }
         const close = () => setModelOpen(false);
-        window.addEventListener("scroll", close, true);
+        const handleScroll = (event: Event) => {
+            const target = event.target;
+            if (target instanceof Node && menuRef.current?.contains(target)) return;
+            close();
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") close();
+        };
+        window.addEventListener("scroll", handleScroll, true);
         window.addEventListener("resize", close);
+        window.addEventListener("keydown", handleKeyDown);
         return () => {
-            window.removeEventListener("scroll", close, true);
+            window.removeEventListener("scroll", handleScroll, true);
             window.removeEventListener("resize", close);
+            window.removeEventListener("keydown", handleKeyDown);
         };
     }, [modelOpen]);
 
@@ -191,6 +231,7 @@ export default function ParamsSection({
                             type="button"
                             onClick={() => setModelOpen(v => !v)}
                             aria-expanded={modelOpen}
+                            aria-haspopup="listbox"
                             title={activeModel?.description}
                             className="inline-flex min-h-[28px] items-center gap-2 rounded-[14px] border border-glass-border bg-surface-inset px-3 py-1.5 font-mono text-[0.6875rem] font-medium text-foreground transition-colors duration-fast ease-out-quart hover:border-foreground/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                         >
@@ -204,8 +245,17 @@ export default function ParamsSection({
                             <>
                                 <div className="fixed inset-0 z-[60]" onClick={() => setModelOpen(false)} aria-hidden="true" />
                                 <div
-                                    className="fixed z-[70] max-h-60 min-w-[12rem] overflow-y-auto rounded-[14px] border border-border-subtle bg-elevated p-1 shadow-[var(--shadow-lift)]"
-                                    style={{ top: menuPos.top, left: menuPos.left }}
+                                    ref={menuRef}
+                                    role="listbox"
+                                    aria-label="Model"
+                                    className="fixed z-[70] overflow-y-auto rounded-[14px] border border-border-subtle bg-elevated p-1 shadow-[var(--shadow-lift)]"
+                                    style={{
+                                        top: menuPos.top,
+                                        left: menuPos.left,
+                                        width: menuPos.width,
+                                        maxHeight: menuPos.maxHeight,
+                                        maxWidth: `calc(100vw - ${MODEL_MENU_MARGIN * 2}px)`,
+                                    }}
                                 >
                                     {modelList.map((m) => {
                                         const active = params.model === m.id;
@@ -213,9 +263,10 @@ export default function ParamsSection({
                                             <button
                                                 key={m.id}
                                                 type="button"
+                                                role="option"
                                                 onClick={() => { handleModelChange(m.id); setModelOpen(false); }}
                                                 title={m.description}
-                                                aria-pressed={active}
+                                                aria-selected={active}
                                                 className={`flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left font-mono text-chrome-sm transition-colors duration-fast ease-out-quart hover:bg-hover-bg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 ${
                                                     active ? "bg-primary/10 text-primary" : "text-text-secondary hover:text-foreground"
                                                 }`}

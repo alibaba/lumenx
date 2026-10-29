@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Tuple
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Dict, Any, Mapping, Tuple
 import base64
 import mimetypes
 import os
 import time
 import requests
 from http import HTTPStatus
-import dashscope
 from dashscope import ImageSynthesis
 from ..utils import get_logger
 from ..utils.endpoints import get_provider_base_url
@@ -15,13 +15,17 @@ from ..utils.oss_utils import OSSImageUploader
 from ..utils.provider_media import resolve_media_input
 from ..utils.provider_registry import resolve_provider_backend
 
+if TYPE_CHECKING:
+    from .provider_tasks import ResolvedCredential
+
 logger = get_logger(__name__)
 
 class ImageGenModel(ABC):
     """Abstract base class for image generation models."""
     
     def __init__(self, config: Dict[str, Any]):
-        self.config = config
+        self.config = config or {}
+        self.output_root = self.config.get("output_root") or self.config.get("params", {}).get("output_root")
 
     @abstractmethod
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
@@ -41,21 +45,66 @@ class ImageGenModel(ABC):
         pass
 
 class WanxImageModel(ImageGenModel):
-    def __init__(self, config):
+    def __init__(self, config, *, env: Mapping[str, str] | None = None):
         super().__init__(config)
-        self.params = config.get('params', {})
+        self.params = self.config.get('params', {})
+        self._env = os.environ if env is None else MappingProxyType(dict(env))
+
+    @staticmethod
+    def generate_with_bound_http(
+        prompt: str, output_path: str, credential: "ResolvedCredential", *, model_name: str,
+        size: str, max_bytes: int, seed: int | None = None,
+        watermark: bool = False, image_contract_version: str = "provider-wan27-t2i-bound-http-v1", **unsupported,
+    ) -> Tuple[str, float]:
+        """Explicit version selects a bound image contract; omission preserves Wan2.7 T2I."""
+        from .provider_tasks import ProviderBindingError
+        from .wan27_image_http import generate_bound_wan27_image
+        from .wan27_image_contract import WAN27_IMAGE_CONTRACT_VERSION
+        from .qwen20_image_contract import QWEN20_IMAGE_CONTRACT_VERSIONS
+        from .qwen20_image_http import generate_bound_qwen20_image
+
+        if image_contract_version in QWEN20_IMAGE_CONTRACT_VERSIONS:
+            return generate_bound_qwen20_image(
+                prompt, output_path, credential, model_name=model_name, size=size,
+                max_bytes=max_bytes, seed=seed, watermark=watermark,
+                image_contract_version=image_contract_version, **unsupported,
+            )
+        if image_contract_version != WAN27_IMAGE_CONTRACT_VERSION or unsupported:
+            raise ProviderBindingError("Unsupported bound image parameters")
+        return generate_bound_wan27_image(
+            prompt, output_path, credential, model_name=model_name, size=size,
+            max_bytes=max_bytes, seed=seed, watermark=watermark,
+        )
 
     @property
     def api_key(self):
-        api_key = os.getenv("DASHSCOPE_API_KEY")
+        api_key = self._env.get("DASHSCOPE_API_KEY")
         if not api_key:
             logger.warning("Dashscope API Key not found in config or environment variables.")
         return api_key
 
+    def _require_api_key(self) -> str:
+        api_key = self.api_key
+        if not api_key:
+            raise RuntimeError("DASHSCOPE_API_KEY is required for DashScope image generation")
+        return api_key
+
+    def _uploader(self) -> OSSImageUploader:
+        return OSSImageUploader(env=self._env, output_root=self.output_root)
+
+    def _dashscope_base_url(self) -> str:
+        return get_provider_base_url("DASHSCOPE", env=self._env)
+
+    def _dashscope_sdk_kwargs(self) -> Dict[str, str]:
+        return {
+            "api_key": self._require_api_key(),
+            "base_address": f"{self._dashscope_base_url()}/api/v1",
+        }
+
     def generate(self, prompt: str, output_path: str, ref_image_path: str = None, ref_image_paths: list = None, model_name: str = None, **kwargs) -> Tuple[str, float]:
         # Determine model based on whether reference image is provided
         # Support both single path (legacy) and list of paths
-        dashscope.api_key = self.api_key
+        self._require_api_key()
 
         all_ref_paths = []
         if ref_image_path:
@@ -64,7 +113,7 @@ class WanxImageModel(ImageGenModel):
             all_ref_paths.extend(ref_image_paths)
             
         # Remove duplicates
-        all_ref_paths = list(set(all_ref_paths))
+        all_ref_paths = list(dict.fromkeys(all_ref_paths))
         # Model selection priority: explicit model_name > config params > defaults
         if model_name:
             final_model_name = model_name
@@ -97,7 +146,7 @@ class WanxImageModel(ImageGenModel):
             logger.warning(f"Limiting reference images from {len(all_ref_paths)} to {ref_limit} for model {final_model_name}")
             all_ref_paths = all_ref_paths[:ref_limit]
         
-        logger.info(f"Starting image generation...")
+        logger.info("Starting image generation...")
         logger.info(f"Prompt: {prompt}")
         logger.info(f"Model: {final_model_name}, Size: {size}, N: {n}")
 
@@ -156,12 +205,12 @@ class WanxImageModel(ImageGenModel):
         watermark: bool = False,
     ) -> str:
         """Generate image using Wan2.7-image / Qwen-image via DashScope async HTTP API."""
-        base = get_provider_base_url("DASHSCOPE")
+        base = self._dashscope_base_url()
         create_url = f"{base}/api/v1/services/aigc/image-generation/generation"
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self._require_api_key()}",
             "X-DashScope-Async": "enable",
         }
 
@@ -194,7 +243,7 @@ class WanxImageModel(ImageGenModel):
 
         if negative_prompt:
             payload["parameters"]["negative_prompt"] = negative_prompt
-        if seed:
+        if seed is not None:
             payload["parameters"]["seed"] = seed
 
         logger.info(f"Calling {model_name} HTTP API (async)...")
@@ -221,7 +270,7 @@ class WanxImageModel(ImageGenModel):
         # Step 2: Poll for task completion
         poll_url = f"{base}/api/v1/tasks/{task_id}"
         poll_headers = {
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self._require_api_key()}"
         }
 
         max_wait_time = 600
@@ -277,12 +326,12 @@ class WanxImageModel(ImageGenModel):
 
     def _generate_wan26_http(self, prompt: str, size: str, n: int, negative_prompt: str = None) -> str:
         """Generate image using Wan 2.6 T2I via HTTP API (synchronous)."""
-        base = get_provider_base_url("DASHSCOPE")
+        base = self._dashscope_base_url()
         url = f"{base}/api/v1/services/aigc/multimodal-generation/generation"
         
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self._require_api_key()}"
         }
         
         payload = {
@@ -311,7 +360,7 @@ class WanxImageModel(ImageGenModel):
         if negative_prompt:
             payload["parameters"]["negative_prompt"] = negative_prompt
         
-        logger.info(f"Calling Wan 2.6 T2I HTTP API...")
+        logger.info("Calling Wan 2.6 T2I HTTP API...")
         logger.info(f"Payload: {payload}")
         
         response = requests.post(url, headers=headers, json=payload, timeout=300)  # 5 minutes for slow API responses
@@ -346,12 +395,12 @@ class WanxImageModel(ImageGenModel):
 
     def _generate_wan26_image_http(self, prompt: str, size: str, n: int, negative_prompt: str = None, ref_image_paths: list = None) -> str:
         """Generate image using Wan 2.6 Image via HTTP API (asynchronous with polling)."""
-        base = get_provider_base_url("DASHSCOPE")
+        base = self._dashscope_base_url()
         create_url = f"{base}/api/v1/services/aigc/image-generation/generation"
         
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self._require_api_key()}",
             "X-DashScope-Async": "enable"  # Required for async mode
         }
         
@@ -399,7 +448,7 @@ class WanxImageModel(ImageGenModel):
         if negative_prompt:
             payload["parameters"]["negative_prompt"] = negative_prompt
         
-        logger.info(f"Calling Wan 2.6 Image HTTP API (async)...")
+        logger.info("Calling Wan 2.6 Image HTTP API (async)...")
         logger.info(f"Payload: {payload}")
         
         # Step 1: Create task
@@ -423,7 +472,7 @@ class WanxImageModel(ImageGenModel):
         # Step 2: Poll for task completion
         poll_url = f"{base}/api/v1/tasks/{task_id}"
         poll_headers = {
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self._require_api_key()}"
         }
         
         max_wait_time = 600  # 10 minutes max wait (I2I can take longer)
@@ -487,7 +536,7 @@ class WanxImageModel(ImageGenModel):
         raise RuntimeError(f"Wan 2.6 Image task timed out after {max_wait_time}s")
 
     def _resolve_wan26_reference_image(self, path: str, model_name: str = "wan2.6-image") -> str:
-        uploader = OSSImageUploader()
+        uploader = self._uploader()
         backend = self._resolve_provider_backend_for_model(model_name)
 
         try:
@@ -497,11 +546,22 @@ class WanxImageModel(ImageGenModel):
                 modality="image",
                 backend=backend,
                 uploader=uploader,
+                output_root=self.output_root,
+                oss_base_path=getattr(uploader, "base_path", None),
             )
             return resolved.value
         except ValueError as e:
-            ref_type = classify_media_ref(path)
-            if ref_type == MEDIA_REF_UNKNOWN and os.path.isabs(path) and os.path.exists(path):
+            ref_type = classify_media_ref(
+                path,
+                output_root=self.output_root,
+                oss_base_path=getattr(uploader, "base_path", None),
+            )
+            if (
+                self.output_root is None
+                and ref_type == MEDIA_REF_UNKNOWN
+                and os.path.isabs(path)
+                and os.path.exists(path)
+            ):
                 # Compatibility fallback: only for legacy absolute local paths
                 # outside managed `output/` media refs.
                 if uploader.is_configured:
@@ -518,7 +578,7 @@ class WanxImageModel(ImageGenModel):
 
     def _resolve_provider_backend_for_model(self, model_name: str) -> str:
         try:
-            return resolve_provider_backend(model_name)
+            return resolve_provider_backend(model_name, env=self._env)
         except (KeyError, ValueError):
             # Keep image flows resilient for models not yet registered.
             return "dashscope"
@@ -561,7 +621,7 @@ class WanxImageModel(ImageGenModel):
         # Handle Reference Images for I2I
         if all_ref_paths:
             ref_image_urls = []
-            uploader = OSSImageUploader()
+            uploader = self._uploader()
             for path in all_ref_paths:
                 if os.path.exists(path):
                     # Upload to OSS and get signed URL
@@ -581,7 +641,7 @@ class WanxImageModel(ImageGenModel):
                 else:
                     # Check if it's an OSS Object Key using the utility function
                     from ..utils.oss_utils import is_object_key
-                    if is_object_key(path):
+                    if is_object_key(path, env=self._env):
                         if uploader.is_configured:
                             signed_url = uploader.sign_url_for_api(path)
                             ref_image_urls.append(signed_url)
@@ -600,6 +660,8 @@ class WanxImageModel(ImageGenModel):
                 ref_image_urls = ref_image_urls[:ref_limit]
             
             call_args['images'] = ref_image_urls
+
+        call_args.update(self._dashscope_sdk_kwargs())
 
         # Call Dashscope SDK
         rsp = ImageSynthesis.call(**call_args)

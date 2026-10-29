@@ -1,0 +1,963 @@
+{
+  "approved": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1791702943.987157
+    },
+    "agent_turns": [
+      {
+        "completed_at": null,
+        "completion_tokens_reserved": 0,
+        "completion_tokens_used": 0,
+        "created_at": 10.0,
+        "generation_cost_quotes": {},
+        "id": "turn-loop-1",
+        "iteration_count": 2,
+        "iterations": [
+          {
+            "completed_at": 11.0,
+            "completion_tokens": 0,
+            "error": null,
+            "idx": 1,
+            "latency_ms": 0.0,
+            "model_id": "deterministic_core",
+            "prompt_tokens": 0,
+            "provider": "local",
+            "started_at": 11.0,
+            "tool_call_ids": [
+              "id-1"
+            ],
+            "total_tokens": 0
+          },
+          {
+            "completed_at": 14.0,
+            "completion_tokens": 0,
+            "error": null,
+            "idx": 2,
+            "latency_ms": 0.0,
+            "model_id": "deterministic_core",
+            "prompt_tokens": 0,
+            "provider": "local",
+            "started_at": 14.0,
+            "tool_call_ids": [
+              "id-2"
+            ],
+            "total_tokens": 0
+          }
+        ],
+        "loop_start_context": {
+          "max_iterations": 4,
+          "planner": "deterministic_core",
+          "schema_version": 1,
+          "selected_node_id": "video-1",
+          "skill_name": null,
+          "user_message": "inspect then draft"
+        },
+        "max_iterations": 4,
+        "messages_history": [
+          {
+            "content": "Inspect",
+            "iteration_fingerprint": {
+              "assistant_message": "Inspect",
+              "iteration_index": 1,
+              "planner": "deterministic_core",
+              "stop_reason": null,
+              "tool_calls": [
+                {
+                  "approval_granted": false,
+                  "approval_required": false,
+                  "arguments": {},
+                  "call_id": "id-1",
+                  "completed_at": null,
+                  "created_at": 1791702943.990398,
+                  "error": null,
+                  "result_snapshot": null,
+                  "status": "proposed",
+                  "tool_name": "canvas.readProject"
+                }
+              ]
+            },
+            "role": "assistant"
+          },
+          {
+            "content": {
+              "node_count": 1,
+              "node_ids": [
+                "video-1"
+              ],
+              "project_id": "p",
+              "revision": 2,
+              "tool_name": "canvas.readProject"
+            },
+            "name": "canvas.readProject",
+            "role": "tool",
+            "tool_call_id": "id-1"
+          },
+          {
+            "content": "Create",
+            "iteration_fingerprint": {
+              "assistant_message": "Create",
+              "iteration_index": 2,
+              "planner": "deterministic_core",
+              "stop_reason": null,
+              "tool_calls": [
+                {
+                  "approval_granted": false,
+                  "approval_required": true,
+                  "arguments": {
+                    "prompt": "Rain",
+                    "title": "Draft"
+                  },
+                  "call_id": "id-2",
+                  "canvas_approval_binding": {
+                    "canvas_authorization_ref": {
+                      "approval_id": "id-3",
+                      "arguments_fingerprint": "08df007b4596f4f958567acec0af62cb39629ad4611a51019e2856228e936ae1",
+                      "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+                      "call_id": "id-2",
+                      "policy_snapshot_hash": "14dfee509443bbeb7948f0a9d1d3488614a9aca80ad961c23c639e089e7bfb61",
+                      "project_id": "p",
+                      "schema_version": 1,
+                      "server_storage_identity": "storage-a",
+                      "target_fingerprint": "69de8d9c9cd4368e4e14f0d45d6ea24c282919a8cd9668c98556b438bcc64dfc",
+                      "tool_name": "canvas.createVideoNode",
+                      "tool_schema_version": "atelier.canvas.tools.v1",
+                      "turn_id": "turn-loop-1"
+                    },
+                    "created_at": 13.0,
+                    "normalized_arguments": {
+                      "height": 180.0,
+                      "prompt": "Rain",
+                      "title": "Draft",
+                      "type": "video",
+                      "width": 320.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "schema_version": 1,
+                    "target_state": {
+                      "kind": "project",
+                      "node_count": 1,
+                      "node_ids": [
+                        "video-1"
+                      ],
+                      "project_id": "p"
+                    }
+                  },
+                  "completed_at": null,
+                  "created_at": 13.0,
+                  "error": null,
+                  "result_snapshot": null,
+                  "status": "approval_required",
+                  "tool_name": "canvas.createVideoNode"
+                }
+              ]
+            },
+            "role": "assistant"
+          }
+        ],
+        "node_reservations": {},
+        "pending_tool_calls": [
+          {
+            "approval_id": "id-3",
+            "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+            "call_id": "id-2",
+            "requires_approval": true,
+            "tool_name": "canvas.createVideoNode"
+          }
+        ],
+        "preview": false,
+        "project_id": "p",
+        "response": null,
+        "session_id": null,
+        "skill_name": null,
+        "start_request_fingerprint": "3d2bede3150047e64e19a749b1e45235b922ddacb40a8fb048f65a8886741d8a",
+        "status": "waiting_approval",
+        "tool_calls": [
+          {
+            "approval_granted": false,
+            "approval_required": false,
+            "arguments": {},
+            "call_id": "id-1",
+            "completed_at": 12.0,
+            "created_at": 1791702943.990398,
+            "error": null,
+            "result_snapshot": {
+              "node_count": 1,
+              "node_ids": [
+                "video-1"
+              ],
+              "project_id": "p",
+              "revision": 2,
+              "tool_name": "canvas.readProject"
+            },
+            "status": "completed",
+            "tool_name": "canvas.readProject"
+          },
+          {
+            "approval_granted": true,
+            "approval_required": true,
+            "arguments": {
+              "prompt": "Rain",
+              "title": "Draft"
+            },
+            "call_id": "id-2",
+            "canvas_approval_binding": {
+              "canvas_authorization_ref": {
+                "approval_id": "id-3",
+                "arguments_fingerprint": "08df007b4596f4f958567acec0af62cb39629ad4611a51019e2856228e936ae1",
+                "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+                "call_id": "id-2",
+                "policy_snapshot_hash": "14dfee509443bbeb7948f0a9d1d3488614a9aca80ad961c23c639e089e7bfb61",
+                "project_id": "p",
+                "schema_version": 1,
+                "server_storage_identity": "storage-a",
+                "target_fingerprint": "69de8d9c9cd4368e4e14f0d45d6ea24c282919a8cd9668c98556b438bcc64dfc",
+                "tool_name": "canvas.createVideoNode",
+                "tool_schema_version": "atelier.canvas.tools.v1",
+                "turn_id": "turn-loop-1"
+              },
+              "created_at": 13.0,
+              "normalized_arguments": {
+                "height": 180.0,
+                "prompt": "Rain",
+                "title": "Draft",
+                "type": "video",
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "schema_version": 1,
+              "target_state": {
+                "kind": "project",
+                "node_count": 1,
+                "node_ids": [
+                  "video-1"
+                ],
+                "project_id": "p"
+              }
+            },
+            "canvas_approval_record": {
+              "approval_id": "id-3",
+              "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+              "decided_at": 30.0,
+              "decision": "approved",
+              "schema_version": 1
+            },
+            "completed_at": null,
+            "created_at": 13.0,
+            "error": null,
+            "result_snapshot": null,
+            "status": "approval_required",
+            "tool_name": "canvas.createVideoNode"
+          }
+        ],
+        "user_message": "inspect then draft"
+      }
+    ],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 1.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "p",
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 1791702943.9871428,
+        "created_by": "user",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "video-1",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "old",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Old",
+        "type": "video",
+        "updated_at": 1.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 5,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Canvas",
+    "updated_at": 30.0
+  },
+  "completed": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1791702943.987157
+    },
+    "agent_turns": [
+      {
+        "completed_at": 16.0,
+        "completion_tokens_reserved": 0,
+        "completion_tokens_used": 0,
+        "created_at": 10.0,
+        "generation_cost_quotes": {},
+        "id": "turn-loop-1",
+        "iteration_count": 3,
+        "iterations": [
+          {
+            "completed_at": 11.0,
+            "completion_tokens": 0,
+            "error": null,
+            "idx": 1,
+            "latency_ms": 0.0,
+            "model_id": "deterministic_core",
+            "prompt_tokens": 0,
+            "provider": "local",
+            "started_at": 11.0,
+            "tool_call_ids": [
+              "id-1"
+            ],
+            "total_tokens": 0
+          },
+          {
+            "completed_at": 14.0,
+            "completion_tokens": 0,
+            "error": null,
+            "idx": 2,
+            "latency_ms": 0.0,
+            "model_id": "deterministic_core",
+            "prompt_tokens": 0,
+            "provider": "local",
+            "started_at": 14.0,
+            "tool_call_ids": [
+              "id-2"
+            ],
+            "total_tokens": 0
+          },
+          {
+            "completed_at": 16.0,
+            "completion_tokens": 0,
+            "error": null,
+            "idx": 3,
+            "latency_ms": 0.0,
+            "model_id": "deterministic_core",
+            "prompt_tokens": 0,
+            "provider": "local",
+            "started_at": 16.0,
+            "tool_call_ids": [],
+            "total_tokens": 0
+          }
+        ],
+        "loop_start_context": {
+          "max_iterations": 4,
+          "planner": "deterministic_core",
+          "schema_version": 1,
+          "selected_node_id": "video-1",
+          "skill_name": null,
+          "user_message": "inspect then draft"
+        },
+        "max_iterations": 4,
+        "messages_history": [
+          {
+            "content": "Inspect",
+            "iteration_fingerprint": {
+              "assistant_message": "Inspect",
+              "iteration_index": 1,
+              "planner": "deterministic_core",
+              "stop_reason": null,
+              "tool_calls": [
+                {
+                  "approval_granted": false,
+                  "approval_required": false,
+                  "arguments": {},
+                  "call_id": "id-1",
+                  "completed_at": null,
+                  "created_at": 1791702943.990398,
+                  "error": null,
+                  "result_snapshot": null,
+                  "status": "proposed",
+                  "tool_name": "canvas.readProject"
+                }
+              ]
+            },
+            "role": "assistant"
+          },
+          {
+            "content": {
+              "node_count": 1,
+              "node_ids": [
+                "video-1"
+              ],
+              "project_id": "p",
+              "revision": 2,
+              "tool_name": "canvas.readProject"
+            },
+            "name": "canvas.readProject",
+            "role": "tool",
+            "tool_call_id": "id-1"
+          },
+          {
+            "content": "Create",
+            "iteration_fingerprint": {
+              "assistant_message": "Create",
+              "iteration_index": 2,
+              "planner": "deterministic_core",
+              "stop_reason": null,
+              "tool_calls": [
+                {
+                  "approval_granted": false,
+                  "approval_required": true,
+                  "arguments": {
+                    "prompt": "Rain",
+                    "title": "Draft"
+                  },
+                  "call_id": "id-2",
+                  "canvas_approval_binding": {
+                    "canvas_authorization_ref": {
+                      "approval_id": "id-3",
+                      "arguments_fingerprint": "08df007b4596f4f958567acec0af62cb39629ad4611a51019e2856228e936ae1",
+                      "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+                      "call_id": "id-2",
+                      "policy_snapshot_hash": "14dfee509443bbeb7948f0a9d1d3488614a9aca80ad961c23c639e089e7bfb61",
+                      "project_id": "p",
+                      "schema_version": 1,
+                      "server_storage_identity": "storage-a",
+                      "target_fingerprint": "69de8d9c9cd4368e4e14f0d45d6ea24c282919a8cd9668c98556b438bcc64dfc",
+                      "tool_name": "canvas.createVideoNode",
+                      "tool_schema_version": "atelier.canvas.tools.v1",
+                      "turn_id": "turn-loop-1"
+                    },
+                    "created_at": 13.0,
+                    "normalized_arguments": {
+                      "height": 180.0,
+                      "prompt": "Rain",
+                      "title": "Draft",
+                      "type": "video",
+                      "width": 320.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "schema_version": 1,
+                    "target_state": {
+                      "kind": "project",
+                      "node_count": 1,
+                      "node_ids": [
+                        "video-1"
+                      ],
+                      "project_id": "p"
+                    }
+                  },
+                  "completed_at": null,
+                  "created_at": 13.0,
+                  "error": null,
+                  "result_snapshot": null,
+                  "status": "approval_required",
+                  "tool_name": "canvas.createVideoNode"
+                }
+              ]
+            },
+            "role": "assistant"
+          },
+          {
+            "content": {
+              "changed_fields": [
+                "nodes"
+              ],
+              "committed_revision": 6,
+              "node_ids": [
+                "id-4"
+              ],
+              "tool_name": "canvas.createVideoNode"
+            },
+            "name": "canvas.createVideoNode",
+            "role": "tool",
+            "tool_call_id": "id-2"
+          },
+          {
+            "content": "Done",
+            "iteration_fingerprint": {
+              "assistant_message": "Done",
+              "iteration_index": 3,
+              "planner": "deterministic_core",
+              "stop_reason": "done",
+              "tool_calls": []
+            },
+            "role": "assistant"
+          }
+        ],
+        "node_reservations": {},
+        "pending_tool_calls": [],
+        "preview": false,
+        "project_id": "p",
+        "response": "done",
+        "session_id": null,
+        "skill_name": null,
+        "start_request_fingerprint": "3d2bede3150047e64e19a749b1e45235b922ddacb40a8fb048f65a8886741d8a",
+        "status": "completed",
+        "tool_calls": [
+          {
+            "approval_granted": false,
+            "approval_required": false,
+            "arguments": {},
+            "call_id": "id-1",
+            "completed_at": 12.0,
+            "created_at": 1791702943.990398,
+            "error": null,
+            "result_snapshot": {
+              "node_count": 1,
+              "node_ids": [
+                "video-1"
+              ],
+              "project_id": "p",
+              "revision": 2,
+              "tool_name": "canvas.readProject"
+            },
+            "status": "completed",
+            "tool_name": "canvas.readProject"
+          },
+          {
+            "approval_granted": true,
+            "approval_required": true,
+            "arguments": {
+              "prompt": "Rain",
+              "title": "Draft"
+            },
+            "call_id": "id-2",
+            "canvas_approval_binding": {
+              "canvas_authorization_ref": {
+                "approval_id": "id-3",
+                "arguments_fingerprint": "08df007b4596f4f958567acec0af62cb39629ad4611a51019e2856228e936ae1",
+                "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+                "call_id": "id-2",
+                "policy_snapshot_hash": "14dfee509443bbeb7948f0a9d1d3488614a9aca80ad961c23c639e089e7bfb61",
+                "project_id": "p",
+                "schema_version": 1,
+                "server_storage_identity": "storage-a",
+                "target_fingerprint": "69de8d9c9cd4368e4e14f0d45d6ea24c282919a8cd9668c98556b438bcc64dfc",
+                "tool_name": "canvas.createVideoNode",
+                "tool_schema_version": "atelier.canvas.tools.v1",
+                "turn_id": "turn-loop-1"
+              },
+              "created_at": 13.0,
+              "normalized_arguments": {
+                "height": 180.0,
+                "prompt": "Rain",
+                "title": "Draft",
+                "type": "video",
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "schema_version": 1,
+              "target_state": {
+                "kind": "project",
+                "node_count": 1,
+                "node_ids": [
+                  "video-1"
+                ],
+                "project_id": "p"
+              }
+            },
+            "canvas_approval_record": {
+              "approval_id": "id-3",
+              "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+              "decided_at": 30.0,
+              "decision": "approved",
+              "schema_version": 1
+            },
+            "completed_at": 15.0,
+            "created_at": 13.0,
+            "error": null,
+            "result_snapshot": {
+              "changed_fields": [
+                "nodes"
+              ],
+              "committed_revision": 6,
+              "node_ids": [
+                "id-4"
+              ],
+              "tool_name": "canvas.createVideoNode"
+            },
+            "status": "completed",
+            "tool_name": "canvas.createVideoNode"
+          }
+        ],
+        "user_message": "inspect then draft"
+      }
+    ],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 1.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "p",
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 1791702943.9871428,
+        "created_by": "user",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "video-1",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "old",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Old",
+        "type": "video",
+        "updated_at": 1.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      {
+        "asset_id": null,
+        "created_at": 15.0,
+        "created_by": "agent",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "id-4",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "Rain",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Draft",
+        "type": "video",
+        "updated_at": 15.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 7,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Canvas",
+    "updated_at": 16.0
+  },
+  "paused": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1791702943.987157
+    },
+    "agent_turns": [
+      {
+        "completed_at": null,
+        "completion_tokens_reserved": 0,
+        "completion_tokens_used": 0,
+        "created_at": 10.0,
+        "generation_cost_quotes": {},
+        "id": "turn-loop-1",
+        "iteration_count": 2,
+        "iterations": [
+          {
+            "completed_at": 11.0,
+            "completion_tokens": 0,
+            "error": null,
+            "idx": 1,
+            "latency_ms": 0.0,
+            "model_id": "deterministic_core",
+            "prompt_tokens": 0,
+            "provider": "local",
+            "started_at": 11.0,
+            "tool_call_ids": [
+              "id-1"
+            ],
+            "total_tokens": 0
+          },
+          {
+            "completed_at": 14.0,
+            "completion_tokens": 0,
+            "error": null,
+            "idx": 2,
+            "latency_ms": 0.0,
+            "model_id": "deterministic_core",
+            "prompt_tokens": 0,
+            "provider": "local",
+            "started_at": 14.0,
+            "tool_call_ids": [
+              "id-2"
+            ],
+            "total_tokens": 0
+          }
+        ],
+        "loop_start_context": {
+          "max_iterations": 4,
+          "planner": "deterministic_core",
+          "schema_version": 1,
+          "selected_node_id": "video-1",
+          "skill_name": null,
+          "user_message": "inspect then draft"
+        },
+        "max_iterations": 4,
+        "messages_history": [
+          {
+            "content": "Inspect",
+            "iteration_fingerprint": {
+              "assistant_message": "Inspect",
+              "iteration_index": 1,
+              "planner": "deterministic_core",
+              "stop_reason": null,
+              "tool_calls": [
+                {
+                  "approval_granted": false,
+                  "approval_required": false,
+                  "arguments": {},
+                  "call_id": "id-1",
+                  "completed_at": null,
+                  "created_at": 1791702943.990398,
+                  "error": null,
+                  "result_snapshot": null,
+                  "status": "proposed",
+                  "tool_name": "canvas.readProject"
+                }
+              ]
+            },
+            "role": "assistant"
+          },
+          {
+            "content": {
+              "node_count": 1,
+              "node_ids": [
+                "video-1"
+              ],
+              "project_id": "p",
+              "revision": 2,
+              "tool_name": "canvas.readProject"
+            },
+            "name": "canvas.readProject",
+            "role": "tool",
+            "tool_call_id": "id-1"
+          },
+          {
+            "content": "Create",
+            "iteration_fingerprint": {
+              "assistant_message": "Create",
+              "iteration_index": 2,
+              "planner": "deterministic_core",
+              "stop_reason": null,
+              "tool_calls": [
+                {
+                  "approval_granted": false,
+                  "approval_required": true,
+                  "arguments": {
+                    "prompt": "Rain",
+                    "title": "Draft"
+                  },
+                  "call_id": "id-2",
+                  "canvas_approval_binding": {
+                    "canvas_authorization_ref": {
+                      "approval_id": "id-3",
+                      "arguments_fingerprint": "08df007b4596f4f958567acec0af62cb39629ad4611a51019e2856228e936ae1",
+                      "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+                      "call_id": "id-2",
+                      "policy_snapshot_hash": "14dfee509443bbeb7948f0a9d1d3488614a9aca80ad961c23c639e089e7bfb61",
+                      "project_id": "p",
+                      "schema_version": 1,
+                      "server_storage_identity": "storage-a",
+                      "target_fingerprint": "69de8d9c9cd4368e4e14f0d45d6ea24c282919a8cd9668c98556b438bcc64dfc",
+                      "tool_name": "canvas.createVideoNode",
+                      "tool_schema_version": "atelier.canvas.tools.v1",
+                      "turn_id": "turn-loop-1"
+                    },
+                    "created_at": 13.0,
+                    "normalized_arguments": {
+                      "height": 180.0,
+                      "prompt": "Rain",
+                      "title": "Draft",
+                      "type": "video",
+                      "width": 320.0,
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "schema_version": 1,
+                    "target_state": {
+                      "kind": "project",
+                      "node_count": 1,
+                      "node_ids": [
+                        "video-1"
+                      ],
+                      "project_id": "p"
+                    }
+                  },
+                  "completed_at": null,
+                  "created_at": 13.0,
+                  "error": null,
+                  "result_snapshot": null,
+                  "status": "approval_required",
+                  "tool_name": "canvas.createVideoNode"
+                }
+              ]
+            },
+            "role": "assistant"
+          }
+        ],
+        "node_reservations": {},
+        "pending_tool_calls": [
+          {
+            "approval_id": "id-3",
+            "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+            "call_id": "id-2",
+            "requires_approval": true,
+            "tool_name": "canvas.createVideoNode"
+          }
+        ],
+        "preview": false,
+        "project_id": "p",
+        "response": null,
+        "session_id": null,
+        "skill_name": null,
+        "start_request_fingerprint": "3d2bede3150047e64e19a749b1e45235b922ddacb40a8fb048f65a8886741d8a",
+        "status": "waiting_approval",
+        "tool_calls": [
+          {
+            "approval_granted": false,
+            "approval_required": false,
+            "arguments": {},
+            "call_id": "id-1",
+            "completed_at": 12.0,
+            "created_at": 1791702943.990398,
+            "error": null,
+            "result_snapshot": {
+              "node_count": 1,
+              "node_ids": [
+                "video-1"
+              ],
+              "project_id": "p",
+              "revision": 2,
+              "tool_name": "canvas.readProject"
+            },
+            "status": "completed",
+            "tool_name": "canvas.readProject"
+          },
+          {
+            "approval_granted": false,
+            "approval_required": true,
+            "arguments": {
+              "prompt": "Rain",
+              "title": "Draft"
+            },
+            "call_id": "id-2",
+            "canvas_approval_binding": {
+              "canvas_authorization_ref": {
+                "approval_id": "id-3",
+                "arguments_fingerprint": "08df007b4596f4f958567acec0af62cb39629ad4611a51019e2856228e936ae1",
+                "authorization_hash": "6883f60c7e0da90a218466038c8a63301f1550f5f0ff98bd9f52c9afd3472fe3",
+                "call_id": "id-2",
+                "policy_snapshot_hash": "14dfee509443bbeb7948f0a9d1d3488614a9aca80ad961c23c639e089e7bfb61",
+                "project_id": "p",
+                "schema_version": 1,
+                "server_storage_identity": "storage-a",
+                "target_fingerprint": "69de8d9c9cd4368e4e14f0d45d6ea24c282919a8cd9668c98556b438bcc64dfc",
+                "tool_name": "canvas.createVideoNode",
+                "tool_schema_version": "atelier.canvas.tools.v1",
+                "turn_id": "turn-loop-1"
+              },
+              "created_at": 13.0,
+              "normalized_arguments": {
+                "height": 180.0,
+                "prompt": "Rain",
+                "title": "Draft",
+                "type": "video",
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "schema_version": 1,
+              "target_state": {
+                "kind": "project",
+                "node_count": 1,
+                "node_ids": [
+                  "video-1"
+                ],
+                "project_id": "p"
+              }
+            },
+            "completed_at": null,
+            "created_at": 13.0,
+            "error": null,
+            "result_snapshot": null,
+            "status": "approval_required",
+            "tool_name": "canvas.createVideoNode"
+          }
+        ],
+        "user_message": "inspect then draft"
+      }
+    ],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 1.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "p",
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 1791702943.9871428,
+        "created_by": "user",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "video-1",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "old",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Old",
+        "type": "video",
+        "updated_at": 1.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 4,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Canvas",
+    "updated_at": 14.0
+  },
+  "schema_version": 1
+}

@@ -1,0 +1,45 @@
+{
+  "batch": {
+    "batch_size": 2,
+    "client_request_id": "ordered-batch",
+    "contract_version": "ordered-media-v1",
+    "expected_revision": 1,
+    "media": [
+      {
+        "media_url": "uploads/image.png",
+        "node_id": "image",
+        "ordinal": 0,
+        "role": "first_frame"
+      },
+      {
+        "media_url": "uploads/last.png",
+        "node_id": "last",
+        "ordinal": 0,
+        "role": "last_frame"
+      }
+    ],
+    "mode": "i2v",
+    "model_id": "wan/wan3.0-video#video",
+    "params": {
+      "audio": false,
+      "prompt_extend": false,
+      "seed": -1,
+      "watermark": false
+    },
+    "prompt": "Slow sunrise"
+  },
+  "t2v": {
+    "client_request_id": "ordered-request",
+    "contract_version": "ordered-media-v1",
+    "expected_revision": 0,
+    "media": [],
+    "mode": "t2v",
+    "model_id": "wan/wan3.0-video#video",
+    "params": {
+      "audio": false,
+      "duration": -1,
+      "seed": 0
+    },
+    "prompt": "Slow sunrise"
+  }
+}

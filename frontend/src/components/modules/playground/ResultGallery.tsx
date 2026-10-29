@@ -1,10 +1,15 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { Sparkles, Grid3x3, GalleryHorizontal } from 'lucide-react';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 import { playgroundApi } from '@/lib/api';
+import { beginPlaygroundGenerationRequest } from '@/lib/playgroundGenerationRequest';
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from '@/lib/runtimeEnvironment';
+import { isSeedanceModel, PlaygroundCapabilityError, requireSeedanceCapability } from '@/lib/playgroundCapabilities';
+import { buildPlaygroundRequestParameters, supportsPlaygroundNegativePrompt } from './playgroundParameterContract';
+import { buildWan27ImageRequestParameters, isWan27TextToImage, isQwen20TextToImage, wan27ImageRetryNeedsEditing, qwen20ImageRetryNeedsEditing } from './playgroundImageContract';
 import ResultCard from './ResultCard';
 import GalleryView from './GalleryView';
 import DetailPanel from './DetailPanel';
@@ -39,79 +44,111 @@ function formatSessionLabel(
   return `${month}/${day} · ${hh}:${mm}`;
 }
 
-export default function ResultGallery() {
-  const { history, startGeneration, updateGeneration, useResultAsReference } = usePlaygroundStore();
+interface ResultGalleryProps {
+  onLoadMore?: () => void;
+}
+
+export default function ResultGallery({ onLoadMore }: ResultGalleryProps = {}) {
+  const {
+    history,
+    enqueueRequest,
+    useResultAsReference: resultAsReference,
+    historyHasMore,
+    isHistoryLoading,
+    historyError,
+  } = usePlaygroundStore();
   const t = useTranslations('playground');
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'gallery'>('grid');
   const [detailGen, setDetailGen] = useState<PlaygroundGeneration | null>(null);
   const [detailOutputId, setDetailOutputId] = useState<string | undefined>(undefined);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const retrying = useRef(new Map<string, symbol>());
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+
+  useEffect(() => subscribeRuntimeEnvironment(() => {
+    retrying.current.clear();
+    setDetailGen(null);
+    setDetailOutputId(undefined);
+    setActionError(null);
+  }), []);
 
   const handleOpenDetail = useCallback((gen: PlaygroundGeneration, outputId?: string) => {
+    setActionError(null);
     setDetailGen(gen);
     setDetailOutputId(outputId);
   }, []);
 
   const handleRetry = useCallback(async (gen: PlaygroundGeneration) => {
-    try {
-      const resp = await playgroundApi.generate({
-        mode: gen.mode,
-        model_id: gen.model_id,
-        prompt: gen.prompt,
-        negative_prompt: gen.negative_prompt || undefined,
-        input_media: gen.input_media.length > 0 ? gen.input_media : undefined,
-        parameters: Object.keys(gen.parameters).length > 0 ? gen.parameters : undefined,
-        batch_size: gen.batch_size > 1 ? gen.batch_size : undefined,
-      });
-      const newGen: PlaygroundGeneration = {
-        id: resp.id,
-        mode: resp.mode as PlaygroundGeneration['mode'],
-        model_id: resp.model_id,
-        prompt: resp.prompt,
-        negative_prompt: resp.negative_prompt,
-        input_media: resp.input_media,
-        parameters: resp.parameters,
-        batch_size: resp.batch_size,
-        outputs: [],
-        status: resp.status as PlaygroundGeneration['status'],
-        error: resp.error,
-        created_at: resp.created_at,
-      };
-      startGeneration(newGen);
-      // Poll for status
-      const poll = setInterval(async () => {
-        try {
-          const s = await playgroundApi.getGenerationStatus(newGen.id);
-          if (s.status === 'completed' || s.status === 'failed') {
-            clearInterval(poll);
-            const full = await playgroundApi.getGeneration(newGen.id);
-            updateGeneration({
-              ...newGen,
-              status: full.status as PlaygroundGeneration['status'],
-              outputs: full.outputs.map((o) => ({ id: o.id, media_path: o.media_path, media_type: o.media_type as 'image' | 'video', thumbnail_path: o.thumbnail_path, saved_to_library: o.saved_to_library })),
-              error: full.error,
-            });
-          }
-        } catch { clearInterval(poll); }
-      }, 2000);
-    } catch (err) {
-      console.error('[Playground] Retry failed:', err);
+    if (retrying.current.has(gen.id)) return;
+    const environment = getRuntimeEnvironment();
+    if (!environment) return;
+    const draft = { modelId: gen.model_id, mode: gen.mode, inputMedia: gen.input_media, parameters: gen.parameters, negativePrompt: gen.negative_prompt ?? '', prompt: gen.prompt };
+    if (wan27ImageRetryNeedsEditing(draft) || qwen20ImageRetryNeedsEditing(draft)) {
+      // Retry is a new paid request. Preserve the original receipt and edit a copy.
+      usePlaygroundStore.setState({ ...draft, negativePromptProvided: typeof gen.negative_prompt === 'string', parameters: { ...gen.parameters }, inputMedia: [...gen.input_media], batchSize: gen.batch_size });
+      setDetailGen(null);
+      setActionError(t(gen.input_media.length > 0 ? 'imageContract.retryReferenceEdit' : 'imageContract.retryEdit'));
+      return;
     }
-  }, [startGeneration, updateGeneration]);
+    const wanImage = isWan27TextToImage(gen.model_id, gen.mode, gen.input_media);
+    const strictImage = wanImage || isQwen20TextToImage(gen.model_id, gen.mode, gen.input_media);
+    const retryToken = Symbol('retry');
+    retrying.current.set(gen.id, retryToken);
+    setActionError(null);
+    try {
+      if (isSeedanceModel(gen.model_id)) {
+        await requireSeedanceCapability({ modelId: gen.model_id, mode: gen.mode, inputMedia: gen.input_media }, environment, playgroundApi.getCapabilities);
+      }
+      if (!mounted.current || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
+      const journal = beginPlaygroundGenerationRequest({
+        environment,
+        mode: gen.mode,
+        modelId: gen.model_id,
+        prompt: gen.prompt,
+        negativePrompt: !wanImage && (!isSeedanceModel(gen.model_id) || supportsPlaygroundNegativePrompt(gen.model_id)) ? gen.negative_prompt ?? undefined : undefined,
+        inputMedia: gen.input_media,
+        parameters: strictImage ? buildWan27ImageRequestParameters(gen.parameters) : isSeedanceModel(gen.model_id) ? buildPlaygroundRequestParameters(gen.model_id, gen.parameters) : gen.parameters,
+        batchSize: gen.batch_size,
+      });
+      enqueueRequest({
+        clientRequestId: journal.clientRequestId,
+        requestFingerprint: journal.requestFingerprint,
+        body: journal.request,
+        journal,
+      });
+    } catch (err) {
+      if (!mounted.current || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
+      console.error('[Playground] Retry failed:', err);
+      setActionError(t(err instanceof PlaygroundCapabilityError ? `capabilities.${err.reason}` : 'results.retryFailed'));
+    } finally {
+      if (retrying.current.get(gen.id) === retryToken) retrying.current.delete(gen.id);
+    }
+  }, [enqueueRequest, t]);
 
   const handleDelete = useCallback(async (gen: PlaygroundGeneration) => {
+    setActionError(null);
+    const environment = getRuntimeEnvironment();
     try {
       await playgroundApi.deleteGeneration(gen.id);
+      if (environment && !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
       usePlaygroundStore.getState().removeGeneration(gen.id);
+      if (detailGen?.id === gen.id) {
+        setDetailGen(null);
+        setDetailOutputId(undefined);
+      }
     } catch (err) {
+      if (environment && !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
       console.error('[Playground] Delete failed:', err);
+      setActionError(t('results.deleteFailed'));
     }
-  }, []);
+  }, [detailGen?.id, t]);
 
   // Image result → "Generate video": set the image as i2v reference and switch mode.
   const handleGenerateVideo = useCallback(
-    (mediaPath: string) => useResultAsReference(mediaPath, 'image', 'i2v'),
-    [useResultAsReference],
+    (mediaPath: string) => resultAsReference(mediaPath, 'image', 'i2v'),
+    [resultAsReference],
   );
 
   const filtered = useMemo(() => {
@@ -202,12 +239,18 @@ export default function ResultGallery() {
 
   if (history.length === 0) {
     return (
-      <div className="flex flex-col flex-1 overflow-hidden min-w-0 items-center justify-center">
+      <div className="relative flex flex-col flex-1 overflow-hidden min-w-0 items-center justify-center px-7 text-center">
+        <div className="absolute right-7 top-4 text-left"><QueuePanel /></div>
         <Sparkles className="w-12 h-12 text-text-muted opacity-40 mb-4" />
         <p className="font-display atelier-display text-base text-foreground mb-1">
           {t('results.emptyTitle')}
         </p>
         <p className="text-xs text-text-muted">{t('results.emptyBody')}</p>
+        {(actionError || historyError) && (
+          <div className="mt-4 rounded-lg border border-status-failed-border bg-status-failed-bg px-3 py-2 text-xs text-status-failed-fg">
+            {actionError ?? t('results.historyFailed')}
+          </div>
+        )}
       </div>
     );
   }
@@ -276,6 +319,12 @@ export default function ResultGallery() {
         </div>
       </div>
 
+      {(actionError || historyError) && (
+        <div className="mx-7 mt-3 rounded-lg border border-status-failed-border bg-status-failed-bg px-3 py-2 text-xs text-status-failed-fg">
+          {actionError ?? t('results.historyFailed')}
+        </div>
+      )}
+
       {/* Content area */}
       {viewMode === 'gallery' ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -328,6 +377,18 @@ export default function ResultGallery() {
               );
             })}
           </div>
+          {(historyHasMore || isHistoryLoading) && (
+            <div className="flex justify-center py-5">
+              <button
+                type="button"
+                onClick={onLoadMore}
+                disabled={isHistoryLoading || !onLoadMore}
+                className="rounded-full border border-glass-border bg-glass px-4 py-2 text-xs font-medium text-text-secondary transition hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+              >
+                {isHistoryLoading ? t('results.loadingMore') : t('results.loadMore')}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

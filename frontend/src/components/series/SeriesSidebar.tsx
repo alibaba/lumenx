@@ -33,6 +33,8 @@ interface SeriesSidebarProps {
   // Title editing
   isEditingTitle: boolean;
   editTitle: string;
+  titleSaving?: boolean;
+  titleError?: string;
   onEditTitleChange: (val: string) => void;
   onTitleDoubleClick: () => void;
   onTitleSave: () => void;
@@ -41,6 +43,9 @@ interface SeriesSidebarProps {
   showAddEpisode: boolean;
   newEpisodeTitle: string;
   isCreatingEpisode: boolean;
+  episodeError?: string;
+  episodePending?: boolean;
+  episodeActionLabel?: string;
   onShowAddEpisode: (show: boolean) => void;
   onNewEpisodeTitleChange: (val: string) => void;
   onAddEpisode: () => void;
@@ -69,6 +74,8 @@ export default function SeriesSidebar({
   onBack,
   isEditingTitle,
   editTitle,
+  titleSaving,
+  titleError,
   onEditTitleChange,
   onTitleDoubleClick,
   onTitleSave,
@@ -76,6 +83,9 @@ export default function SeriesSidebar({
   showAddEpisode,
   newEpisodeTitle,
   isCreatingEpisode,
+  episodeError,
+  episodePending,
+  episodeActionLabel,
   onShowAddEpisode,
   onNewEpisodeTitleChange,
   onAddEpisode,
@@ -123,6 +133,8 @@ export default function SeriesSidebar({
           {isEditingTitle ? (
             <input
               type="text"
+              aria-label={t("editTitleHint")}
+              disabled={titleSaving}
               value={editTitle}
               onChange={(e) => onEditTitleChange(e.target.value)}
               onBlur={onTitleSave}
@@ -139,6 +151,7 @@ export default function SeriesSidebar({
               {series.title}
             </h1>
           )}
+          {titleError && <p role="alert" className="mt-2 text-xs text-status-failed-fg">{titleError}</p>}
 
           {series.description && (
             <p className="text-xs text-text-secondary truncate">{series.description}</p>
@@ -338,6 +351,7 @@ export default function SeriesSidebar({
                   <input
                     type="text"
                     value={newEpisodeTitle}
+                    disabled={isCreatingEpisode || episodePending}
                     onChange={(e) => onNewEpisodeTitleChange(e.target.value)}
                     placeholder={t("episodeTitlePlaceholder")}
                     className="w-full bg-input-bg border border-glass-border rounded-lg px-3 py-2 text-sm text-foreground placeholder-text-muted focus:outline-none focus:border-primary transition-colors"
@@ -350,9 +364,10 @@ export default function SeriesSidebar({
                       disabled={!newEpisodeTitle.trim() || isCreatingEpisode}
                       className="flex-1 bg-primary hover:bg-primary/90 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 active:scale-[0.97]"
                     >
-                      {isCreatingEpisode ? t("creating") : tc("confirm")}
+                      {isCreatingEpisode ? t("creating") : episodeActionLabel ?? tc("confirm")}
                     </button>
                     <button
+                      disabled={isCreatingEpisode || episodePending}
                       onClick={() => {
                         onShowAddEpisode(false);
                         onNewEpisodeTitleChange("");
@@ -362,6 +377,7 @@ export default function SeriesSidebar({
                       {tc("cancel")}
                     </button>
                   </div>
+                  {episodeError && <p role="alert" className="text-xs leading-relaxed text-red-300">{episodeError}</p>}
                 </div>
               </motion.div>
             ) : (

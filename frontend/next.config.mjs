@@ -4,6 +4,7 @@ const isDocker = process.env.DOCKER_BUILD === 'true';
 const isTauri = process.env.TAURI_BUILD === 'true';
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:17177';
+const appBasePath = isProd && !isDocker && !isTauri ? '/static' : '';
 
 // Tauri build: output to frontend/out/ with no basePath (loaded via Tauri protocol)
 // Docker build: output to frontend/out/
@@ -11,8 +12,11 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:17177';
 const nextConfig = {
     output: isProd ? 'export' : undefined,
     distDir: isProd ? (isTauri ? 'out' : (isDocker ? 'out' : '../static')) : undefined,
-    basePath: isProd && !isDocker && !isTauri ? '/static' : undefined,
-    assetPrefix: isProd && !isDocker && !isTauri ? '/static' : undefined,
+    basePath: appBasePath || undefined,
+    assetPrefix: appBasePath || undefined,
+    env: {
+        NEXT_PUBLIC_APP_BASE_PATH: appBasePath,
+    },
     // Dev-only: proxy /api-proxy/* to backend to avoid CORS issues (e.g. file downloads)
     async rewrites() {
         return isProd ? [] : [
@@ -41,6 +45,11 @@ const nextConfig = {
                 port: "17177",
             },
         ],
+    },
+    webpack(config) {
+        // Local verification on a nearly full disk can skip the optional build cache.
+        if (process.env.LUMENX_BUILD_CACHE === '0') config.cache = false;
+        return config;
     },
 };
 

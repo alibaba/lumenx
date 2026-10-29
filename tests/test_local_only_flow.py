@@ -1,9 +1,11 @@
 import base64
+import threading
 import time
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
-from src.apps.comic_gen.models import Character, Scene, Script, StoryboardFrame
+from src.apps.comic_gen.models import Character, GlobalAssetLibrary, Scene, Script, StoryboardFrame
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.models.wanx import WanxModel
 
@@ -23,22 +25,53 @@ def _write_output_png(rel_path: str) -> str:
 
 def _build_pipeline(script: Script, wanx_model: WanxModel) -> ComicGenPipeline:
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
+    pipeline._closed = False
+    pipeline._storage_failed = None
+    pipeline._save_lock = threading.RLock()
+    pipeline._video_task_runs = {}
+    pipeline.data_dir = Path("output").resolve()
     pipeline.scripts = {script.id: script}
-    pipeline._save_data = lambda: None
+    pipeline.series_store = {}
+    pipeline.library_store = GlobalAssetLibrary()
+    pipeline._committed = {
+        "projects.json": {script.id: script.model_dump(mode="json")},
+        "series.json": {},
+        "library_assets.json": pipeline.library_store.model_dump(mode="json"),
+    }
+
+    def commit(*names):
+        for name in names:
+            if name == "projects.json":
+                pipeline._committed[name] = {
+                    key: value.model_dump(mode="json") for key, value in pipeline.scripts.items()
+                }
+            elif name == "series.json":
+                pipeline._committed[name] = {}
+            elif name == "library_assets.json":
+                pipeline._committed[name] = pipeline.library_store.model_dump(mode="json")
+
+    pipeline._commit_storage = commit
+    pipeline._save_data = lambda: commit("projects.json")
+    pipeline.assert_storage_available = lambda: None
+    pipeline.read_committed_script = lambda script_id: Script.model_validate(
+        deepcopy(pipeline._committed["projects.json"][script_id])
+    )
     pipeline._kling_model = None
     pipeline._vidu_model = None
+    pipeline._mulerouter_video_model = None
     pipeline.video_generator = SimpleNamespace(model=wanx_model)
     pipeline.get_script = lambda script_id: pipeline.scripts.get(script_id)
     return pipeline
 
 
-def test_local_only_pipeline_flow_without_oss(monkeypatch):
+def test_local_only_pipeline_flow_without_oss(monkeypatch, tmp_path):
     """
     End-to-end backend check for local-only mode:
     - local uploaded/generated/storyboard refs stay as stable project refs
     - video task snapshots local input under output/video_inputs
     - DashScope I2V media prep works without OSS via temp oss:// URL + resolve header
     """
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
     for key in (
         "ALIBABA_CLOUD_ACCESS_KEY_ID",
@@ -88,7 +121,7 @@ def test_local_only_pipeline_flow_without_oss(monkeypatch):
 
     captured = {}
 
-    wanx_model = WanxModel({"params": {}})
+    wanx_model = WanxModel({"params": {}, "output_root": str(Path("output").resolve())})
 
     def fake_create_dashscope_temp_url(local_path: str, model_name: str) -> str:
         captured["temp_local_path"] = local_path
@@ -141,8 +174,10 @@ def test_local_only_pipeline_flow_without_oss(monkeypatch):
 
     pipeline.process_video_task(script.id, task_id)
 
-    assert task.status == "completed"
-    assert task.video_url.startswith("video/video_")
+    saved = pipeline.read_committed_script(script.id)
+    saved_task = next(t for t in saved.video_tasks if t.id == task_id)
+    assert saved_task.status == "completed"
+    assert saved_task.video_url.startswith("video/video_")
 
     assert captured["img_url"] == "oss://dashscope-temp/local-only/frame.png"
     assert captured["model_name"] == "wan2.6-i2v"

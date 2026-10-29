@@ -13,10 +13,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY src/ src/
+# Model defaults validate the executable catalog and its local API snapshot.
+COPY config/model_catalog/ config/model_catalog/
+COPY docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md
 
-# Create output directories
-RUN mkdir -p output/uploads output/video output/assets output/storyboard \
-    output/audio output/export output/video_inputs output/outputs/videos
+# Runtime configuration, logs and media belong to the persistent user root.
+RUN mkdir -p /var/lib/lumenx
 
 # Environment
 ENV NO_PROXY="*.aliyuncs.com,localhost,127.0.0.1"
@@ -25,4 +27,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 17177
 
-CMD ["python", "-m", "uvicorn", "src.apps.comic_gen.api:app", "--host", "0.0.0.0", "--port", "17177"]
+CMD ["python", "-m", "src.lumenx_server", "--data-dir", "/var/lib/lumenx", "--host", "0.0.0.0", "--port", "17177"]

@@ -1,29 +1,34 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Star, ArrowDownUp, ChevronDown, Check, Plus } from "lucide-react";
 import { api } from "@/lib/api";
-import type { Series, Project, Character, Scene, Prop, ImageAsset } from "@/store/projectStore";
+import { getLibraryAssetUrl } from "./libraryAssetUrl";
+import { requireActiveRuntimeEnvironment, getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import { useProjectStore, type Series, type Project, type Character, type Scene, type Prop, type ImageAsset } from "@/store/projectStore";
 import { toast } from "@/store/toastStore";
 import { characterImageUrl, characterVariants } from "@/lib/characterImage";
-import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
+import { coverGradient, GRAIN_URL } from "@/lib/cover";
 import { rovingKeyDown } from "@/lib/a11y";
 import AssetInspector from "./AssetInspector";
 import NewLibraryAssetDialog from "./NewLibraryAssetDialog";
+import { libraryHasAsset, libraryRevision, type LibraryAssetType } from "@/lib/libraryReadback";
+import { markSharedReadStale } from "@/lib/frameCommandSnapshot";
 
 type AssetTab = "characters" | "scenes" | "props";
 type TypeFilter = AssetTab | "all";
 type SortMode = "default" | "name" | "recent" | "usage";
 type ViewAxis = "type" | "source";
 
-const SINGULAR: Record<AssetTab, string> = { characters: "character", scenes: "scene", props: "prop" };
+const SINGULAR: Record<AssetTab, LibraryAssetType> = { characters: "character", scenes: "scene", props: "prop" };
 
 interface AssetSource {
   id: string; // `series-X` / `project-X`（列表 key）
   rawId: string; // 裸 series/project id（调 API 用）
   name: string;
   kind: "series" | "project" | "global";
+  project?: Project;
   characters: Character[];
   scenes: Scene[];
   props: Prop[];
@@ -64,6 +69,21 @@ function variantCount(asset: Character | Scene | Prop, type: AssetTab): number {
  *  character 取 full_body/three_view/headshot updated_at + reference_sheet 变体 created_at 的最大值；
  *  scene/prop 取 image_asset 的 created_at/image_updated_at + 变体 created_at 的最大值。
  *  全无时间戳 → 0（降序时排最后）。纯前端派生。 */
+
+function publishLibraryRevision(revision: number): void {
+  const environment = requireActiveRuntimeEnvironment().key;
+  useProjectStore.setState((state) => {
+    const previousFloor = state.readWatermarks[environment] ?? { series: {} };
+    const nextFloor = { ...previousFloor, library: Math.max(previousFloor.library ?? 0, revision), series: { ...previousFloor.series } };
+    if ((previousFloor.library ?? 0) >= nextFloor.library) return state;
+    return {
+      readWatermarks: { ...state.readWatermarks, [environment]: nextFloor },
+      currentProject: state.currentProject ? markSharedReadStale(state.currentProject, nextFloor, environment) : null,
+      projects: state.projects.map((project) => markSharedReadStale(project, nextFloor, environment)),
+    };
+  });
+}
+
 function recencyOf(asset: Character | Scene | Prop, type: AssetTab): number {
   const ts: number[] = [];
   if (type === "characters") {
@@ -97,12 +117,43 @@ export default function AssetLibraryPage() {
   const [starredOnly, setStarredOnly] = useState(false);
   const [selected, setSelected] = useState<{ sourceId: string; assetId: string; type: AssetTab } | null>(null);
   const [newAssetOpen, setNewAssetOpen] = useState(false);
+  const mountedRef = useRef(false);
+  const loadRequestRef = useRef(0);
+  const libraryRevisionFloorRef = useRef(0);
+  const sourcesRef = useRef(sources); sourcesRef.current = sources;
+  const selectedRef = useRef(selected); selectedRef.current = selected;
 
-  useEffect(() => {
-    loadAssets();
+  // Keep confirmed uncached project output in this page; never select or cache another Studio project.
+  const acceptProjectRead = useCallback((snapshot: Project, isCurrent: (snapshot: Project) => boolean): boolean => {
+    const selection = selectedRef.current;
+    const source = sourcesRef.current.find(item => item.id === selection?.sourceId);
+    if (!mountedRef.current || !selection || source?.kind !== 'project' || source.rawId !== snapshot.id
+      || snapshot.revision < (source.project?.revision ?? 0) || !isCurrent(snapshot)) return false;
+    const pool = snapshot[selection.type];
+    const previous = source[selection.type].find(item => item.id === selection.assetId);
+    if (!pool.some(item => item.id === selection.assetId && (item.source ?? 'episode') === (previous?.source ?? 'episode'))) return false;
+    // GET /projects/:id also contains implicit shared overlays. Retain original owner groups,
+    // including shared entries that were explicitly present in the project's source row.
+    const visible = <T extends Character | Scene | Prop,>(items: T[], prior: T[]) => items.filter(item => !item.source || item.source === 'episode'
+      || prior.some(old => old.id === item.id && old.source === item.source));
+    const next = sourcesRef.current.map(item => item === source ? { ...item, project: snapshot,
+      characters: visible(snapshot.characters, item.characters), scenes: visible(snapshot.scenes, item.scenes), props: visible(snapshot.props, item.props) } : item);
+    // A list read issued before this projection cannot replace it when it arrives later.
+    loadRequestRef.current += 1;
+    libraryRevisionFloorRef.current = Math.max(libraryRevisionFloorRef.current, snapshot.read_versions?.library ?? 0);
+    sourcesRef.current = next;
+    setSources(next); setLoading(false);
+    return true;
   }, []);
 
-  const loadAssets = async () => {
+  type LoadAssetsOptions = { expectGlobalAsset?: { assetType: LibraryAssetType; assetId: string } };
+  type LoadAssetsResult = { applied: boolean; found: boolean };
+
+  const loadAssets = useCallback(async (options: LoadAssetsOptions = {}): Promise<LoadAssetsResult> => {
+    const requestId = ++loadRequestRef.current;
+    const environment = getRuntimeEnvironment();
+    if (!environment) { setLoading(false); return { applied: false, found: false }; }
+    const live = () => mountedRef.current && requestId === loadRequestRef.current && isCurrentRuntimeEnvironment(environment.key, environment.generation);
     setLoading(true);
     try {
       const [seriesList, projects, globalPool] = await Promise.all([
@@ -110,6 +161,16 @@ export default function AssetLibraryPage() {
         api.getProjects(),
         api.listLibraryAssets(),
       ]);
+      const revision = libraryRevision(globalPool);
+      const expected = options.expectGlobalAsset;
+      const found = expected ? libraryHasAsset(globalPool, expected.assetType, expected.assetId) : true;
+      if (!live()) return { applied: false, found };
+      const knownLibraryFloor = Math.max(
+        libraryRevisionFloorRef.current,
+        useProjectStore.getState().readWatermarks[environment.key]?.library ?? 0
+      );
+      if (revision === null || revision < knownLibraryFloor) return { applied: false, found };
+
       const result: AssetSource[] = [];
 
       for (const s of seriesList as Series[]) {
@@ -128,12 +189,19 @@ export default function AssetLibraryPage() {
 
       const standaloneProjects = (projects as Project[]).filter((p) => !p.series_id);
       for (const p of standaloneProjects) {
+        const confirmed = sourcesRef.current.find(source => source.kind === 'project' && source.rawId === p.id);
+        if (confirmed?.project?.readEnvironment === environment.key && confirmed.project.read_versions
+          && p.revision <= confirmed.project.revision) {
+          result.push(confirmed);
+          continue;
+        }
         if ((p.characters?.length || 0) + (p.scenes?.length || 0) + (p.props?.length || 0) > 0) {
           result.push({
             id: `project-${p.id}`,
             rawId: p.id,
             name: p.title,
             kind: "project",
+            project: p,
             characters: p.characters || [],
             scenes: p.scenes || [],
             props: p.props || [],
@@ -159,14 +227,41 @@ export default function AssetLibraryPage() {
         });
       }
 
+      libraryRevisionFloorRef.current = Math.max(libraryRevisionFloorRef.current, revision);
+      publishLibraryRevision(revision);
       setSources(result);
+      return { applied: true, found };
     } catch (error) {
-      console.error("Failed to load asset library:", error);
-      toast.error(t("loadFailed"), { body: t("loadFailedBody") });
+      if (live()) {
+        console.error("Failed to load asset library:", error);
+        toast.error(t("loadFailed"), { body: t("loadFailedBody") });
+      }
+      return { applied: false, found: false };
     } finally {
-      setLoading(false);
+      if (live()) setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    void loadAssets();
+    const unsubscribe = subscribeRuntimeEnvironment(() => {
+      loadRequestRef.current += 1;
+      libraryRevisionFloorRef.current = 0;
+      setSelected(null); setSources([]);
+      void loadAssets();
+    });
+    return () => {
+      unsubscribe();
+      mountedRef.current = false;
+      loadRequestRef.current += 1;
+    };
+  }, [loadAssets]);
+
+  const confirmGlobalAssetRead = useCallback(async (assetType: LibraryAssetType, assetId: string): Promise<boolean> => {
+    const result = await loadAssets({ expectGlobalAsset: { assetType, assetId } });
+    return result.applied && result.found;
+  }, [loadAssets]);
 
   // 全局计数（facet 总览；不受搜索/星标过滤影响，与分组标题里的计数互补）。
   const counts = useMemo(() => {
@@ -523,14 +618,14 @@ export default function AssetLibraryPage() {
                   {/* 卡片网格（库专用富卡片） */}
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {grp.items.map(({ asset, type, src }, i) => {
-                      const url = getImageUrl(asset, type);
+                      const url = getLibraryAssetUrl(getImageUrl(asset, type));
                       const vc = variantCount(asset, type);
                       const isSel = selected?.sourceId === src.id && selected?.assetId === asset.id && selected?.type === type;
                       const isStar = !!asset.starred;
                       const isChar = type === "characters";
                       return (
                         <div
-                          key={`${type}-${asset.id}`}
+                          key={`${src.id}-${type}-${asset.id}`}
                           role="button"
                           tabIndex={0}
                           onClick={() => setSelected({ sourceId: src.id, assetId: asset.id, type })}
@@ -643,17 +738,20 @@ export default function AssetLibraryPage() {
             sourceName={selectedSource.name}
             sourceId={selected.sourceId}
             sourceKind={selectedSource.kind}
+            sourceProject={selectedSource.project}
+            onProjectRead={acceptProjectRead}
             starred={!!selectedAsset.starred}
             onClose={() => setSelected(null)}
             onToggleStar={() => toggleStar(selected.sourceId, selected.assetId, selected.type)}
-            onPromoted={loadAssets}
+            onPromoted={confirmGlobalAssetRead}
+            onRefresh={async () => (await loadAssets()).applied}
           />
         )}
       </div>
 
       {/* 新建全局资产弹窗（T6-entries） */}
       {newAssetOpen && (
-        <NewLibraryAssetDialog onClose={() => setNewAssetOpen(false)} onCreated={loadAssets} />
+        <NewLibraryAssetDialog onClose={() => setNewAssetOpen(false)} onCreated={confirmGlobalAssetRead} />
       )}
     </div>
   );

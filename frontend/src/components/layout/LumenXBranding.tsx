@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSettingsStore, type ThemePreset } from "@/store/settingsStore";
+import { publicAssetPath } from "@/lib/publicAsset";
 
 interface LumenXBrandingProps {
   size?: "sm" | "md";
@@ -30,7 +31,7 @@ export default function LumenXBranding({ size = "md", showSlogan = true }: Lumen
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const activeTheme: ThemePreset = mounted ? theme : "atelier-dark";
-  const logoSrc = LOGO_SRC[activeTheme] ?? "/logo-dark.png";
+  const logoSrc = publicAssetPath(LOGO_SRC[activeTheme] ?? "/logo-dark.png");
   const logoFilter = activeTheme === "atelier-dark" ? ATELIER_DARK_FILTER : undefined;
 
   return (

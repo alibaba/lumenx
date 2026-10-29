@@ -22,14 +22,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Users, MapPin, Box, AlertTriangle, Sparkles, Plus, Upload, X, Loader2, Play, Pause, Volume2, Wand2, Layers, Maximize2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useProjectStore } from "@/store/projectStore";
+import { isAssetGenerationActive } from "@/lib/assetGenerationOwnership";
 import { api } from "@/lib/api";
+import { requireActiveRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import { isReadConfirmed } from "@/lib/frameCommandSnapshot";
+import { readProjectOnce } from "@/lib/projectReadback";
+import { VoiceBindingReadbackError, voiceBindingFailure } from "@/lib/voiceBindingFeedback";
+import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
 import { useLightbox } from "@/components/shared/preview/LightboxProvider";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import VoicePickerModal from "./cast/VoicePickerModal";
-import CastWorkbenchModal, { activePolls } from "./cast/CastWorkbenchModal";
+import CastWorkbenchModal from "./cast/CastWorkbenchModal";
 
 type AssetKind = "character" | "scene" | "prop";
 
@@ -40,6 +46,7 @@ interface CastItem {
     appearances: number;            // 出场次数（在多少 frame 中被引用）
     referenceImageUrl?: string;     // 参考图（优先 reference_sheet → full_body fallback）
     status: "ready" | "pending" | "new";
+    needsConfirmation?: boolean;
     persona?: string;               // R2V v2 P1-a — characters only; groups visual variants of same person
 }
 
@@ -85,17 +92,6 @@ export default function Cast() {
     const [activeTab, setActiveTab] = useState<"all" | "character" | "scene" | "prop">("all");
     const [workbench, setWorkbench] = useState<{ kind: "character" | "scene" | "prop"; entityId: string } | null>(null);
 
-    const removeGeneratingTask = useProjectStore((s) => s.removeGeneratingTask);
-    const generatingTasks = useProjectStore((s) => s.generatingTasks);
-    useEffect(() => {
-        if (generatingTasks.length === 0) return;
-        for (const task of generatingTasks) {
-            if (!activePolls.has(task.assetId)) {
-                removeGeneratingTask(task.assetId, task.generationType);
-            }
-        }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
     /**
      * Aggregate per-asset appearance counts from frame references, then
      * union with the project's entity pool so freshly-extracted assets
@@ -130,6 +126,7 @@ export default function Cast() {
             return {
                 id: c.id,
                 name: c.name ?? c.id,
+                needsConfirmation: c.status === "needs_confirmation",
                 kind: "character" as const,
                 appearances: characterCounts.get(c.id) ?? 0,
                 referenceImageUrl: imageUrl,
@@ -143,6 +140,7 @@ export default function Cast() {
             return {
                 id: s.id,
                 name: s.name ?? s.id,
+                needsConfirmation: s.status === "needs_confirmation",
                 kind: "scene" as const,
                 appearances: sceneCounts.get(s.id) ?? 0,
                 referenceImageUrl: imageUrl,
@@ -155,6 +153,7 @@ export default function Cast() {
             return {
                 id: p.id,
                 name: p.name ?? p.id,
+                needsConfirmation: p.status === "needs_confirmation",
                 kind: "prop" as const,
                 appearances: propCounts.get(p.id) ?? 0,
                 referenceImageUrl: imageUrl,
@@ -683,12 +682,23 @@ function CastSection({ kind, icon, title, items, emptyLabel, onAddNew, addLabel,
 }
 
 function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?: () => void }) {
+    const projectId = useProjectStore(state => state.currentProject?.id);
+    // Shared character IDs can recur across projects; picker state belongs to one view.
+    return <CastCardSession key={`${projectId}:${item.id}`} item={item} onOpenWorkbench={onOpenWorkbench} />;
+}
+
+function CastCardSession({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?: () => void }) {
+    const recovery = useTranslations("assetRecovery");
     const t = useTranslations("cast");
+    const tVoice = useTranslations("voicePicker");
     const { open: openLightbox } = useLightbox();
-    const updateProject = useProjectStore((state) => state.updateProject);
     const currentProject = useProjectStore((state) => state.currentProject);
+    // Shared characters can change without advancing the project's own revision.
+    // Serialize bindings across this project's cards so equal-revision ACKs cannot overtake each other.
+    const bindingKey = `voice-bind:${encodeURIComponent(requireActiveRuntimeEnvironment().key)}:${encodeURIComponent(currentProject?.id ?? '')}`;
+    const binding = useProjectStore(state => !!state.runningOps[bindingKey]);
     const generatingTasks = useProjectStore((state) => state.generatingTasks);
-    const isGenerating = generatingTasks.some((task) => task.assetId === item.id);
+    const isGenerating = generatingTasks.some(task => task.assetId === item.id && isAssetGenerationActive(task));
     const [historyOpen, setHistoryOpen] = useState(false);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [previewing, setPreviewing] = useState(false);
@@ -698,20 +708,36 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
     // Look up full character to read voice_id / voice_name (CastItem is a
     // read-only aggregation, doesn't carry voice fields).
     const character = item.kind === "character"
-        ? currentProject?.characters?.find((c: any) => c.id === item.id)
+        ? currentProject?.characters?.find(c => c.id === item.id)
         : null;
     const voiceId: string | undefined = character?.voice_id;
     const voiceName: string | undefined = character?.voice_name;
 
     // PR-3g · Voice bind handler: persist via existing bindVoice API
     const handleApplyVoice = async (newVoiceId: string, newVoiceName: string) => {
-        if (!currentProject || !character) return;
+        const store = useProjectStore.getState();
+        if (!currentProject || !character || store.currentProject?.id !== currentProject.id) {
+            throw new Error('Voice binding target is no longer active');
+        }
+        if (store.runningOps[bindingKey]) throw new Error('Voice binding is already pending');
+        store.setRunningOp(bindingKey, true);
         try {
             const updated = await api.bindVoice(currentProject.id, character.id, newVoiceId, newVoiceName);
-            // Backend returns the updated script - sync to store
-            updateProject(currentProject.id, updated);
-        } catch (e) {
-            console.error("Failed to bind voice:", e);
+            // Only a valid committed ACK confirms the write. Invalid initial
+            // responses remain unconfirmed and must not trigger a fallback GET.
+            if (isReadConfirmed(store.applyProjectReadSnapshot(currentProject.id, updated))) return;
+            try {
+                await readProjectOnce(currentProject.id);
+            } catch {
+                throw new VoiceBindingReadbackError('Voice binding saved, but its current state could not be read');
+            }
+        } catch (cause: unknown) {
+            toast.error(tVoice(`saveErrors.${voiceBindingFailure(cause)}`), {
+                projectId: currentProject.id, projectTitle: currentProject.title,
+            });
+            throw cause;
+        } finally {
+            store.setRunningOp(bindingKey, false);
         }
     };
 
@@ -890,6 +916,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
                             {t("appearancesCount", { count: item.appearances })}
                         </span>
                         <StatusBadge status={item.status} />
+                        {item.needsConfirmation && <span className="text-xs text-text-secondary">{recovery("title")}</span>}
                     </div>
                 </div>
                 {/* PR-3g Stage B · Voice binding hover bar (Q2 A · characters only).
@@ -949,6 +976,7 @@ function CastCard({ item, onOpenWorkbench }: { item: CastItem; onOpenWorkbench?:
                     characterName={item.name}
                     characterGender={character.gender}
                     currentVoiceId={voiceId}
+                    isSaving={binding}
                     onApply={handleApplyVoice}
                     seriesId={currentProject?.series_id || null}
                     characterDescription={character.description}

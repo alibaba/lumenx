@@ -2,7 +2,8 @@ import os
 import logging
 import base64
 import time
-from typing import Tuple
+from types import MappingProxyType
+from typing import Mapping, Tuple
 
 from ..utils.endpoints import get_provider_base_url
 
@@ -38,13 +39,14 @@ I2V_OPTIMIZATION_PROMPT = """你是一个AI视频提示词专家，我需要你�
 
 
 class QwenVLModel:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, *, env: Mapping[str, str] | None = None):
+        self._env = os.environ if env is None else MappingProxyType(dict(env))
         self.model_name = config.get('params', {}).get('model_name', 'qwen3.7-plus')
         self._client = None
 
     @property
     def api_key(self):
-        api_key = os.getenv("DASHSCOPE_API_KEY")
+        api_key = self._env.get("DASHSCOPE_API_KEY")
         if not api_key:
             logger.warning("Dashscope API Key not found in config or environment variables.")
         return api_key
@@ -52,13 +54,16 @@ class QwenVLModel:
     def _get_client(self):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
         if self._client is None:
+            api_key = self.api_key
+            if not api_key:
+                raise RuntimeError("Multimodal provider credentials are not configured")
             try:
                 from openai import OpenAI
             except ImportError:
                 raise RuntimeError("openai package not installed. Run: pip install openai>=1.0.0")
             self._client = OpenAI(
-                api_key=self.api_key,
-                base_url=f"{get_provider_base_url('DASHSCOPE')}/compatible-mode/v1",
+                api_key=api_key,
+                base_url=f"{get_provider_base_url('DASHSCOPE', env=self._env)}/compatible-mode/v1",
                 timeout=120.0,
             )
         return self._client

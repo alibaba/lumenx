@@ -65,10 +65,7 @@ def pipeline(tmp_path):
          patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
          patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
          patch("src.apps.comic_gen.pipeline.ExportManager"):
-        p = ComicGenPipeline()
-    p.data_file = str(tmp_path / "projects.json")
-    p.series_data_file = str(tmp_path / "series.json")
-    p.library_data_file = str(tmp_path / "library_assets.json")
+        p = ComicGenPipeline(data_dir=tmp_path / "output")
     p.scripts = {}
     p.series_store = {}
     return p

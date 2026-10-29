@@ -15,6 +15,8 @@ interface EntityConfirmModalProps {
     currentCounts: { characters: number; scenes: number; props: number };
     onConfirm: () => void;
     onDiscard: () => void;
+    error?: string;
+    discardLabel?: string;
 }
 
 export default function EntityConfirmModal({
@@ -23,6 +25,8 @@ export default function EntityConfirmModal({
     currentCounts,
     onConfirm,
     onDiscard,
+    error,
+    discardLabel,
 }: EntityConfirmModalProps) {
     const t = useTranslations("script");
 
@@ -95,13 +99,14 @@ export default function EntityConfirmModal({
                         </div>
 
                         {/* Footer */}
+                        {error && <p role="alert" className="px-6 pb-3 text-sm text-status-failed-fg">{error}</p>}
                         <footer className="flex items-center justify-end gap-3 px-6 py-4 border-t border-glass-border">
                             <button
                                 onClick={onDiscard}
                                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm text-text-secondary hover:text-foreground hover:bg-hover-bg transition-colors"
                             >
                                 <X size={14} />
-                                {t("extractDiscard")}
+                                {discardLabel ?? t("extractDiscard")}
                             </button>
                             <button
                                 onClick={onConfirm}

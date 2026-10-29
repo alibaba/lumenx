@@ -95,8 +95,8 @@ export default function EpisodeMiniList({
 
     const handleSwitch = (epId: string) => {
         if (epId === currentProjectId) return;
-        // Preserve the activeStep via URL hash. ProjectClient reads
-        // hash on mount to restore the step.
+        // The workspace router separates this step fragment from the ID
+        // and hands it to ProjectClient when opening the destination.
         const stepFragment = activeStep ? `#${activeStep}` : "";
         window.location.hash = `/project/${epId}${stepFragment}`;
     };

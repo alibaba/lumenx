@@ -1,40 +1,1064 @@
 import base64
+import binascii
 import mimetypes
 import os
 import time
+import unicodedata
 import requests
 from http import HTTPStatus
 from dashscope import VideoSynthesis
-import dashscope
 from .base import VideoGenModel
+from .provider_result_fetch import _reject_deferred_callback, fetch_provider_result
+from .provider_tasks import (
+    ProviderArtifact, ProviderBindingError, ProviderHandle,
+    ProviderObservation, ProviderQueryError,
+    ProviderSubmission, ProviderSubmitError, ProviderTaskStatus, QueryCapability,
+    ResolvedCredential, validate_fetch_binding, validate_query_binding, validate_result_url,
+)
+from .kling_core_contract import KLING_PROVIDER_MODELS, kling_submission_payload
+from .vidu_core_contract import VIDU_PROVIDER_MODELS, vidu_submission_payload
+from .pixverse_core_contract import PIXVERSE_PROVIDER_MODELS, pixverse_submission_payload
 from ..utils import get_logger
 from ..utils.endpoints import get_provider_base_url
 
-from typing import Callable, Dict, List, Mapping, Optional, Tuple
+from pathlib import Path
+from types import MappingProxyType
+from typing import Any, Callable, ContextManager, Dict, List, Mapping, Optional, Tuple
 
 from ..utils.oss_utils import OSSImageUploader
 from ..utils.provider_media import resolve_media_input, resolve_media_inputs
 from ..utils.provider_registry import resolve_provider_backend
+from ..utils.json_storage import DirectoryWriterLock, StorageError
+from ..utils.generation_intent import GenerationIntent
+from ..utils.media_probe import FrozenMediaMetadata, MediaProbeError, probe_frozen_image
 
 logger = get_logger(__name__)
 
+def _dashscope_scope_headers(scope) -> dict:
+    """Validate an explicit official gateway and preserve its workspace scope."""
+    import re
+
+    if scope.provider != "dashscope" or scope.backend != "dashscope":
+        raise ProviderBindingError("Receipt is not bound to DashScope")
+    # Official host inventory, checked 2026-10-09:
+    # https://help.aliyun.com/zh/model-studio/regions
+    classic_hosts = {
+        "dashscope.aliyuncs.com": "cn-beijing",
+        "dashscope-intl.aliyuncs.com": "ap-southeast-1",
+        "dashscope-us.aliyuncs.com": "us-east-1",
+        "cn-hongkong.dashscope.aliyuncs.com": "cn-hongkong",
+    }
+    regions = {*classic_hosts.values(), "eu-central-1", "ap-northeast-1"}
+    if scope.gateway == "dashscope":
+        permitted_hosts = {
+            host for host, region in classic_hosts.items() if region == scope.region
+        }
+    elif (
+        scope.gateway == "dashscope_workspace" and scope.region in regions
+        and scope.workspace_id != "trial"
+        and re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", scope.workspace_id or "")
+    ):
+        permitted_hosts = {f"{scope.workspace_id}.{scope.region}.maas.aliyuncs.com"}
+    else:
+        raise ProviderBindingError("Unsupported or incomplete DashScope gateway scope")
+    if scope.base_url not in {
+        value for host in permitted_hosts for value in (f"https://{host}", f"https://{host}/")
+    }:
+        raise ProviderBindingError("Task operation requires an original official HTTPS base URL")
+    headers = {}
+    if scope.gateway == "dashscope" and scope.workspace_id is not None:
+        # Match SDK workspace headers without deriving a workspace or gateway.
+        if not re.fullmatch(r"[\x21-\x7e]+", scope.workspace_id):
+            raise ProviderBindingError("Invalid workspace header")
+        headers["X-DashScope-WorkSpace"] = scope.workspace_id
+    return headers
+
+
+def _dashscope_task_headers(scope, credential: ResolvedCredential) -> dict:
+    return {**_dashscope_scope_headers(scope), "Authorization": f"Bearer {credential.secret}"}
+
+
+def _wan_first_frame_submission_payload(request: ProviderSubmission) -> dict:
+    """Narrow first-frame contract; never infer a model, defaults, or media roles.
+
+    Official references checked 2026-10-11:
+    https://help.aliyun.com/zh/model-studio/legacy-image-to-video-api-reference/
+    https://help.aliyun.com/zh/model-studio/image-to-video-general-api-reference
+    2.7 uses input.media and has no audio/shot controls. Audio control remains
+    2.6-flash-only. No Wan3 rules or additional media roles are inferred here.
+    """
+    models = {
+        "wan2.6-i2v": "wan/wan2.6-video#i2v",
+        "wan2.6-i2v-flash": "wan/wan2.6-i2v-flash#i2v",
+        "wan2.7-i2v": "wan/wan2.7-video#i2v",
+    }
+    intent = request.intent
+    if (
+        request.provider_model_id not in models
+        or intent.model_id != models[request.provider_model_id]
+        or intent.mode != "i2v" or intent.catalog_mode != "i2v"
+    ):
+        raise ProviderBindingError("Unsupported or mismatched submission model/mode")
+    if len(request.media) != 1 or request.media[0].version.role != "first_frame":
+        raise ProviderBindingError("Submission requires exactly one first frame")
+    version = request.media[0].version
+    if (
+        version.declared_media_type not in {"image/png", "image/jpeg", "image/webp", "image/bmp"}
+        or version.size_bytes > 20 * 1024 * 1024
+    ):
+        raise ProviderBindingError("Unsupported first-frame metadata")
+    is_wan27 = request.provider_model_id == "wan2.7-i2v"
+    if not isinstance(intent.prompt, str) or len(intent.prompt) > (5000 if is_wan27 else 1500):
+        raise ProviderBindingError("Invalid submission prompt")
+    params = dict(intent.params)
+    allowed = {
+        "duration", "resolution", "seed", "prompt_extend", "watermark", "negative_prompt",
+    }
+    if not is_wan27:
+        allowed.add("shot_type")
+    if request.provider_model_id == "wan2.6-i2v-flash":
+        allowed.add("audio")
+    if set(params) - allowed:
+        raise ProviderBindingError("Unsupported submission parameter")
+    if type(params.get("duration")) is not int or not 2 <= params["duration"] <= 15:
+        raise ProviderBindingError("A supported frozen duration is required")
+    if (
+        not isinstance(params.get("resolution"), str)
+        or params["resolution"].upper() not in {"720P", "1080P"}
+    ):
+        raise ProviderBindingError("A supported frozen resolution is required")
+    params["resolution"] = params["resolution"].upper()
+    if "seed" in params:
+        if type(params["seed"]) is not int or not -1 <= params["seed"] <= 2147483647:
+            raise ProviderBindingError("Invalid submission seed")
+        if params["seed"] == -1:
+            params.pop("seed")
+    for name in ("prompt_extend", "watermark", "audio"):
+        if name in params and type(params[name]) is not bool:
+            raise ProviderBindingError("Invalid submission boolean")
+    if "shot_type" in params and (
+        params["shot_type"] not in {"single", "multi"} or params.get("prompt_extend") is False
+    ):
+        raise ProviderBindingError("Unsupported shot control without prompt extension")
+    inputs: dict[str, object] = {"prompt": intent.prompt}
+    if is_wan27:
+        inputs["media"] = [{"type": "first_frame", "url": request.media[0].url}]
+    else:
+        inputs["img_url"] = request.media[0].url
+    if "negative_prompt" in params:
+        negative = params.pop("negative_prompt")
+        if not isinstance(negative, str) or len(negative) > 500:
+            raise ProviderBindingError("Invalid negative prompt")
+        inputs["negative_prompt"] = negative
+    return {"model": request.provider_model_id, "input": inputs, "parameters": params}
+
+
+def _wan27_t2v_submission_payload(request: ProviderSubmission) -> dict:
+    """Narrow Wan 2.7 text-to-video contract; no media or audio controls."""
+    intent = request.intent
+    if (
+        request.provider_model_id != "wan2.7-t2v"
+        or intent.model_id != "wan/wan2.7-video#t2v"
+        or intent.mode != "t2v" or intent.catalog_mode != "t2v"
+        or request.scope.gateway != "dashscope"
+    ):
+        raise ProviderBindingError("Unsupported or mismatched submission model/mode")
+    if request.media:
+        raise ProviderBindingError("Wan 2.7 text-to-video cannot include media")
+    if not isinstance(intent.prompt, str) or not intent.prompt.strip() or len(intent.prompt) > 5000:
+        raise ProviderBindingError("Invalid submission prompt")
+    params = dict(intent.params)
+    if set(params) - {
+        "duration", "resolution", "ratio", "seed", "prompt_extend", "watermark", "negative_prompt",
+    }:
+        raise ProviderBindingError("Unsupported submission parameter")
+    if type(params.get("duration")) is not int or not 2 <= params["duration"] <= 15:
+        raise ProviderBindingError("A supported frozen duration is required")
+    if (
+        not isinstance(params.get("resolution"), str)
+        or params["resolution"].upper() not in {"720P", "1080P"}
+    ):
+        raise ProviderBindingError("A supported frozen resolution is required")
+    params["resolution"] = params["resolution"].upper()
+    if not isinstance(params.get("ratio"), str) or params["ratio"] not in {"16:9", "9:16", "1:1", "4:3", "3:4"}:
+        raise ProviderBindingError("A supported frozen ratio is required")
+    if "seed" in params:
+        if type(params["seed"]) is not int or not -1 <= params["seed"] <= 2147483647:
+            raise ProviderBindingError("Invalid submission seed")
+        if params["seed"] == -1:
+            params.pop("seed")
+    for name in ("prompt_extend", "watermark"):
+        if name in params and type(params[name]) is not bool:
+            raise ProviderBindingError("Invalid submission boolean")
+    inputs: dict[str, object] = {"prompt": intent.prompt}
+    if "negative_prompt" in params:
+        negative = params.pop("negative_prompt")
+        if not isinstance(negative, str) or len(negative) > 500:
+            raise ProviderBindingError("Invalid negative prompt")
+        inputs["negative_prompt"] = negative
+    return {"model": request.provider_model_id, "input": inputs, "parameters": params}
+
+
+def _wan27_r2v_submission_payload(request: ProviderSubmission) -> dict:
+    """Wan 2.7 reference-to-video with image references only for this slice.
+
+    Official reference checked 2026-10-13:
+    https://help.aliyun.com/zh/model-studio/wan-video-to-video-api-reference
+    The complete provider contract also permits reference videos, first frame
+    and voice references. Product code does not admit those roles in this Core
+    slice, so this builder accepts only 1..5 ``reference_image`` items.
+    """
+    intent = request.intent
+    if (
+        request.provider_model_id not in {"wan2.7-r2v", "wan2.7-r2v-2026-06-12"}
+        or intent.model_id != "wan/wan2.7-video#r2v"
+        or intent.mode != "r2v" or intent.catalog_mode != "r2v"
+        or request.scope.gateway != "dashscope"
+    ):
+        raise ProviderBindingError("Unsupported or mismatched submission model/mode")
+    if not isinstance(intent.prompt, str) or not intent.prompt.strip() or len(intent.prompt) > 5000:
+        raise ProviderBindingError("Invalid submission prompt")
+    if not 1 <= len(request.media) <= 5:
+        raise ProviderBindingError("Wan 2.7 R2V requires 1 to 5 reference images")
+    media_payload = []
+    for ordinal, item in enumerate(request.media):
+        version = item.version
+        if (
+            version.role != "reference_image"
+            or version.ordinal != ordinal
+            or version.declared_media_type not in {"image/png", "image/jpeg", "image/webp", "image/bmp"}
+            or version.size_bytes > 20 * 1024 * 1024
+        ):
+            raise ProviderBindingError("Unsupported Wan 2.7 R2V reference image")
+        media_payload.append({"type": "reference_image", "url": item.url})
+    params = dict(intent.params)
+    if set(params) - {
+        "duration", "resolution", "ratio", "seed", "prompt_extend", "watermark", "negative_prompt",
+    }:
+        raise ProviderBindingError("Unsupported submission parameter")
+    if type(params.get("duration")) is not int or not 2 <= params["duration"] <= 15:
+        raise ProviderBindingError("A supported frozen duration is required")
+    if (
+        not isinstance(params.get("resolution"), str)
+        or params["resolution"].upper() not in {"720P", "1080P"}
+    ):
+        raise ProviderBindingError("A supported frozen resolution is required")
+    params["resolution"] = params["resolution"].upper()
+    if not isinstance(params.get("ratio"), str) or params["ratio"] not in {"16:9", "9:16", "1:1", "4:3", "3:4"}:
+        raise ProviderBindingError("A supported frozen ratio is required")
+    if "seed" in params:
+        if type(params["seed"]) is not int or not -1 <= params["seed"] <= 2147483647:
+            raise ProviderBindingError("Invalid submission seed")
+        if params["seed"] == -1:
+            params.pop("seed")
+    for name in ("prompt_extend", "watermark"):
+        if name in params and type(params[name]) is not bool:
+            raise ProviderBindingError("Invalid submission boolean")
+    inputs: dict[str, object] = {"prompt": intent.prompt, "media": media_payload}
+    if "negative_prompt" in params:
+        negative = params.pop("negative_prompt")
+        if not isinstance(negative, str) or len(negative) > 500:
+            raise ProviderBindingError("Invalid negative prompt")
+        inputs["negative_prompt"] = negative
+    return {"model": request.provider_model_id, "input": inputs, "parameters": params}
+
+
+def _wan27_videoedit_submission_payload(
+    request: ProviderSubmission,
+    *,
+    require_transport_ready: bool = False,
+) -> dict:
+    """Wan 2.7 instruction video editing with one video plus optional images.
+
+    Official reference checked 2026-10-13:
+    https://help.aliyun.com/en/model-studio/wan-video-editing-api-reference
+    The video input must be a provider-resolved temporary URL before submit.
+    Reference images remain frozen data URI media in this Core slice.
+    """
+    intent = request.intent
+    if (
+        request.provider_model_id != "wan2.7-videoedit"
+        or intent.model_id != "wan/wan2.7-video#v2v"
+        or intent.mode != "v2v" or intent.catalog_mode != "v2v"
+        or request.scope.gateway != "dashscope"
+    ):
+        raise ProviderBindingError("Unsupported or mismatched submission model/mode")
+    if not isinstance(intent.prompt, str) or len(intent.prompt) > 5000:
+        raise ProviderBindingError("Invalid submission prompt")
+    if not 1 <= len(request.media) <= 5:
+        raise ProviderBindingError("Wan 2.7 VideoEdit requires one video and up to four reference images")
+    video, *images = request.media
+    media_payload = [_wan27_videoedit_video_payload(video, require_transport_ready=require_transport_ready)]
+    for ordinal, item in enumerate(images):
+        media_payload.append(_wan27_videoedit_image_payload(item, ordinal=ordinal))
+
+    params = dict(intent.params)
+    if set(params) - {
+        "duration", "resolution", "ratio", "seed", "prompt_extend", "watermark",
+        "negative_prompt", "audio_setting",
+    }:
+        raise ProviderBindingError("Unsupported submission parameter")
+    if "duration" in params:
+        if type(params["duration"]) is not int or not (params["duration"] == 0 or 2 <= params["duration"] <= 10):
+            raise ProviderBindingError("A supported frozen duration is required")
+    if "resolution" in params:
+        if not isinstance(params["resolution"], str) or params["resolution"] not in {"720P", "1080P"}:
+            raise ProviderBindingError("A supported frozen resolution is required")
+    if "ratio" in params and params["ratio"] not in {"16:9", "9:16", "1:1", "4:3", "3:4"}:
+        raise ProviderBindingError("Invalid submission ratio")
+    if "seed" in params and (
+        type(params["seed"]) is not int or not 0 <= params["seed"] <= 2147483647
+    ):
+        raise ProviderBindingError("Invalid submission seed")
+    for name in ("prompt_extend", "watermark"):
+        if name in params and type(params[name]) is not bool:
+            raise ProviderBindingError("Invalid submission boolean")
+    if "audio_setting" in params and params["audio_setting"] not in {"auto", "origin"}:
+        raise ProviderBindingError("Invalid submission audio setting")
+    inputs: dict[str, object] = {"prompt": intent.prompt, "media": media_payload}
+    if "negative_prompt" in params:
+        negative = params.pop("negative_prompt")
+        if not isinstance(negative, str) or len(negative) > 500:
+            raise ProviderBindingError("Invalid negative prompt")
+        inputs["negative_prompt"] = negative
+    return {"model": request.provider_model_id, "input": inputs, "parameters": params}
+
+
+def _wan27_videoedit_video_payload(item, *, require_transport_ready: bool) -> dict:
+    version = item.version
+    if (
+        version.role != "reference_video"
+        or version.ordinal != 0
+        or version.declared_media_type not in {"video/mp4", "video/quicktime"}
+        or version.size_bytes > 100 * 1024 * 1024
+    ):
+        raise ProviderBindingError("Unsupported Wan 2.7 VideoEdit video media")
+    _validate_wan3_av_transport(item, require_transport_ready=require_transport_ready)
+    metadata = item.frozen_metadata
+    if (
+        metadata is None
+        or metadata.kind != "video"
+        or not 2 <= metadata.duration <= 10
+        or metadata.width is None
+        or metadata.height is None
+        or not 240 <= metadata.width <= 4096
+        or not 240 <= metadata.height <= 4096
+        or max(metadata.width / metadata.height, metadata.height / metadata.width) > 8
+    ):
+        raise ProviderBindingError("Wan 2.7 VideoEdit video metadata is outside supported limits")
+    return {"type": "video", "url": item.url}
+
+
+def _wan27_videoedit_image_payload(item, *, ordinal: int) -> dict:
+    version = item.version
+    if (
+        version.role != "reference_image"
+        or version.ordinal != ordinal
+        or version.declared_media_type not in _WAN3_IMAGE_MIMES
+        or version.size_bytes > _WAN3_IMAGE_MAX_BYTES
+        or item.transport_binding != _WAN3_IMAGE_BINDING
+    ):
+        raise ProviderBindingError("Unsupported Wan 2.7 VideoEdit reference image")
+    metadata = _validate_wan3_image_bytes(item)
+    if (
+        not 240 <= metadata.width <= 8000
+        or not 240 <= metadata.height <= 8000
+        or max(metadata.width / metadata.height, metadata.height / metadata.width) > 8
+        or metadata.has_alpha
+    ):
+        raise ProviderBindingError("Wan 2.7 VideoEdit image dimensions are outside supported limits")
+    return {"type": "reference_image", "url": item.url}
+
+
+_HAPPYHORSE_11_MODEL_MODES = {
+    "happyhorse-1.1-t2v": ("happyhorse/happyhorse-1.1-t2v#t2v", "t2v"),
+    "happyhorse-1.1-i2v": ("happyhorse/happyhorse-1.1-video#i2v", "i2v"),
+    "happyhorse-1.1-r2v": ("happyhorse/happyhorse-1.1-video#r2v", "r2v"),
+}
+_HAPPYHORSE_IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp"}
+_HAPPYHORSE_IMAGE_BINDING = "data_uri_sha256_v1"
+_HAPPYHORSE_IMAGE_MAX_BYTES = 20 * 1024 * 1024
+_HAPPYHORSE_RESOLUTIONS = {"480P", "720P", "1080P"}
+_HAPPYHORSE_RATIOS = {"16:9", "9:16", "1:1", "4:3", "3:4", "4:5", "5:4", "9:21", "21:9"}
+_HAPPYHORSE_SEED_MAX = 2147483647
+
+
+def _happyhorse_11_submission_payload(request: ProviderSubmission) -> dict:
+    """HappyHorse 1.1 Core provider contract, workspace-only and media-frozen.
+
+    Official references checked 2026-10-13:
+    https://help.aliyun.com/en/model-studio/happyhorse-text-to-video-api-reference
+    https://help.aliyun.com/en/model-studio/happyhorse-image-to-video-api-reference
+    https://help.aliyun.com/en/model-studio/happyhorse-reference-to-video-api-reference
+    """
+    intent = request.intent
+    contract = _HAPPYHORSE_11_MODEL_MODES.get(request.provider_model_id)
+    if contract is None:
+        raise ProviderBindingError("Unsupported HappyHorse provider model")
+    canonical_model_id, mode = contract
+    if (
+        intent.model_id != canonical_model_id
+        or intent.mode != mode
+        or intent.catalog_mode != mode
+        or request.scope.gateway != "dashscope_workspace"
+    ):
+        raise ProviderBindingError("Unsupported or mismatched HappyHorse model/mode/gateway")
+    params = validate_happyhorse_11_intent(intent, mode=mode)
+    inputs: dict[str, object] = {"prompt": intent.prompt}
+    media_payload = _happyhorse_11_media_payload(tuple(request.media), mode=mode)
+    if media_payload:
+        inputs["media"] = media_payload
+    return {"model": request.provider_model_id, "input": inputs, "parameters": params}
+
+
+def validate_happyhorse_11_intent(intent: GenerationIntent, *, mode: str) -> dict:
+    """Validate HappyHorse 1.1 user-controlled prompt and params without media, scope, or credentials."""
+    if mode not in {"t2v", "i2v", "r2v"}:
+        raise ProviderBindingError("Unsupported HappyHorse mode")
+    if not _happyhorse_prompt_is_supported(intent.prompt):
+        raise ProviderBindingError("Invalid HappyHorse prompt")
+    if mode in {"t2v", "r2v"} and not intent.prompt.strip():
+        raise ProviderBindingError("HappyHorse text/reference-to-video requires a prompt")
+    return _happyhorse_11_parameters(intent.params, mode=mode)
+
+
+def _happyhorse_11_parameters(params: Mapping[str, object], *, mode: str) -> dict:
+    allowed = {"duration", "resolution", "seed", "watermark"}
+    if mode in {"t2v", "r2v"}:
+        allowed.add("ratio")
+    params = dict(params)
+    if set(params) - allowed:
+        raise ProviderBindingError("Unsupported HappyHorse parameter")
+    if "duration" in params and (
+        type(params["duration"]) is not int or not 3 <= params["duration"] <= 15
+    ):
+        raise ProviderBindingError("Invalid HappyHorse duration")
+    if "resolution" in params and (
+        not isinstance(params["resolution"], str) or params["resolution"] not in _HAPPYHORSE_RESOLUTIONS
+    ):
+        raise ProviderBindingError("Invalid HappyHorse resolution")
+    if "ratio" in params and (
+        not isinstance(params["ratio"], str) or params["ratio"] not in _HAPPYHORSE_RATIOS
+    ):
+        raise ProviderBindingError("Invalid HappyHorse ratio")
+    if "seed" in params and (
+        type(params["seed"]) is not int or not 0 <= params["seed"] <= _HAPPYHORSE_SEED_MAX
+    ):
+        raise ProviderBindingError("Invalid HappyHorse seed")
+    if "watermark" in params and type(params["watermark"]) is not bool:
+        raise ProviderBindingError("Invalid HappyHorse watermark")
+    return params
+
+
+def _happyhorse_11_media_payload(media: tuple, *, mode: str) -> list[dict]:
+    if mode == "t2v":
+        if media:
+            raise ProviderBindingError("HappyHorse text-to-video cannot include media")
+        return []
+    if mode == "i2v":
+        if len(media) != 1:
+            raise ProviderBindingError("HappyHorse image-to-video requires one first frame")
+        return [_happyhorse_11_image_payload(media[0], role="first_frame", ordinal=0, mode=mode)]
+    if not 1 <= len(media) <= 9:
+        raise ProviderBindingError("HappyHorse reference-to-video requires 1 to 9 reference images")
+    return [
+        _happyhorse_11_image_payload(item, role="reference_image", ordinal=ordinal, mode=mode)
+        for ordinal, item in enumerate(media)
+    ]
+
+
+def _happyhorse_11_image_payload(item, *, role: str, ordinal: int, mode: str) -> dict:
+    version = item.version
+    if (
+        version.role != role
+        or version.ordinal != ordinal
+        or version.declared_media_type not in _HAPPYHORSE_IMAGE_MIMES
+        or version.size_bytes > _HAPPYHORSE_IMAGE_MAX_BYTES
+        or item.transport_binding != _HAPPYHORSE_IMAGE_BINDING
+    ):
+        raise ProviderBindingError("Unsupported HappyHorse image media")
+    metadata = _validate_happyhorse_image_bytes(item)
+    if mode == "i2v":
+        if (
+            metadata.width < 300
+            or metadata.height < 300
+            or max(metadata.width / metadata.height, metadata.height / metadata.width) > 2.5
+        ):
+            raise ProviderBindingError("HappyHorse first-frame dimensions are outside supported limits")
+    else:
+        if min(metadata.width, metadata.height) < 400:
+            raise ProviderBindingError("HappyHorse reference image dimensions are outside supported limits")
+    return {"type": role, "url": item.url}
+
+
+def _validate_happyhorse_image_bytes(item):
+    version = item.version
+    if not isinstance(item.url, str):
+        raise ProviderBindingError("HappyHorse image media bytes are invalid")
+    prefix = f"data:{version.declared_media_type};base64,"
+    if not item.url.startswith(prefix):
+        raise ProviderBindingError("HappyHorse image media bytes are invalid")
+    encoded = item.url[len(prefix):]
+    if not encoded or len(encoded) > ((_HAPPYHORSE_IMAGE_MAX_BYTES + 2) // 3) * 4 + 4:
+        raise ProviderBindingError("HappyHorse image media bytes are invalid")
+    try:
+        data = base64.b64decode(encoded.encode("ascii"), validate=True)
+    except (binascii.Error, UnicodeEncodeError, ValueError):
+        raise ProviderBindingError("HappyHorse image media bytes are invalid") from None
+    try:
+        return probe_frozen_image(version, data)
+    except MediaProbeError:
+        raise ProviderBindingError("HappyHorse image media bytes are invalid") from None
+
+
+def _happyhorse_prompt_is_supported(prompt: object) -> bool:
+    if not isinstance(prompt, str):
+        return False
+    total = 0
+    for char in prompt:
+        total += 2 if _is_han_ideograph(char) else 1
+        if total > 5000:
+            return False
+    return True
+
+
+def _is_han_ideograph(char: str) -> bool:
+    name = unicodedata.name(char, "")
+    return name.startswith(("CJK UNIFIED IDEOGRAPH", "CJK COMPATIBILITY IDEOGRAPH"))
+
+
+def _happyhorse_videoedit_submission_payload(
+    request: ProviderSubmission,
+    *,
+    require_transport_ready: bool = False,
+) -> dict:
+    """HappyHorse 1.0 VideoEdit with one provider-uploaded video plus optional images.
+
+    Official reference checked 2026-10-13:
+    https://help.aliyun.com/en/model-studio/happyhorse-video-edit-api-reference
+    """
+    intent = request.intent
+    if request.provider_model_id != "happyhorse-1.0-video-edit" or request.scope.gateway != "dashscope_workspace":
+        raise ProviderBindingError("Unsupported or mismatched HappyHorse VideoEdit model/mode/gateway")
+    validate_happyhorse_videoedit_intent(intent)
+    if not 1 <= len(request.media) <= 6:
+        raise ProviderBindingError("HappyHorse VideoEdit requires one video and up to five reference images")
+    video, *images = request.media
+    media_payload = [
+        _happyhorse_videoedit_video_payload(video, require_transport_ready=require_transport_ready)
+    ]
+    for ordinal, item in enumerate(images):
+        media_payload.append(_happyhorse_videoedit_image_payload(item, ordinal=ordinal))
+
+    params = dict(intent.params)
+    return {
+        "model": request.provider_model_id,
+        "input": {"prompt": intent.prompt, "media": media_payload},
+        "parameters": params,
+    }
+
+
+def validate_happyhorse_videoedit_intent(intent: GenerationIntent) -> None:
+    """Pure HappyHorse VideoEdit intent admission check; performs no I/O."""
+    if (
+        not isinstance(intent, GenerationIntent)
+        or intent.model_id != "happyhorse/happyhorse-1.0-video-edit#v2v"
+        or intent.mode != "v2v"
+        or intent.catalog_mode != "v2v"
+    ):
+        raise ProviderBindingError("Unsupported or mismatched HappyHorse VideoEdit intent")
+    if not _happyhorse_prompt_is_supported(intent.prompt) or not intent.prompt.strip():
+        raise ProviderBindingError("Invalid HappyHorse VideoEdit prompt")
+    params = dict(intent.params)
+    if set(params) - {"resolution", "seed", "watermark", "audio_setting"}:
+        raise ProviderBindingError("Unsupported HappyHorse VideoEdit parameter")
+    if "resolution" in params and (
+        not isinstance(params["resolution"], str) or params["resolution"] not in {"720P", "1080P"}
+    ):
+        raise ProviderBindingError("Invalid HappyHorse VideoEdit resolution")
+    if "seed" in params and (
+        type(params["seed"]) is not int or not 0 <= params["seed"] <= _HAPPYHORSE_SEED_MAX
+    ):
+        raise ProviderBindingError("Invalid HappyHorse VideoEdit seed")
+    if "watermark" in params and type(params["watermark"]) is not bool:
+        raise ProviderBindingError("Invalid HappyHorse VideoEdit watermark")
+    if "audio_setting" in params and (
+        not isinstance(params["audio_setting"], str)
+        or params["audio_setting"] not in {"auto", "origin"}
+    ):
+        raise ProviderBindingError("Invalid HappyHorse VideoEdit audio setting")
+
+
+def validate_happyhorse_videoedit_video_metadata(metadata: FrozenMediaMetadata) -> None:
+    """Pure reported video metadata preflight; does not inspect files or frames."""
+    if (
+        not isinstance(metadata, FrozenMediaMetadata)
+        or metadata.kind != "video"
+        or not 3 <= metadata.duration <= 60
+        or metadata.width is None
+        or metadata.height is None
+        or min(metadata.width, metadata.height) < 360
+        or max(metadata.width, metadata.height) > 4096
+        or max(metadata.width / metadata.height, metadata.height / metadata.width) > 2.5
+        or metadata.fps is None
+        or not 8 <= metadata.fps <= 60
+    ):
+        raise ProviderBindingError("HappyHorse VideoEdit video metadata is outside supported limits")
+
+
+def _happyhorse_videoedit_video_payload(item, *, require_transport_ready: bool) -> dict:
+    version = item.version
+    if (
+        version.role != "reference_video"
+        or version.ordinal != 0
+        or version.declared_media_type not in {"video/mp4", "video/quicktime"}
+        or version.size_bytes > 100 * 1024 * 1024
+    ):
+        raise ProviderBindingError("Unsupported HappyHorse VideoEdit video media")
+    _validate_wan3_av_transport(item, require_transport_ready=require_transport_ready)
+    validate_happyhorse_videoedit_video_metadata(item.frozen_metadata)
+    return {"type": "video", "url": item.url}
+
+
+def _happyhorse_videoedit_image_payload(item, *, ordinal: int) -> dict:
+    version = item.version
+    if (
+        version.role != "reference_image"
+        or version.ordinal != ordinal
+        or version.declared_media_type not in _HAPPYHORSE_IMAGE_MIMES
+        or version.size_bytes > _HAPPYHORSE_IMAGE_MAX_BYTES
+        or item.transport_binding != _HAPPYHORSE_IMAGE_BINDING
+    ):
+        raise ProviderBindingError("Unsupported HappyHorse VideoEdit reference image")
+    metadata = _validate_happyhorse_image_bytes(item)
+    if (
+        metadata.width < 300
+        or metadata.height < 300
+        or max(metadata.width / metadata.height, metadata.height / metadata.width) > 2.5
+    ):
+        raise ProviderBindingError("HappyHorse VideoEdit image dimensions are outside supported limits")
+    return {"type": "reference_image", "url": item.url}
+
+
+_WAN3_IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp", "image/bmp"}
+_WAN3_RATIOS = {"adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"}
+_WAN3_IMAGE_ROLES = {"first_frame", "last_frame", "reference_image"}
+_WAN3_VIDEO_ROLES = {"reference_video"}
+_WAN3_AUDIO_ROLES = {"reference_audio"}
+_WAN3_ROLE_ORDER = {
+    "first_frame": 0,
+    "last_frame": 1,
+    "reference_image": 2,
+    "reference_video": 3,
+    "reference_audio": 4,
+}
+_WAN3_PENDING_AV_BINDING = "frozen_av_sha256_v1"
+_WAN3_OSS_AV_BINDING = "dashscope_oss_sha256_v1"
+_WAN3_IMAGE_BINDING = "data_uri_sha256_v1"
+_WAN3_IMAGE_MAX_BYTES = 20 * 1024 * 1024
+
+
+def _validate_wan3_media_items(
+    request: ProviderSubmission,
+    *,
+    params: Mapping[str, object],
+    require_transport_ready: bool,
+) -> list[dict]:
+    roles = [item.version.role for item in request.media]
+    if len(request.media) > 20:
+        raise ProviderBindingError("Wan3 media count exceeds the supported total")
+    last_order = -1
+    counts = {"image": 0, "video": 0, "audio": 0}
+    durations = {"video": 0.0, "audio": 0.0}
+    for item in request.media:
+        version = item.version
+        role = version.role
+        if role not in _WAN3_ROLE_ORDER:
+            raise ProviderBindingError("Unsupported Wan3 media role")
+        order = _WAN3_ROLE_ORDER[role]
+        if order < last_order:
+            raise ProviderBindingError("Wan3 media roles must be ordered")
+        last_order = order
+        if role in _WAN3_IMAGE_ROLES:
+            if (
+                version.declared_media_type not in _WAN3_IMAGE_MIMES
+                or version.size_bytes > _WAN3_IMAGE_MAX_BYTES
+                or item.transport_binding != _WAN3_IMAGE_BINDING
+            ):
+                raise ProviderBindingError("Unsupported Wan3 image media metadata")
+            metadata = _validate_wan3_image_bytes(item)
+            if (
+                not 240 <= metadata.width <= 8000
+                or not 240 <= metadata.height <= 8000
+                or max(metadata.width / metadata.height, metadata.height / metadata.width) > 8
+            ):
+                raise ProviderBindingError("Wan3 image dimensions are outside supported limits")
+            if version.declared_media_type == "image/png" and metadata.has_alpha:
+                raise ProviderBindingError("Wan3 PNG transparency is unsupported")
+            counts["image"] += 1
+        elif role in _WAN3_VIDEO_ROLES:
+            if (
+                version.declared_media_type not in {"video/mp4", "video/quicktime"}
+                or version.size_bytes > 100 * 1024 * 1024
+            ):
+                raise ProviderBindingError("Unsupported Wan3 video media metadata")
+            _validate_wan3_av_transport(item, require_transport_ready=require_transport_ready)
+            metadata = item.frozen_metadata
+            if metadata is None or metadata.kind != "video":
+                raise ProviderBindingError("Wan3 video metadata is required")
+            if (
+                not 1 <= metadata.duration <= 15
+                or metadata.fps is None or metadata.fps < 16
+                or metadata.width is None or metadata.height is None
+                or not 240 <= metadata.width <= 4096
+                or not 240 <= metadata.height <= 4096
+                or max(metadata.width / metadata.height, metadata.height / metadata.width) > 8
+            ):
+                raise ProviderBindingError("Wan3 video metadata is outside supported limits")
+            counts["video"] += 1
+            durations["video"] += metadata.duration
+        else:
+            if (
+                version.declared_media_type not in {"audio/wav", "audio/mpeg"}
+                or version.size_bytes > 15 * 1024 * 1024
+            ):
+                raise ProviderBindingError("Unsupported Wan3 audio media metadata")
+            _validate_wan3_av_transport(item, require_transport_ready=require_transport_ready)
+            metadata = item.frozen_metadata
+            if metadata is None or metadata.kind != "audio" or not 1 <= metadata.duration <= 15:
+                raise ProviderBindingError("Wan3 audio metadata is outside supported limits")
+            counts["audio"] += 1
+            durations["audio"] += metadata.duration
+    if counts["image"] > 10 or counts["video"] > 5 or counts["audio"] > 5:
+        raise ProviderBindingError("Wan3 media count exceeds supported role limits")
+    if durations["video"] > 15 or durations["audio"] > 15:
+        raise ProviderBindingError("Wan3 AV duration exceeds supported limits")
+    output_duration = params.get("duration")
+    if type(output_duration) is int and output_duration > 0 and durations["video"] + output_duration > 30:
+        raise ProviderBindingError("Wan3 input and output video duration exceeds supported limits")
+    if request.intent.mode == "t2v":
+        if request.media:
+            raise ProviderBindingError("Wan3 text-to-video cannot include media")
+        return []
+    if request.intent.mode == "i2v":
+        if tuple(roles) not in {("first_frame",), ("first_frame", "last_frame")}:
+            raise ProviderBindingError("Wan3 image-to-video requires first frame or first and last frames")
+    elif request.intent.mode == "r2v":
+        if not 1 <= len(request.media) <= 20 or any(role not in {"reference_image", "reference_video", "reference_audio"} for role in roles):
+            raise ProviderBindingError("Wan3 reference-to-video requires reference media")
+    else:
+        raise ProviderBindingError("Unsupported or mismatched Wan3 model/mode/gateway")
+    ordinals_by_role: dict[str, list[int]] = {}
+    for item in request.media:
+        ordinals_by_role.setdefault(item.version.role, []).append(item.version.ordinal)
+    for role, ordinals in ordinals_by_role.items():
+        if ordinals != list(range(len(ordinals))):
+            raise ProviderBindingError("Wan3 media ordinals must be continuous within each role")
+        if role in {"first_frame", "last_frame"} and ordinals != [0]:
+            raise ProviderBindingError("Wan3 frame roles require ordinal zero")
+    return [{"type": item.version.role, "url": item.url} for item in request.media]
+
+
+def _validate_wan3_image_bytes(item):
+    version = item.version
+    if not isinstance(item.url, str):
+        raise ProviderBindingError("Wan3 image media bytes are invalid")
+    prefix = f"data:{version.declared_media_type};base64,"
+    if not item.url.startswith(prefix):
+        raise ProviderBindingError("Wan3 image media bytes are invalid")
+    encoded = item.url[len(prefix):]
+    if not encoded or len(encoded) > ((_WAN3_IMAGE_MAX_BYTES + 2) // 3) * 4 + 4:
+        raise ProviderBindingError("Wan3 image media bytes are invalid")
+    try:
+        data = base64.b64decode(encoded.encode("ascii"), validate=True)
+    except (binascii.Error, UnicodeEncodeError, ValueError):
+        raise ProviderBindingError("Wan3 image media bytes are invalid") from None
+    try:
+        return probe_frozen_image(version, data)
+    except MediaProbeError:
+        raise ProviderBindingError("Wan3 image media bytes are invalid") from None
+
+
+def _validate_wan3_av_transport(item, *, require_transport_ready: bool) -> None:
+    if require_transport_ready:
+        if item.transport_binding != _WAN3_OSS_AV_BINDING or not item.url.startswith("oss://"):
+            raise ProviderBindingError("Wan3 AV media must be uploaded before submit")
+    elif item.transport_binding not in {_WAN3_PENDING_AV_BINDING, _WAN3_OSS_AV_BINDING}:
+        raise ProviderBindingError("Wan3 AV media requires verified frozen bytes or provider upload")
+
+
+def _wan3_submission_payload(request: ProviderSubmission, *, require_transport_ready: bool = False) -> dict:
+    """Validate frozen Wan3 inputs without catalog reads or default inference.
+
+    Official contract checked 2026-10-12:
+    https://help.aliyun.com/zh/model-studio/wan3-video-generation-api-reference
+    This durable path accepts explicit T2V (no media), I2V first/last frames,
+    and R2V reference image/video/audio only after product code has frozen bytes.
+    """
+    intent = request.intent
+    if (
+        request.provider_model_id not in {"wan3.0-video", "wan3.0-video-prime"}
+        or intent.model_id != f"wan/{request.provider_model_id}#video"
+        or intent.catalog_mode != "video"
+        or request.scope.gateway != "dashscope_workspace"
+    ):
+        raise ProviderBindingError("Unsupported or mismatched Wan3 model/mode/gateway")
+    if not isinstance(intent.prompt, str) or len(intent.prompt) > 20000:
+        raise ProviderBindingError("Invalid submission prompt")
+    if intent.mode == "t2v" and not intent.prompt.strip():
+        raise ProviderBindingError("Wan3 text-to-video requires a prompt")
+    params = dict(intent.params)
+    if set(params) - {"duration", "resolution", "ratio", "seed", "prompt_extend", "watermark", "audio"}:
+        raise ProviderBindingError("Unsupported submission parameter")
+    if type(params.get("duration")) is not int or not (
+        params["duration"] == -1 or 2 <= params["duration"] <= 30
+    ):
+        raise ProviderBindingError("A supported frozen duration is required")
+    if (
+        not isinstance(params.get("resolution"), str)
+        or params["resolution"] not in {"480P", "720P", "1080P"}
+    ):
+        raise ProviderBindingError("A supported frozen resolution is required")
+    if "ratio" in params and params["ratio"] not in _WAN3_RATIOS:
+        raise ProviderBindingError("Invalid submission ratio")
+    if "seed" in params and (
+        type(params["seed"]) is not int or not -1 <= params["seed"] <= 2147483647
+    ):
+        raise ProviderBindingError("Invalid submission seed")
+    for name in ("prompt_extend", "watermark", "audio"):
+        if name in params and type(params[name]) is not bool:
+            raise ProviderBindingError("Invalid submission boolean")
+    media_payload = _validate_wan3_media_items(
+        request, params=params, require_transport_ready=require_transport_ready,
+    )
+    inputs: dict[str, object] = {"prompt": intent.prompt}
+    if media_payload:
+        inputs["media"] = media_payload
+    return {"model": request.provider_model_id, "input": inputs, "parameters": params}
+
+
+def _wan_submission_payload(request: ProviderSubmission, *, require_transport_ready: bool = False) -> dict:
+    if request.provider_model_id in PIXVERSE_PROVIDER_MODELS:
+        return pixverse_submission_payload(request, require_transport_ready=require_transport_ready)
+    if request.provider_model_id in VIDU_PROVIDER_MODELS:
+        return vidu_submission_payload(request, require_transport_ready=require_transport_ready)
+    if request.provider_model_id in KLING_PROVIDER_MODELS:
+        return kling_submission_payload(
+            request,
+            require_transport_ready=require_transport_ready,
+        )
+    if request.provider_model_id == "happyhorse-1.0-video-edit":
+        return _happyhorse_videoedit_submission_payload(
+            request,
+            require_transport_ready=require_transport_ready,
+        )
+    if request.provider_model_id in _HAPPYHORSE_11_MODEL_MODES:
+        return _happyhorse_11_submission_payload(request)
+    if request.provider_model_id == "wan2.7-t2v":
+        return _wan27_t2v_submission_payload(request)
+    if request.provider_model_id in {"wan2.7-r2v", "wan2.7-r2v-2026-06-12"}:
+        return _wan27_r2v_submission_payload(request)
+    if request.provider_model_id == "wan2.7-videoedit":
+        return _wan27_videoedit_submission_payload(request, require_transport_ready=require_transport_ready)
+    if request.provider_model_id in {"wan3.0-video", "wan3.0-video-prime"}:
+        return _wan3_submission_payload(request, require_transport_ready=require_transport_ready)
+    return _wan_first_frame_submission_payload(request)
+
 
 class WanxModel(VideoGenModel):
-    def __init__(self, config):
+    def __init__(self, config, *, env: Mapping[str, str] | None = None):
         super().__init__(config)
+        self._explicit_env = env is not None
+        self._env = os.environ if env is None else MappingProxyType(dict(env))
 
-        self.params = config.get('params', {})
+        self.params = self.config.get('params', {})
+
+    @staticmethod
+    def validate_submission(request: ProviderSubmission) -> None:
+        """Check the submit contract before product admission, without I/O.
+
+        Uses the same gateway and payload rules as submit. This does not prove
+        credential ownership, media-byte binding, or permission to spend.
+        """
+        if not isinstance(request, ProviderSubmission):
+            raise ProviderBindingError("Validation requires a frozen submission")
+        _dashscope_scope_headers(request.scope)
+        _wan_submission_payload(request, require_transport_ready=False)
+
+    def submit(
+        self, request: ProviderSubmission, *, credential: ResolvedCredential,
+        on_submitted: Callable[[ProviderHandle], None],
+    ) -> ProviderHandle:
+        """One opt-in HTTP POST, then mandatory receipt persistence; no poll/fetch.
+
+        Product admission must prove content binding before calling this method.
+        Never use current config to fill this frozen request.
+        """
+        import inspect
+        import re
+
+        if not callable(on_submitted) or any(
+            check(candidate)
+            for candidate in (on_submitted, getattr(on_submitted, "__call__", None))
+            for check in (
+                inspect.iscoroutinefunction, inspect.isgeneratorfunction, inspect.isasyncgenfunction,
+            )
+        ):
+            raise ProviderBindingError("Submission requires a synchronous receipt writer")
+        if (
+            not isinstance(request, ProviderSubmission)
+            or not isinstance(credential, ResolvedCredential)
+        ):
+            raise ProviderBindingError("Submission requires an explicit credential binding")
+        if credential.scope != request.scope or credential.credential_ref != request.credential_ref:
+            raise ProviderBindingError("Credential binding does not match the submission")
+        headers = _dashscope_task_headers(request.scope, credential)
+        payload = _wan_submission_payload(request, require_transport_ready=True)
+        headers.update({"Content-Type": "application/json", "X-DashScope-Async": "enable"})
+        if any(item.url.startswith("oss://") for item in request.media):
+            headers["X-DashScope-OssResourceResolve"] = "enable"
+        submitted_at = time.time()
+        try:
+            response = requests.post(
+                request.scope.base_url.rstrip('/')
+                + "/api/v1/services/aigc/video-generation/video-synthesis",
+                headers=headers, json=payload, auth=lambda prepared: prepared,
+                timeout=120, allow_redirects=False,
+            )
+        except requests.RequestException:
+            raise ProviderSubmitError("transport") from None
+        try:
+            result = response.json()
+        except ValueError:
+            raise ProviderSubmitError("protocol", status_code=response.status_code) from None
+        output = result.get("output") if isinstance(result, dict) else None
+        task_id = output.get("task_id") if isinstance(output, dict) else None
+        if not isinstance(task_id, str) or not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}", task_id,
+        ):
+            # Even a non-200 response can carry an accepted task. Without a
+            # usable ID we cannot prove rejection, and must never retry here.
+            raise ProviderSubmitError("missing_receipt", status_code=response.status_code) from None
+        request_id = result.get("request_id")
+        if not isinstance(request_id, str) or not re.fullmatch(
+            r"[A-Za-z0-9_.:-]{1,256}", request_id,
+        ):
+            request_id = None  # Bad optional diagnostics must not erase a usable receipt.
+        handle = ProviderHandle(
+            provider_model_id=request.provider_model_id, task_id=task_id,
+            scope=request.scope, credential_ref=request.credential_ref, request_id=request_id,
+            query_capability=QueryCapability.BY_TASK_ID, submitted_at=submitted_at,
+        )
+        # Every writer exception, including StorageError, propagates unchanged.
+        acknowledgement = on_submitted(handle)
+        if acknowledgement is not None:
+            # A synchronous wrapper can still return a coroutine/generator.
+            # Never acknowledge persistence before that deferred body runs.
+            if inspect.iscoroutine(acknowledgement) or inspect.isgenerator(acknowledgement):
+                acknowledgement.close()
+            raise TypeError("Receipt writer must return None synchronously")
+        return handle
+
+    def query(
+        self, handle: ProviderHandle, *, credential: ResolvedCredential,
+    ) -> ProviderObservation:
+        """GET one original DashScope task; never resolve current routes or submit.
+
+        Only explicitly bound receipts can use this opt-in interface. The old
+        SDK/HTTP generate paths do not acquire query capability by model name.
+        """
+        import re
+
+        scope = validate_query_binding(handle, credential)
+        headers = _dashscope_task_headers(scope, credential)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}", handle.task_id):
+            raise ProviderBindingError("Invalid provider task ID")
+
+        try:
+            response = requests.get(
+                f"{scope.base_url.rstrip('/')}/api/v1/tasks/{handle.task_id}",
+                headers=headers,
+                # An explicit auth handler prevents ambient .netrc credentials
+                # from overwriting the already bound Authorization header.
+                auth=lambda request: request,
+                timeout=30, allow_redirects=False,
+            )
+        except requests.RequestException:
+            # Transport exceptions may include URLs, headers or response bodies.
+            raise ProviderQueryError("transport") from None
+        if response.status_code != 200:
+            raise ProviderQueryError("http", status_code=response.status_code)
+        try:
+            payload = response.json()
+        except ValueError:
+            raise ProviderQueryError("protocol") from None
+        if not isinstance(payload, dict) or not isinstance(payload.get("output"), dict):
+            raise ProviderQueryError("protocol")
+        output = payload["output"]
+        raw_status = output.get("task_status")
+        if not isinstance(raw_status, str) or not re.fullmatch(
+            r"[A-Za-z][A-Za-z0-9_-]{0,63}", raw_status,
+        ):
+            raise ProviderQueryError("protocol")
+        if output.get("task_id") is not None and output["task_id"] != handle.task_id:
+            raise ProviderQueryError("protocol")
+        request_id = payload.get("request_id")
+        error_code = output.get("code")
+        for value in (request_id, error_code):
+            if value is not None and (
+                not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,256}", value)
+            ):
+                raise ProviderQueryError("protocol")
+        status = {item.name: item for item in ProviderTaskStatus}.get(
+            raw_status, ProviderTaskStatus.UNKNOWN,
+        )
+        video_url = None
+        if status == ProviderTaskStatus.SUCCEEDED:
+            video_url = output.get("video_url")
+            try:
+                validate_result_url(video_url)
+            except ProviderBindingError:
+                raise ProviderQueryError("protocol") from None
+        return ProviderObservation(
+            task_id=handle.task_id, status=status, raw_status=raw_status,
+            request_id=request_id, video_url=video_url, error_code=error_code,
+            source_handle=handle,
+        )
+
+    def fetch(
+        self, handle: ProviderHandle, observation: ProviderObservation, *,
+        output_root: Path, output_ref: str, writer_lock: DirectoryWriterLock,
+        storage_guard: Callable[[], ContextManager[None]], max_bytes: int,
+        on_prepared: Callable[[ProviderArtifact], None] | None = None,
+        publish_policy: str = "replace",
+    ) -> ProviderArtifact:
+        """Download once, anonymously, into the caller's explicitly owned root.
+
+        No current credentials, generation, query, retries, or product mutation.
+        Callers may explicitly fetch this same receipt again after a failure.
+        """
+        _reject_deferred_callback(on_prepared)
+        validate_fetch_binding(handle, observation)
+        _dashscope_scope_headers(handle.scope)  # Validate provenance, never send its headers.
+
+        return fetch_provider_result(
+            handle, observation, output_root=output_root, output_ref=output_ref,
+            writer_lock=writer_lock, storage_guard=storage_guard, max_bytes=max_bytes,
+            on_prepared=on_prepared, publish_policy=publish_policy,
+        )
 
     @property
     def api_key(self):
-        api_key = os.getenv("DASHSCOPE_API_KEY")
+        api_key = self._env.get("DASHSCOPE_API_KEY")
+        if self._explicit_env and not api_key:
+            raise RuntimeError("DashScope API key is not configured for this environment")
         if not api_key:
             logger.warning("Dashscope API Key not found in config or environment variables.")
         return api_key
 
     def _resolve_provider_backend_for_model(self, model_name: str) -> str:
         try:
-            return resolve_provider_backend(model_name)
+            return resolve_provider_backend(model_name, env=self._env)
         except (KeyError, ValueError):
             logger.debug(
                 "Provider backend not registered for model %s, defaulting to dashscope.",
@@ -111,6 +1135,7 @@ class WanxModel(VideoGenModel):
                 modality="image",
                 backend=backend,
                 uploader=uploader,
+                output_root=self.output_root,
                 dashscope_temp_url_resolver=temp_url_resolver,
             )
             if resolved_image.headers:
@@ -129,14 +1154,15 @@ class WanxModel(VideoGenModel):
                 e,
             )
 
-        local_candidate = None
-        if img_path and os.path.exists(img_path):
-            local_candidate = img_path
-        elif isinstance(img_url, str) and os.path.exists(img_url):
-            local_candidate = img_url
+        if self.output_root is None:
+            local_candidate = None
+            if img_path and os.path.exists(img_path):
+                local_candidate = img_path
+            elif isinstance(img_url, str) and os.path.exists(img_url):
+                local_candidate = img_url
 
-        if local_candidate:
-            return self._encode_local_image_as_data_uri(local_candidate)
+            if local_candidate:
+                return self._encode_local_image_as_data_uri(local_candidate)
         return img_url
 
     def _create_dashscope_temp_url(self, local_path: str, model_name: str) -> str:
@@ -146,7 +1172,7 @@ class WanxModel(VideoGenModel):
         if not os.path.exists(local_path):
             raise FileNotFoundError(f"Local media file not found: {local_path}")
 
-        base = get_provider_base_url("DASHSCOPE")
+        base = get_provider_base_url("DASHSCOPE", env=self._env)
         policy_url = f"{base}/api/v1/uploads"
         headers = {"Authorization": f"Bearer {self.api_key}"}
 
@@ -248,6 +1274,8 @@ class WanxModel(VideoGenModel):
         negative_prompt = kwargs.get('negative_prompt') or self.params.get('negative_prompt', '')
         audio_url = kwargs.get('audio_url') or self.params.get('audio_url', '')
         seed = kwargs.get('seed') or self.params.get('seed')
+        if final_model_name == 'wan2.7-i2v' and kwargs.get('seed') is not None:
+            seed = kwargs['seed']
 
         # Resolution mapping - normalize to uppercase for API
         resolution = kwargs.get('resolution') or self.params.get('resolution', '720P')
@@ -270,7 +1298,8 @@ class WanxModel(VideoGenModel):
             api_start_time = time.time()
 
             img_url = kwargs.get('img_url')
-            uploader = OSSImageUploader()
+            uploader = (OSSImageUploader(env=self._env, output_root=self.output_root)
+                        if self._explicit_env else OSSImageUploader())
             extra_media_headers: Dict[str, str] = {}
 
             # Use HTTP API for wan2.7-i2v, wan2.6-i2v, wan2.5-i2v, or wan2.6-r2v
@@ -284,22 +1313,12 @@ class WanxModel(VideoGenModel):
                     resolved_image = resolve_media_input(
                         image_ref,
                         model_name=resolver_model,
-                        modality="image",
+                        modality="reference_video",
                         backend=backend,
                         uploader=uploader,
+                        output_root=self.output_root,
                         dashscope_temp_url_resolver=temp_url_resolver,
                     )
-                    # For Wan I2V, keep local no-OSS image inputs URL-based just like audio/video
-                    # (oss:// + X-DashScope-OssResourceResolve), not data URIs.
-                    if resolved_image.value.startswith("data:image/"):
-                        resolved_image = resolve_media_input(
-                            image_ref,
-                            model_name=resolver_model,
-                            modality="reference_video",
-                            backend=backend,
-                            uploader=uploader,
-                            dashscope_temp_url_resolver=temp_url_resolver,
-                        )
 
                     img_url = resolved_image.value
                     self._merge_media_headers(extra_media_headers, resolved_image.headers)
@@ -311,22 +1330,21 @@ class WanxModel(VideoGenModel):
                         modality="audio",
                         backend=backend,
                         uploader=uploader,
+                        output_root=self.output_root,
                         dashscope_temp_url_resolver=temp_url_resolver,
                     )
                     audio_url = resolved_audio.value
                     self._merge_media_headers(extra_media_headers, resolved_audio.headers)
 
-                # Get shot_type from kwargs (only for wan I2V models)
+                is_wan27_i2v = final_model_name == 'wan2.7-i2v'
+                if is_wan27_i2v and any(kwargs.get(name) is not None for name in ('ratio', 'shot_type')):
+                    raise ValueError("wan2.7-i2v does not support explicit ratio or shot_type")
                 shot_type = kwargs.get('shot_type', 'single')
-                # Wan2.7 uses ratio instead of resolution
-                ratio = kwargs.get('ratio')
-                is_wan27_i2v = final_model_name.startswith('wan2.7-')
                 video_url = self._generate_wan_i2v_http(
                     prompt=prompt,
                     img_url=img_url,
                     model_name=final_model_name,
-                    resolution=resolution if not is_wan27_i2v else None,
-                    ratio=ratio if is_wan27_i2v else None,
+                    resolution=resolution,
                     duration=duration,
                     prompt_extend=prompt_extend,
                     negative_prompt=negative_prompt,
@@ -355,6 +1373,7 @@ class WanxModel(VideoGenModel):
                     modality=modality,
                     backend=backend,
                     uploader=uploader,
+                    output_root=self.output_root,
                     dashscope_temp_url_resolver=temp_url_resolver,
                 )
                 ref_urls_resolved = [item.value for item in resolved_ref_urls]
@@ -394,6 +1413,7 @@ class WanxModel(VideoGenModel):
                             modality="reference_video",
                             backend=backend,
                             uploader=uploader,
+                            output_root=self.output_root,
                             dashscope_temp_url_resolver=temp_url_resolver,
                         )
                         media = [{"type": "video", "url": resolved_video.value}]
@@ -406,6 +1426,7 @@ class WanxModel(VideoGenModel):
                             modality="image",
                             backend=backend,
                             uploader=uploader,
+                            output_root=self.output_root,
                             dashscope_temp_url_resolver=temp_url_resolver,
                         )
                         for r in resolved_imgs:
@@ -440,6 +1461,7 @@ class WanxModel(VideoGenModel):
                             modality="image",
                             backend=backend,
                             uploader=uploader,
+                            output_root=self.output_root,
                             dashscope_temp_url_resolver=temp_url_resolver,
                         )
                         media = [{"type": "first_frame", "url": resolved.value}]
@@ -456,6 +1478,7 @@ class WanxModel(VideoGenModel):
                         modality="image",
                         backend=backend,
                         uploader=uploader,
+                        output_root=self.output_root,
                         dashscope_temp_url_resolver=temp_url_resolver,
                     )
                     media = [{"type": "reference_image", "url": r.value} for r in resolved_refs]
@@ -473,6 +1496,7 @@ class WanxModel(VideoGenModel):
                             modality="reference_video",
                             backend=backend,
                             uploader=uploader,
+                            output_root=self.output_root,
                             dashscope_temp_url_resolver=temp_url_resolver,
                         )
                         media = [{"type": "video", "url": resolved_video.value}]
@@ -485,6 +1509,7 @@ class WanxModel(VideoGenModel):
                                 modality="image",
                                 backend=backend,
                                 uploader=uploader,
+                                output_root=self.output_root,
                                 dashscope_temp_url_resolver=temp_url_resolver,
                             )
                             for r in resolved_imgs:
@@ -551,7 +1576,7 @@ class WanxModel(VideoGenModel):
                                   shot_type: str = "single",
                                   extra_headers: Optional[Mapping[str, str]] = None) -> str:
         """Generate video using Wan I2V (2.5/2.6/2.7) via HTTP API (asynchronous with polling)."""
-        base = get_provider_base_url("DASHSCOPE")
+        base = get_provider_base_url("DASHSCOPE", env=self._env)
         create_url = f"{base}/api/v1/services/aigc/video-generation/video-synthesis"
         
         headers = {
@@ -562,34 +1587,39 @@ class WanxModel(VideoGenModel):
         if extra_headers:
             headers.update(dict(extra_headers))
         
-        payload = {
-            "model": model_name,  # Use passed model name (wan2.5-i2v, wan2.6-i2v, or wan2.7-i2v)
-            "input": {
-                "prompt": prompt,
-                "img_url": img_url
-            },
+        payload: Dict[str, Any] = {
+            "model": model_name,
+            "input": {"prompt": prompt},
             "parameters": {
                 "duration": duration,
                 "prompt_extend": prompt_extend,
                 "watermark": watermark,
-                "audio": True,  # Auto-generate audio
-                "shot_type": shot_type  # single or multi (only works when prompt_extend=True)
-            }
+            },
         }
-
-        # Wan2.7 uses ratio; older models use resolution
-        if ratio:
-            payload["parameters"]["ratio"] = ratio
-        elif resolution:
+        if model_name == "wan2.7-i2v":
+            # Wan 2.7 represents both first frame and driving audio as media.
+            media = [{"type": "first_frame", "url": img_url}]
+            if audio_url:
+                media.append({"type": "driving_audio", "url": audio_url})
+            payload["input"]["media"] = media
             payload["parameters"]["resolution"] = resolution
-        
-        # Add optional parameters
+        else:
+            payload["input"]["img_url"] = img_url
+            payload["parameters"].update({"audio": True, "shot_type": shot_type})
+            if ratio:
+                payload["parameters"]["ratio"] = ratio
+            elif resolution:
+                payload["parameters"]["resolution"] = resolution
+            if audio_url:
+                payload["input"]["audio_url"] = audio_url
+                del payload["parameters"]["audio"]  # audio_url takes precedence
+
         if negative_prompt:
             payload["input"]["negative_prompt"] = negative_prompt
-        if audio_url:
-            payload["input"]["audio_url"] = audio_url
-            del payload["parameters"]["audio"]  # audio_url takes precedence
-        if seed:
+        if model_name == "wan2.7-i2v":
+            if seed is not None:
+                payload["parameters"]["seed"] = seed
+        elif seed:
             payload["parameters"]["seed"] = seed
         
         logger.info(f"Calling {model_name} HTTP API (async)...")
@@ -664,7 +1694,7 @@ class WanxModel(VideoGenModel):
                                   shot_type: str = "multi", seed: int = None,
                                   extra_headers: Optional[Mapping[str, str]] = None) -> str:
         """Generate video using Wan R2V (2.6/2.7) via HTTP API (asynchronous with polling)."""
-        base = get_provider_base_url("DASHSCOPE")
+        base = get_provider_base_url("DASHSCOPE", env=self._env)
         create_url = f"{base}/api/v1/services/aigc/video-generation/video-synthesis"
 
         headers = {
@@ -776,11 +1806,10 @@ class WanxModel(VideoGenModel):
         `(provider_name, provider_task_id, provider_request_id)`. Used by the
         pipeline to persist Bailian / DashScope IDs onto our VideoTask so the
         user can paste them into the 百炼 console for diagnosis even while the
-        task is still running (Issue 17). Failures during the callback are
-        logged but do not interrupt generation.
+        task is still running (Issue 17). Storage failures must reach the caller
+        before polling; other diagnostic callback failures remain warnings.
         """
-        """Generate video using HappyHorse models via HTTP API (asynchronous with polling)."""
-        base = get_provider_base_url("DASHSCOPE")
+        base = get_provider_base_url("DASHSCOPE", env=self._env)
         create_url = f"{base}/api/v1/services/aigc/video-generation/video-synthesis"
 
         headers = {
@@ -840,11 +1869,13 @@ class WanxModel(VideoGenModel):
 
         # Fire provider-id callback ASAP — pipeline persists these onto our
         # VideoTask so the UI / user can copy them while the task is still
-        # running. Wrap in try/except so a buggy callback can't kill the
-        # whole generation flow.
+        # running. A failed durable save must stop this execution path;
+        # unrelated diagnostic callback failures retain their warning behavior.
         if on_provider_ids is not None:
             try:
                 on_provider_ids("dashscope", task_id, request_id)
+            except StorageError:
+                raise
             except Exception as cb_err:
                 logger.warning(f"on_provider_ids callback failed: {cb_err}")
 
@@ -926,6 +1957,8 @@ class WanxModel(VideoGenModel):
             call_args['img_url'] = img_url
             logger.info(f"Image to Video mode. Input Image URL: {img_url}")
 
+        if self._explicit_env:
+            call_args["base_address"] = f"{get_provider_base_url('DASHSCOPE', env=self._env)}/api/v1"
         rsp = VideoSynthesis.async_call(**call_args)
         
         if rsp.status_code != HTTPStatus.OK:
@@ -936,7 +1969,10 @@ class WanxModel(VideoGenModel):
         logger.info(f"Task submitted. Task ID: {task_id}")
         
         # Wait for completion
-        rsp = VideoSynthesis.wait(rsp)
+        wait_kwargs = {"api_key": call_args["api_key"]}
+        if self._explicit_env:
+            wait_kwargs["base_address"] = call_args["base_address"]
+        rsp = VideoSynthesis.wait(rsp, **wait_kwargs)
         
         logger.info(f"SDK response: {rsp}")
 

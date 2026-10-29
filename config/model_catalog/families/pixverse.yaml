@@ -33,7 +33,7 @@ models:
     capabilities: [i2v]
     runtime:
       dashscope:
-        gateway: dashscope
+        gateway: dashscope_workspace
         api_model_id: pixverse/pixverse-v6-it2v
     docs:
       context_hub_doc_ids: [pixverse/dashscope-proxy]
@@ -50,20 +50,24 @@ models:
       default: 5
     params:
       resolution:
-        options: [360p, 540p, 720p, 1080p]
-        default: 720p
+        options: [360P, 540P, 720P, 1080P]
+        default: 720P
       shotType:
         options: [single, multi]
         default: single
-      audio: true
-      watermark: true
-      seed: true
+      audio: {default: false}
+      watermark: {default: false}
+      seed: {min: 0, max: 2147483647}
       negativePrompt: false
       promptExtend: false
     inputs:
       reference_images:
         max: 1
         reference_type: image
+        mime_types: [image/jpeg, image/png, image/webp]
+        max_bytes: 20971520
+        max_width: 10000
+        max_height: 10000
 
   - id: pixverse/pixverse-c1-video
     display_name: PixVerse C1 Video
@@ -72,7 +76,7 @@ models:
     release_stage: stable
     runtime:
       dashscope:
-        gateway: dashscope
+        gateway: dashscope_workspace
     docs:
       context_hub_doc_ids: [pixverse/dashscope-proxy]
     modes:
@@ -96,17 +100,21 @@ models:
           default: 5
         params:
           resolution:
-            options: [360p, 540p, 720p, 1080p]
-            default: 720p
-          audio: true
-          watermark: true
-          seed: true
+            options: [360P, 540P, 720P, 1080P]
+            default: 720P
+          audio: {default: false}
+          watermark: {default: false}
+          seed: {min: 0, max: 2147483647}
           negativePrompt: false
           promptExtend: false
         inputs:
           reference_images:
             max: 1
             reference_type: image
+            mime_types: [image/jpeg, image/png, image/webp]
+            max_bytes: 20971520
+            max_width: 10000
+            max_height: 10000
       r2v:
         legacy_id: pixverse-c1-r2v
         display_name: PixVerse C1 R2V
@@ -121,22 +129,30 @@ models:
           order: 70
         duration:
           type: slider
-          min: 3
-          max: 8
+          min: 1
+          max: 15
           step: 1
           default: 5
         params:
           resolution:
-            options: [720p, 1080p]
-            default: 720p
-          seed: true
+            options: [720P, 1080P]
+            default: 720P
+          aspectRatio:
+            options: ["16:9", "4:3", "1:1", "3:4", "9:16"]
+            default: "16:9"
+          seed: {min: 0, max: 2147483647}
           negativePrompt: false
           promptExtend: false
-          watermark: false
+          audio: {default: false}
+          watermark: {default: false}
         inputs:
           reference_images:
             max: 7
             reference_type: image
+            mime_types: [image/jpeg, image/png, image/webp]
+            max_bytes: 20971520
+            max_width: 10000
+            max_height: 10000
 
   - id: pixverse-v5.6-r2v
     display_name: PixVerse V5.6 R2V
@@ -146,7 +162,7 @@ models:
     capabilities: [r2v]
     runtime:
       dashscope:
-        gateway: dashscope
+        gateway: dashscope_workspace
         api_model_id: pixverse/pixverse-v5.6-r2v
     docs:
       context_hub_doc_ids: [pixverse/dashscope-proxy]
@@ -155,23 +171,32 @@ models:
       visible_in: [project_settings, series_settings, video_sidebar, global_settings]
       order: 70
     duration:
-      type: slider
-      min: 3
-      max: 8
-      step: 1
+      type: buttons
+      options: [5, 8, 10]
       default: 5
+      options_by_resolution:
+        720P: [5, 8, 10]
+        1080P: [5, 8]
     params:
       resolution:
-        options: [720p, 1080p]
-        default: 720p
-      seed: true
+        options: [720P, 1080P]
+        default: 720P
+      aspectRatio:
+        options: ["16:9", "4:3", "1:1", "3:4", "9:16"]
+        default: "16:9"
+      seed: {min: 0, max: 2147483647}
       negativePrompt: false
       promptExtend: false
-      watermark: false
+      audio: {default: false}
+      watermark: {default: false}
     inputs:
       reference_images:
         max: 7
         reference_type: image
+        mime_types: [image/jpeg, image/png, image/webp]
+        max_bytes: 20971520
+        max_width: 10000
+        max_height: 10000
 
   # ── Deprecated: PixVerse V4 ────────────────────────────────────────
   - id: pixverse-v4-i2v

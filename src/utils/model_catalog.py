@@ -1,14 +1,14 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, cast
 
 import yaml
 
 
 SUPPORTED_PROVIDER_BACKENDS = ("dashscope", "vendor", "mulerouter")
 SUPPORTED_MODEL_STATUSES = ("active", "planned", "deprecated", "hidden")
-SUPPORTED_SELECTION_GROUPS = ("t2i", "i2i", "image", "i2v", "r2v", "t2v")
+SUPPORTED_SELECTION_GROUPS = ("t2i", "i2i", "image", "i2v", "r2v", "t2v", "video")
 VISIBLE_MODEL_SURFACES = ("project_settings", "series_settings", "video_sidebar", "global_settings")
 DEFAULT_MODEL_SURFACE_REQUIREMENTS = {
     "t2i_model": ("project_settings", "series_settings", "global_settings"),
@@ -76,6 +76,84 @@ def _normalize_string_list(value: Any, *, label: str) -> List[str]:
     items = _require_list(value, label=label)
     normalized = [_require_non_empty_str(item, label=f"{label} item") for item in items]
     return normalized
+
+
+def _validate_repo_local_snapshot_path_value(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or not value.strip():
+        return "must be a non-empty string"
+    rel = Path(value.strip())
+    if rel.is_absolute() or ".." in rel.parts:
+        return "must be a relative docs/1-api-reference markdown path"
+    if rel.suffix.lower() != ".md":
+        return "must be a markdown path"
+    docs_root = (REPO_ROOT / "docs" / "1-api-reference").resolve()
+    resolved = (REPO_ROOT / rel).resolve()
+    try:
+        resolved.relative_to(docs_root)
+    except ValueError:
+        return "must be under docs/1-api-reference"
+    if not resolved.is_file():
+        return "does not exist"
+    return None
+
+
+def _normalize_repo_local_snapshot_paths(value: Any, *, label: str) -> List[str]:
+    paths = _normalize_string_list(value, label=label)
+    normalized: List[str] = []
+    for item in paths:
+        path_error = _validate_repo_local_snapshot_path_value(item)
+        if path_error:
+            raise ValueError(f"{label} item {path_error}: {item}")
+        normalized.append(item.strip())
+    return normalized
+
+
+def _docs_have_provenance(docs: Mapping[str, Any]) -> bool:
+    return bool(docs.get("context_hub_doc_ids") or docs.get("repo_local_snapshot_paths"))
+
+
+def _append_docs_payload_report_errors(
+    errors: List[str],
+    *,
+    projection: str,
+    entry_id: str,
+    docs: Any,
+    require_provenance: bool = False,
+    require_official_snapshots: bool = False,
+) -> None:
+    if docs is None:
+        docs = {}
+    if not isinstance(docs, Mapping):
+        errors.append(f"{projection} '{entry_id}' docs must be a mapping.")
+        return
+
+    repo_local_snapshot_paths = docs.get("repo_local_snapshot_paths", [])
+    if repo_local_snapshot_paths is None:
+        repo_local_snapshot_paths = []
+    if not isinstance(repo_local_snapshot_paths, list):
+        errors.append(f"{projection} '{entry_id}' docs.repo_local_snapshot_paths must be a list.")
+        repo_local_snapshot_paths = []
+    for path_value in repo_local_snapshot_paths:
+        path_error = _validate_repo_local_snapshot_path_value(path_value)
+        if path_error:
+            errors.append(
+                f"{projection} '{entry_id}' docs.repo_local_snapshot_paths item {path_value!r} {path_error}."
+            )
+
+    if require_provenance and not _docs_have_provenance(docs):
+        errors.append(
+            f"{projection} '{entry_id}' is missing docs.context_hub_doc_ids or docs.repo_local_snapshot_paths."
+        )
+    if require_official_snapshots and not docs.get("official_snapshot_ids"):
+        errors.append(f"{projection} '{entry_id}' is missing docs.official_snapshot_ids.")
+
+
+def _require_visible_docs_provenance(*, visible_in: Sequence[str], docs: Mapping[str, Any], model_id: str) -> None:
+    if visible_in and not _docs_have_provenance(docs):
+        raise ValueError(
+            f"Visible model '{model_id}' must define docs.context_hub_doc_ids or docs.repo_local_snapshot_paths "
+            "for Context Hub or repo-local docs provenance"
+        )
 
 
 def _validate_backend_names(names: Iterable[str], *, label: str) -> List[str]:
@@ -177,6 +255,7 @@ def _build_legacy_model_payload(
     transport: Mapping[str, Any],
     official_snapshot_ids: Sequence[str],
     context_hub_doc_ids: Sequence[str],
+    repo_local_snapshot_paths: Sequence[str],
     selection_group: str,
     visible_in: Sequence[str],
     recommended: bool,
@@ -210,10 +289,11 @@ def _build_legacy_model_payload(
             "audio_input_mode": dict(transport["audio_input_mode"]),
             "reference_video_input_mode": dict(transport["reference_video_input_mode"]),
         },
-        "docs": {
-            "official_snapshot_ids": list(official_snapshot_ids),
-            "context_hub_doc_ids": list(context_hub_doc_ids),
-        },
+        "docs": _build_docs_payload(
+            official_snapshot_ids=official_snapshot_ids,
+            context_hub_doc_ids=context_hub_doc_ids,
+            repo_local_snapshot_paths=repo_local_snapshot_paths,
+        ),
         "ui": {
             "selection_group": selection_group,
             "visible_in": list(visible_in),
@@ -247,6 +327,7 @@ def _build_mode_payload(
     runtime: Mapping[str, Mapping[str, Any]],
     official_snapshot_ids: Sequence[str],
     context_hub_doc_ids: Sequence[str],
+    repo_local_snapshot_paths: Sequence[str],
     selection_group: str,
     visible_in: Sequence[str],
     recommended: bool,
@@ -287,10 +368,11 @@ def _build_mode_payload(
             backend: dict(payload)
             for backend, payload in runtime.items()
         },
-        "docs": {
-            "official_snapshot_ids": list(official_snapshot_ids),
-            "context_hub_doc_ids": list(context_hub_doc_ids),
-        },
+        "docs": _build_docs_payload(
+            official_snapshot_ids=official_snapshot_ids,
+            context_hub_doc_ids=context_hub_doc_ids,
+            repo_local_snapshot_paths=repo_local_snapshot_paths,
+        ),
         "ui": {
             "selection_group": selection_group,
             "visible_in": list(visible_in),
@@ -302,6 +384,21 @@ def _build_mode_payload(
         "params": dict(params),
         "inputs": dict(inputs),
     }
+
+
+def _build_docs_payload(
+    *,
+    official_snapshot_ids: Sequence[str],
+    context_hub_doc_ids: Sequence[str],
+    repo_local_snapshot_paths: Sequence[str],
+) -> Dict[str, List[str]]:
+    docs = {
+        "official_snapshot_ids": list(official_snapshot_ids),
+        "context_hub_doc_ids": list(context_hub_doc_ids),
+    }
+    if repo_local_snapshot_paths:
+        docs["repo_local_snapshot_paths"] = list(repo_local_snapshot_paths)
+    return docs
 
 
 def _ensure_model_line_payload(
@@ -321,10 +418,11 @@ def _ensure_model_line_payload(
                     for backend, payload in value.items()
                 }
                 if key == "runtime"
-                else {
-                    "official_snapshot_ids": list(value["official_snapshot_ids"]),
-                    "context_hub_doc_ids": list(value["context_hub_doc_ids"]),
-                }
+                else _build_docs_payload(
+                    official_snapshot_ids=value["official_snapshot_ids"],
+                    context_hub_doc_ids=value["context_hub_doc_ids"],
+                    repo_local_snapshot_paths=value.get("repo_local_snapshot_paths", []),
+                )
                 if key == "docs"
                 else list(value)
                 if key in {"supported_backends", "routing_prefixes", "supported_modalities"}
@@ -347,8 +445,8 @@ def _ensure_model_line_payload(
         existing["legacy_model_ids"] = []
         model_lines[model_line_id] = existing
 
-    existing["modes"].append(canonical_mode_id)
-    existing["legacy_model_ids"].append(legacy_model_id)
+    cast(List[str], existing["modes"]).append(canonical_mode_id)
+    cast(List[str], existing["legacy_model_ids"]).append(legacy_model_id)
 
 
 def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
@@ -509,6 +607,10 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                     line_docs.get("context_hub_doc_ids", []),
                     label=f"{family_path}: {model_line_id}.docs.context_hub_doc_ids",
                 )
+                line_repo_local_snapshot_paths = _normalize_repo_local_snapshot_paths(
+                    line_docs.get("repo_local_snapshot_paths", []),
+                    label=f"{family_path}: {model_line_id}.docs.repo_local_snapshot_paths",
+                )
                 line_runtime = _normalize_runtime_backends(
                     model_mapping.get("runtime", {}),
                     label=f"{family_path}: {model_line_id}.runtime",
@@ -533,10 +635,11 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                     "supported_modalities": list(supported_modalities),
                     "transport": transport_payload,
                     "runtime": line_runtime,
-                    "docs": {
-                        "official_snapshot_ids": official_snapshot_ids,
-                        "context_hub_doc_ids": line_context_hub_doc_ids,
-                    },
+                    "docs": _build_docs_payload(
+                        official_snapshot_ids=official_snapshot_ids,
+                        context_hub_doc_ids=line_context_hub_doc_ids,
+                        repo_local_snapshot_paths=line_repo_local_snapshot_paths,
+                    ),
                 }
 
                 for mode_name, raw_mode in raw_modes.items():
@@ -570,6 +673,10 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                         model_docs.get("context_hub_doc_ids", line_context_hub_doc_ids),
                         label=f"{family_path}: {legacy_model_id}.docs.context_hub_doc_ids",
                     )
+                    repo_local_snapshot_paths = _normalize_repo_local_snapshot_paths(
+                        model_docs.get("repo_local_snapshot_paths", line_repo_local_snapshot_paths),
+                        label=f"{family_path}: {legacy_model_id}.docs.repo_local_snapshot_paths",
+                    )
 
                     model_ui = _require_mapping(mode_mapping.get("ui"), label=f"{family_path}: {legacy_model_id}.ui")
                     selection_group = _require_non_empty_str(
@@ -584,10 +691,14 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                         model_ui.get("visible_in", []),
                         label=f"{family_path}: {legacy_model_id}.ui.visible_in",
                     )
-                    if visible_in and not context_hub_doc_ids:
-                        raise ValueError(
-                            f"Visible model '{legacy_model_id}' must define docs.context_hub_doc_ids"
-                        )
+                    _require_visible_docs_provenance(
+                        visible_in=visible_in,
+                        docs={
+                            "context_hub_doc_ids": context_hub_doc_ids,
+                            "repo_local_snapshot_paths": repo_local_snapshot_paths,
+                        },
+                        model_id=legacy_model_id,
+                    )
 
                     capabilities = _normalize_string_list(
                         mode_mapping.get("capabilities", [mode_name]),
@@ -620,6 +731,7 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                         transport=transport_payload,
                         official_snapshot_ids=official_snapshot_ids,
                         context_hub_doc_ids=context_hub_doc_ids,
+                        repo_local_snapshot_paths=repo_local_snapshot_paths,
                         selection_group=selection_group,
                         visible_in=visible_in,
                         recommended=bool(model_ui.get("recommended", False)),
@@ -666,6 +778,7 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                         runtime=runtime,
                         official_snapshot_ids=official_snapshot_ids,
                         context_hub_doc_ids=context_hub_doc_ids,
+                        repo_local_snapshot_paths=repo_local_snapshot_paths,
                         selection_group=selection_group,
                         visible_in=visible_in,
                         recommended=bool(model_ui.get("recommended", False)),
@@ -713,6 +826,10 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                 model_docs.get("context_hub_doc_ids", []),
                 label=f"{family_path}: {model_id}.docs.context_hub_doc_ids",
             )
+            repo_local_snapshot_paths = _normalize_repo_local_snapshot_paths(
+                model_docs.get("repo_local_snapshot_paths", []),
+                label=f"{family_path}: {model_id}.docs.repo_local_snapshot_paths",
+            )
 
             model_ui = _require_mapping(model_mapping.get("ui"), label=f"{family_path}: {model_id}.ui")
             selection_group = _require_non_empty_str(
@@ -727,8 +844,14 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                 model_ui.get("visible_in", []),
                 label=f"{family_path}: {model_id}.ui.visible_in",
             )
-            if visible_in and not context_hub_doc_ids:
-                raise ValueError(f"Visible model '{model_id}' must define docs.context_hub_doc_ids")
+            _require_visible_docs_provenance(
+                visible_in=visible_in,
+                docs={
+                    "context_hub_doc_ids": context_hub_doc_ids,
+                    "repo_local_snapshot_paths": repo_local_snapshot_paths,
+                },
+                model_id=model_id,
+            )
 
             capabilities = _normalize_string_list(
                 model_mapping.get("capabilities"),
@@ -770,6 +893,7 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                 transport=transport_payload,
                 official_snapshot_ids=official_snapshot_ids,
                 context_hub_doc_ids=context_hub_doc_ids,
+                repo_local_snapshot_paths=repo_local_snapshot_paths,
                 selection_group=selection_group,
                 visible_in=visible_in,
                 recommended=bool(model_ui.get("recommended", False)),
@@ -813,10 +937,11 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                 "supported_modalities": list(supported_modalities),
                 "transport": transport_payload,
                 "runtime": runtime,
-                "docs": {
-                    "official_snapshot_ids": official_snapshot_ids,
-                    "context_hub_doc_ids": context_hub_doc_ids,
-                },
+                "docs": _build_docs_payload(
+                    official_snapshot_ids=official_snapshot_ids,
+                    context_hub_doc_ids=context_hub_doc_ids,
+                    repo_local_snapshot_paths=repo_local_snapshot_paths,
+                ),
             }
 
             mode_payload = _build_mode_payload(
@@ -838,6 +963,7 @@ def build_catalog_dict(catalog_root: Optional[Path] = None) -> Dict[str, Any]:
                 runtime=runtime,
                 official_snapshot_ids=official_snapshot_ids,
                 context_hub_doc_ids=context_hub_doc_ids,
+                repo_local_snapshot_paths=repo_local_snapshot_paths,
                 selection_group=selection_group,
                 visible_in=visible_in,
                 recommended=bool(model_ui.get("recommended", False)),
@@ -1037,6 +1163,19 @@ class CatalogAccessor:
             return None
         return backend_meta.get("gateway")
 
+    def get_api_model_id(
+        self, canonical_mode_id: str, backend: str = "dashscope",
+    ) -> Optional[str]:
+        """Return the explicit provider API model id for a canonical mode/backend."""
+        runtime = self.get_mode_runtime(canonical_mode_id)
+        if runtime is None:
+            return None
+        backend_meta = runtime.get(backend)
+        if backend_meta is None:
+            return None
+        value = backend_meta.get("api_model_id")
+        return value if isinstance(value, str) and value else None
+
     # --- Enumeration helpers ---
 
     def all_canonical_mode_ids(self) -> List[str]:
@@ -1080,7 +1219,7 @@ def get_default_model_settings(catalog_root: Optional[Path] = None) -> DefaultMo
 
 def build_provider_family_configs(
     catalog: Optional[Mapping[str, Any]] = None,
-) -> Tuple["ProviderFamilyConfig", ...]:
+) -> Tuple[Any, ...]:
     from .provider_registry import ProviderFamilyConfig
 
     active_catalog = catalog or load_generated_model_catalog()
@@ -1186,11 +1325,30 @@ def build_catalog_validation_report(
 
     for model_id, model in models.items():
         visible_in = tuple(model.get("ui", {}).get("visible_in", []))
-        docs = model.get("docs", {})
-        if visible_in and not docs.get("context_hub_doc_ids"):
-            errors.append(f"Visible model '{model_id}' is missing docs.context_hub_doc_ids.")
-        if visible_in and not docs.get("official_snapshot_ids"):
-            errors.append(f"Visible model '{model_id}' is missing docs.official_snapshot_ids.")
+        _append_docs_payload_report_errors(
+            errors,
+            projection="models",
+            entry_id=model_id,
+            docs=model.get("docs", {}),
+            require_provenance=bool(visible_in),
+            require_official_snapshots=bool(visible_in),
+        )
+
+    for mode_id, mode in canonical_modes.items():
+        _append_docs_payload_report_errors(
+            errors,
+            projection="modes",
+            entry_id=mode_id,
+            docs=mode.get("docs", {}),
+        )
+
+    for model_line_id, model_line in model_lines.items():
+        _append_docs_payload_report_errors(
+            errors,
+            projection="model_lines",
+            entry_id=model_line_id,
+            docs=model_line.get("docs", {}),
+        )
 
     surface_summary: Dict[str, Dict[str, List[str]]] = {}
     for surface in VISIBLE_MODEL_SURFACES:

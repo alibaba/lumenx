@@ -1,17 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Copy, Clock } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore } from './usePlaygroundStore';
 import PromptTemplateModal from './PromptTemplateModal';
 import PromptHistoryDrawer from './PromptHistoryDrawer';
+import { isWan27TextToImage, isQwen20TextToImage } from './playgroundImageContract';
+import { supportsPlaygroundNegativePrompt } from './playgroundParameterContract';
 
 const MAX_LENGTH = 2000;
 
 export default function PromptInput() {
   const prompt = usePlaygroundStore((s) => s.prompt);
   const negativePrompt = usePlaygroundStore((s) => s.negativePrompt);
+  const negativePromptProvided = usePlaygroundStore((s) => s.negativePromptProvided);
+  const savedNegativePrompt = usePlaygroundStore((s) => s.parameters.negative_prompt);
+  const modelId = usePlaygroundStore((s) => s.modelId);
+  const mode = usePlaygroundStore((s) => s.mode);
+  const inputMedia = usePlaygroundStore((s) => s.inputMedia);
   const setPrompt = usePlaygroundStore((s) => s.setPrompt);
   const setNegativePrompt = usePlaygroundStore((s) => s.setNegativePrompt);
   const setShowTemplateModal = usePlaygroundStore((s) => s.setShowTemplateModal);
@@ -19,6 +26,15 @@ export default function PromptInput() {
   const t = useTranslations('playground');
 
   const [showNegPrompt, setShowNegPrompt] = useState(false);
+  const strictImage = isWan27TextToImage(modelId, mode, inputMedia);
+  const qwenImage = isQwen20TextToImage(modelId, mode, inputMedia);
+  const negativePromptSupported = !strictImage && supportsPlaygroundNegativePrompt(modelId);
+  const hasInactiveNegativePrompt = negativePrompt.trim().length > 0 && !negativePromptSupported;
+
+  useEffect(() => {
+    // Applying a saved value must reveal the editable text, including an explicit empty value.
+    if (qwenImage && negativePromptProvided) setShowNegPrompt(true);
+  }, [qwenImage, negativePromptProvided, negativePrompt, savedNegativePrompt]);
 
   return (
     <div>
@@ -55,8 +71,15 @@ export default function PromptInput() {
 
       {/* Negative prompt toggle */}
       <div
-        className="flex items-center gap-[6px] py-[6px] text-[0.6875rem] text-text-muted cursor-pointer hover:text-foreground mt-2"
-        onClick={() => setShowNegPrompt((v) => !v)}
+        className={`flex items-center gap-[6px] py-[6px] text-[0.6875rem] text-text-muted mt-2 ${
+          negativePromptSupported || hasInactiveNegativePrompt
+            ? 'cursor-pointer hover:text-foreground'
+            : 'cursor-not-allowed opacity-60'
+        }`}
+        onClick={() => {
+          if (negativePromptSupported || hasInactiveNegativePrompt) setShowNegPrompt((v) => !v);
+        }}
+        aria-disabled={!negativePromptSupported}
       >
         <span
           className="inline-block transition-transform duration-150"
@@ -65,15 +88,30 @@ export default function PromptInput() {
           &#9656;
         </span>
         <span>{t('prompt.negativeLabel')}</span>
+        {hasInactiveNegativePrompt && (
+          <span className="rounded-full border border-border-subtle px-1.5 py-0.5 text-[0.5625rem] uppercase tracking-[0.08em] text-text-muted">
+            {t(strictImage ? 'imageContract.needsCorrection' : 'prompt.inactiveBadge')}
+          </span>
+        )}
       </div>
 
-      {showNegPrompt && (
-        <textarea
-          value={negativePrompt}
-          onChange={(e) => setNegativePrompt(e.target.value)}
-          placeholder={t('prompt.negativePlaceholder')}
-          className="w-full min-h-[60px] resize-y bg-transparent border-0 rounded-none p-0 text-text-secondary text-xs placeholder-text-muted focus:ring-0"
-        />
+      {hasInactiveNegativePrompt && (
+        <p className="text-[0.6875rem] leading-relaxed text-text-muted">
+          {t(strictImage ? 'imageContract.negativeUnsupported' : 'prompt.negativeUnsupportedHint')}
+        </p>
+      )}
+
+      {showNegPrompt && (negativePromptSupported || hasInactiveNegativePrompt) && (
+        <div className="space-y-2">
+          <textarea
+            value={negativePrompt}
+            onChange={(e) => setNegativePrompt(e.target.value)}
+            placeholder={t('prompt.negativePlaceholder')}
+            disabled={!negativePromptSupported}
+            className="w-full min-h-[60px] resize-y bg-transparent border-0 rounded-none p-0 text-text-secondary text-xs placeholder-text-muted focus:ring-0 disabled:cursor-not-allowed disabled:opacity-70"
+          />
+          {qwenImage && <p className="text-[0.6875rem] text-text-muted">{t('imageContract.qwenNegativeLimit')}</p>}
+        </div>
       )}
 
       <PromptTemplateModal />

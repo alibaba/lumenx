@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -10,38 +10,102 @@ import {
 } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import { api, crudApi } from "@/lib/api";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, requireActiveRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import { getAssetUrlWithTimestamp, extractErrorDetail } from "@/lib/utils";
 import { selectedVariantUrl } from "@/lib/characterImage";
 import StepHeader from "@/components/shared/StepHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 
 import StoryboardFrameEditor from "./StoryboardFrameEditor";
+import { useFrameCommand } from '@/lib/useFrameCommand';
+import { confirmRawProjectAck, ProjectReadbackError } from "@/lib/projectReadback";
+
+const composerOperationKey = (projectId: string, key: string) => `storyboard-composer:${encodeURIComponent(requireActiveRuntimeEnvironment().key)}:${encodeURIComponent(projectId)}:${key}`;
 
 export default function StoryboardComposer() {
+    const projectId = useProjectStore(state => state.currentProject?.id);
+    const environment = useProjectStore(state => state.currentProject?.readEnvironment);
+    return <StoryboardComposerSession key={`${environment}:${projectId}`} />;
+}
+
+function StoryboardComposerSession() {
     const t = useTranslations("storyboard");
     const tStep = useTranslations("stepHeader");
     const currentProject = useProjectStore((state) => state.currentProject);
     const selectedFrameId = useProjectStore((state) => state.selectedFrameId);
     const setSelectedFrameId = useProjectStore((state) => state.setSelectedFrameId);
-    const updateProject = useProjectStore((state) => state.updateProject);
+    const command = useFrameCommand(currentProject?.id);
+    const tCommand = useTranslations('frameCommands');
 
     // Use global rendering state (persists across module switches)
     const renderingFrames = useProjectStore((state) => state.renderingFrames);
     const addRenderingFrame = useProjectStore((state) => state.addRenderingFrame);
     const removeRenderingFrame = useProjectStore((state) => state.removeRenderingFrame);
 
-    // Use global storyboard analysis state (persists across tab switches)
-    const isAnalyzing = useProjectStore((state) => state.isAnalyzingStoryboard);
-    const setIsAnalyzing = useProjectStore((state) => state.setIsAnalyzingStoryboard);
+    const runningOps = useProjectStore(state => state.runningOps);
+    const isAnalyzing = !!currentProject && !!runningOps[composerOperationKey(currentProject.id, `analyze:${currentProject.id}`)];
 
     const [editingFrameId, setEditingFrameId] = useState<string | null>(null);
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
     const [insertIndex, setInsertIndex] = useState<number | null>(null);
     const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
     const [showScriptOverlay, setShowScriptOverlay] = useState(false);
+    const sessionMountedRef = useRef(true);
+    useEffect(() => {
+        sessionMountedRef.current = true;
+        return () => { sessionMountedRef.current = false; };
+    }, []);
+
+    const currentProjectReadGuard = useCallback((expectedProjectId: string) => {
+        const environment = getRuntimeEnvironment();
+        return () => {
+            const current = useProjectStore.getState().currentProject;
+            return !!environment && sessionMountedRef.current && current?.id === expectedProjectId
+                && current.readEnvironment === environment.key && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+        };
+    }, []);
+
+    const commandBlocked = useCallback(() => command.error === 'savedReadFailed', [command.error]);
+    const runGuardedRawCommand = useCallback(async (key: string, projectId: string, action: () => Promise<unknown>) => {
+        const store = useProjectStore.getState();
+        const opKey = composerOperationKey(projectId, key);
+        const isCurrent = currentProjectReadGuard(projectId);
+        if (!isCurrent() || commandBlocked() || store.runningOps[opKey]) return 'busy' as const;
+
+        store.setRunningOp(opKey, true);
+        command.setError(null);
+        try {
+            const response = await action();
+            if (!isCurrent()) return 'stale' as const;
+            await confirmRawProjectAck(projectId, response, { isCurrent });
+            if (!isCurrent()) return 'stale' as const;
+            return 'confirmed' as const;
+        } catch (error) {
+            console.error("Storyboard command failed:", error);
+            if (!isCurrent()) return 'stale' as const;
+            if (error instanceof ProjectReadbackError) {
+                command.setError('savedReadFailed');
+                return 'read-failed' as const;
+            }
+            command.setError('unconfirmed');
+            return 'write-failed' as const;
+        } finally {
+
+            store.setRunningOp(opKey, false);
+        }
+    }, [command, commandBlocked, currentProjectReadGuard]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [uploadTargetFrameId, setUploadTargetFrameId] = useState<string | null>(null);
+
+    const canChangeStructure = () => {
+        if (command.isBusy()) return false;
+        if (editingFrameId || isCreateDialogOpen) { command.setError('editorOpen'); return false; }
+        if (isAnalyzing || renderingFrames.size || currentProject?.video_tasks?.some(task => ['pending', 'processing'].includes(task.status))) {
+            command.setError('unsettled'); return false;
+        }
+        return true;
+    };
 
 
 
@@ -59,26 +123,42 @@ export default function StoryboardComposer() {
             if (!confirm(t("overwriteConfirm"))) return;
         }
 
-        setIsAnalyzing(true);
+        const projectId = currentProject.id;
+        const analyzeKey = `analyze:${projectId}`;
+        const opKey = composerOperationKey(projectId, analyzeKey);
+        const store = useProjectStore.getState();
+        const isCurrent = currentProjectReadGuard(projectId);
+        if (!isCurrent() || commandBlocked() || store.runningOps[opKey]) return;
+
+        store.setRunningOp(opKey, true);
         try {
-            const updatedProject = await api.analyzeToStoryboard(currentProject.id, text);
-            const frameCount = updatedProject.frames?.length || 0;
+            const response = await api.analyzeToStoryboard(projectId, text);
+            if (!isCurrent()) return;
+            await confirmRawProjectAck(projectId, response, { isCurrent });
+            if (!isCurrent()) return;
+            const frameCount = useProjectStore.getState().currentProject?.id === projectId
+                ? useProjectStore.getState().currentProject?.frames?.length || 0 : 0;
             if (frameCount > 0) {
-                updateProject(currentProject.id, updatedProject);
                 alert(t("framesGenerated", { count: frameCount }));
             } else {
                 alert(t("aiInvalidOutput"));
             }
         } catch (error: any) {
             console.error("Analyze to storyboard failed:", error);
-            const detail = extractErrorDetail(error, "");
-            if (detail.includes("JSON") || detail.includes("格式")) {
-                alert(t("aiFormatRetry"));
+            if (!isCurrent()) return;
+            if (error instanceof ProjectReadbackError) {
+                command.setError('savedReadFailed');
             } else {
-                alert(t("genFailedDetail", { detail }));
+                const detail = extractErrorDetail(error, "");
+                if (detail.includes("JSON") || detail.includes("格式")) {
+                    alert(t("aiFormatRetry"));
+                } else {
+                    alert(t("genFailedDetail", { detail }));
+                }
             }
         } finally {
-            setIsAnalyzing(false);
+
+            store.setRunningOp(opKey, false);
         }
     };
 
@@ -89,54 +169,36 @@ export default function StoryboardComposer() {
 
     const handleDeleteFrame = async (frameId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!currentProject) return;
+        if (!currentProject || !canChangeStructure()) return;
         if (!confirm(t("confirmDeleteFrame"))) return;
-
-        try {
-            await crudApi.deleteFrame(currentProject.id, frameId);
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
-            console.error("Failed to delete frame:", error);
-            alert(t("deleteFrameFailed"));
-        }
+        await command.run(() => crudApi.deleteFrame(currentProject.id, frameId));
     };
 
     const handleCopyFrame = async (frameId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!currentProject) return;
-
-        try {
-            await crudApi.copyFrame(currentProject.id, frameId);
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
-            console.error("Failed to copy frame:", error);
-            alert(t("copyFrameFailed"));
-        }
+        if (!currentProject || !canChangeStructure()) return;
+        await command.run(() => crudApi.copyFrame(currentProject.id, frameId));
     };
 
     const handleCreateFrame = async (data: any) => {
         if (!currentProject) return;
 
-        try {
-            await crudApi.createFrame(currentProject.id, {
-                ...data,
-                insert_at: insertIndex !== null ? insertIndex : undefined
-            });
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
+        const projectId = currentProject.id;
+        const result = await runGuardedRawCommand(`create:${projectId}`, projectId, () => crudApi.createFrame(projectId, {
+            ...data,
+            insert_at: insertIndex !== null ? insertIndex : undefined
+        }));
+        if (result === 'confirmed') {
             setIsCreateDialogOpen(false);
             setInsertIndex(null);
-        } catch (error) {
-            console.error("Failed to create frame:", error);
+        } else if (result === 'write-failed') {
             alert(t("createFrameFailed"));
         }
     };
 
     const handleMoveFrame = async (index: number, direction: 'up' | 'down', e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!currentProject || !currentProject.frames) return;
+        if (!currentProject || !currentProject.frames || !canChangeStructure()) return;
 
         const newIndex = direction === 'up' ? index - 1 : index + 1;
         if (newIndex < 0 || newIndex >= currentProject.frames.length) return;
@@ -148,19 +210,7 @@ export default function StoryboardComposer() {
 
         const newOrderIds = newFrames.map((f: any) => f.id);
 
-        try {
-            // Optimistic update
-            updateProject(currentProject.id, { ...currentProject, frames: newFrames });
-
-            await crudApi.reorderFrames(currentProject.id, newOrderIds);
-            // No need to fetch again if optimistic update was correct, but good for safety
-        } catch (error) {
-            console.error("Failed to reorder frames:", error);
-            alert(t("reorderFailed"));
-            // Revert on error would be ideal here by fetching project again
-            const project = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, project);
-        }
+        await command.run(() => crudApi.reorderFrames(currentProject.id, newOrderIds));
     };
 
     const handleExtractLastFrame = async (frameId: string, e: React.MouseEvent) => {
@@ -185,13 +235,10 @@ export default function StoryboardComposer() {
             return;
         }
 
+        const projectId = currentProject.id;
         setExtractingFrameId(frameId);
         try {
-            const updatedProject = await api.extractLastFrame(currentProject.id, frameId, prevVideo.id);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error: any) {
-            console.error("Failed to extract last frame:", error);
-            alert(error?.response?.data?.detail || "Failed to extract last frame");
+            await runGuardedRawCommand(`extract:${projectId}:${frameId}`, projectId, () => api.extractLastFrame(projectId, frameId, prevVideo.id));
         } finally {
             setExtractingFrameId(null);
         }
@@ -208,11 +255,9 @@ export default function StoryboardComposer() {
         if (!file || !uploadTargetFrameId || !currentProject) return;
 
         try {
-            const updatedProject = await api.uploadFrameImage(currentProject.id, uploadTargetFrameId, file);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error: any) {
-            console.error("Failed to upload frame image:", error);
-            alert(error?.message || "Failed to upload frame image");
+            const projectId = currentProject.id;
+            const frameId = uploadTargetFrameId;
+            await runGuardedRawCommand(`upload:${projectId}:${frameId}`, projectId, () => api.uploadFrameImage(projectId, frameId, file));
         } finally {
             setUploadTargetFrameId(null);
             if (fileInputRef.current) fileInputRef.current.value = "";
@@ -223,6 +268,15 @@ export default function StoryboardComposer() {
         e?.stopPropagation();
         if (!currentProject) return;
 
+        const projectId = currentProject.id;
+        const renderKey = `render:${projectId}:${frame.id}`;
+        const opKey = composerOperationKey(projectId, renderKey);
+        const store = useProjectStore.getState();
+        const isCurrent = currentProjectReadGuard(projectId);
+        if (!isCurrent() || commandBlocked() || store.runningOps[opKey]) return;
+
+        store.setRunningOp(opKey, true);
+        command.setError(null);
         addRenderingFrame(frame.id);
         try {
             // Construct composition data with references
@@ -312,22 +366,27 @@ export default function StoryboardComposer() {
                 finalPrompt = parts.join(" . ");
             }
 
-            await api.renderFrame(currentProject.id, frame.id, compositionData, finalPrompt, batchSize);
-
-            // Fetch updated project to get new image URL and timestamp
-            const updatedProject = await api.getProject(currentProject.id);
-            useProjectStore.getState().updateProject(currentProject.id, updatedProject);
+            const response = await api.renderFrame(projectId, frame.id, compositionData, finalPrompt, batchSize);
+            if (!isCurrent()) return;
+            await confirmRawProjectAck(projectId, response, { isCurrent });
 
         } catch (error) {
             console.error("Render failed:", error);
-            alert("Render failed. See console for details.");
+            if (!isCurrent()) return;
+            if (error instanceof ProjectReadbackError) command.setError('savedReadFailed');
+            else alert("Render failed. See console for details.");
         } finally {
             removeRenderingFrame(frame.id);
+
+            store.setRunningOp(opKey, false);
         }
     };
 
     return (
-        <div className="flex flex-col h-full text-foreground overflow-hidden">
+        <fieldset disabled={command.busy || command.error === 'savedReadFailed'} className="flex flex-col h-full text-foreground overflow-hidden min-w-0">
+            {command.busy && <p role="status" className="px-6 py-2 text-sm">{tCommand('saving')}</p>}
+            {currentProject?.sharedAssetsNeedRefresh && <p role="status" className="px-6 py-2 text-sm">{tCommand('seriesAssetsPending')}</p>}
+            {command.error && <p role="alert" className="px-6 py-2 text-sm text-status-failed-fg">{currentProject?.title}: {tCommand(command.error)}</p>}
             <StepHeader
                 stepNumber={4}
                 totalSteps={6}
@@ -380,7 +439,7 @@ export default function StoryboardComposer() {
                         </div>
 
                         {currentProject?.frames?.map((frame: any, index: number) => (
-                            <>
+                            <Fragment key={frame.id}>
                                 <motion.div
                                     key={frame.id}
                                     layoutId={frame.id}
@@ -422,9 +481,7 @@ export default function StoryboardComposer() {
                                                     e.stopPropagation();
                                                     if (!currentProject) return;
                                                     try {
-                                                        await api.toggleFrameLock(currentProject.id, frame.id);
-                                                        const updated = await api.getProject(currentProject.id);
-                                                        updateProject(currentProject.id, updated);
+                                                        await runGuardedRawCommand(`lock:${currentProject.id}:${frame.id}`, currentProject.id, () => api.toggleFrameLock(currentProject.id, frame.id));
                                                     } catch (error) {
                                                         console.error("Toggle lock failed:", error);
                                                     }
@@ -495,17 +552,19 @@ export default function StoryboardComposer() {
                                             <div className="flex items-center gap-1 mr-auto">
                                                 <button
                                                     onClick={(e) => handleMoveFrame(index, 'up', e)}
-                                                    disabled={index === 0}
+                                                    disabled={command.busy || index === 0}
                                                     className="btn-tip p-2 hover:bg-hover-bg text-text-secondary hover:text-foreground rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                                     data-tip={t("moveUp")}
+                                                    aria-label={t("moveUp")}
                                                 >
                                                     <ArrowUp size={14} />
                                                 </button>
                                                 <button
                                                     onClick={(e) => handleMoveFrame(index, 'down', e)}
-                                                    disabled={index === (currentProject.frames?.length || 0) - 1}
+                                                    disabled={command.busy || index === (currentProject.frames?.length || 0) - 1}
                                                     className="btn-tip p-2 hover:bg-hover-bg text-text-secondary hover:text-foreground rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                                                     data-tip={t("moveDown")}
+                                                    aria-label={t("moveDown")}
                                                 >
                                                     <ArrowDown size={14} />
                                                 </button>
@@ -513,8 +572,10 @@ export default function StoryboardComposer() {
 
                                             <button
                                                 onClick={(e) => handleCopyFrame(frame.id, e)}
+                                                disabled={command.busy}
                                                 className="btn-tip p-2 hover:bg-hover-bg text-text-secondary hover:text-foreground rounded-lg transition-colors"
                                                 data-tip={t("duplicateFrame")}
+                                                aria-label={t("duplicateFrame")}
                                             >
                                                 <Copy size={14} />
                                             </button>
@@ -522,6 +583,7 @@ export default function StoryboardComposer() {
                                                 onClick={(e) => handleUploadFrameImage(frame.id, e)}
                                                 className="btn-tip p-2 hover:bg-primary/15 text-text-secondary hover:text-primary rounded-lg transition-colors"
                                                 data-tip={t("uploadImage")}
+                                                title={t("uploadImage")}
                                             >
                                                 <Upload size={14} />
                                             </button>
@@ -533,9 +595,10 @@ export default function StoryboardComposer() {
                                                 return prevVideoCompleted ? (
                                                     <button
                                                         onClick={(e) => handleExtractLastFrame(frame.id, e)}
-                                                        disabled={extractingFrameId === frame.id}
+                                                        disabled={extractingFrameId === frame.id || !!runningOps[composerOperationKey(currentProject.id, `extract:${currentProject.id}:${frame.id}`)]}
                                                         className="btn-tip p-2 hover:bg-primary/15 text-text-secondary hover:text-primary rounded-lg transition-colors disabled:opacity-50"
                                                         data-tip={t("usePrevEndFrame")}
+                                                        title={t("usePrevEndFrame")}
                                                     >
                                                         {extractingFrameId === frame.id ? <Loader2 size={14} className="animate-spin" /> : <Film size={14} />}
                                                     </button>
@@ -543,8 +606,10 @@ export default function StoryboardComposer() {
                                             })()}
                                             <button
                                                 onClick={(e) => handleDeleteFrame(frame.id, e)}
+                                                disabled={command.busy}
                                                 className="btn-tip p-2 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded-lg transition-colors"
                                                 data-tip="Delete"
+                                                aria-label={t("deleteFrame")}
                                             >
                                                 <Trash2 size={14} />
                                             </button>
@@ -562,7 +627,7 @@ export default function StoryboardComposer() {
                                         <Plus size={16} />
                                     </button>
                                 </div>
-                            </>
+                            </Fragment>
                         ))}
                 </div>
             </div>
@@ -637,7 +702,7 @@ export default function StoryboardComposer() {
                 className="hidden"
                 onChange={handleFileSelected}
             />
-        </div >
+        </fieldset>
     );
 }
 

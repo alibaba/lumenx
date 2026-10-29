@@ -1,0 +1,99 @@
+{
+  "project": {
+    "id": "p1",
+    "title": "Canvas",
+    "description": "",
+    "source_project_id": null,
+    "nodes": [
+      {
+        "id": "id-2",
+        "project_id": "p1",
+        "type": "image",
+        "title": "Pixel",
+        "prompt": "",
+        "status": "completed",
+        "x": 4.0,
+        "y": 5.0,
+        "width": 240.0,
+        "height": 240.0,
+        "source_project_id": null,
+        "frame_id": null,
+        "asset_id": null,
+        "video_task_id": null,
+        "media_urls": [
+          "uploads/fixture-upload.png"
+        ],
+        "data": {
+          "filename": "pixel.png",
+          "size_bytes": 68,
+          "sha256": "4b5c5c92cec3b23e6a294fc0eea43234ef5126c5a64f4c6c531ac8430ab0b844",
+          "width": 1,
+          "height": 1
+        },
+        "created_by": "user",
+        "created_at": 81.0,
+        "updated_at": 81.0
+      }
+    ],
+    "agent_policy": {
+      "approval_mode": "untrusted",
+      "allowed_tools": [],
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "updated_at": 1.0
+    },
+    "agent_turns": [],
+    "sequence": [],
+    "audio_tracks": [],
+    "exports": [],
+    "node_delete_receipts": [],
+    "node_upload_receipts": [
+      {
+        "schema_version": 1,
+        "receipt_id": "id-1",
+        "project_id": "p1",
+        "client_request_id": "fixture-req",
+        "operation": "create_media_node",
+        "request_contract_version": "atelier-upload-request-v1",
+        "request_fingerprint": "270eadff19a5645ce9e8b611095e367ed17e2195159245dd003b9972289e3509",
+        "base_revision": 0,
+        "committed_revision": 1,
+        "created_at": 81.0,
+        "node_ids": [
+          "id-2"
+        ],
+        "media": {
+          "url": "uploads/fixture-upload.png",
+          "media_kind": "image",
+          "size_bytes": 68,
+          "sha256": "4b5c5c92cec3b23e6a294fc0eea43234ef5126c5a64f4c6c531ac8430ab0b844",
+          "width": 1,
+          "height": 1,
+          "duration": null,
+          "poster_url": null,
+          "poster_size_bytes": null,
+          "poster_sha256": null
+        },
+        "target_node_id": null,
+        "replaced_node_id": null,
+        "source_node_id": "id-2",
+        "previous_media": null
+      }
+    ],
+    "sequence_export_jobs": [],
+    "agent_compaction_summary": null,
+    "compacted_through_turn_id": null,
+    "revision": 1,
+    "created_at": 1.0,
+    "updated_at": 81.0,
+    "generation_attempts": [],
+    "generation_request_receipts": []
+  },
+  "node_ids": [
+    "id-2"
+  ],
+  "receipt_id": "id-1",
+  "replayed": false
+}

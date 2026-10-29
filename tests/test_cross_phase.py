@@ -32,9 +32,7 @@ def pipeline(tmp_path):
          patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
          patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
          patch("src.apps.comic_gen.pipeline.ExportManager"):
-        p = ComicGenPipeline()
-    p.data_file = str(tmp_path / "projects.json")
-    p.series_data_file = str(tmp_path / "series.json")
+        p = ComicGenPipeline(data_dir=tmp_path / "output")
     p.scripts = {}
     p.series_store = {}
     return p
@@ -163,6 +161,7 @@ class TestPromptConfigIntegration:
     def test_episode_in_series_auto_resolves_prompt(self, pipeline):
         """Episode with series_id should auto-resolve series prompt config."""
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         s.prompt_config = PromptConfig(video_polish="auto-resolved series prompt")
 
         ep = _make_script(series_id=s.id)
@@ -190,6 +189,7 @@ class TestAssetResolutionIntegration:
     def test_series_assets_supplement_episode(self, pipeline):
         """Series assets should be added when episode has no conflicting IDs."""
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         series_char = _make_character(name="Series Char")
         series_scene = _make_scene(name="Series Scene")
         series_prop = _make_prop(name="Series Prop")
@@ -213,6 +213,7 @@ class TestAssetResolutionIntegration:
         """When episode and series have same asset ID, episode wins."""
         shared_id = "shared-id-123"
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         s.characters = [_make_character(name="Series Version", id=shared_id)]
 
         ep = _make_script(
@@ -251,6 +252,7 @@ class TestAssetResolutionIntegration:
         """Each asset type (char/scene/prop) merges independently."""
         shared_scene_id = "scene-shared"
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         s.characters = [_make_character(name="S-Char")]
         s.scenes = [_make_scene(name="S-Scene", id=shared_scene_id)]
         s.props = [_make_prop(name="S-Prop")]
@@ -293,6 +295,7 @@ class TestModelSettingsIntegration:
     def test_update_series_model_settings_via_pipeline(self, pipeline):
         """Pipeline update_series should accept model_settings changes."""
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         new_ms = ModelSettings(t2i_model="custom-t2i", i2v_model="kling-1.6")
         updated = pipeline.update_series(s.id, {"model_settings": new_ms})
         assert updated.model_settings.t2i_model == "custom-t2i"
@@ -303,6 +306,7 @@ class TestModelSettingsIntegration:
     def test_update_series_model_settings_partial_via_copy(self, pipeline):
         """Partial update via model_copy should preserve other fields."""
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         current_ms = s.model_settings
         updated_ms = current_ms.model_copy(update={"t2i_model": "new-model"})
         updated = pipeline.update_series(s.id, {"model_settings": updated_ms})
@@ -313,6 +317,7 @@ class TestModelSettingsIntegration:
     def test_model_settings_not_overwritten_by_id_or_created_at(self, pipeline):
         """update_series should not allow overwriting protected fields."""
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         original_id = s.id
         pipeline.update_series(s.id, {"id": "hacked", "created_at": 0})
         assert s.id == original_id
@@ -345,6 +350,7 @@ class TestEpisodeLifecycleIntegration:
     def test_delete_series_orphans_episodes(self, pipeline):
         """Deleting a series should orphan episodes, not delete them."""
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         ep1 = _make_script(title="Ep1")
         ep2 = _make_script(title="Ep2")
         pipeline.scripts[ep1.id] = ep1
@@ -364,6 +370,7 @@ class TestEpisodeLifecycleIntegration:
     def test_episode_numbering_sequential(self, pipeline):
         """Episodes added sequentially should get correct numbers."""
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         eps = []
         for i in range(3):
             ep = _make_script(title=f"Ep{i+1}")
@@ -379,6 +386,7 @@ class TestEpisodeLifecycleIntegration:
     def test_remove_episode_renumber_not_automatic(self, pipeline):
         """Removing an episode should not auto-renumber remaining ones."""
         s = pipeline.create_series("S")
+        s = pipeline.series_store[s.id]
         ep1 = _make_script(title="Ep1")
         ep2 = _make_script(title="Ep2")
         ep3 = _make_script(title="Ep3")
@@ -460,6 +468,7 @@ class TestCrossSeriesImportIntegration:
     def test_imported_assets_independent_of_source(self, pipeline):
         """Imported assets should be deep copies, independent of source."""
         source = pipeline.create_series("Source")
+        source = pipeline.series_store[source.id]
         char = _make_character(name="Original Hero")
         source.characters = [char]
 
@@ -478,6 +487,7 @@ class TestCrossSeriesImportIntegration:
     def test_import_preserves_descriptions(self, pipeline):
         """Import should preserve all asset metadata."""
         source = pipeline.create_series("Source")
+        source = pipeline.series_store[source.id]
         char = _make_character(name="Hero", description="Wears red cape")
         scene = _make_scene(name="Castle", description="Ancient stone castle")
         source.characters = [char]
@@ -496,6 +506,7 @@ class TestCrossSeriesImportIntegration:
     def test_import_empty_list_no_change(self, pipeline):
         """Import with empty list should not modify target."""
         source = pipeline.create_series("Source")
+        source = pipeline.series_store[source.id]
         source.characters = [_make_character()]
         target = pipeline.create_series("Target")
 

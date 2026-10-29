@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { EditorContent } from '@tiptap/react';
 import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, WifiOff, RotateCcw, X } from 'lucide-react';
@@ -13,6 +13,7 @@ import { useContinuityCheck } from './hooks/useContinuityCheck';
 import { useSceneFolding } from './hooks/useSceneFolding';
 import { useViewMode } from './hooks/useViewMode';
 import { useOfflineCache } from './hooks/useOfflineCache';
+import { useAutoSave } from './hooks/useAutoSave';
 import { useL3Completion } from './hooks/useL3Completion';
 import { PasteHintBar } from './components/PasteHintBar';
 import { ShortcutHelpPanel } from './components/ShortcutHelpPanel';
@@ -20,6 +21,7 @@ import { ContinuityIndicator } from './components/ContinuityIndicator';
 import RightPanelContainer from './panels';
 import LeftSidebar from './sidebar';
 import StoryboardView from './views/StoryboardView';
+import SnapshotListDialog from './dialogs/SnapshotListDialog';
 
 export interface ScriptEditorShellProps {
   mode?: 'full' | 'embedded' | 'focus';
@@ -33,6 +35,7 @@ export default function ScriptEditorShell({
   initialContent,
 }: ScriptEditorShellProps) {
   const t = useTranslations('scriptEditor');
+  const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
   const { editor, isReady } = useEditorSetup({ content: initialContent });
   const { showHint, analysis, applyFormatting, dismissHint } = usePasteHandler(editor);
   const { showShortcutHelp, closeShortcutHelp } = useKeyboardShortcuts(editor);
@@ -40,6 +43,7 @@ export default function ScriptEditorShell({
   const { enabled: foldingEnabled, isAllExpanded, totalScenes: foldingTotal } = useSceneFolding(editor);
   const { mode: viewMode, setMode: setViewMode, isReadOnly, showToolbar, showSidebars } = useViewMode();
   const { hasNewerLocal, restoreFromLocal, dismissLocalRestore, isOffline } = useOfflineCache(projectId, editor);
+  const documentSave = useAutoSave(editor, projectId ?? null);
   useL3Completion(editor, projectId ?? null);
 
   const isDirty = useEditorStore((s) => s.isDirty);
@@ -52,6 +56,9 @@ export default function ScriptEditorShell({
   const rightCollapsed = useEditorStore((s) => s.rightSidebarCollapsed);
   const toggleLeft = useEditorStore((s) => s.toggleLeftSidebar);
   const toggleRight = useEditorStore((s) => s.toggleRightSidebar);
+
+  const documentError = documentSave.errorKey ? t(`status.${documentSave.errorKey}`) : null;
+  const canDiscardAndReload = Boolean(projectId && documentError && documentSave.loadStatus !== 'loading' && documentSave.saveStatus !== 'saving');
 
   const showLeft = mode === 'full' && !leftCollapsed && showSidebars;
   const showRight = mode === 'full' && !rightCollapsed && showSidebars;
@@ -106,8 +113,24 @@ export default function ScriptEditorShell({
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-text-muted">
-              {isDirty ? t('status.unsaved') : lastSavedAt ? t('status.savedAt', { time: lastSavedAt.toLocaleTimeString() }) : ''}
+              {documentSave.saveStatus === 'saving'
+                ? t('status.saving')
+                : isDirty
+                  ? t('status.unsaved')
+                  : lastSavedAt
+                    ? t('status.savedAt', { time: lastSavedAt.toLocaleTimeString() })
+                    : ''}
             </span>
+            {projectId && documentSave.documentRevision !== null && (
+              <button
+                type="button"
+                onClick={() => setSnapshotDialogOpen(true)}
+                disabled={documentSave.saveStatus === 'saving'}
+                className="rounded border border-white/10 px-2 py-1 text-xs text-text-muted transition-colors hover:text-foreground disabled:opacity-40"
+              >
+                {t('snapshots.title')}
+              </button>
+            )}
             {mode === 'full' && (
               <button
                 type="button"
@@ -171,6 +194,24 @@ export default function ScriptEditorShell({
                 </div>
               </div>
             )}
+            {documentError && (
+              <div role="alert" className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-red-700/30 bg-red-900/30 px-4 py-2 text-xs text-red-200">
+                <span>{documentError}</span>
+                {canDiscardAndReload && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(t('status.discardLocalAndReloadConfirm'))) {
+                        void documentSave.discardAndReload();
+                      }
+                    }}
+                    className="shrink-0 rounded border border-red-300/30 px-2 py-0.5 text-xs text-red-100 transition-colors hover:bg-red-300/10"
+                  >
+                    {t('status.discardLocalAndReload')}
+                  </button>
+                )}
+              </div>
+            )}
             {/* Paste Hint Bar */}
             <PasteHintBar
               visible={showHint}
@@ -228,13 +269,16 @@ export default function ScriptEditorShell({
           </span>
           <span className="text-white/20">|</span>
           <span>
+            {!projectId ? `${t('status.localDraft')} · ` : ''}
             {isOffline
               ? t('status.offlineShort')
-              : isDirty
-                ? t('status.unsavedDot')
-                : lastSavedAt
-                  ? t('status.savedAt', { time: lastSavedAt.toLocaleTimeString() })
-                  : t('status.ready')}
+              : documentSave.saveStatus === 'saving'
+                ? t('status.saving')
+                : isDirty
+                  ? t('status.unsavedDot')
+                  : lastSavedAt
+                    ? t('status.savedAt', { time: lastSavedAt.toLocaleTimeString() })
+                    : t('status.ready')}
           </span>
           <span className="text-white/20">|</span>
           <ContinuityIndicator report={continuityReport} />
@@ -242,6 +286,17 @@ export default function ScriptEditorShell({
             {currentFormat} / {currentRendering}
           </span>
         </div>
+      )}
+
+      {projectId && documentSave.documentRevision !== null && (
+        <SnapshotListDialog
+          open={snapshotDialogOpen}
+          onClose={() => setSnapshotDialogOpen(false)}
+          projectId={projectId}
+          currentRevision={documentSave.documentRevision}
+          canRestore={!isDirty && documentSave.saveStatus !== 'saving'}
+          onRestore={documentSave.adoptRestoredEnvelope}
+        />
       )}
 
       {/* Shortcut Help Panel */}

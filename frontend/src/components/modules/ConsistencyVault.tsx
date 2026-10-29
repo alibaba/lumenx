@@ -1,12 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo, useSyncExternalStore, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Paintbrush, User, Users, MapPin, Box, Lock, Unlock, RefreshCw, Upload, Image as ImageIcon, X, Check, Settings, ChevronRight, Trash2, Plus, Link as LinkIcon } from "lucide-react";
-import { useProjectStore } from "@/store/projectStore";
-import { api, API_URL, crudApi } from "@/lib/api";
+import { useProjectStore, type Project, type Scene, type Prop } from "@/store/projectStore";
+import { api, crudApi } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+import { confirmProjectAck, confirmRawProjectAck, ProjectReadbackError, readProjectOnce } from "@/lib/projectReadback";
+import { isStudioGptImageModel } from "@/lib/studioAssetImageRequest";
+import { frameCommandSnapshot, sameReadVersion } from "@/lib/frameCommandSnapshot";
+import { isAssetGenerationActive, trackAssetGeneration } from "@/lib/assetGenerationOwnership";
+import { useStudioAssetImageRequests, usesStudioImageCore, usesStudioQwenImageCore } from "@/lib/useStudioAssetImageRequests";
+import StudioImageRequestResults from "@/components/shared/StudioImageRequestResults";
+import { useStudioMotionRequests } from "@/lib/useStudioMotionRequests";
+import { readStudioMotionEligibility } from "@/lib/studioMotionRequest";
+import StudioMotionRequestResults from "@/components/shared/StudioMotionRequestResults";
+import AssetRecoveryNotice from "@/components/shared/AssetRecoveryNotice";
+import { requireActiveRuntimeEnvironment, getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import CharacterWorkbench from "./CharacterWorkbench";
 import { VariantSelector } from "../common/VariantSelector";
 import { VideoVariantSelector } from "../common/VideoVariantSelector";
@@ -17,8 +28,9 @@ import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 export default function ConsistencyVault() {
     const tv = useTranslations("vault");
     const tStep = useTranslations("stepHeader");
+    const feedback = useTranslations("castWorkbench");
+    const recovery = useTranslations("assetRecovery");
     const currentProject = useProjectStore((state) => state.currentProject);
-    const updateProject = useProjectStore((state) => state.updateProject);
 
 
 
@@ -33,13 +45,40 @@ export default function ConsistencyVault() {
     // Store ID and Type instead of full object to ensure reactivity
     const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
     const [selectedAssetType, setSelectedAssetType] = useState<string | null>(null);
+    const [workbenchSession, setWorkbenchSession] = useState(0);
 
     // Create asset dialog state
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
 
     // Upload modal state
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-    const [uploadTarget, setUploadTarget] = useState<{ id: string; type: string; name: string; description: string } | null>(null);
+    const [uploadTarget, setUploadTarget] = useState<{ id: string; type: string; name: string; description: string; projectId: string; session: object } | null>(null);
+    const uploadSession = useRef<object | null>(null);
+    const createSession = useRef<object | null>(null);
+    const recoveryEpoch = useRef(0);
+    const [readingAsset, setReadingAsset] = useState(false);
+    const [assetReadFailed, setAssetReadFailed] = useState(false);
+    useEffect(() => { recoveryEpoch.current += 1; setReadingAsset(false); setAssetReadFailed(false); return () => { recoveryEpoch.current += 1; }; }, [currentProject?.id, currentProject?.series_id]);
+    useEffect(() => subscribeRuntimeEnvironment(() => {
+        recoveryEpoch.current += 1; setReadingAsset(false); setAssetReadFailed(false);
+    }), []);
+    const readAssetsAgain = async () => {
+        if (!currentProject) return;
+        const epoch = recoveryEpoch.current;
+        const environment = getRuntimeEnvironment();
+        if (!environment) { setAssetReadFailed(true); return; }
+        const live = () => epoch === recoveryEpoch.current && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+        setReadingAsset(true); setAssetReadFailed(false);
+        try { await readProjectOnce(currentProject.id, undefined, { isCurrent: snapshot => live() && snapshot.series_id === currentProject.series_id }); }
+        catch { if (live()) setAssetReadFailed(true); }
+        finally { if (live()) setReadingAsset(false); }
+    };
+    useEffect(() => {
+        setSelectedAssetId(null); setSelectedAssetType(null);
+        setIsCreateDialogOpen(false); setIsUploadModalOpen(false); setUploadTarget(null);
+        uploadSession.current = null;
+        createSession.current = null;
+    }, [currentProject?.id]);
 
     // Derive selected asset from currentProject
     const selectedAsset = currentProject ? (() => {
@@ -50,166 +89,125 @@ export default function ConsistencyVault() {
         return list?.find((a: any) => a.id === selectedAssetId) || null;
     })() : null;
 
-    const isAssetGenerating = (assetId: string) => {
-        return generatingTasks?.some((t: any) => t.assetId === assetId);
-    };
-
-    const getAssetGeneratingTypes = (assetId: string) => {
-        return generatingTasks?.filter((t: any) => t.assetId === assetId).map((t: any) => ({
-            type: t.generationType,
-            batchSize: t.batchSize
-        })) || [];
-    };
+    const isAssetGenerating = (assetId: string) => generatingTasks.some(task => task.assetId === assetId && isAssetGenerationActive(task));
+    const getAssetGeneratingTypes = (assetId: string) => generatingTasks.filter(task => task.assetId === assetId && isAssetGenerationActive(task)).map(task => ({ type: task.generationType, batchSize: task.batchSize }));
 
     const handleUpdateDescription = async (assetId: string, type: string, description: string) => {
-        if (!currentProject) return;
+        if (!currentProject) return false;
         try {
-            const updatedProject = await api.updateAssetDescription(currentProject.id, assetId, type, description);
-            updateProject(currentProject.id, updatedProject);
+            const response = await api.updateAssetDescription(currentProject.id, assetId, type, description);
+            await confirmRawProjectAck(currentProject.id, response);
+            return true;
         } catch (error) {
-            console.error("Failed to update description:", error);
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed") : "Failed to save description");
+            return false;
+        }
+    };
+
+    // Each submission owns a serial status loop through navigation/unmount. A terminal
+    // read is attempted once; it cannot restart polling or repeat the paid command.
+    const pollTask = async (projectId: string, taskId: string, interval: number, assetId: string, type: string, isCurrent: () => boolean, ownerMatches: (snapshot: Awaited<ReturnType<typeof readProjectOnce>>) => boolean, minimumRevision?: number) => {
+        for (;;) {
+            await new Promise(resolve => setTimeout(resolve, interval));
+            if (!isCurrent()) return;
+            let status;
+            try { status = await api.getTaskStatus(taskId); }
+            catch {
+                if (!isCurrent()) return;
+                let fresh;
+                try { fresh = await readProjectOnce(projectId, minimumRevision, { isCurrent: snapshot => isCurrent() && ownerMatches(snapshot) }); }
+                catch { throw new Error(recovery('readFailed')); }
+                if (!isCurrent()) return;
+                const pool = type === 'character' ? fresh.characters : type === 'scene' ? fresh.scenes : fresh.props;
+                if (pool.find(item => item.id === assetId)?.status !== 'needs_confirmation') throw new Error(recovery('readFailed'));
+                return;
+            }
+            if (!isCurrent()) return;
+            if (status?.status === 'pending' || status?.status === 'processing') continue;
+            if (status?.status === 'completed' || status?.status === 'needs_confirmation') {
+                await readProjectOnce(projectId, minimumRevision, { isCurrent: snapshot => isCurrent() && ownerMatches(snapshot) });
+                return;
+            }
+            if (status?.status === 'failed') {
+                alert(tv('genFailed', { error: status.error || '' }));
+                try { await readProjectOnce(projectId, minimumRevision, { isCurrent: snapshot => isCurrent() && ownerMatches(snapshot) }); }
+                catch { if (isCurrent()) alert(feedback('toastRefreshFailed')); }
+                return;
+            }
+            throw new Error(recovery('readFailed'));
         }
     };
 
     const handleGenerate = async (assetId: string, type: string, generationType: string = "all", prompt: string = "", applyStyle: boolean = true, negativePrompt: string = "", batchSize: number = 1) => {
-        if (!currentProject) return;
-
-        // Add task with specific generation type and batch size
-        if (addGeneratingTask) {
-            addGeneratingTask(assetId, generationType, batchSize);
-        }
-
+        if (!currentProject || useProjectStore.getState().generatingTasks.some(task => task.assetId === assetId && task.generationType === generationType && isAssetGenerationActive(task))) return;
+        const projectId = currentProject.id;
+        const environment = requireActiveRuntimeEnvironment();
+        const source = (type === 'character' ? currentProject.characters : type === 'scene' ? currentProject.scenes : currentProject.props).find(item => item.id === assetId)?.source;
+        addGeneratingTask(assetId, generationType, batchSize);
+        const marker = useProjectStore.getState().generatingTasks.at(-1);
+        const ownerMatches = (snapshot: Awaited<ReturnType<typeof readProjectOnce>>) => (source !== 'series' || snapshot.series_id === currentProject.series_id) && (type === 'character' ? snapshot.characters : type === 'scene' ? snapshot.scenes : snapshot.props).some(item => item.id === assetId && item.source === source);
+        const isCurrent = () => {
+            const store = useProjectStore.getState();
+            const owner = store.currentProject?.id === projectId ? store.currentProject : store.projects.find(project => project.id === projectId);
+            return isCurrentRuntimeEnvironment(environment.key, environment.generation) && store.generatingTasks.includes(marker!) && !!owner && ownerMatches(owner);
+        };
+        const release = trackAssetGeneration(marker!, isCurrent);
+        let submitted = false;
         try {
-            const stylePrompt = currentProject?.art_direction?.style_config?.positive_prompt || "";
-
-            console.log("[handleGenerate] Starting asset generation...");
-
-            // Call API - now returns immediately with task_id
-            const response = await api.generateAsset(
-                currentProject.id,
-                assetId,
-                type,
-                "ArtDirection",
-                stylePrompt,
-                generationType,
-                prompt,
-                applyStyle,
-                negativePrompt,
-                batchSize,
-                currentProject.model_settings?.t2i_model
-            );
-
-            const taskId = response._task_id;
-            console.log("[handleGenerate] Got task_id:", taskId);
-
-            // Start polling if we got a task_id
-            if (taskId) {
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const status = await api.getTaskStatus(taskId);
-                        console.log("[Polling] Task status:", status.status);
-
-                        if (status.status === "completed") {
-                            clearInterval(pollInterval);
-                            // Refresh project data
-                            const updatedProject = await api.getProject(currentProject.id);
-                            updateProject(currentProject.id, updatedProject);
-                            console.log("Asset generated successfully (async)");
-
-                            if (removeGeneratingTask) {
-                                removeGeneratingTask(assetId, generationType);
-                            }
-                        } else if (status.status === "failed") {
-                            clearInterval(pollInterval);
-                            console.error("Asset generation failed:", status.error);
-                            alert(tv('genFailed', { error: status.error || '' }));
-
-                            // Also refresh project to show updated status
-                            try {
-                                const updatedProject = await api.getProject(currentProject.id);
-                                updateProject(currentProject.id, updatedProject);
-                            } catch (refreshError) {
-                                console.error("Failed to refresh project:", refreshError);
-                            }
-
-                            if (removeGeneratingTask) {
-                                removeGeneratingTask(assetId, generationType);
-                            }
-                        }
-                        // If status is "pending" or "processing", continue polling
-                    } catch (pollError: any) {
-                        console.error("Polling error:", pollError);
-                        clearInterval(pollInterval);
-                        alert(tv('pollFailed', { error: pollError.message || '' }));
-                        if (removeGeneratingTask) {
-                            removeGeneratingTask(assetId, generationType);
-                        }
-                    }
-                }, 2000); // Poll every 2 seconds
+            const response = await api.generateAsset(projectId, assetId, type, "ArtDirection",
+                currentProject.art_direction?.style_config?.positive_prompt || "", generationType,
+                prompt, applyStyle, negativePrompt, batchSize, currentProject.model_settings?.t2i_model);
+            if (!isCurrent()) return;
+            const taskId = response?._task_id;
+            if (taskId !== undefined) {
+                if (typeof taskId !== "string" || !taskId.trim()) throw new Error(feedback("toastGenErr"));
+                const submittedProject = frameCommandSnapshot(projectId, response);
+                submitted = true;
+                await pollTask(projectId, taskId, 2000, assetId, type, isCurrent, ownerMatches, submittedProject.revision);
             } else {
-                // Fallback: no task_id means sync response (shouldn't happen, but just in case)
-                console.warn("[handleGenerate] No task_id in response, falling back to sync mode");
-                updateProject(currentProject.id, response);
-                console.log("Asset generated successfully");
-                if (removeGeneratingTask) {
-                    removeGeneratingTask(assetId, generationType);
-                }
+                await confirmRawProjectAck(projectId, response, { isCurrent: snapshot => isCurrent() && ownerMatches(snapshot) });
             }
-        } catch (error: any) {
-            console.error("Failed to generate asset:", error);
-            alert(tv('startGenFailed', { error: error.response?.data?.detail || error.message }));
-            if (removeGeneratingTask) {
-                removeGeneratingTask(assetId, generationType);
-            }
-        }
-    };
-
-    // Delete asset handler
-    const handleDeleteAsset = async (assetId: string, type: string) => {
-        if (!currentProject) return;
-        if (!confirm(`Are you sure you want to delete this ${type}?`)) return;
-
-        try {
-            if (type === "character") {
-                await crudApi.deleteCharacter(currentProject.id, assetId);
-            } else if (type === "scene") {
-                await crudApi.deleteScene(currentProject.id, assetId);
-            } else if (type === "prop") {
-                await crudApi.deleteProp(currentProject.id, assetId);
-            }
-            // Refresh project data
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
         } catch (error) {
-            console.error("Failed to delete asset:", error);
-            alert("Failed to delete asset");
+            if (!isCurrent()) return;
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed")
+                : tv(submitted ? "pollFailed" : "startGenFailed", { error: error instanceof Error ? error.message : "" }));
+        } finally {
+            if (isCurrent()) removeGeneratingTask(assetId, generationType);
+            release();
         }
     };
 
-    // Create asset handler
+    const handleDeleteAsset = async (assetId: string, type: string) => {
+        if (!currentProject || !confirm(`Are you sure you want to delete this ${type}?`)) return;
+        try {
+            const response = type === "character" ? await crudApi.deleteCharacter(currentProject.id, assetId)
+                : type === "scene" ? await crudApi.deleteScene(currentProject.id, assetId)
+                : await crudApi.deleteProp(currentProject.id, assetId);
+            await confirmRawProjectAck(currentProject.id, response);
+        } catch (error) {
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed") : "Failed to delete asset");
+        }
+    };
+
     const handleCreateAsset = async (data: { name: string; description: string }) => {
         if (!currentProject) return;
-
+        const session = createSession.current;
         try {
-            if (activeTab === "character") {
-                await crudApi.createCharacter(currentProject.id, data);
-            } else if (activeTab === "scene") {
-                await crudApi.createScene(currentProject.id, data);
-            } else if (activeTab === "prop") {
-                await crudApi.createProp(currentProject.id, data);
-            }
-            // Refresh project data
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
-            setIsCreateDialogOpen(false);
+            const response = activeTab === "character" ? await crudApi.createCharacter(currentProject.id, data)
+                : activeTab === "scene" ? await crudApi.createScene(currentProject.id, data)
+                : await crudApi.createProp(currentProject.id, data);
+            await confirmRawProjectAck(currentProject.id, response);
+            if (createSession.current === session) setIsCreateDialogOpen(false);
         } catch (error) {
-            console.error("Failed to create asset:", error);
-            alert("Failed to create asset");
+            // A valid committed ACK has already created the asset; don't leave a
+            // create button inviting an accidental duplicate when only GET failed.
+            if (error instanceof ProjectReadbackError && createSession.current === session) setIsCreateDialogOpen(false);
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed") : "Failed to create asset");
         }
     };
 
     // Video Handlers
-    const handleGenerateVideo = async (assetId: string, type: string, prompt: string, duration: number, assetSubType: string = "full_body") => {
+    const handleGenerateVideo = async (assetId: string, type: string, prompt: string, duration: number, assetSubType: string = "full_body", audioUrl?: string) => {
         if (!currentProject) return;
 
         // Validate and map the assetSubType to ensure correct values are passed
@@ -232,72 +230,39 @@ export default function ConsistencyVault() {
         // Use a more specific generation type to avoid state pollution
         const generationType = assetSubType === "head_shot" ? "video_head_shot" : "video_full_body";
 
-        if (addGeneratingTask) {
-            addGeneratingTask(assetId, generationType, 1);
-        }
-
+        if (useProjectStore.getState().generatingTasks.some(task => task.assetId === assetId && task.generationType === generationType && isAssetGenerationActive(task))) return;
+        const projectId = currentProject.id;
+        const environment = requireActiveRuntimeEnvironment();
+        const source = (type === 'character' ? currentProject.characters : type === 'scene' ? currentProject.scenes : currentProject.props).find(item => item.id === assetId)?.source;
+        addGeneratingTask(assetId, generationType, 1);
+        const marker = useProjectStore.getState().generatingTasks.at(-1);
+        const ownerMatches = (snapshot: Awaited<ReturnType<typeof readProjectOnce>>) => (source !== 'series' || snapshot.series_id === currentProject.series_id) && (type === 'character' ? snapshot.characters : type === 'scene' ? snapshot.scenes : snapshot.props).some(item => item.id === assetId && item.source === source);
+        const isCurrent = () => {
+            const store = useProjectStore.getState();
+            const owner = store.currentProject?.id === projectId ? store.currentProject : store.projects.find(project => project.id === projectId);
+            return isCurrentRuntimeEnvironment(environment.key, environment.generation) && store.generatingTasks.includes(marker!) && !!owner && ownerMatches(owner);
+        };
+        const release = trackAssetGeneration(marker!, isCurrent);
+        let submitted = false;
         try {
-            console.log(`[handleGenerateVideo] Starting ${generationType} generation for asset ${type}, type: ${finalAssetType}...`);
-            const response = await api.generateMotionRef(
-                currentProject.id,
-                assetId,
-                finalAssetType,
-                prompt,
-                undefined, // audioUrl
-                duration
-            );
-
-            const taskId = response._task_id;
-            console.log("[handleGenerateVideo] Got task_id:", taskId);
-
-            if (taskId) {
-                // Polling mechanism for video task
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const status = await api.getTaskStatus(taskId);
-                        console.log(`[Video Polling] Task ${taskId} status:`, status.status);
-
-                        if (status.status === "completed") {
-                            clearInterval(pollInterval);
-                            // Refresh project data
-                            const updatedProject = await api.getProject(currentProject.id);
-                            updateProject(currentProject.id, updatedProject);
-                            if (removeGeneratingTask) {
-                                removeGeneratingTask(assetId, generationType);
-                            }
-                            console.log(`[Video Polling] ${generationType} generated successfully`);
-                        } else if (status.status === "failed") {
-                            clearInterval(pollInterval);
-                            alert(tv('genFailed', { error: status.error || '' }));
-                            if (removeGeneratingTask) {
-                                removeGeneratingTask(assetId, generationType);
-                            }
-                            // Still refresh to show failed status if any
-                            const updatedProject = await api.getProject(currentProject.id);
-                            updateProject(currentProject.id, updatedProject);
-                        }
-                    } catch (pollError: any) {
-                        console.error("Video polling error:", pollError);
-                        clearInterval(pollInterval);
-                        alert(tv('pollFailed', { error: pollError.message || '' }));
-                        if (removeGeneratingTask) {
-                            removeGeneratingTask(assetId, generationType);
-                        }
-                    }
-                }, 3000); // Poll every 3 seconds for video
+            const response = await api.generateMotionRef(projectId, assetId, finalAssetType, prompt, audioUrl, duration);
+            if (!isCurrent()) return;
+            const taskId = response?._task_id;
+            if (taskId !== undefined) {
+                if (typeof taskId !== "string" || !taskId.trim()) throw new Error(feedback("toastGenErr"));
+                const submittedProject = frameCommandSnapshot(projectId, response);
+                submitted = true;
+                await pollTask(projectId, taskId, 3000, assetId, type, isCurrent, ownerMatches, submittedProject.revision);
             } else {
-                // Fallback for sync response
-                updateProject(currentProject.id, response);
-                if (removeGeneratingTask) {
-                    removeGeneratingTask(assetId, generationType);
-                }
+                await confirmRawProjectAck(projectId, response, { isCurrent: snapshot => isCurrent() && ownerMatches(snapshot) });
             }
-        } catch (error: any) {
-            console.error("Failed to generate video:", error);
-            alert(tv('startGenFailed', { error: error.response?.data?.detail || error.message }));
-            if (removeGeneratingTask) {
-                removeGeneratingTask(assetId, generationType);
-            }
+        } catch (error) {
+            if (!isCurrent()) return;
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed")
+                : tv(submitted ? "pollFailed" : "startGenFailed", { error: error instanceof Error ? error.message : "" }));
+        } finally {
+            if (isCurrent()) removeGeneratingTask(assetId, generationType);
+            release();
         }
     };
 
@@ -306,12 +271,11 @@ export default function ConsistencyVault() {
         if (!confirm("Are you sure you want to delete this video? This action cannot be undone.")) return;
 
         try {
-            await api.deleteAssetVideo(currentProject.id, type, assetId, videoId);
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
+            const response = await api.deleteAssetVideo(currentProject.id, type, assetId, videoId);
+            await confirmRawProjectAck(currentProject.id, response);
         } catch (error: any) {
             console.error("Failed to delete video:", error);
-            alert(`Failed to delete video: ${error.message}`);
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed") : `Failed to delete video: ${error.message}`);
         }
     };
 
@@ -327,31 +291,43 @@ export default function ConsistencyVault() {
 
         try {
             const updatedProject = await api.syncDescriptions(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
+            await confirmRawProjectAck(currentProject.id, updatedProject);
             alert(tv("syncSuccess"));
         } catch (error: any) {
             console.error("Failed to sync descriptions:", error);
-            alert(tv('syncFailed', { error: error.message }));
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed") : tv("syncFailed", { error: error.message }));
         }
     };
 
-    // Upload handlers
-    const handleOpenUploadModal = (asset: any, type: string) => {
-        setUploadTarget({
-            id: asset.id,
-            type: type,
-            name: asset.name,
-            description: asset.description
-        });
+    const handleToggleLock = async (assetId: string, type: string) => {
+        if (!currentProject) return;
+        try {
+            const response = await api.toggleAssetLock(currentProject.id, assetId, type);
+            await confirmRawProjectAck(currentProject.id, response);
+        } catch (error) {
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed") : "Failed to update asset lock");
+        }
+    };
+
+    const handleOpenUploadModal = (asset: { id: string; name: string; description: string }, type: string) => {
+        if (!currentProject) return;
+        const session = {};
+        uploadSession.current = session;
+        setUploadTarget({ id: asset.id, type, name: asset.name, description: asset.description, projectId: currentProject.id, session });
         setIsUploadModalOpen(true);
     };
 
-    const handleUploadComplete = async (updatedScript: any) => {
-        if (currentProject) {
-            updateProject(currentProject.id, updatedScript);
+    const closeUpload = () => {
+        if (uploadTarget && uploadSession.current === uploadTarget.session) {
+            uploadSession.current = null;
+            setIsUploadModalOpen(false); setUploadTarget(null);
         }
-        setIsUploadModalOpen(false);
-        setUploadTarget(null);
+    };
+    const handleUploadComplete = async (response: unknown) => {
+        if (!uploadTarget) return;
+        try { await confirmProjectAck(uploadTarget.projectId, response); }
+        catch (error) { alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed") : "Upload could not be confirmed"); }
+        closeUpload();
     };
 
     const assets = activeTab === "character" ? currentProject?.characters :
@@ -417,6 +393,7 @@ export default function ConsistencyVault() {
                     </div>
                 </div>
             )}
+            {assets?.some(asset => asset.status === 'needs_confirmation') && <AssetRecoveryNotice onRead={readAssetsAgain} reading={readingAsset} readFailed={assetReadFailed} />}
             <div className="flex-1 overflow-y-auto p-6">
                 {!currentProject ? (
                     <div className="flex items-center justify-center h-full text-text-muted">
@@ -431,28 +408,31 @@ export default function ConsistencyVault() {
                     </div>
                 ) : (
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                        {assets?.map((asset: any) => (
-                            <AssetCard
-                                key={asset.id}
-                                asset={asset}
-                                type={activeTab}
-                                isGenerating={isAssetGenerating(asset.id)}
-                                onGenerate={() => handleGenerate(asset.id, activeTab)}
-                                onToggleLock={() => api.toggleAssetLock(currentProject.id, asset.id, activeTab).then(updated => updateProject(currentProject.id, updated))}
-                                onClick={() => {
-                                    setSelectedAssetId(asset.id);
-                                    setSelectedAssetType(activeTab);
-                                }}
-                                onDelete={() => handleDeleteAsset(asset.id, activeTab)}
-                                onUpload={() => handleOpenUploadModal(asset, activeTab)}
-                            />
-                        ))}
+                        {assets?.map((asset: any) => {
+                            const cardProps = {
+                                asset, type: activeTab, isGenerating: isAssetGenerating(asset.id),
+                                onToggleLock: () => handleToggleLock(asset.id, activeTab),
+                                onClick: () => { setWorkbenchSession(session => session + 1); setSelectedAssetId(asset.id); setSelectedAssetType(activeTab); },
+                                onDelete: () => handleDeleteAsset(asset.id, activeTab),
+                                onUpload: () => handleOpenUploadModal(asset, activeTab),
+                            };
+                            return activeTab === 'character' ? <AssetCard key={asset.id} {...cardProps} onGenerate={() => handleGenerate(asset.id, activeTab)} />
+                                : <ScenePropVaultItem key={`${currentProject.id}:${activeTab}:${asset.id}:${asset.source}:${currentProject.series_id}`}
+                                    {...cardProps} project={currentProject} type={activeTab}
+                                    selected={selectedAssetId === asset.id && selectedAssetType === activeTab}
+                                    onClose={() => { setSelectedAssetId(null); setSelectedAssetType(null); }}
+                                    onUpdateDescription={description => handleUpdateDescription(asset.id, activeTab, description)}
+                                    onGenerate={(applyStyle, negativePrompt, batchSize) => handleGenerate(asset.id, activeTab, 'all', '', applyStyle, negativePrompt, batchSize)}
+                                    onGenerateVideo={(prompt, duration) => handleGenerateVideo(asset.id, activeTab, prompt, duration, 'video')}
+                                    onDeleteVideo={videoId => handleDeleteVideo(asset.id, activeTab, videoId)}
+                                    isGeneratingVideo={getAssetGeneratingTypes(asset.id).some(task => task.type.startsWith('video'))} />;
+                        })}
                         {/* Create New Asset Button */}
                         <motion.div
                             layout
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            onClick={() => setIsCreateDialogOpen(true)}
+                            onClick={() => { createSession.current = {}; setIsCreateDialogOpen(true); }}
                             className="group relative aspect-[3/4] bg-surface rounded-2xl border-2 border-dashed border-glass-border hover:border-primary/50 overflow-hidden transition-all cursor-pointer flex items-center justify-center hover:bg-glass"
                         >
                             <div className="flex flex-col items-center gap-3 text-text-secondary group-hover:text-primary transition-colors">
@@ -466,9 +446,9 @@ export default function ConsistencyVault() {
 
             {/* Detail Modal / Workbench */}
             <AnimatePresence>
-                {selectedAsset && selectedAssetId && selectedAssetType && (
-                    selectedAssetType === "character" ? (
+                {selectedAsset && selectedAssetId && selectedAssetType === "character" && (
                         <CharacterWorkbench
+                            key={workbenchSession}
                             asset={selectedAsset}
                             onClose={() => {
                                 setSelectedAssetId(null);
@@ -479,27 +459,9 @@ export default function ConsistencyVault() {
                             generatingTypes={getAssetGeneratingTypes(selectedAssetId)}
                             stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
                             styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
-                            onGenerateVideo={(prompt: string, duration: number, subType?: string) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, subType || "video")}
+                            onGenerateVideo={(prompt: string, duration: number, subType?: string, audioUrl?: string) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, subType || "video", audioUrl)}
                             onDeleteVideo={(videoId: string) => handleDeleteVideo(selectedAssetId, selectedAssetType, videoId)}
                         />
-                    ) : (
-                        <CharacterDetailModal
-                            asset={selectedAsset}
-                            type={selectedAssetType}
-                            onClose={() => {
-                                setSelectedAssetId(null);
-                                setSelectedAssetType(null);
-                            }}
-                            onUpdateDescription={(desc: string) => handleUpdateDescription(selectedAssetId, selectedAssetType, desc)}
-                            onGenerate={(applyStyle: boolean, negativePrompt: string, batchSize: number) => handleGenerate(selectedAssetId, selectedAssetType, "all", "", applyStyle, negativePrompt, batchSize)}
-                            isGenerating={isAssetGenerating(selectedAssetId)}
-                            stylePrompt={currentProject?.art_direction?.style_config?.positive_prompt || ""}
-                            styleNegativePrompt={currentProject?.art_direction?.style_config?.negative_prompt || ""}
-                            onGenerateVideo={(prompt: string, duration: number) => handleGenerateVideo(selectedAssetId, selectedAssetType, prompt, duration, "video")}
-                            onDeleteVideo={(videoId: string) => handleDeleteVideo(selectedAssetId, selectedAssetType, videoId)}
-                            isGeneratingVideo={getAssetGeneratingTypes(selectedAssetId).some((t: any) => t.type.startsWith("video"))}
-                        />
-                    )
                 )}
             </AnimatePresence>
 
@@ -510,7 +472,7 @@ export default function ConsistencyVault() {
                 {isCreateDialogOpen && (
                     <CreateAssetDialog
                         type={activeTab}
-                        onClose={() => setIsCreateDialogOpen(false)}
+                        onClose={() => { createSession.current = null; setIsCreateDialogOpen(false); }}
                         onCreate={handleCreateAsset}
                     />
                 )}
@@ -520,15 +482,12 @@ export default function ConsistencyVault() {
             {uploadTarget && currentProject && (
                 <UploadAssetModal
                     isOpen={isUploadModalOpen}
-                    onClose={() => {
-                        setIsUploadModalOpen(false);
-                        setUploadTarget(null);
-                    }}
+                    onClose={closeUpload}
                     assetId={uploadTarget.id}
                     assetType={uploadTarget.type as "character" | "scene" | "prop"}
                     assetName={uploadTarget.name}
                     defaultDescription={uploadTarget.description}
-                    scriptId={currentProject.id}
+                    scriptId={uploadTarget.projectId}
                     onUploadComplete={handleUploadComplete}
                 />
             )}
@@ -536,49 +495,234 @@ export default function ConsistencyVault() {
     );
 }
 
-function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo }: any) {
+const DEFAULT_VAULT_NEGATIVE = "low quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry";
+
+type ImageControls = {
+    applyStyle: boolean; setApplyStyle: (value: boolean) => void;
+    negativePrompt: string; setNegativePrompt: (value: string) => void;
+    onBatchSizeChange?: (value: number) => boolean;
+    inheritedNegative: string; qwen: boolean; gpt: boolean;
+};
+type DetailProps = {
+    asset: Scene | Prop; type: 'scene' | 'prop'; onClose: () => void;
+    onUpdateDescription: (description: string) => Promise<boolean>;
+    onGenerate: (applyStyle: boolean, negativePrompt: string, batchSize: number) => void;
+    isGenerating: boolean; stylePrompt?: string; styleNegativePrompt?: string;
+    onGenerateVideo: (prompt: string, duration: number) => void;
+    onDeleteVideo: (id: string) => void; isGeneratingVideo: boolean;
+    imageControls?: ImageControls; requestResults?: ReactNode;
+    motionBlocked?: boolean; motionResults?: ReactNode; onMotionDraftChange?: () => void;
+};
+type VaultItemProps = Omit<DetailProps, 'stylePrompt' | 'styleNegativePrompt' | 'imageControls' | 'requestResults' | 'motionBlocked' | 'motionResults' | 'onMotionDraftChange'> & {
+    project: Project; selected: boolean; onClick: () => void;
+    onToggleLock: () => void; onDelete: () => void; onUpload: () => void;
+};
+
+/** One mounted item owns both visible submission controls and the original receipt view. */
+function ScenePropVaultItem(props: VaultItemProps) {
+    const { project, asset, type, selected, onClick } = props;
+    const t = useTranslations('castWorkbench');
+    const environment = useSyncExternalStore(subscribeRuntimeEnvironment, getRuntimeEnvironment, () => null);
+    const series = useProjectStore(state => state.currentSeries);
+    const model = project.model_settings?.t2i_model || 'wan2.1-t2i';
+    const strict = usesStudioImageCore(type, model, 'image');
+    const qwen = usesStudioQwenImageCore(type, model, 'image');
+    const gpt = strict && isStudioGptImageModel(model);
+    const freshInputs = qwen || gpt;
+    const seriesCurrent = !!series && series.id === project.series_id && (!freshInputs || series.revision === project.read_versions?.series?.revision && !project.sharedAssetsNeedRefresh);
+    const style = (project.art_direction ?? (strict && seriesCurrent ? series?.art_direction : null))?.style_config;
+    const requests = useStudioAssetImageRequests({ kind: type, open: true, projectId: project.id,
+        assetId: asset.id, source: asset.source, seriesId: project.series_id });
+    const identity = useMemo(() => ({ projectId: project.id, seriesId: project.series_id, assetId: asset.id, source: asset.source, type, environment, model }), [project.id, project.series_id, asset.id, asset.source, type, environment, model]);
+    const latest = useRef(identity); latest.current = identity;
+    const draftEpoch = useRef(0);
+    const detailSession = useMemo(() => ({ identity, selected, motionEpoch: draftEpoch.current }), [identity, selected]);
+    const latestDetail = useRef(detailSession); latestDetail.current = detailSession;
+    const lifecycle = useRef<object | null>(null);
+    const pending = useRef<object | null>(null);
+    const [preparing, setPreparing] = useState<object | null>(null);
+    const [readFailed, setReadFailed] = useState<object | null>(null);
+    const [applyStyle, setApplyStyle] = useState(true);
+    // Only authored/default negative text belongs in this draft; inherited style stays separate.
+    const seedNegative = !freshInputs && style?.negative_prompt || DEFAULT_VAULT_NEGATIVE;
+    const [negativePrompt, setNegativePrompt] = useState(seedNegative);
+    const initialNegative = useRef(seedNegative); initialNegative.current = seedNegative;
+    useEffect(() => {
+        const lease = {}; lifecycle.current = lease;
+        setApplyStyle(true); setNegativePrompt(initialNegative.current);
+        return () => { if (lifecycle.current === lease) lifecycle.current = null; };
+        // Draft initialization belongs to this identity, never to a later read of the same asset.
+    }, [identity]);
+    const detailCurrent = () => latestDetail.current === detailSession && detailSession.selected;
+    const motionCurrent = (lease = lifecycle.current) => !!lease && lifecycle.current === lease
+        && latest.current === identity && detailCurrent() && !!environment
+        && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+    const motionRequests = useStudioMotionRequests({ open: selected, projectId: project.id,
+        assetId: asset.id, assetKind: type, source: asset.source, seriesId: project.series_id,
+        onCreated: () => {
+            if (!motionCurrent()) throw new ProjectReadbackError('Motion author session changed');
+            detailSession.motionEpoch = draftEpoch.current;
+        },
+        readback: async (result, isCurrent) => {
+            const lease = lifecycle.current, epoch = detailSession.motionEpoch;
+            const current = (snapshot: Project) => motionCurrent(lease) && draftEpoch.current === epoch && isCurrent(snapshot);
+            const snapshot = await readProjectOnce(result.journal.projectId, undefined, { isCurrent: current });
+            if (!current(snapshot)) throw new ProjectReadbackError('Motion result is no longer current');
+            return snapshot;
+        } });
+    const generateMotion = async (prompt: string, duration: number) => {
+        const lease = lifecycle.current;
+        if (!motionCurrent(lease) || !motionRequests.owner || motionRequests.busy || motionRequests.blocked || props.isGeneratingVideo) return;
+        const baseline = project, epoch = draftEpoch.current;
+        const sameOwner = (snapshot: Project) => snapshot.series_id === baseline.series_id
+            && (type === 'scene' ? snapshot.scenes : snapshot.props).some(item => item.id === asset.id && item.source === asset.source);
+        const authorCurrent = () => {
+            const root = useProjectStore.getState().currentProject;
+            return motionCurrent(lease) && draftEpoch.current === epoch && !!root && sameReadVersion(root, baseline)
+                && !root.sharedAssetsNeedRefresh && sameOwner(root);
+        };
+        setReadFailed(null);
+        await motionRequests.submit(async () => {
+            try {
+                const fresh = await readProjectOnce(baseline.id, undefined, { isCurrent: snapshot => authorCurrent() && sameOwner(snapshot) });
+                if (!authorCurrent() || !sameReadVersion(fresh, baseline)) throw new ProjectReadbackError('Motion source changed');
+                const qualification = await readStudioMotionEligibility({ ...motionRequests.owner!, assetType: type, isCurrent: authorCurrent });
+                if (!authorCurrent()) throw new ProjectReadbackError('Motion draft changed');
+                if (!qualification.eligible) {
+                    const legacy = ['model_unsupported', 'configured_audio_present', 'selected_image_required'].includes(qualification.reason ?? '')
+                        || qualification.reason === 'source_kind_unsupported' && ['remote_url', 'object_key'].includes(qualification.source_kind);
+                    if (!legacy) throw new ProjectReadbackError('Motion source cannot be confirmed');
+                    return 'legacy';
+                }
+                const selectedImage = (type === 'scene' ? fresh.scenes : fresh.props).find(item => item.id === asset.id)?.image_asset?.selected_id;
+                if (selectedImage !== qualification.selected_image_id) throw new ProjectReadbackError('Motion image changed');
+                return { input: { asset_id: asset.id, asset_type: type, prompt, duration, batch_size: 1,
+                    expected_target: qualification.expected_target }, selectedImageId: qualification.selected_image_id! };
+            } catch (error) { if (motionCurrent(lease)) setReadFailed(identity); throw error; }
+        }, authorCurrent, () => props.onGenerateVideo(prompt, duration));
+    };
+    const busy = props.isGenerating || requests.busy || preparing === identity;
+    const negativeBlocked = (negative: string, useStyle: boolean, inherited: string) => qwen
+        ? Array.from([negative, useStyle ? inherited : ''].filter(Boolean).join(', ')).length > 500
+        : !!negative || !gpt && useStyle && !!inherited;
+    const generate = async (useStyle: boolean, negative: string, batchSize: number, detail?: object) => {
+        if (detail && latestDetail.current !== detail) return;
+        if (!strict) { props.onGenerate(useStyle, negative, batchSize); return; }
+        const lease = lifecycle.current, epoch = draftEpoch.current;
+        if (!environment || !lease || pending.current === lease || busy) return;
+        if (negativeBlocked(negative, useStyle, style?.negative_prompt || '')) { onClick(); return; }
+        const live = () => lifecycle.current === lease && latest.current === identity
+            && (!freshInputs || draftEpoch.current === epoch && (!detail || latestDetail.current === detail))
+            && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+        const ownerMatches = (snapshot: Project) => (asset.source !== 'series' && !freshInputs || snapshot.series_id === project.series_id)
+            && (type === 'scene' ? snapshot.scenes : snapshot.props).some(item => item.id === asset.id && item.source === asset.source)
+            && (snapshot.model_settings?.t2i_model || 'wan2.1-t2i') === model;
+        pending.current = lease; setPreparing(identity); setReadFailed(null);
+        try {
+            const fresh = await readProjectOnce(project.id, undefined, { isCurrent: snapshot => live() && ownerMatches(snapshot) });
+            if (!live()) return;
+            if (freshInputs && useStyle && !fresh.art_direction && fresh.series_id) {
+                const inherited = await api.getSeries(fresh.series_id);
+                if (!live()) return;
+                if (!useProjectStore.getState().applySeriesReadSnapshot(fresh.id, fresh.series_id, inherited)) throw new ProjectReadbackError('Series style is not current');
+            }
+            const styleAtSubmission = () => {
+                const state = useProjectStore.getState(), root = state.currentProject, inherited = state.currentSeries;
+                return root?.id === fresh.id ? root.art_direction ?? (inherited?.id === root.series_id ? inherited?.art_direction : null) : null;
+            };
+            const freshStyle = (freshInputs ? styleAtSubmission() : fresh.art_direction ?? (series && series.id === fresh.series_id ? series.art_direction : null))?.style_config;
+            if (negativeBlocked(negative, useStyle, freshStyle?.negative_prompt || '')) { onClick(); return; }
+            const capturedStyle = JSON.stringify(useStyle ? styleAtSubmission() : null);
+            const submissionCurrent = () => {
+                const state = useProjectStore.getState(), root = state.currentProject, inherited = state.currentSeries;
+                if (!live() || !root || root.id !== fresh.id || (gpt ? !sameReadVersion(root, fresh) : root.revision !== fresh.revision) || !ownerMatches(root)
+                    || root.sharedAssetsNeedRefresh || root.readEnvironment !== environment.key) return false;
+                if (useStyle && !root.art_direction && root.series_id
+                    && (!inherited || inherited.id !== root.series_id || inherited.revision !== root.read_versions?.series?.revision)) return false;
+                return capturedStyle === JSON.stringify(useStyle ? styleAtSubmission() : null);
+            };
+            if (freshInputs && !submissionCurrent()) return;
+            if (useProjectStore.getState().generatingTasks.some(task => task.assetId === asset.id && isAssetGenerationActive(task))) return;
+            await requests.submit({ asset_id: asset.id, asset_type: type, generation_type: 'all',
+                style_preset: 'ArtDirection', style_prompt: freshInputs && !useStyle ? '' : freshStyle?.positive_prompt || '',
+                apply_style: useStyle, negative_prompt: negative, batch_size: batchSize, model_name: model, prompt: '' }, freshInputs ? submissionCurrent : undefined);
+        } catch { if (live()) setReadFailed(identity); }
+        finally {
+            if (pending.current === lease) { pending.current = null; if (latest.current === identity && lifecycle.current === lease) setPreparing(null); }
+        }
+    };
+    const closeDetail = () => { if (detailCurrent()) { draftEpoch.current += 1; props.onClose(); } };
+    const results = <>{gpt && (!selected || applyStyle) && !!style?.negative_prompt && <p role="status" className="text-xs text-text-secondary">{t('gptNegativeNotApplied')}</p>}{readFailed === identity && <p role="status" className="text-xs text-amber-300">{t('toastRefreshFailed')}</p>}<StudioImageRequestResults requests={requests} /></>;
+    return <div className="min-w-0 space-y-2">
+        <AssetCard {...props} isGenerating={busy} onGenerate={() => { void generate(true, '', 1); }} />
+        {!selected && results}
+        <AnimatePresence>{selected && <CharacterDetailModal {...props} onClose={closeDetail} isGenerating={busy}
+            onGenerate={(useStyle, negative, batch) => { if (detailCurrent()) void generate(useStyle, negative, batch, detailSession); }}
+            stylePrompt={style?.positive_prompt || ''} styleNegativePrompt={style?.negative_prompt || ''}
+            imageControls={strict ? { applyStyle, setApplyStyle: value => { if (detailCurrent()) { draftEpoch.current += 1; setApplyStyle(value); } },
+                negativePrompt, setNegativePrompt: value => { if (detailCurrent()) { draftEpoch.current += 1; setNegativePrompt(value); } },
+                onBatchSizeChange: freshInputs ? () => { if (!detailCurrent()) return false; draftEpoch.current += 1; return true; } : undefined,
+                inheritedNegative: style?.negative_prompt || '', qwen, gpt } : undefined}
+            requestResults={results} onGenerateVideo={(prompt, duration) => { void generateMotion(prompt, duration); }}
+            isGeneratingVideo={props.isGeneratingVideo || motionRequests.busy} motionBlocked={motionRequests.blocked}
+            onMotionDraftChange={() => { if (detailCurrent()) draftEpoch.current += 1; }}
+            motionResults={<StudioMotionRequestResults requests={motionRequests} />} />}</AnimatePresence>
+    </div>;
+}
+
+function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGenerate, isGenerating, stylePrompt = "", styleNegativePrompt = "", onGenerateVideo, onDeleteVideo, isGeneratingVideo, imageControls, requestResults, motionBlocked, motionResults, onMotionDraftChange }: DetailProps) {
+    const feedback = useTranslations("castWorkbench");
     const [description, setDescription] = useState(asset.description);
     const [isEditing, setIsEditing] = useState(false);
     const currentProject = useProjectStore((state) => state.currentProject);
-    const updateProject = useProjectStore((state) => state.updateProject);
 
     // Style Controls
-    const [applyStyle, setApplyStyle] = useState(true);
-    const [negativePrompt, setNegativePrompt] = useState(styleNegativePrompt || "low quality, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry");
+    const [legacyApplyStyle, setLegacyApplyStyle] = useState(true);
+    const [legacyNegative, setLegacyNegative] = useState(styleNegativePrompt || DEFAULT_VAULT_NEGATIVE);
+    const applyStyle = imageControls?.applyStyle ?? legacyApplyStyle;
+    const setApplyStyle = imageControls?.setApplyStyle ?? setLegacyApplyStyle;
+    const negativePrompt = imageControls?.negativePrompt ?? legacyNegative;
+    const setNegativePrompt = imageControls?.setNegativePrompt ?? setLegacyNegative;
+    const negativeBlocked = !!imageControls && (imageControls.qwen
+        ? Array.from([negativePrompt, applyStyle ? imageControls.inheritedNegative : ''].filter(Boolean).join(', ')).length > 500
+        : !!negativePrompt || !imageControls.gpt && applyStyle && !!imageControls.inheritedNegative);
     const [showAdvanced, setShowAdvanced] = useState(false);
 
     // Video Controls
     const [activeTab, setActiveTab] = useState<"image" | "video">("image");
     const [videoPrompt, setVideoPrompt] = useState(asset.video_prompt || "");
+    const videoPromptEdited = useRef(false);
 
     // Sync local state if asset changes
     useEffect(() => {
         setDescription(asset.description);
-        if (asset.video_prompt) setVideoPrompt(asset.video_prompt);
-        else if (!videoPrompt) {
+        if (!videoPromptEdited.current && asset.video_prompt) setVideoPrompt(asset.video_prompt);
+        else if (!videoPromptEdited.current && !videoPrompt) {
             setVideoPrompt(`Cinematic shot of ${asset.name}, ${asset.description}, looking around, breathing, slight movement, high quality, 4k`);
         }
     }, [asset]);
 
-    // Sync negative prompt if style changes
+    // Only legacy drafts inherit later style text; explicit strict corrections stay cleared.
+    const strictControls = !!imageControls;
     useEffect(() => {
-        if (styleNegativePrompt && (!negativePrompt || negativePrompt.includes("low quality"))) {
-            setNegativePrompt(styleNegativePrompt);
+        if (!strictControls && styleNegativePrompt) {
+            setLegacyNegative(previous => !previous || previous.includes("low quality") ? styleNegativePrompt : previous);
         }
-    }, [styleNegativePrompt]);
+    }, [styleNegativePrompt, strictControls]);
 
-    const handleSave = () => {
-        onUpdateDescription(description);
-        setIsEditing(false);
+    const handleSave = async () => {
+        if (await onUpdateDescription(description)) setIsEditing(false);
     };
 
     const handleSelectVariant = async (variantId: string) => {
         if (!currentProject) return;
+        onMotionDraftChange?.();
         try {
             const updatedProject = await api.selectAssetVariant(currentProject.id, asset.id, type, variantId);
-            updateProject(currentProject.id, updatedProject);
+            await confirmProjectAck(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to select variant:", error);
+            alert(feedback(error instanceof ProjectReadbackError ? "toastReadbackFailed" : "toastSelectErr"));
         }
     };
 
@@ -586,14 +730,15 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
         if (!currentProject) return;
         try {
             const updatedProject = await api.deleteAssetVariant(currentProject.id, asset.id, type, variantId);
-            updateProject(currentProject.id, updatedProject);
+            await confirmProjectAck(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete variant:", error);
+            alert(feedback(error instanceof ProjectReadbackError ? "toastReadbackFailed" : "toastSelectErr"));
         }
     };
 
     const handleGenerateClick = (batchSize: number) => {
-        onGenerate(applyStyle, negativePrompt, batchSize);
+        if (!negativeBlocked) onGenerate(applyStyle, negativePrompt, batchSize);
     };
 
     return (
@@ -630,7 +775,9 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                 onSelect={handleSelectVariant}
                                 onDelete={handleDeleteVariant}
                                 onGenerate={handleGenerateClick}
+                                onBatchSizeChange={imageControls?.onBatchSizeChange}
                                 isGenerating={isGenerating}
+                                generateDisabled={negativeBlocked}
                                 aspectRatio="16:9"
                                 className="h-full"
                             />
@@ -640,11 +787,13 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                 onDelete={onDeleteVideo}
                                 onGenerate={(duration) => onGenerateVideo(videoPrompt, duration)}
                                 isGenerating={isGeneratingVideo}
+                                generateDisabled={motionBlocked}
                                 aspectRatio="16:9"
                                 className="h-full"
                             />
                         )}
                     </div>
+                    {activeTab === "video" && motionResults}
                 </div>
 
                 {/* Right: Details */}
@@ -659,6 +808,16 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
 
                     {/* Content */}
                     <div className="flex-1 p-6 overflow-y-auto space-y-6">
+                        {requestResults}
+                        {imageControls && !imageControls.qwen && negativePrompt && <div className="space-y-2 text-xs text-amber-300">
+                            <p role="status">{feedback('negativeDraftUnsupported')}</p>
+                            <button onClick={() => setNegativePrompt('')} className="text-primary underline">{feedback('clearNegativeForRequest')}</button>
+                        </div>}
+                        {imageControls && !imageControls.qwen && !imageControls.gpt && applyStyle && imageControls.inheritedNegative && <div className="space-y-2 text-xs text-amber-300">
+                            <p role="status">{feedback('negativeUnsupported')}</p>
+                            <button onClick={() => setApplyStyle(false)} className="text-primary underline">{feedback('disableStyleForRequest')}</button>
+                        </div>}
+                        {imageControls?.qwen && negativeBlocked && <p role="status" className="text-xs text-amber-300">{feedback('imageNegativeTooLong')}</p>}
                         {/* Description */}
                         <div className="space-y-2">
                             <div className="flex justify-between items-center">
@@ -673,7 +832,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                 <div className="space-y-2">
                                     <textarea
                                         value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
+                                        onChange={(e) => { onMotionDraftChange?.(); setDescription(e.target.value); }}
                                         className="w-full h-32 bg-input-bg border border-glass-border rounded-lg p-3 text-sm text-text-secondary resize-none focus:border-primary focus:outline-none"
                                     />
                                     <div className="flex justify-end gap-2">
@@ -694,7 +853,7 @@ function CharacterDetailModal({ asset, type, onClose, onUpdateDescription, onGen
                                 <label className="text-sm font-bold text-text-secondary uppercase">Video Prompt</label>
                                 <textarea
                                     value={videoPrompt}
-                                    onChange={(e) => setVideoPrompt(e.target.value)}
+                                    onChange={(e) => { videoPromptEdited.current = true; onMotionDraftChange?.(); setVideoPrompt(e.target.value); }}
                                     className="w-full h-24 bg-input-bg border border-glass-border rounded-lg p-3 text-sm text-text-secondary resize-none focus:border-primary focus:outline-none"
                                     placeholder="Describe the motion..."
                                 />
@@ -849,28 +1008,8 @@ function ImageWithRetry({ src, alt, className }: { src: string, alt: string, cla
 
 function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClick, onDelete, onUpload }: any) {
     const tv = useTranslations("vault");
+    const recovery = useTranslations("assetRecovery");
     const isLocked = asset.locked || false;
-    const currentProject = useProjectStore((state) => state.currentProject);
-    const updateProject = useProjectStore((state) => state.updateProject);
-
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !currentProject) return;
-
-        try {
-            // 1. Upload file
-            const { url } = await api.uploadFile(file);
-
-            // 2. Update asset image
-            const updatedProject = await api.updateAssetImage(currentProject.id, asset.id, type, url);
-
-            // 3. Update local state
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
-            console.error("Failed to upload asset image:", error);
-            alert("Failed to upload image");
-        }
-    };
 
     const imageUrl = (type === 'character' ? (asset.avatar_url || asset.image_url) : asset.image_url);
     const fullImageUrl = getAssetUrl(imageUrl);
@@ -924,6 +1063,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                         e.stopPropagation();
                         onToggleLock();
                     }}
+                    title={isLocked ? "Unlock" : "Lock"}
                     className={`p-2 rounded-full backdrop-blur-md transition-colors ${isLocked
                         ? "bg-primary/20 text-primary hover:bg-primary/30"
                         : "bg-surface text-foreground hover:bg-hover-bg"
@@ -953,7 +1093,7 @@ function AssetCard({ asset, type, isGenerating, onGenerate, onToggleLock, onClic
                         size="sm"
                         className="flex-1"
                     >
-                        {isGenerating ? "Generating..." : "Generate"}
+                        {isGenerating ? "Generating..." : asset.status === "needs_confirmation" ? recovery("newGenerate") : "Generate"}
                     </WorkflowActionButton>
                     <button
                         onClick={(e) => {

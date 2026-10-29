@@ -2,7 +2,7 @@
  * Tests for Phase 2: Custom prompt configuration logic.
  * - PromptConfig defaults and fallback
  * - API payload construction for prompt config
- * - Polish API script_id passthrough
+ * Polish API payloads are covered by the actual PolishPanel component tests.
  */
 import { describe, it, expect } from 'vitest';
 
@@ -77,64 +77,6 @@ describe('substituteR2VPlaceholders', () => {
         const template = "Slots: {SLOTS}";
         const result = substituteR2VPlaceholders(template, "No reference videos provided.");
         expect(result).toBe("Slots: No reference videos provided.");
-    });
-});
-
-// ── Video polish payload with script_id ──
-
-function buildVideoPolishPayload(draftPrompt: string, feedback: string = "", scriptId: string = "") {
-    return {
-        draft_prompt: draftPrompt,
-        feedback: feedback,
-        script_id: scriptId,
-    };
-}
-
-function buildR2VPolishPayload(
-    draftPrompt: string,
-    slots: { description: string }[],
-    feedback: string = "",
-    scriptId: string = "",
-) {
-    return {
-        draft_prompt: draftPrompt,
-        slots: slots,
-        feedback: feedback,
-        script_id: scriptId,
-    };
-}
-
-describe('buildVideoPolishPayload with scriptId', () => {
-    it('should include empty script_id by default', () => {
-        const payload = buildVideoPolishPayload("prompt");
-        expect(payload.script_id).toBe("");
-    });
-
-    it('should include script_id when provided', () => {
-        const payload = buildVideoPolishPayload("prompt", "", "project-123");
-        expect(payload.script_id).toBe("project-123");
-    });
-
-    it('should include all fields together', () => {
-        const payload = buildVideoPolishPayload("prompt", "feedback text", "project-123");
-        expect(payload).toEqual({
-            draft_prompt: "prompt",
-            feedback: "feedback text",
-            script_id: "project-123",
-        });
-    });
-});
-
-describe('buildR2VPolishPayload with scriptId', () => {
-    it('should include script_id when provided', () => {
-        const slots = [{ description: "warrior" }];
-        const payload = buildR2VPolishPayload("prompt", slots, "", "project-456");
-        expect(payload.script_id).toBe("project-456");
-    });
-
-    it('should default script_id to empty string', () => {
-        const payload = buildR2VPolishPayload("prompt", []);
-        expect(payload.script_id).toBe("");
     });
 });
 

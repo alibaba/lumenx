@@ -7,9 +7,19 @@ See: https://help.aliyun.com/zh/model-studio/cosyvoice-python-sdk
 """
 import os
 import logging
-from typing import Optional, Tuple
+import math
+from dataclasses import asdict, dataclass, field
+from threading import RLock
+from types import MappingProxyType
+from typing import Mapping, Optional, Tuple
+
+from src.utils.endpoints import get_provider_base_url
 
 logger = logging.getLogger(__name__)
+
+_DASHSCOPE_TTS_CONSTRUCTOR_LOCK = RLock()
+_MISSING = object()
+_DEFAULT_DASHSCOPE_WEBSOCKET_API_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference'
 
 
 # Voice registry: key -> {model_id, name, gender, model}
@@ -108,6 +118,108 @@ VOICES = {
 }
 
 
+TTS_RULES_VERSION = 'tts-parameters-v1'
+TTSScalar = str | int | float | bool | None
+
+
+def _text_value(value, name, *, nonempty=False):
+    if not isinstance(value, str) or (nonempty and not value.strip()):
+        raise ValueError(f'{name} must be valid text')
+    try:
+        value.encode('utf-8')
+    except UnicodeError as exc:
+        raise ValueError(f'{name} must be valid UTF-8') from exc
+    return value
+
+
+def _finite_number(value, name):
+    try:
+        valid = type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        valid = False
+    if not valid:
+        raise ValueError(f'{name} must be a finite number')
+    return value
+
+
+@dataclass(frozen=True)
+class TTSParameterNotice:
+    field: str
+    reason: str
+    requested: TTSScalar
+    effective: TTSScalar = None
+
+    def __post_init__(self):
+        _text_value(self.field, 'field', nonempty=True)
+        _text_value(self.reason, 'reason', nonempty=True)
+        for value in (self.requested, self.effective):
+            if isinstance(value, str):
+                _text_value(value, 'parameter')
+            elif value is not None and type(value) is not bool:
+                _finite_number(value, 'parameter')
+
+
+@dataclass(frozen=True)
+class PreparedTTS:
+    """Local SDK input, not proof of provider effects or a generation receipt.
+
+    Only scalar tuples are retained. Output paths, credentials and response URLs
+    belong to execution, never to this persistable value. Use prepare() to build.
+    """
+    family: str
+    parameters: tuple[tuple[str, TTSScalar], ...]
+    adjustments: tuple[TTSParameterNotice, ...] = ()
+    unsupported: tuple[TTSParameterNotice, ...] = ()
+    rules_version: str = field(default=TTS_RULES_VERSION, init=False)
+
+    def __post_init__(self):
+        if self.family not in ('cosyvoice', 'qwen3'):
+            raise ValueError('Unsupported TTS family')
+        parameters = tuple((key, value) for key, value in self.parameters)
+        required = {'model', 'voice', 'text'}
+        allowed = required | ({'speech_rate', 'pitch_rate', 'volume', 'instruction'}
+                              if self.family == 'cosyvoice' else
+                              {'language_type', 'stream', 'instructions', 'optimize_instructions'})
+        keys = [key for key, _ in parameters]
+        if len(set(keys)) != len(keys) or not required <= set(keys) or not set(keys) <= allowed:
+            raise ValueError('Invalid prepared TTS parameter fields')
+        for key, value in parameters:
+            if isinstance(value, str):
+                _text_value(value, key)
+            elif type(value) is not bool:
+                _finite_number(value, key)
+        object.__setattr__(self, 'parameters', parameters)
+        for name in ('adjustments', 'unsupported'):
+            notices = tuple(getattr(self, name))
+            if any(type(value) is not TTSParameterNotice for value in notices):
+                raise ValueError('Invalid prepared TTS parameter notice')
+            object.__setattr__(self, name, notices)
+
+    @property
+    def model(self) -> str:
+        return dict(self.parameters)['model']
+
+    @property
+    def voice(self) -> str:
+        return dict(self.parameters)['voice']
+
+    @property
+    def text(self) -> str:
+        return dict(self.parameters)['text']
+
+    def sdk_kwargs(self) -> dict:
+        """Fresh copy; CosyVoice passes text to call, the rest to its constructor."""
+        return dict(self.parameters)
+
+    def to_snapshot(self) -> dict:
+        return {
+            'rules_version': self.rules_version, 'family': self.family,
+            'parameters': self.sdk_kwargs(),
+            'adjustments': [asdict(value) for value in self.adjustments],
+            'unsupported': [asdict(value) for value in self.unsupported],
+        }
+
+
 class TTSProcessor:
     """Text-to-Speech processor using CosyVoice"""
 
@@ -115,26 +227,64 @@ class TTSProcessor:
         self,
         api_key: Optional[str] = None,
         model: str = "cosyvoice-v3-flash",
-        voice: str = "longanyang"
+        voice: str = "longanyang",
+        *,
+        env: Optional[Mapping[str, str]] = None,
     ):
         """
         Initialize TTS processor
 
         Args:
-            api_key: DashScope API key. If None, will read from DASHSCOPE_API_KEY env var
+            api_key: DashScope API key. If None, reads from env when provided,
+                otherwise keeps standalone process environment compatibility.
             model: TTS model name (default: cosyvoice-v2)
             voice: Default voice ID (default: longxiaochun_v2)
+            env: Optional explicit runtime environment snapshot. env={} is an
+                authoritative empty app config and never falls back to os.environ.
         """
-        import dashscope
-
-        self.api_key = api_key or os.getenv('DASHSCOPE_API_KEY')
-        if self.api_key:
-            dashscope.api_key = self.api_key
-
+        self._env = MappingProxyType(dict(env)) if env is not None else None
+        self.api_key = api_key if api_key is not None else self._env_value('DASHSCOPE_API_KEY')
         self.model = model
         self.voice = voice
 
         logger.info(f"TTS Processor initialized with model={model}, voice={voice}")
+
+    def _env_value(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        explicit_env = getattr(self, '_env', None)
+        if explicit_env is not None:
+            value = explicit_env.get(key)
+            return value if value is not None else default
+        return os.getenv(key, default)
+
+    def _require_dashscope_api_key(self) -> str:
+        api_key = getattr(self, 'api_key', None)
+        if api_key:
+            return api_key
+        if getattr(self, '_env', None) is None:
+            import dashscope
+
+            ambient_key = getattr(dashscope, 'api_key', None) or os.getenv('DASHSCOPE_API_KEY')
+            if ambient_key:
+                return ambient_key
+        raise RuntimeError('DASHSCOPE_API_KEY is not configured')
+
+    def _dashscope_tts_websocket_url(self) -> Optional[str]:
+        for key in ('DASHSCOPE_TTS_WEBSOCKET_URL', 'DASHSCOPE_WEBSOCKET_URL', 'DASHSCOPE_BASE_WEBSOCKET_API_URL'):
+            value = self._env_value(key)
+            if value:
+                return value
+        if getattr(self, '_env', None) is not None:
+            return _DEFAULT_DASHSCOPE_WEBSOCKET_API_URL
+        return None
+
+    def _dashscope_http_base_address(self) -> Optional[str]:
+        if getattr(self, '_env', None) is not None:
+            return f"{get_provider_base_url('DASHSCOPE', env=self._env)}/api/v1"
+        return None
+
+    def _dashscope_workspace(self) -> Optional[str]:
+        value = self._env_value('DASHSCOPE_WORKSPACE')
+        return value or None
 
     def synthesize(
         self,
@@ -148,183 +298,159 @@ class TTSProcessor:
         model_override: Optional[str] = None,
         family_override: Optional[str] = None,
     ) -> Tuple[str, float, str]:
+        """Prepare once, then execute; preserve the legacy result tuple.
+
+        Inspect prepare().unsupported before execution when the caller requires
+        an explicitly requested control to be supported. Legacy callers retain
+        best-effort behavior for unsupported controls.
         """
-        Synthesize speech from text. Dispatches to CosyVoice or Qwen3-TTS
-        based on the voice's family (registry metadata).
-
-        Args:
-            text: Text to synthesize (max 20,000 characters)
-            output_path: Path to save audio file
-            voice: Voice ID override (must match model version)
-            speech_rate: Speech speed multiplier (0.5-2.0, default 1.0)
-            pitch_rate: Pitch multiplier (0.5-2.0, default 1.0)
-            volume: Volume level (0-100, default 50)
-            instructions: Natural-language instruction for voice control
-                (CosyVoice ≤100 chars / Qwen3 ≤1600 tokens). Only honored by
-                models with `supports_instruction=True`; ignored silently
-                otherwise. PR-3g #2.
-            model_override: Force a specific TTS model (e.g. cosyvoice-v3.5-plus
-                for custom cloned voices not in TTS_VOICE_REGISTRY). PR-3h #2.
-            family_override: Force dispatch family ('cosyvoice' | 'qwen3') for
-                voices not in the registry. PR-3h #2.
-
-        Returns:
-            Tuple[str, float, str]: (output_path, first_package_delay_ms, request_id)
-        """
-        voice = voice or self.voice
-        family = family_override or self._resolve_family_for_voice(voice)
-
-        if family == 'qwen3':
-            return self._synthesize_qwen3(
-                text, output_path, voice,
-                speech_rate=speech_rate, instructions=instructions,
-                model_override=model_override,
-            )
-        # CosyVoice (default for legacy entries without family metadata)
-        return self._synthesize_cosyvoice(
-            text, output_path, voice,
-            speech_rate=speech_rate, pitch_rate=pitch_rate, volume=volume,
-            instructions=instructions, model_override=model_override,
+        prepared = self.prepare(
+            text, voice=voice, speech_rate=speech_rate, pitch_rate=pitch_rate,
+            volume=volume, instructions=instructions, model_override=model_override,
+            family_override=family_override,
         )
+        return self.execute(prepared, output_path)
 
-    def _synthesize_cosyvoice(
-        self, text: str, output_path: str, voice: str,
+    def prepare(
+        self, text: str, voice: Optional[str] = None,
         speech_rate: float = 1.0, pitch_rate: float = 1.0, volume: int = 50,
-        instructions: Optional[str] = None,
-        model_override: Optional[str] = None,
-    ) -> Tuple[str, float, str]:
-        """Synthesize using CosyVoice SpeechSynthesizer (dashscope.audio.tts_v2)."""
+        instructions: Optional[str] = None, model_override: Optional[str] = None,
+        family_override: Optional[str] = None,
+    ) -> PreparedTTS:
+        """Resolve the existing transports without credentials, I/O or mutation."""
+        text = _text_value(text, 'text')
+        voice = _text_value(self.voice if voice is None else voice, 'voice', nonempty=True)
+        if instructions is not None:
+            instructions = _text_value(instructions, 'instructions')
+        numbers = {'speech_rate': speech_rate, 'pitch_rate': pitch_rate, 'volume': volume}
+        for key, value in numbers.items():
+            _finite_number(value, key)
+        # Copy registry metadata now; execute must never resolve it again.
+        meta = dict(self._voice_meta(voice))
+        family = meta.get('family', 'cosyvoice') if family_override is None else family_override
+        if family not in ('cosyvoice', 'qwen3'):
+            raise ValueError('Unsupported TTS family')
+        model = _text_value(
+            meta.get('model', self.model) if model_override is None else model_override,
+            'model', nonempty=True,
+        )
+        params = {'model': model, 'voice': voice, 'text': text}
+        adjustments, unsupported = [], []
+        if family == 'cosyvoice':
+            for key, value in numbers.items():
+                lower, upper = (0, 100) if key == 'volume' else (0.5, 2.0)
+                effective = max(lower, min(upper, value))
+                params[key] = effective
+                if effective != value:
+                    adjustments.append(TTSParameterNotice(key, 'clamped', value, effective))
+            # Preserve the known legacy support range, but check the selected
+            # model as well as the voice. v3.5 does not support system voices.
+            model_supports = model in ('cosyvoice-v3-flash', 'cosyvoice-v3.5-flash', 'cosyvoice-v3.5-plus')
+            voice_supports = not meta or (
+                meta.get('family', 'cosyvoice') == 'cosyvoice'
+                and not model.startswith('cosyvoice-v3.5-')
+                and meta.get('supports_instruction', meta.get('model') == 'cosyvoice-v3-flash') is True
+            )
+            if instructions and model_supports and voice_supports:
+                params['instruction'] = instructions
+            elif instructions:
+                unsupported.append(TTSParameterNotice('instructions', 'voice_or_model_not_supported', instructions))
+        else:
+            unsupported.extend(TTSParameterNotice(key, 'transport_not_supported', value)
+                               for key, value in numbers.items())
+            voice_supports = meta.get('family') == 'qwen3' and meta.get('supports_instruction') is True
+            if instructions and voice_supports and model_override is None and model == 'qwen3-tts-flash':
+                model = 'qwen3-tts-instruct-flash'
+                adjustments.append(TTSParameterNotice('model', 'instruction_model', params['model'], model))
+                params['model'] = model
+            language_map = {
+                'es': 'Spanish', 'ru': 'Russian', 'it': 'Italian', 'ko': 'Korean',
+                'ja': 'Japanese', 'de': 'German', 'fr': 'French', 'pt': 'Portuguese',
+            }
+            params.update(language_type=language_map.get(meta.get('lang_primary'), 'Chinese'), stream=False)
+            if instructions and voice_supports and model == 'qwen3-tts-instruct-flash':
+                params.update(instructions=instructions, optimize_instructions=True)
+            elif instructions:
+                unsupported.append(TTSParameterNotice('instructions', 'voice_or_model_not_supported', instructions))
+        return PreparedTTS(family, tuple(params.items()), tuple(adjustments), tuple(unsupported))
+
+    def execute(self, prepared: PreparedTTS, output_path: str) -> Tuple[str, float, str]:
+        """Execute exactly the prepared transport input; only credentials are live."""
+        if not isinstance(prepared, PreparedTTS):
+            raise ValueError('Expected a prepared TTS input')
+        if prepared.family == 'qwen3':
+            return self._execute_qwen3(prepared, output_path)
+        return self._execute_cosyvoice(prepared, output_path)
+
+    def _execute_cosyvoice(self, prepared: PreparedTTS, output_path: str) -> Tuple[str, float, str]:
         import time
+        import dashscope
         from dashscope.audio.tts_v2 import SpeechSynthesizer
 
         start_time = time.time()
-        # PR-3h #2: model_override lets caller (e.g. /voice/preview for a
-        # custom cloned voice) bypass registry lookup which would fall back
-        # to self.model and produce wrong output. Cloned voices need their
-        # target_model (typically cosyvoice-v3.5-plus).
-        model = model_override or self._resolve_model_for_voice(voice)
-
-        # Clamp parameters
-        speech_rate = max(0.5, min(2.0, speech_rate))
-        pitch_rate = max(0.5, min(2.0, pitch_rate))
-        volume = max(0, min(100, volume))
-
-        synth_kwargs = {
-            'model': model,
-            'voice': voice,
-            'speech_rate': speech_rate,
-            'pitch_rate': pitch_rate,
-            'volume': volume,
-        }
-        # Pass instructions only if voice supports it (v3-flash / v3.5-*).
-        # SDK will reject unknown kwargs, so gate explicitly.
-        if instructions and self._voice_supports_instruction(voice):
-            synth_kwargs['instructions'] = instructions
-
-        logger.info(
-            f"CosyVoice synth: model={model}, voice='{voice}' "
-            f"(rate={speech_rate}, pitch={pitch_rate}, vol={volume}, "
-            f"instr={'yes' if instructions else 'no'})"
-        )
-        logger.info(f"Text: {text[:100]}{'...' if len(text) > 100 else ''}")
-
-        synthesizer = SpeechSynthesizer(**synth_kwargs)
+        api_key = self._require_dashscope_api_key()
+        kwargs = prepared.sdk_kwargs()
+        text = kwargs.pop('text')
+        url = self._dashscope_tts_websocket_url()
+        if url:
+            kwargs['url'] = url
+        workspace = self._dashscope_workspace()
+        if workspace:
+            kwargs['workspace'] = workspace
+        logger.info('CosyVoice synth: model=%s, voice=%s', prepared.model, prepared.voice)
+        with _DASHSCOPE_TTS_CONSTRUCTOR_LOCK:
+            previous_key = getattr(dashscope, 'api_key', _MISSING)
+            try:
+                dashscope.api_key = api_key
+                synthesizer = SpeechSynthesizer(**kwargs)
+            finally:
+                if previous_key is _MISSING:
+                    try:
+                        delattr(dashscope, 'api_key')
+                    except AttributeError:
+                        pass
+                else:
+                    dashscope.api_key = previous_key
         audio_data = synthesizer.call(text)
-
         request_id = synthesizer.get_last_request_id()
         first_package_delay = synthesizer.get_first_package_delay()
-
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'wb') as f:
             f.write(audio_data)
-
-        duration = time.time() - start_time
-        logger.info(
-            f"CosyVoice audio synthesized: request_id={request_id}, "
-            f"delay={first_package_delay}ms, total={duration:.2f}s -> {output_path}"
-        )
+        logger.info('CosyVoice audio synthesized: request_id=%s, total=%.2fs -> %s',
+                    request_id, time.time() - start_time, output_path)
         return output_path, first_package_delay, request_id
 
-    def _synthesize_qwen3(
-        self, text: str, output_path: str, voice: str,
-        speech_rate: float = 1.0, instructions: Optional[str] = None,
-        model_override: Optional[str] = None,
-    ) -> Tuple[str, float, str]:
-        """Synthesize using Qwen3-TTS via dashscope.MultiModalConversation.
-
-        Qwen3 has a different API surface than CosyVoice:
-          - Endpoint: /services/aigc/multimodal-generation/generation
-          - SDK call: MultiModalConversation.call(model=..., text=..., voice=...,
-                       language_type=..., instructions=..., stream=False)
-          - Returns audio URL (not bytes); we download to output_path.
-        """
+    def _execute_qwen3(self, prepared: PreparedTTS, output_path: str) -> Tuple[str, float, str]:
         import time
         import requests
         import dashscope
 
         start_time = time.time()
-        # Qwen3 doesn't expose per-call rate; speech control happens via
-        # `instructions` string (e.g. "语速偏快"). Param kept for signature
-        # parity with CosyVoice path.
-        _ = speech_rate
-
-        # PR-3h #2: explicit override wins (for custom voices not in registry).
-        # Otherwise resolve from registry, then switch to instruct variant
-        # when instructions supplied (per doc).
-        model = model_override or self._resolve_model_for_voice(voice)
-        if instructions and self._voice_supports_instruction(voice):
-            if 'instruct' not in model:
-                model = 'qwen3-tts-instruct-flash'
-
-        # Detect target language hint from voice metadata if present
-        lang_primary = self._voice_meta(voice).get('lang_primary') or ''
-        LANG_MAP: dict = {
-            'es': 'Spanish', 'ru': 'Russian', 'it': 'Italian',
-            'ko': 'Korean', 'ja': 'Japanese', 'de': 'German', 'fr': 'French',
-            'pt': 'Portuguese',
-        }
-        language_type = LANG_MAP.get(lang_primary, 'Chinese')
-
-        params = {
-            'api_key': self.api_key,
-            'model': model,
-            'text': text,
-            'voice': voice,
-            'language_type': language_type,
-            'stream': False,
-        }
-        if instructions and 'instruct' in model:
-            params['instructions'] = instructions
-            params['optimize_instructions'] = True
-
-        logger.info(
-            f"Qwen3 synth: model={model}, voice='{voice}', "
-            f"lang={language_type}, instr={'yes' if instructions else 'no'}"
-        )
-        logger.info(f"Text: {text[:100]}{'...' if len(text) > 100 else ''}")
-
+        api_key = self._require_dashscope_api_key()
+        params = prepared.sdk_kwargs()
+        params['api_key'] = api_key
+        base_address = self._dashscope_http_base_address()
+        if base_address:
+            params['base_address'] = base_address
+        workspace = self._dashscope_workspace()
+        if workspace:
+            params['workspace'] = workspace
+        logger.info('Qwen3 synth: model=%s, voice=%s', prepared.model, prepared.voice)
         response = dashscope.MultiModalConversation.call(**params)
         if not response or not getattr(response, 'output', None):
-            raise RuntimeError(f"Qwen3 TTS empty response: {response}")
+            raise RuntimeError('Qwen3 TTS returned an empty response')
         audio = response.output.audio
         if audio is None or not getattr(audio, 'url', None):
-            raise RuntimeError(f"Qwen3 TTS no audio URL: {response}")
-
-        # Download the audio file (URL valid 24h)
+            raise RuntimeError('Qwen3 TTS returned no audio URL')
         audio_resp = requests.get(audio.url, timeout=30)
         audio_resp.raise_for_status()
-
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'wb') as f:
             f.write(audio_resp.content)
-
-        duration = time.time() - start_time
         request_id = getattr(response, 'request_id', '') or ''
-        logger.info(
-            f"Qwen3 audio synthesized: request_id={request_id}, "
-            f"total={duration:.2f}s -> {output_path}"
-        )
-        # Qwen3 non-streaming has no first_package_delay; report 0.
+        logger.info('Qwen3 audio synthesized: request_id=%s, total=%.2fs -> %s',
+                    request_id, time.time() - start_time, output_path)
         return output_path, 0.0, request_id
 
     def _voice_meta(self, voice_id: str) -> dict:
@@ -333,34 +459,6 @@ class TTSProcessor:
             if meta['model_id'] == voice_id:
                 return meta
         return {}
-
-    def _resolve_model_for_voice(self, voice_id: str) -> str:
-        """Resolve the correct model for a given voice ID.
-
-        Falls back to self.model if voice is not in the registry (e.g.
-        cloned/designed voices, which have voice_id but no static entry).
-        """
-        meta = self._voice_meta(voice_id)
-        return meta.get('model', self.model) if meta else self.model
-
-    def _resolve_family_for_voice(self, voice_id: str) -> str:
-        """Resolve voice family: 'cosyvoice' (default) or 'qwen3'.
-
-        Registry metadata `family` field is the source of truth. CosyVoice
-        entries pre-PR-3g don't have the field and implicitly belong to
-        family='cosyvoice'.
-        """
-        meta = self._voice_meta(voice_id)
-        return meta.get('family', 'cosyvoice')
-
-    def _voice_supports_instruction(self, voice_id: str) -> bool:
-        """Whether this voice's model accepts the `instructions` parameter."""
-        meta = self._voice_meta(voice_id)
-        if 'supports_instruction' in meta:
-            return bool(meta['supports_instruction'])
-        # Heuristic for legacy CosyVoice entries: v3-flash / v3.5-* support it.
-        model = meta.get('model', self.model)
-        return any(tag in model for tag in ('v3.5-', 'v3-flash'))
 
     @staticmethod
     def list_voices():

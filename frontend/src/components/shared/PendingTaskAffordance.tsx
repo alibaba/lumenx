@@ -18,7 +18,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Loader2, X, AlertTriangle, FileText, Copy, Check, RefreshCw, Terminal } from "lucide-react";
-import { api } from "@/lib/api";
+import { diagnosticsApi } from "@/lib/diagnosticsApi";
 
 interface Props {
     /** Task creation timestamp (epoch seconds). When omitted the
@@ -153,12 +153,12 @@ interface DiagnoseModalProps {
 export function DiagnoseModal({ taskId, elapsedLabel, onClose }: DiagnoseModalProps) {
     type HealthState =
         | { kind: "loading" }
-        | { kind: "ok"; data: Awaited<ReturnType<typeof api.healthCheck>> }
+        | { kind: "ok"; data: Awaited<ReturnType<typeof diagnosticsApi.healthCheck>> }
         | { kind: "error"; message: string };
     type LogState =
         | { kind: "idle" }
         | { kind: "loading" }
-        | { kind: "ok"; data: Awaited<ReturnType<typeof api.diagnoseLogTail>> }
+        | { kind: "ok"; data: Awaited<ReturnType<typeof diagnosticsApi.diagnoseLogTail>> }
         | { kind: "error"; message: string };
     const [health, setHealth] = useState<HealthState>({ kind: "loading" });
     const [log, setLog] = useState<LogState>({ kind: "idle" });
@@ -166,7 +166,7 @@ export function DiagnoseModal({ taskId, elapsedLabel, onClose }: DiagnoseModalPr
 
     const loadLog = () => {
         setLog({ kind: "loading" });
-        api.diagnoseLogTail(200)
+        diagnosticsApi.diagnoseLogTail(200)
             .then((data) => setLog({ kind: "ok", data }))
             .catch((err) =>
                 setLog({ kind: "error", message: err instanceof Error ? err.message : String(err) }),
@@ -177,7 +177,7 @@ export function DiagnoseModal({ taskId, elapsedLabel, onClose }: DiagnoseModalPr
     // doesn't need to click anything to see what's wrong.
     useEffect(() => {
         let cancelled = false;
-        api.healthCheck()
+        diagnosticsApi.healthCheck()
             .then((data) => {
                 if (!cancelled) setHealth({ kind: "ok", data });
             })
@@ -365,7 +365,7 @@ export function DiagnoseModal({ taskId, elapsedLabel, onClose }: DiagnoseModalPr
                             <li>Press F5 to refresh — polling may have stalled.</li>
                             <li>If backend is unreachable, the desktop app or <code className="rounded bg-elevated px-1 font-mono text-[0.65625rem]">./start_backend.sh</code> may have stopped. Restart it.</li>
                             <li>Look at the red rows above for the immediate cause (provider auth, network, model misuse).</li>
-                            <li>Backend restart wipes in-memory tasks; a stuck task is automatically marked failed at startup, so retry usually works.</li>
+                            <li>After restart, check the saved task status. An uncertain submission may still be running; confirm its outcome before starting another generation.</li>
                         </ol>
                     </div>
                 </div>

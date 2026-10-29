@@ -1,30 +1,45 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { Video } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
 import VideoCreator from "./VideoCreator";
 import VideoSidebar from "./VideoSidebar";
-import { api, VideoTask } from "@/lib/api";
+import { resolveLegacyVideoSidebarModelId } from "@/lib/legacyVideoSidebarModels";
+import { VideoTask } from "@/lib/api";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import { resolveModelId } from "@/lib/modelCatalog";
 import StepHeader from "@/components/shared/StepHeader";
+import { ProjectReadbackError, readProjectOnce } from "@/lib/projectReadback";
 
 export default function VideoGenerator() {
     const tStep = useTranslations("stepHeader");
+    const tFrameCommand = useTranslations("frameCommands");
     const currentProject = useProjectStore((state) => state.currentProject);
-    const updateProject = useProjectStore((state) => state.updateProject);
     const [tasks, setTasks] = useState<VideoTask[]>([]);
+    const pollInFlightRef = useRef(false);
+    const [pollBlocked, setPollBlocked] = useState<{ projectId: string; signature: string } | null>(null);
+    const [pollReadFailed, setPollReadFailed] = useState(false);
+
+    const currentProjectReadGuard = useCallback((expectedProjectId: string) => {
+        const environment = getRuntimeEnvironment();
+        return () => {
+            const current = useProjectStore.getState().currentProject;
+            return !!environment && current?.id === expectedProjectId && current.readEnvironment === environment.key
+                && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+        };
+    }, []);
 
     // Shared state for Remix functionality
     const [remixData, setRemixData] = useState<Partial<VideoTask> | null>(null);
 
     // Get default model from project settings
-    const defaultI2vModel = resolveModelId(
+    const defaultI2vModel = resolveLegacyVideoSidebarModelId(resolveModelId(
         'i2v',
         currentProject?.model_settings?.i2v_model,
         'video_sidebar',
-    );
+    ));
 
     // Generation Params (Lifted State)
     const [params, setParams] = useState({
@@ -55,46 +70,71 @@ export default function VideoGenerator() {
     useEffect(() => {
         setParams((p) => ({
             ...p,
-            model: resolveModelId(
+            model: resolveLegacyVideoSidebarModelId(resolveModelId(
                 'i2v',
                 currentProject?.model_settings?.i2v_model,
                 'video_sidebar',
-            ),
+            )),
         }));
     }, [currentProject?.model_settings?.i2v_model]);
 
-    // Sync tasks from project
     useEffect(() => {
-        if (currentProject?.video_tasks) {
-            setTasks(currentProject.video_tasks);
-        }
+        setPollReadFailed(false);
+        setPollBlocked(null);
+    }, [currentProject?.id, currentProject?.readEnvironment]);
+
+    // The sidebar reflects the confirmed store, including an empty project.
+    useEffect(() => {
+        setTasks((currentProject?.video_tasks ?? []) as VideoTask[]);
     }, [currentProject?.video_tasks]);
 
-    // Poll for updates
+    // Poll for updates through the shared readback guard. Keep the
+    // in-flight latch at session scope so effect restarts from task
+    // snapshots cannot start overlapping project reads.
     useEffect(() => {
-        const hasActiveTasks = tasks.some(t => t.status === "pending" || t.status === "processing");
-        if (!hasActiveTasks || !currentProject) return;
+        const activeTaskIds = tasks
+            .filter(t => t.status === "pending" || t.status === "processing")
+            .map(t => t.id)
+            .sort();
+        if (!activeTaskIds.length || !currentProject?.id || currentProject.readEnvironment !== getRuntimeEnvironment()?.key) return;
 
+        const projectId = currentProject.id;
+        const signature = activeTaskIds.join('|');
+        if (pollBlocked?.projectId === projectId && pollBlocked.signature === signature) return;
+
+        let cancelled = false;
         const interval = setInterval(async () => {
+            if (pollInFlightRef.current) return;
+            pollInFlightRef.current = true;
             try {
-                const project = await api.getProject(currentProject.id);
-                if (project.video_tasks) {
-                    setTasks(project.video_tasks);
-                    updateProject(currentProject.id, { video_tasks: project.video_tasks });
-                }
+                const project = await readProjectOnce(projectId, undefined, {
+                    isCurrent: () => !cancelled && currentProjectReadGuard(projectId)(),
+                });
+                if (cancelled) return;
+                setTasks((project.video_tasks ?? []) as VideoTask[]);
+                setPollReadFailed(false);
+                setPollBlocked(prev => prev?.projectId === projectId ? null : prev);
             } catch (error) {
+                if (cancelled) return;
                 console.error("Failed to poll project status:", error);
+                if (error instanceof ProjectReadbackError) {
+                    setPollReadFailed(true);
+                    setPollBlocked({ projectId, signature });
+                }
+            } finally {
+                pollInFlightRef.current = false;
             }
         }, 3000);
 
-        return () => clearInterval(interval);
-    }, [tasks, currentProject?.id]);
+        return () => { cancelled = true; clearInterval(interval); };
+    }, [tasks, currentProject?.id, currentProject?.readEnvironment, pollBlocked, currentProjectReadGuard]);
 
     const handleTaskCreated = (updatedProject: any) => {
-        if (updatedProject.video_tasks) {
-            setTasks(updatedProject.video_tasks);
-            updateProject(currentProject!.id, { video_tasks: updatedProject.video_tasks });
-        }
+        const current = useProjectStore.getState().currentProject;
+        const environment = getRuntimeEnvironment();
+        if (!environment || !current || !updatedProject?.video_tasks || !updatedProject.id || updatedProject.id !== current.id
+            || updatedProject.readEnvironment !== environment.key || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
+        if (current.readEnvironment === environment.key) setTasks((current.video_tasks ?? []) as VideoTask[]);
     };
 
     const handleRemix = (task: VideoTask) => {
@@ -157,6 +197,11 @@ export default function VideoGenerator() {
                     </span>
                 ) : undefined}
             />
+            {pollReadFailed ? (
+                <div role="alert" className="mx-6 mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                    {tFrameCommand("readFailed")}
+                </div>
+            ) : null}
             <div className="flex flex-1 overflow-hidden">
                 {/* Left: Creator (70%) */}
                 <div className="w-[70%] h-full border-r border-glass-border">

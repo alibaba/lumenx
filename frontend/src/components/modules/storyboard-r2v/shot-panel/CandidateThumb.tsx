@@ -13,6 +13,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Star, AlertCircle, Check, Pencil, Pin } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import type { VideoTask } from "@/lib/api";
@@ -24,8 +25,10 @@ interface CandidateThumbProps {
      *  frame.selected_video_id === task.id). Drives the primary-color
      *  border + the filled Pin badge state. */
     isActive?: boolean;
-    /** If this task was dubbed, show the dubbed video URL instead. */
+    /** Legacy dub URL hint. Source-safe callers should pass displayVideoUrl after proof validation. */
     dubbedVideoUrl?: string;
+    /** Verified display URL selected by dubSource helpers. */
+    displayVideoUrl?: string;
     /** Optional: resolve a URL to display-ready form (asset prefix). */
     resolveUrl?: (url: string) => string;
     onClick: (task: VideoTask, modifiers: { shift: boolean; meta: boolean }) => void;
@@ -44,7 +47,7 @@ export default function CandidateThumb({
     task,
     isCompareSelected,
     isActive = false,
-    dubbedVideoUrl,
+    displayVideoUrl,
     resolveUrl,
     onClick,
     onToggleStar,
@@ -53,13 +56,15 @@ export default function CandidateThumb({
     onCancel,
     onRetry,
 }: CandidateThumbProps) {
+    const t = useTranslations("storyboardR2V");
     const status = task.status;
     const isProcessing = status === "pending" || status === "processing";
     const isFailed = status === "failed";
+    const isNeedsConfirmation = status === "needs_confirmation";
     const isCompleted = status === "completed";
     const display = (u?: string | null) => (u && resolveUrl ? resolveUrl(u) : u ?? undefined);
 
-    const videoUrl = isCompleted ? display(dubbedVideoUrl || task.video_url) : undefined;
+    const videoUrl = isCompleted ? display(displayVideoUrl || task.video_url) : undefined;
 
     const [editingLabel, setEditingLabel] = useState(false);
     const [labelDraft, setLabelDraft] = useState(task.label ?? "");
@@ -92,10 +97,14 @@ export default function CandidateThumb({
                 role="button"
                 tabIndex={0}
                 aria-label={`Candidate ${task.id.slice(0, 6)}${task.is_starred ? ", starred" : ""}${task.label ? ", labeled " + task.label : ""}, ${status}`}
-                onClick={(e) => onClick(task, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey })}
+                onClick={(e) => {
+                    if (isNeedsConfirmation) return;
+                    onClick(task, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
+                }}
                 onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
+                        if (isNeedsConfirmation) return;
                         onClick(task, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
                     }
                 }}
@@ -108,7 +117,9 @@ export default function CandidateThumb({
                                 ? "border-glass-border hover:border-primary/45"
                                 : isFailed
                                     ? "border-status-failed-border"
-                                    : "border-status-pending-border"
+                                    : isNeedsConfirmation
+                                        ? "border-amber-500/45"
+                                        : "border-status-pending-border"
                 }`}
                 title={
                     isActive
@@ -135,6 +146,13 @@ export default function CandidateThumb({
                                 compact
                                 onCancel={onCancel ? () => onCancel(task) : undefined}
                             />
+                        ) : isNeedsConfirmation ? (
+                            <div className="flex flex-col items-center gap-1 px-2 text-center">
+                                <AlertCircle size={14} className="text-amber-300" aria-hidden="true" />
+                                <span className="font-mono text-chrome-sm font-medium uppercase text-amber-200">
+                                    {t("statusNeedsConfirmation")}
+                                </span>
+                            </div>
                         ) : isFailed ? (
                             <div className="flex flex-col items-center gap-1 px-2 text-center">
                                 <AlertCircle size={14} className="text-status-failed-fg" aria-hidden="true" />
@@ -193,36 +211,46 @@ export default function CandidateThumb({
                     </button>
                 ) : null}
 
-                {/* ★ toggle top-right — always visible per design grill.
-                    28×28 hit area (P0-1) via wrapper padding; visual
-                    chip stays 22×22 to keep the dense thumb readable.
-                    Scale pulse on toggle (P3-1) hints affirmation. */}
-                <button
-                    type="button"
-                    aria-pressed={task.is_starred}
-                    aria-label={task.is_starred ? "Unstar candidate" : "Star candidate"}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        void onToggleStar(task, !task.is_starred);
-                    }}
-                    className="absolute right-0.5 top-0.5 grid h-7 w-7 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-starred-border"
-                >
-                    <span
-                        aria-hidden="true"
-                        className={`grid h-[22px] w-[22px] place-items-center rounded-full border transition-all duration-fast ease-out-quart active:scale-90 ${
-                            task.is_starred
-                                ? "border-status-starred-border bg-status-starred-bg text-status-starred-fg shadow-[0_0_10px_-2px_var(--color-status-starred-bg)]"
-                                : "border-foreground/15 bg-black/55 text-foreground/80 hover:text-status-starred-fg"
-                        }`}
+                {/* ★ marker/toggle top-right. Recovered tasks keep old annotations as read-only. */}
+                {isNeedsConfirmation ? (
+                    task.is_starred ? (
+                        <span
+                            aria-label="Starred recovered candidate"
+                            className="absolute right-0.5 top-0.5 grid h-7 w-7 place-items-center rounded-full"
+                        >
+                            <span className="grid h-[22px] w-[22px] place-items-center rounded-full border border-status-starred-border bg-status-starred-bg text-status-starred-fg shadow-[0_0_10px_-2px_var(--color-status-starred-bg)]">
+                                <Star size={11} aria-hidden="true" fill="currentColor" strokeWidth={0} />
+                            </span>
+                        </span>
+                    ) : null
+                ) : (
+                    <button
+                        type="button"
+                        aria-pressed={task.is_starred}
+                        aria-label={task.is_starred ? "Unstar candidate" : "Star candidate"}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            void onToggleStar(task, !task.is_starred);
+                        }}
+                        className="absolute right-0.5 top-0.5 grid h-7 w-7 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-starred-border"
                     >
-                        <Star
-                            size={11}
+                        <span
                             aria-hidden="true"
-                            fill={task.is_starred ? "currentColor" : "none"}
-                            strokeWidth={task.is_starred ? 0 : 1.5}
-                        />
-                    </span>
-                </button>
+                            className={`grid h-[22px] w-[22px] place-items-center rounded-full border transition-all duration-fast ease-out-quart active:scale-90 ${
+                                task.is_starred
+                                    ? "border-status-starred-border bg-status-starred-bg text-status-starred-fg shadow-[0_0_10px_-2px_var(--color-status-starred-bg)]"
+                                    : "border-foreground/15 bg-black/55 text-foreground/80 hover:text-status-starred-fg"
+                            }`}
+                        >
+                            <Star
+                                size={11}
+                                aria-hidden="true"
+                                fill={task.is_starred ? "currentColor" : "none"}
+                                strokeWidth={task.is_starred ? 0 : 1.5}
+                            />
+                        </span>
+                    </button>
+                )}
 
                 {/* Compare-select corner badge */}
                 {isCompareSelected ? (

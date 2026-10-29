@@ -1,0 +1,24 @@
+{
+  "audio": {
+    "client_request_id": "audio-request",
+    "expected_revision": 1,
+    "params": {
+      "volume": 0
+    },
+    "text": "A glass moon above the city.",
+    "voice": "longanyang"
+  },
+  "image": {
+    "batch_size": 2,
+    "client_request_id": "image-request",
+    "expected_revision": 0,
+    "mode": "t2i",
+    "model_id": "wan/wan2.7-image-pro#image",
+    "params": {
+      "prompt_extend": false,
+      "seed": 0,
+      "watermark": false
+    },
+    "prompt": "A glass moon"
+  }
+}

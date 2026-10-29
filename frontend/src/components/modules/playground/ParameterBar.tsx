@@ -1,8 +1,16 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { usePlaygroundStore } from './usePlaygroundStore';
+import { usePlaygroundStore, type PlaygroundParameters } from './usePlaygroundStore';
 import { getModelParams, getModelDuration } from './playgroundModels';
+import {
+  getEffectivePlaygroundParameters,
+  getPlaygroundBooleanDefault,
+  hasInactivePlaygroundParameterDrafts,
+  isMigratedPlaygroundModel,
+  supportsPlaygroundParameter,
+} from './playgroundParameterContract';
+import { isWan27TextToImage, isQwen20TextToImage, imageDraftValueText } from './playgroundImageContract';
 import { ChevronDown, Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
@@ -234,6 +242,7 @@ export default function ParameterBar() {
   const mode = usePlaygroundStore((s) => s.mode);
   const modelId = usePlaygroundStore((s) => s.modelId);
   const parameters = usePlaygroundStore((s) => s.parameters);
+  const inputMedia = usePlaygroundStore((s) => s.inputMedia);
   const batchSize = usePlaygroundStore((s) => s.batchSize);
   const setParameters = usePlaygroundStore((s) => s.setParameters);
   const setBatchSize = usePlaygroundStore((s) => s.setBatchSize);
@@ -241,16 +250,26 @@ export default function ParameterBar() {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const isVideoMode = VIDEO_MODES.has(mode);
+  const strictImage = isWan27TextToImage(modelId, mode, inputMedia);
+  const qwenImage = isQwen20TextToImage(modelId, mode, inputMedia);
+  const strictImageParameters = strictImage || qwenImage;
 
   // Read model-specific params and duration from catalog
   const modelParams = getModelParams(modelId);
-  const modelDuration = getModelDuration(modelId);
+  const migratedModel = isMigratedPlaygroundModel(modelId);
+  const effectiveParameters = getEffectivePlaygroundParameters(modelId, parameters);
+  const modelDuration = getModelDuration(modelId, effectiveParameters.resolution);
+  const hasInactiveDrafts = hasInactivePlaygroundParameterDrafts(modelId, parameters);
 
   // Derive options with fallbacks — IMAGE uses size, VIDEO uses resolution/ratio
   const hasSize = !!modelParams?.size;
   const hasResolution = !!modelParams?.resolution;
   const hasRatio = !!modelParams?.ratio;
   const hasQuality = !!modelParams?.quality;
+  const hasAudioSetting = !!modelParams?.audioSetting;
+  const videoQuality = migratedModel ? modelParams?.mode : undefined;
+  const shotType = migratedModel ? modelParams?.shotType : undefined;
+  const supportsAudio = migratedModel && supportsPlaygroundParameter(modelId, 'audio');
 
   const sizeOptions = modelParams?.size?.options ?? [];
   const sizeDefault = modelParams?.size?.default ?? sizeOptions[0] ?? '1024*1024';
@@ -260,16 +279,20 @@ export default function ParameterBar() {
   const resolutionDefault = modelParams?.resolution?.default ?? resolutionOptions[0];
   const qualityOptions = modelParams?.quality?.options ?? [];
   const qualityDefault = modelParams?.quality?.default ?? qualityOptions[0] ?? 'high';
+  const audioSettingOptions = modelParams?.audioSetting?.options ?? [];
+  const audioSettingDefault = modelParams?.audioSetting?.default ?? audioSettingOptions[0] ?? 'auto';
 
   // Boolean feature flags from model
-  const supportsSeed = modelParams?.seed !== false;
-  const supportsPromptExtend = modelParams?.promptExtend !== false;
-  const supportsWatermark = modelParams?.watermark !== false;
-  const hasAnyAdvanced = supportsSeed || supportsPromptExtend || supportsWatermark;
+  const supportsSeed = migratedModel ? supportsPlaygroundParameter(modelId, 'seed') : modelParams?.seed !== false;
+  const supportsPromptExtend = !strictImage && (migratedModel ? supportsPlaygroundParameter(modelId, 'promptExtend') : modelParams?.promptExtend !== false);
+  const supportsWatermark = migratedModel ? supportsPlaygroundParameter(modelId, 'watermark') : modelParams?.watermark !== false;
+  const supportsDuration = migratedModel ? supportsPlaygroundParameter(modelId, 'duration') : true;
+  const hasAnyAdvanced = supportsSeed || supportsPromptExtend || supportsWatermark || supportsAudio;
 
-  // When model changes, reset params whose current value is not in the new model's options
+  // Only legacy model changes normalize options; adding a reference keeps the current draft.
   useEffect(() => {
-    const patches: Record<string, any> = {};
+    if (migratedModel || strictImageParameters || isQwen20TextToImage(modelId, mode, [])) return;
+    const patches: PlaygroundParameters = {};
 
     if (hasSize) {
       const cur = parameters.size as string | undefined;
@@ -287,6 +310,10 @@ export default function ParameterBar() {
       const cur = parameters.quality as string | undefined;
       if (cur && !qualityOptions.includes(cur)) patches.quality = qualityDefault;
     }
+    if (hasAudioSetting) {
+      const cur = parameters.audio_setting as string | undefined;
+      if (cur && !audioSettingOptions.includes(cur)) patches.audio_setting = audioSettingDefault;
+    }
 
     if (isVideoMode && modelDuration) {
       const currentDur = parameters.duration as number | undefined;
@@ -303,17 +330,23 @@ export default function ParameterBar() {
 
     if (Object.keys(patches).length > 0) setParameters({ ...parameters, ...patches });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelId]);
+  }, [modelId, migratedModel]);
 
-  const updateParam = (key: string, value: any) => {
+  const updateParam = (key: string, value: PlaygroundParameters[string]) => {
     setParameters({ ...parameters, [key]: value });
   };
 
   // Duration state (video only)
-  const durationValue = (parameters.duration as number | undefined)
+  const durationValue = (effectiveParameters.duration as number | undefined)
     ?? (modelDuration?.type === 'fixed' ? modelDuration.value
       : (modelDuration?.type === 'slider' || modelDuration?.type === 'buttons') ? modelDuration.default : 5);
   const durationFixed = modelDuration?.type === 'fixed';
+  const promptExtendValue = (effectiveParameters.prompt_extend as boolean | undefined)
+    ?? getPlaygroundBooleanDefault(modelId, 'promptExtend')
+    ?? (parameters.prompt_extend !== false);
+  const watermarkValue = (effectiveParameters.watermark as boolean | undefined)
+    ?? getPlaygroundBooleanDefault(modelId, 'watermark')
+    ?? (parameters.watermark === true);
 
   // Batch pill renderer (reused for both image and video)
   const batchPills = (
@@ -340,6 +373,8 @@ export default function ParameterBar() {
 
   return (
     <div className="space-y-3">
+      {strictImage && <p className="text-[0.6875rem] leading-relaxed text-text-muted">{t('imageContract.supported')}</p>}
+      {qwenImage && <p className="text-[0.6875rem] leading-relaxed text-text-muted">{t('imageContract.qwenSupported')}</p>}
       <div className="grid grid-cols-2 gap-3">
 
         {/* ── IMAGE MODE PARAMS ── */}
@@ -349,7 +384,9 @@ export default function ParameterBar() {
             {hasSize && (
               <ParamDropdown
                 label={t('parameters.imageSize')}
-                value={(parameters.size as string) ?? sizeDefault}
+                value={effectiveParameters.size !== undefined
+                  ? typeof effectiveParameters.size === 'string' ? effectiveParameters.size : imageDraftValueText(effectiveParameters.size)
+                  : sizeDefault}
                 options={sizeOptions}
                 onChange={(v) => updateParam('size', v)}
                 formatOption={formatImageSize}
@@ -360,7 +397,7 @@ export default function ParameterBar() {
             {hasQuality && (
               <ParamDropdown
                 label={t('parameters.quality')}
-                value={(parameters.quality as string) ?? qualityDefault}
+                value={(effectiveParameters.quality as string) ?? qualityDefault}
                 options={qualityOptions}
                 onChange={(v) => updateParam('quality', v)}
               />
@@ -380,7 +417,7 @@ export default function ParameterBar() {
             {hasRatio && (
               <ParamDropdown
                 label={t('parameters.aspectRatio')}
-                value={(parameters.aspect_ratio as string) ?? ratioDefault}
+                value={(effectiveParameters.aspect_ratio as string) ?? ratioDefault}
                 options={ratioOptions}
                 onChange={(v) => updateParam('aspect_ratio', v)}
               />
@@ -390,38 +427,83 @@ export default function ParameterBar() {
             {hasResolution && (
               <ParamDropdown
                 label={t('parameters.resolution')}
-                value={(parameters.resolution as string) ?? resolutionDefault}
+                value={(effectiveParameters.resolution as string) ?? resolutionDefault}
                 options={resolutionOptions}
                 onChange={(v) => updateParam('resolution', v)}
               />
             )}
 
             {/* Fallback: show ratio + resolution even if model doesn't declare them */}
-            {!hasRatio && !hasResolution && (
+            {!migratedModel && !hasRatio && !hasResolution && (
               <>
                 <ParamDropdown
                   label={t('parameters.aspectRatio')}
-                  value={(parameters.aspect_ratio as string) ?? FALLBACK_RATIOS[0]}
+                  value={(effectiveParameters.aspect_ratio as string) ?? FALLBACK_RATIOS[0]}
                   options={FALLBACK_RATIOS}
                   onChange={(v) => updateParam('aspect_ratio', v)}
                 />
                 <ParamDropdown
                   label={t('parameters.resolution')}
-                  value={(parameters.resolution as string) ?? FALLBACK_RESOLUTIONS[0]}
+                  value={(effectiveParameters.resolution as string) ?? FALLBACK_RESOLUTIONS[0]}
                   options={FALLBACK_RESOLUTIONS}
                   onChange={(v) => updateParam('resolution', v)}
                 />
               </>
             )}
 
+            {videoQuality && (
+              <ParamDropdown
+                label={t('parameters.videoQuality')}
+                value={(effectiveParameters.mode as string) ?? videoQuality.default}
+                options={videoQuality.options}
+                onChange={(value) => updateParam('mode', value)}
+                formatOption={(option) => t(`parameters.videoQualityOptions.${option}`)}
+              />
+            )}
+
+            {shotType && (
+              <ParamDropdown
+                label={t('parameters.shotType')}
+                value={(effectiveParameters.shot_type as string) ?? shotType.default}
+                options={shotType.options}
+                onChange={(value) => updateParam('shot_type', value)}
+                formatOption={(option) => t(`parameters.shotTypeOptions.${option}`)}
+              />
+            )}
+
+            {hasAudioSetting && (
+              <ParamDropdown
+                label={t('parameters.audioSetting')}
+                value={(effectiveParameters.audio_setting as string) ?? audioSettingDefault}
+                options={audioSettingOptions}
+                onChange={(v) => updateParam('audio_setting', v)}
+                formatOption={(opt) => t(`parameters.audioSettingOptions.${opt}`)}
+              />
+            )}
+
             {/* Duration */}
-            {durationFixed ? (
+            {!supportsDuration ? (
+              <div className="col-span-2 flex flex-col gap-[6px]">
+                <span className="font-mono text-[0.625rem] uppercase tracking-[0.08em] text-text-muted">{t('parameters.sourceVideoDurationLabel')}</span>
+                <div className="w-full rounded-[14px] border border-border-subtle bg-surface-inset px-3 py-2.5 text-xs leading-relaxed text-text-muted">
+                  {t('parameters.sourceVideoDurationHint')}
+                </div>
+              </div>
+            ) : durationFixed ? (
               <div className="flex flex-col gap-[6px]">
                 <span className="font-mono text-[0.625rem] uppercase tracking-[0.08em] text-text-muted">{t('parameters.duration')}</span>
                 <div className="w-full flex items-center px-3 py-2.5 rounded-[14px] bg-surface-inset border border-border-subtle text-text-muted text-xs font-medium">
                   {durationValue}s {t('parameters.durationFixedSuffix')}
                 </div>
               </div>
+            ) : modelDuration?.type === 'buttons' && modelDuration.options.length > 4 ? (
+              <ParamDropdown
+                label={t('parameters.duration')}
+                value={String(durationValue)}
+                options={modelDuration.options.map(String)}
+                onChange={(v) => updateParam('duration', Number.parseInt(v, 10))}
+                formatOption={(opt) => (opt === '0' ? t('parameters.durationKeepSource') : `${opt}s`)}
+              />
             ) : modelDuration?.type === 'buttons' ? (
               <div className="flex flex-col gap-[6px]">
                 <span className="font-mono text-[0.625rem] uppercase tracking-[0.08em] text-text-muted">{t('parameters.duration')}</span>
@@ -437,7 +519,7 @@ export default function ParameterBar() {
                           : 'text-text-muted hover:text-foreground hover:bg-hover-bg'
                       }`}
                     >
-                      {n}s
+                      {n === 0 ? t('parameters.durationKeepSource') : `${n}s`}
                     </button>
                   ))}
                 </div>
@@ -477,12 +559,21 @@ export default function ParameterBar() {
                   <span className="font-mono text-[0.625rem] uppercase tracking-[0.08em] text-text-muted">Seed</span>
                   <input
                     type="number"
+                    aria-label="Seed"
+                    min={strictImageParameters ? 0 : undefined}
+                    max={strictImageParameters ? 2147483647 : undefined}
+                    step={strictImageParameters ? 1 : undefined}
                     placeholder={t('parameters.seedPlaceholder')}
                     className="glass-input w-full text-xs text-foreground font-mono placeholder:text-text-muted bg-surface-inset rounded-[14px]"
-                    value={parameters.seed ?? ''}
+                    value={typeof parameters.seed === 'number' || typeof parameters.seed === 'string' ? parameters.seed : ''}
                     onChange={(e) => {
                       const val = e.target.value;
-                      updateParam('seed', val === '' ? undefined : parseInt(val) || undefined);
+                      if (val === '') {
+                        updateParam('seed', undefined);
+                        return;
+                      }
+                      const parsed = strictImageParameters ? Number(val) : Number.parseInt(val, 10);
+                      updateParam('seed', Number.isNaN(parsed) ? undefined : parsed);
                     }}
                   />
                 </div>
@@ -491,21 +582,34 @@ export default function ParameterBar() {
               {supportsPromptExtend && (
                 <PillToggle
                   label={t('parameters.promptExtend')}
-                  value={parameters.prompt_extend !== false}
+                  value={promptExtendValue}
                   onChange={(v) => updateParam('prompt_extend', v)}
+                />
+              )}
+
+              {supportsAudio && (
+                <PillToggle
+                  label={t('parameters.generateAudio')}
+                  value={effectiveParameters.audio === true}
+                  onChange={(value) => updateParam('audio', value)}
                 />
               )}
 
               {supportsWatermark && (
                 <PillToggle
                   label={t('parameters.watermark')}
-                  value={parameters.watermark === true}
+                  value={watermarkValue}
                   onChange={(v) => updateParam('watermark', v)}
                 />
               )}
             </div>
           )}
         </div>
+      )}
+      {hasInactiveDrafts && (
+        <p className="text-[0.6875rem] leading-relaxed text-text-muted">
+          {t('parameters.inactiveDraftHint')}
+        </p>
       )}
     </div>
   );

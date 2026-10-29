@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { api, API_URL } from "@/lib/api";
 import { VariantSelector } from "../common/VariantSelector";
 import { useProjectStore } from "@/store/projectStore";
+import { confirmProjectAck, confirmRawProjectAck, ProjectReadbackError } from "@/lib/projectReadback";
 
 interface StoryboardFrameEditorProps {
     frame: any;
@@ -15,8 +16,8 @@ interface StoryboardFrameEditorProps {
 
 export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: StoryboardFrameEditorProps) {
     const ts = useTranslations("storyboard");
+    const feedback = useTranslations("castWorkbench");
     const currentProject = useProjectStore(state => state.currentProject);
-    const updateProject = useProjectStore(state => state.updateProject);
 
     // Get the latest frame data from the store (instead of using stale prop)
     const frame = useMemo(() => {
@@ -49,10 +50,10 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
                 prompt,
                 batchSize
             );
-            updateProject(currentProject.id, updatedProject);
+            await confirmRawProjectAck(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to generate frame:", error);
-            alert(ts("generateFailed"));
+            alert(error instanceof ProjectReadbackError ? feedback("toastReadbackFailed") : ts("generateFailed"));
         } finally {
             setIsGenerating(false);
         }
@@ -62,9 +63,10 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         if (!currentProject) return;
         try {
             const updatedProject = await api.selectAssetVariant(currentProject.id, frame.id, "storyboard_frame", variantId);
-            updateProject(currentProject.id, updatedProject);
+            await confirmProjectAck(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to select variant:", error);
+            alert(feedback(error instanceof ProjectReadbackError ? "toastReadbackFailed" : "toastSelectErr"));
         }
     };
 
@@ -72,9 +74,10 @@ export default function StoryboardFrameEditor({ frame: initialFrame, onClose }: 
         if (!currentProject) return;
         try {
             const updatedProject = await api.deleteAssetVariant(currentProject.id, frame.id, "storyboard_frame", variantId);
-            updateProject(currentProject.id, updatedProject);
+            await confirmProjectAck(currentProject.id, updatedProject);
         } catch (error) {
             console.error("Failed to delete variant:", error);
+            alert(feedback(error instanceof ProjectReadbackError ? "toastReadbackFailed" : "toastSelectErr"));
         }
     };
 

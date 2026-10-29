@@ -1,9 +1,13 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union, Literal
 from enum import Enum
 import time
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ...utils.model_catalog import get_default_model_settings
+from ...utils.request_identity import REQUEST_IDENTITY_CONTRACT_VERSION, validate_client_request_id
+from ...models.provider_execution import ProviderExecutionRecord
+from .asset_image_models import AssetImageRequestRecord, AssetImageServerId, validate_asset_image_requests
+from .series_episode import SeriesEpisodeCreationReceipt
 
 
 _DEFAULT_MODEL_SETTINGS = get_default_model_settings()
@@ -19,6 +23,10 @@ class GenerationStatus(str, Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+# Legacy asset status covers image and motion generation; interruption is not failure.
+AssetGenerationStatus = Union[GenerationStatus, Literal["needs_confirmation"]]
 
 
 # === Storyboard Schema v2: Enums ===
@@ -168,6 +176,210 @@ class AssetUnit(BaseModel):
     image_updated_at: float = Field(default_factory=time.time, description="Timestamp of last image update")
     video_updated_at: float = Field(0.0, description="Timestamp of last motion ref update")
 
+
+class ProviderRequestReceiptMember(BaseModel):
+    """One task/attempt member owned by a provider request receipt."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(..., description="Product task created by the original admission")
+    attempt_id: str = Field(..., description="Product attempt created by the original admission")
+    execution_fingerprint: str = Field(..., description="Accepted provider execution fingerprint")
+
+    @field_validator("task_id", "attempt_id", mode="before")
+    @classmethod
+    def _strict_non_empty_string(cls, value: str) -> str:
+        if type(value) is not str or value == "":
+            raise ValueError("Provider request receipt member field must be a non-empty string")
+        value.encode("utf-8")
+        return value
+
+    @field_validator("execution_fingerprint", mode="before")
+    @classmethod
+    def _member_fingerprint(cls, value: str) -> str:
+        import re
+
+        if type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError("Invalid provider request receipt member fingerprint")
+        return value
+
+
+class ProviderRequestReceiptBase(BaseModel):
+    """Common immutable identity fields for provider request receipts."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    request_contract_version: str = Field(..., description="Canonical request identity contract version")
+    entrypoint: str = Field(..., description="Server-owned product entrypoint namespace")
+    client_request_id: str = Field(..., description="Caller-provided idempotency key within the project entrypoint")
+    frame_id: str = Field(..., description="Frame owner captured in the request fingerprint")
+    request_fingerprint: str = Field(..., description="sha256 of strict canonical request identity")
+    created_at: float = Field(..., ge=0, description="Receipt creation timestamp")
+
+    @field_validator("request_contract_version", mode="before")
+    @classmethod
+    def _request_contract_version(cls, value: str) -> str:
+        if value != REQUEST_IDENTITY_CONTRACT_VERSION:
+            raise ValueError("Unsupported provider request identity contract version")
+        return value
+
+    @field_validator("client_request_id", mode="before")
+    @classmethod
+    def _client_request_id(cls, value: str) -> str:
+        return validate_client_request_id(value)
+
+    @field_validator("entrypoint", "frame_id", mode="before")
+    @classmethod
+    def _strict_non_empty_string(cls, value: str) -> str:
+        if type(value) is not str or value == "":
+            raise ValueError("Provider request receipt field must be a non-empty string")
+        value.encode("utf-8")
+        return value
+
+    @field_validator("request_fingerprint", mode="before")
+    @classmethod
+    def _request_fingerprint(cls, value: str) -> str:
+        import re
+
+        if type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError("Invalid provider request receipt fingerprint")
+        return value
+
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def _created_at(cls, value: float) -> float:
+        import math
+
+        if type(value) not in {int, float} or not math.isfinite(value) or value < 0:
+            raise ValueError("Invalid provider request receipt timestamp")
+        return float(value)
+
+
+class ProviderRequestReceipt(ProviderRequestReceiptBase):
+    """Schema v1 single-task product receipt.
+
+    This remains the legacy/readable single-task receipt shape and does not
+    serialize batch-only fields.
+    """
+
+    schema_version: int = Field(1, description="Provider request receipt schema")
+    execution_fingerprint: str = Field(..., description="Accepted provider execution fingerprint")
+    task_id: str = Field(..., description="Product task created by the original admission")
+    attempt_id: str = Field(..., description="Product attempt created by the original admission")
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def _receipt_schema_version(cls, value: int) -> int:
+        if type(value) is not int or value != 1:
+            raise ValueError("Unsupported provider request receipt schema")
+        return value
+
+    @field_validator("task_id", "attempt_id", mode="before")
+    @classmethod
+    def _strict_single_identity(cls, value: str) -> str:
+        if type(value) is not str or value == "":
+            raise ValueError("Provider request receipt field must be a non-empty string")
+        value.encode("utf-8")
+        return value
+
+    @field_validator("execution_fingerprint", mode="before")
+    @classmethod
+    def _execution_fingerprint(cls, value: str) -> str:
+        import re
+
+        if type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise ValueError("Invalid provider request receipt fingerprint")
+        return value
+
+    @property
+    def receipt_members(self) -> tuple[ProviderRequestReceiptMember, ...]:
+        return (
+            ProviderRequestReceiptMember(
+                task_id=self.task_id,
+                attempt_id=self.attempt_id,
+                execution_fingerprint=self.execution_fingerprint,
+            ),
+        )
+
+
+class ProviderBatchRequestReceipt(ProviderRequestReceiptBase):
+    """Schema v2 batch product receipt with typed member identities."""
+
+    schema_version: int = Field(2, description="Provider request receipt schema")
+    members: List[ProviderRequestReceiptMember] = Field(..., min_length=1, max_length=6)
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def _receipt_schema_version(cls, value: int) -> int:
+        if type(value) is not int or value != 2:
+            raise ValueError("Unsupported provider request receipt schema")
+        return value
+
+    @model_validator(mode="after")
+    def _members_are_unique(self):
+        seen_tasks: set[str] = set()
+        seen_attempts: set[str] = set()
+        for member in self.members:
+            if member.task_id in seen_tasks:
+                raise ValueError("Duplicate provider request receipt member task")
+            if member.attempt_id in seen_attempts:
+                raise ValueError("Duplicate provider request receipt member attempt")
+            seen_tasks.add(member.task_id)
+            seen_attempts.add(member.attempt_id)
+        return self
+
+    @property
+    def receipt_members(self) -> tuple[ProviderRequestReceiptMember, ...]:
+        return tuple(self.members)
+
+
+class MotionReferenceBinding(BaseModel):
+    """Asset association, separate from a project-owned paid execution."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    channel: Literal["full_body", "head_shot", "scene", "prop"] = "full_body"
+    owner_kind: Literal["script", "series", "global"]
+    owner_id: str = Field(min_length=1)
+    target_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_image_id: str = Field(min_length=1)
+    client_request_id: str
+
+    @field_validator("client_request_id", mode="before")
+    @classmethod
+    def _request_key(cls, value):
+        return validate_client_request_id(value)
+
+
+class MotionReferenceReceipt(ProviderRequestReceiptMember):
+    """Schema v3 motion receipt: no synthetic storyboard frame owner."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    schema_version: Literal[3] = 3
+    entrypoint: Literal["studio.motion_reference.v1"] = "studio.motion_reference.v1"
+    request_contract_version: Literal["request-json-v1"] = "request-json-v1"
+    client_request_id: str
+    asset_id: str = Field(min_length=1)
+    asset_type: Literal["full_body", "head_shot", "scene", "prop"] = "full_body"
+    owner_kind: Literal["script", "series", "global"]
+    owner_id: str = Field(min_length=1)
+    request_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    created_at: float = Field(ge=0, allow_inf_nan=False)
+
+    @field_validator("client_request_id", mode="before")
+    @classmethod
+    def _request_key(cls, value):
+        return validate_client_request_id(value)
+
+    @property
+    def receipt_members(self) -> tuple[ProviderRequestReceiptMember, ...]:
+        return (ProviderRequestReceiptMember(
+            task_id=self.task_id, attempt_id=self.attempt_id,
+            execution_fingerprint=self.execution_fingerprint,
+        ),)
+
+
+ProviderRequestReceiptUnion = Union[MotionReferenceReceipt, ProviderBatchRequestReceipt, ProviderRequestReceipt]
+
 class VideoTask(BaseModel):
     id: str
     project_id: str
@@ -175,7 +387,9 @@ class VideoTask(BaseModel):
     asset_id: Optional[str] = Field(None, description="ID of the asset this video belongs to")
     image_url: str
     prompt: str
-    status: str = "pending"  # pending, processing, completed, failed
+    last_frame_url: Optional[str] = Field(None, description="Optional final image for ordered I2V")
+    reference_audio_urls: List[str] = Field(default_factory=list, description="Ordered audio references for R2V")
+    status: str = "pending"  # pending, processing, completed, failed, needs_confirmation
     error: Optional[str] = Field(None, description="Failure reason, if any (set by pipeline / cancel / orphan recovery)")
     video_url: Optional[str] = None
     duration: int = Field(5, description="Video duration in seconds (model-specific range)")
@@ -231,7 +445,22 @@ class VideoTask(BaseModel):
         None,
         description="Storyboard R2V workbench tab the user generated from: 't2i_i2v' | 'direct_r2v'",
     )
+    provider_execution: Optional[ProviderExecutionRecord] = Field(
+        None,
+        description="Durable non-secret provider execution record for query/fetch recovery",
+    )
+    motion_reference: Optional[MotionReferenceBinding] = None
     created_at: float = Field(default_factory=time.time)
+
+    def has_completed_motion_artifact(self) -> bool:
+        """Completion belongs to paid proof, independently of asset adoption."""
+        record = self.provider_execution
+        return bool(
+            self.motion_reference is not None and record is not None
+            and record.phase == "completed" and record.artifact is not None
+            and record.prepared_artifact == record.artifact
+            and self.video_url == record.artifact["relative_path"]
+        )
 
 class Character(BaseModel):
     id: str = Field(..., description="Unique identifier for the character")
@@ -258,6 +487,21 @@ class Character(BaseModel):
         default_factory=AssetUnit,
         description="Single master reference sheet (R2V v2). Multi-view or single portrait both supported.",
     )
+
+    reference_sheet_request_id: Optional[AssetImageServerId] = Field(
+        None, description="Dormant current Core image request; never generated while loading",
+    )
+    full_body_request_id: Optional[AssetImageServerId] = Field(
+        None, description="Dormant full-body Core image request; independent of the reference sheet",
+    )
+    three_view_request_id: Optional[AssetImageServerId] = Field(
+        None, description="Dormant three-view Core image request; never generated while loading",
+    )
+    headshot_request_id: Optional[AssetImageServerId] = Field(
+        None, description="Dormant headshot Core image request; never generated while loading",
+    )
+    full_body_motion_request_id: Optional[AssetImageServerId] = None
+    head_shot_motion_request_id: Optional[AssetImageServerId] = None
 
     # === LEGACY (pre R2V v2): Asset Activation v2 — three separate units ===
     # Frontend now collapses to reference_sheet; legacy fields are read
@@ -310,7 +554,7 @@ class Character(BaseModel):
     voice_origin: str = Field("system", description="Voice source: 'system' | 'clone' | 'design'")
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
-    status: GenerationStatus = GenerationStatus.PENDING
+    status: AssetGenerationStatus = GenerationStatus.PENDING
 
 class Scene(BaseModel):
     id: str = Field(..., description="Unique identifier for the scene")
@@ -321,6 +565,10 @@ class Scene(BaseModel):
     lighting_mood: Optional[str] = Field(None, description="Lighting atmosphere")
     image_url: Optional[str] = Field(None, description="URL of the generated scene reference image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Scene image asset container")
+    image_request_id: Optional[AssetImageServerId] = Field(
+        None, description="Current Core image request; copies must clear this authority",
+    )
+    motion_request_id: Optional[AssetImageServerId] = None
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this scene")
@@ -328,7 +576,7 @@ class Scene(BaseModel):
     
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
-    status: GenerationStatus = GenerationStatus.PENDING
+    status: AssetGenerationStatus = GenerationStatus.PENDING
 
 class Prop(BaseModel):
     id: str = Field(..., description="Unique identifier for the prop")
@@ -340,6 +588,10 @@ class Prop(BaseModel):
     bgm_url: Optional[str] = None
     image_url: Optional[str] = Field(None, description="URL of the generated prop image (Legacy)")
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Prop image asset container")
+    image_request_id: Optional[AssetImageServerId] = Field(
+        None, description="Current Core image request; copies must clear this authority",
+    )
+    motion_request_id: Optional[AssetImageServerId] = None
     
     # Video Assets (New for R2V)
     video_assets: List[VideoTask] = Field(default_factory=list, description="Generated reference videos for this prop")
@@ -347,7 +599,64 @@ class Prop(BaseModel):
     
     locked: bool = Field(False, description="Whether this asset is locked from regeneration")
     starred: bool = Field(False, description="User-starred flag for the asset library shortlist")
-    status: GenerationStatus = GenerationStatus.PENDING
+    status: AssetGenerationStatus = GenerationStatus.PENDING
+
+class DialogueAudioOptions(BaseModel):
+    """Saved desired overrides; null inherits current character/structured inputs."""
+    model_config = {"extra": "forbid"}
+
+    speed: Optional[float] = Field(None, strict=True, allow_inf_nan=False)
+    pitch: Optional[float] = Field(None, strict=True, allow_inf_nan=False)
+    volume: Optional[int] = Field(None, strict=True)
+    instructions: Optional[str] = Field(None, strict=True)
+
+
+class DialogueAudioSnapshot(BaseModel):
+    """Parameters used for one successful file, separate from desired overrides."""
+    schema_version: int = Field(1, strict=True, ge=1, le=1)
+    audio_url: str
+    options: DialogueAudioOptions
+    sources: Dict[str, str]
+    resolved_request: Dict[str, Any]
+    prepared: Dict[str, Any]
+
+
+class UnknownDialogueAudioSnapshot(BaseModel):
+    """Keep unrecognized versions opaque; never interpret them as v1 proof."""
+    model_config = {"extra": "allow"}
+    schema_version: int = Field(..., strict=True, ge=0)
+
+    @field_validator("schema_version")
+    @classmethod
+    def require_unknown_version(cls, value: int) -> int:
+        if value == 1:
+            raise ValueError("Version 1 must satisfy the known audio snapshot schema")
+        return value
+
+
+class DubSource(BaseModel):
+    """Verified inputs for one preview/applied dubbed video artifact."""
+    model_config = {"extra": "forbid"}
+
+    schema_version: int = Field(..., strict=True, ge=1, le=1)
+    task_id: str = Field(..., strict=True, min_length=1)
+    video_url: str = Field(..., strict=True, min_length=1)
+    audio_url: str = Field(..., strict=True, min_length=1)
+    offset_ms: int = Field(..., strict=True, ge=0)
+
+
+class UnknownDubSource(BaseModel):
+    """Preserve future dub provenance without trusting it as v1 proof."""
+    model_config = {"extra": "allow"}
+    schema_version: int = Field(..., strict=True, ge=0)
+
+    @field_validator("schema_version")
+    @classmethod
+    def require_unknown_version(cls, value: int) -> int:
+        if value == 1:
+            raise ValueError("Version 1 must satisfy the known dub source schema")
+        return value
+
 
 class StoryboardFrame(BaseModel):
     id: str = Field(..., description="Unique identifier for the frame")
@@ -396,6 +705,7 @@ class StoryboardFrame(BaseModel):
     image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Storyboard image asset container")
     rendered_image_url: Optional[str] = Field(None, description="URL of the high-fidelity rendered image (Legacy)")
     rendered_image_asset: Optional[ImageAsset] = Field(default_factory=ImageAsset, description="Rendered image asset container")
+    image_request_id: Optional[AssetImageServerId] = None
     
     video_prompt: Optional[str] = Field(None, description="Optimized prompt for I2V")
     video_url: Optional[str] = Field(None, description="URL of the generated video clip")
@@ -409,6 +719,8 @@ class StoryboardFrame(BaseModel):
     dialogue_text_hash: Optional[str] = Field(None, description="MD5 of (dialogue|voice_id|instructions) at audio generation time")
     dialogue_voice_id: Optional[str] = Field(None, description="Voice id used to generate the current audio")
     dialogue_instructions: Optional[str] = Field(None, description="Emotion/style instructions used for the current audio")
+    dialogue_audio_options: DialogueAudioOptions = Field(default_factory=DialogueAudioOptions)
+    dialogue_audio_snapshot: Optional[Union[DialogueAudioSnapshot, UnknownDialogueAudioSnapshot]] = None
     
     dubbed_video_url: Optional[str] = Field(None, description="URL of the video with TTS audio dubbed over original track")
     dubbed_video_task_id: Optional[str] = Field(None, description="ID of the VideoTask that was dubbed (for UI display)")
@@ -416,11 +728,13 @@ class StoryboardFrame(BaseModel):
     bg_audio_url: Optional[str] = Field(None, description="Cached background audio (Demucs no_vocals) path")
     bg_audio_source_video: Optional[str] = Field(None, description="Video URL that bg_audio_url was separated from (cache key)")
     preview_video_url: Optional[str] = Field(None, description="Current preview dubbed video (temporary, not committed)")
+    dub_preview_source: Optional[Union[DubSource, UnknownDubSource]] = None
+    dub_applied_source: Optional[Union[DubSource, UnknownDubSource]] = None
 
     selected_video_id: Optional[str] = Field(None, description="ID of the selected VideoTask for this frame")
     is_video_pinned: bool = Field(False, description="True when the user has manually pinned an active video take; auto_select_latest_video skips pinned frames so newly generated takes don't overwrite a hand-picked selection")
     locked: bool = Field(False, description="Whether this frame is locked from regeneration")
-    status: GenerationStatus = GenerationStatus.PENDING
+    status: AssetGenerationStatus = GenerationStatus.PENDING
     updated_at: float = Field(default_factory=time.time, description="Timestamp of last update")
 
     # === Storyboard R2V Workbench Persistence ===
@@ -448,6 +762,10 @@ class StoryboardFrame(BaseModel):
         1,
         description="Last-chosen Generate ×N batch size for this shot (1-6).",
     )
+    last_frame_url: Optional[str] = Field(
+        None,
+        description="Optional managed local closing-frame image for ordered I2V workbench generation.",
+    )
     # Issue 16 — final take selection. Set in Assembly (per the chosen take
     # from this frame's video_tasks), read by Storyboard's ShotCard top
     # preview to display the canonical "this is the version that ships"
@@ -457,6 +775,23 @@ class StoryboardFrame(BaseModel):
         None,
         description="Task ID of the chosen final take for this frame (singular). Set in Assembly stage; read by Storyboard.",
     )
+
+    def clear_image_request_for_copy(self) -> None:
+        """Keep copied media, without inheriting a worker or unqueryable state."""
+        if self.image_request_id is None:
+            return
+        self.image_request_id = None
+        if self.status not in (GenerationStatus.PROCESSING, "needs_confirmation"):
+            return
+        urls = [self.rendered_image_url, self.image_url]
+        for asset in (self.rendered_image_asset, self.image_asset):
+            if asset and asset.selected_id:
+                urls.extend(variant.url for variant in asset.variants if variant.id == asset.selected_id)
+        if self.t2i_image_urls:
+            index = max(0, min(self.t2i_selected_index, len(self.t2i_image_urls) - 1))
+            urls.append(self.t2i_image_urls[index])
+        self.status = (GenerationStatus.COMPLETED if any(url and url.strip() for url in urls)
+                       else GenerationStatus.PENDING)
 
 class CustomVoice(BaseModel):
     """PR-3h/i — User-created custom voice (clone or design).
@@ -519,6 +854,13 @@ class PromptConfig(BaseModel):
 
 class Script(BaseModel):
     id: str = Field(..., description="Unique identifier for the script project")
+    asset_image_request_scope_id: Optional[AssetImageServerId] = Field(
+        None, description="Dormant server scope incarnation; only assigned at future admission",
+    )
+    asset_image_requests: List[AssetImageRequestRecord] = Field(
+        default_factory=list, description="Dormant owner-local Core image request history",
+    )
+    revision: int = Field(0, ge=0, strict=True, description="Persisted version for optimistic editing")
     title: str = Field(..., description="Title of the comic/video")
     original_text: str = Field(..., description="The original novel text")
     
@@ -527,6 +869,10 @@ class Script(BaseModel):
     props: List[Prop] = Field(default_factory=list)
     frames: List[StoryboardFrame] = Field(default_factory=list)
     video_tasks: List[VideoTask] = Field(default_factory=list)
+    provider_request_receipts: List[ProviderRequestReceiptUnion] = Field(
+        default_factory=list,
+        description="Project-owned provider request idempotency receipts",
+    )
     
     # Global style settings (legacy, will be replaced by art_direction)
     style_preset: str = Field("realistic", description="Global style preset for all image generations")
@@ -554,6 +900,10 @@ class Script(BaseModel):
 
     # Merged video URL
     merged_video_url: Optional[str] = Field(None, description="URL of the merged final video")
+    merged_video_source: Optional[Any] = Field(
+        None,
+        description="Raw merge input provenance for the current merged video; unknown schemas are response-time unknown.",
+    )
 
     # PR-3k · Assembly audio mix. bgm_url points at a preset library entry
     # (e.g. "presets/bgm/calm_warm.mp3") or a user-uploaded URL. mix_settings
@@ -602,10 +952,71 @@ class Script(BaseModel):
     created_at: float
     updated_at: float
 
+    @model_validator(mode="after")
+    def _provider_request_receipts_are_consistent(self):
+        seen: set[tuple[str, str]] = set()
+        seen_task_ids: set[str] = set()
+        for receipt in self.provider_request_receipts:
+            key = (receipt.entrypoint, receipt.client_request_id)
+            if key in seen:
+                raise ValueError("Duplicate provider request receipt key")
+            seen.add(key)
+            for member in receipt.receipt_members:
+                if member.task_id in seen_task_ids:
+                    raise ValueError("Duplicate provider request receipt task")
+                seen_task_ids.add(member.task_id)
+
+        tasks_by_id = {task.id: task for task in self.video_tasks}
+        for receipt in self.provider_request_receipts:
+            for member in receipt.receipt_members:
+                task = tasks_by_id.get(member.task_id)
+                if task is None:
+                    continue
+                if task.project_id != self.id:
+                    raise ValueError("Provider request receipt points at a task from another project")
+                if isinstance(receipt, MotionReferenceReceipt):
+                    binding = task.motion_reference
+                    if (
+                        task.frame_id is not None or task.asset_id != receipt.asset_id
+                        or binding is None or binding.channel != receipt.asset_type
+                        or (binding.owner_kind, binding.owner_id, binding.client_request_id)
+                        != (receipt.owner_kind, receipt.owner_id, receipt.client_request_id)
+                    ):
+                        raise ValueError("Motion reference receipt does not match task owner")
+                elif task.frame_id != receipt.frame_id or task.motion_reference is not None:
+                    raise ValueError("Provider request receipt frame does not match task")
+                if task.provider_execution is None:
+                    raise ValueError("Provider request receipt points at a task without provider execution")
+                if task.provider_execution.attempt_id != member.attempt_id:
+                    raise ValueError("Provider request receipt attempt does not match task")
+                if task.provider_execution.fingerprint != member.execution_fingerprint:
+                    raise ValueError("Provider request receipt execution fingerprint does not match task")
+        for task in self.video_tasks:
+            if task.motion_reference is not None and (
+                task.id not in seen_task_ids or task.frame_id is not None
+                or task.provider_execution is None
+                or task.provider_execution.provider_model_id != "wan2.7-i2v"
+                or task.model != "wan2.7-i2v" or task.generation_mode != "i2v"
+            ):
+                raise ValueError("Motion reference task requires its original supported receipt")
+        return self
+
+    @model_validator(mode="after")
+    def _asset_image_requests_are_consistent(self):
+        validate_asset_image_requests(self.asset_image_requests, owner_kind="script", owner_id=self.id)
+        return self
+
 
 class Series(BaseModel):
     """A Series groups multiple Episodes with shared assets and configuration."""
     id: str = Field(..., description="Unique identifier for the series")
+    asset_image_request_scope_id: Optional[AssetImageServerId] = Field(
+        None, description="Dormant server scope incarnation; only assigned at future admission",
+    )
+    asset_image_requests: List[AssetImageRequestRecord] = Field(
+        default_factory=list, description="Dormant owner-local Core image request history",
+    )
+    revision: int = Field(0, ge=0, strict=True, description="Persisted version for optimistic editing")
     title: str = Field(..., description="Title of the series")
     description: str = Field("", description="Series description/synopsis")
 
@@ -644,9 +1055,27 @@ class Series(BaseModel):
 
     # Episode references
     episode_ids: List[str] = Field(default_factory=list, description="Ordered list of Episode/Script IDs")
+    episode_creation_receipts: List[SeriesEpisodeCreationReceipt] = Field(
+        default_factory=list, description="Original episode creation identities, retained after removal",
+    )
 
     created_at: float
     updated_at: float
+
+    @model_validator(mode="after")
+    def _asset_image_requests_are_consistent(self):
+        validate_asset_image_requests(self.asset_image_requests, owner_kind="series", owner_id=self.id)
+        return self
+
+    @model_validator(mode="after")
+    def _episode_creation_receipts_are_consistent(self):
+        identities = [receipt.client_request_id for receipt in self.episode_creation_receipts]
+        episodes = [receipt.episode_id for receipt in self.episode_creation_receipts]
+        if len(set(identities)) != len(identities) or len(set(episodes)) != len(episodes):
+            raise ValueError("Duplicate episode creation receipt")
+        if any(receipt.series_id != self.id for receipt in self.episode_creation_receipts):
+            raise ValueError("Episode creation receipt belongs to another series")
+        return self
 
 
 class GlobalAssetLibrary(BaseModel):
@@ -660,6 +1089,15 @@ class GlobalAssetLibrary(BaseModel):
     schema verbatim. Persisted to output/library_assets.json alongside
     projects.json / series.json."""
 
+    asset_image_requests: List[AssetImageRequestRecord] = Field(
+        default_factory=list, description="Dormant owner-local Core image request history",
+    )
+
+    revision: int = Field(0, ge=0, strict=True, description="Persisted version of the shared library")
     characters: List[Character] = Field(default_factory=list, description="Shared global character assets")
     scenes: List[Scene] = Field(default_factory=list, description="Shared global scene assets")
     props: List[Prop] = Field(default_factory=list, description="Shared global prop assets")
+    @model_validator(mode="after")
+    def _asset_image_requests_are_consistent(self):
+        validate_asset_image_requests(self.asset_image_requests, owner_kind="global", owner_id="library")
+        return self

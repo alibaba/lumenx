@@ -1,0 +1,263 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "case": "legacy_model_eligibility_read_only",
+      "checks": {
+        "all_local_http_methods_get": true,
+        "configuration_change_setup": "isolated pipeline config video.model.params.i2v_model_name",
+        "external_transport_calls_empty": true,
+        "managed_files_unchanged": true,
+        "zero_task_and_receipt": true
+      },
+      "events": [
+        {
+          "body": {
+            "asset_id": "hero",
+            "asset_type": "full_body",
+            "eligible": true,
+            "expected_target": "be2de17500ee9cd84bdb0de9caf4d48e7d385bb8c046c9e82e604ef3c96c7e97",
+            "model_id": "wan2.7-i2v",
+            "owner": {
+              "id": "project",
+              "kind": "script"
+            },
+            "project_id": "project",
+            "reason": null,
+            "selected_image_id": "selected-image",
+            "source_kind": "data_uri"
+          },
+          "label": "eligible_before_model_change",
+          "method": "GET",
+          "path": "/projects/project/motion_ref_requests",
+          "raw_response_sha256": "1bc25383805fa6bff280641297a87b9f20b791767961faa7c130e6e072b872d3",
+          "request_query": {
+            "asset_id": "hero",
+            "asset_type": "full_body",
+            "batch_size": 1,
+            "has_audio": false
+          },
+          "status_code": 200
+        },
+        {
+          "body": {
+            "art_direction": null,
+            "asset_image_request_scope_id": null,
+            "asset_image_requests": [],
+            "bgm_url": null,
+            "characters": [
+              {
+                "age": null,
+                "avatar_url": null,
+                "base_character_id": null,
+                "clothing": null,
+                "description": "Red coat",
+                "full_body": {
+                  "image_prompt": null,
+                  "image_updated_at": 1792684729.01575,
+                  "image_variants": [
+                    {
+                      "created_at": 1792684729.015746,
+                      "id": "selected-image",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "prompt_used": null,
+                      "upload_type": null,
+                      "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAPAAAADwCAIAAACxN37FAAACmElEQVR4nO3SQQkAIBAAwQvhx/5ljGUJQVgGJsA+ds5ekDHfC+AhQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYmxdCkGJoUQ5NiaFIMTYqhSTE0KYYm5QJjt2GashqP1QAAAABJRU5ErkJggg=="
+                    }
+                  ],
+                  "selected_image_id": "selected-image",
+                  "selected_video_id": "selected-video",
+                  "video_prompt": null,
+                  "video_updated_at": 0.0,
+                  "video_variants": [
+                    {
+                      "audio_url": null,
+                      "created_at": 1792684729.0157492,
+                      "id": "selected-video",
+                      "is_favorited": false,
+                      "prompt_used": null,
+                      "source_image_id": null,
+                      "url": "video/history.mp4"
+                    }
+                  ]
+                },
+                "full_body_asset": {
+                  "selected_id": null,
+                  "variants": []
+                },
+                "full_body_image_url": "https://media.invalid/unselected.png",
+                "full_body_motion_request_id": null,
+                "full_body_prompt": null,
+                "full_body_request_id": null,
+                "full_body_updated_at": 1792684729.015759,
+                "gender": null,
+                "head_shot": {
+                  "image_prompt": null,
+                  "image_updated_at": 1792684729.015753,
+                  "image_variants": [],
+                  "selected_image_id": null,
+                  "selected_video_id": null,
+                  "video_prompt": null,
+                  "video_updated_at": 0.0,
+                  "video_variants": []
+                },
+                "headshot_asset": {
+                  "selected_id": null,
+                  "variants": []
+                },
+                "headshot_image_url": null,
+                "headshot_prompt": null,
+                "headshot_updated_at": 0.0,
+                "id": "hero",
+                "image_url": null,
+                "is_consistent": true,
+                "locked": false,
+                "name": "Hero",
+                "persona": "",
+                "reference_sheet": {
+                  "image_prompt": null,
+                  "image_updated_at": 1792684729.015742,
+                  "image_variants": [],
+                  "selected_image_id": null,
+                  "selected_video_id": null,
+                  "video_prompt": null,
+                  "video_updated_at": 0.0,
+                  "video_variants": []
+                },
+                "reference_sheet_request_id": null,
+                "source": "episode",
+                "starred": false,
+                "status": "pending",
+                "three_view_asset": {
+                  "selected_id": null,
+                  "variants": []
+                },
+                "three_view_image_url": null,
+                "three_view_prompt": null,
+                "three_view_request_id": null,
+                "three_view_updated_at": 0.0,
+                "three_views": {
+                  "image_prompt": null,
+                  "image_updated_at": 1792684729.0157518,
+                  "image_variants": [],
+                  "selected_image_id": null,
+                  "selected_video_id": null,
+                  "video_prompt": null,
+                  "video_updated_at": 0.0,
+                  "video_variants": []
+                },
+                "video_assets": [],
+                "video_prompt": null,
+                "visual_weight": 3,
+                "voice_id": null,
+                "voice_name": null,
+                "voice_origin": "system",
+                "voice_pitch": 1.0,
+                "voice_speed": 1.0,
+                "voice_volume": 50
+              }
+            ],
+            "created_at": 1.0,
+            "default_generation_mode": "r2v",
+            "episode_number": null,
+            "frames": [],
+            "id": "project",
+            "last_episode_summary_cache": null,
+            "last_episode_summary_revision": null,
+            "merged_video_freshness": {
+              "project_revision": 0,
+              "reason": "no_merged_video",
+              "state": "unknown"
+            },
+            "merged_video_source": null,
+            "merged_video_url": null,
+            "mix_settings": {
+              "bgm": 35,
+              "dialogue": 100,
+              "sfx": 60
+            },
+            "model_settings": {
+              "character_aspect_ratio": "9:16",
+              "i2i_model": "wan2.7-image-pro",
+              "i2v_model": "happyhorse-1.1-i2v",
+              "image_model": "wan2.7-image-pro",
+              "prop_aspect_ratio": "1:1",
+              "r2v_model": "wan2.7-r2v",
+              "scene_aspect_ratio": "16:9",
+              "storyboard_aspect_ratio": "16:9",
+              "t2i_model": "wan2.7-image-pro"
+            },
+            "next_hook_cache": null,
+            "next_hook_revision": null,
+            "original_text": "Synthetic",
+            "prompt_config": {
+              "entity_extraction": "",
+              "polish_model": "",
+              "r2v_polish": "",
+              "storyboard_extraction": "",
+              "storyboard_polish": "",
+              "style_analysis": "",
+              "video_polish": ""
+            },
+            "props": [],
+            "provider_request_receipts": [],
+            "read_versions": {
+              "library": 0,
+              "project": 0,
+              "series": null
+            },
+            "revision": 0,
+            "scenes": [],
+            "series_id": null,
+            "starred": false,
+            "style_preset": "realistic",
+            "style_prompt": null,
+            "title": "Motion durability",
+            "updated_at": 1.0,
+            "video_tasks": [],
+            "workflow_mode": "i2v_legacy"
+          },
+          "label": "legacy_enriched_project",
+          "method": "GET",
+          "path": "/projects/project",
+          "raw_response_sha256": "8fadfa03cc8198fe43b81938192f993fb556dc557398c9be4a26e9f4c6c1b209",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "asset_id": "hero",
+            "asset_type": "full_body",
+            "eligible": false,
+            "expected_target": "59336903d5c363615f7ccab1c978555a8b4cf662a52ff9b7c3ae088a95923a32",
+            "model_id": "wan2.6-i2v",
+            "owner": {
+              "id": "project",
+              "kind": "script"
+            },
+            "project_id": "project",
+            "reason": "model_unsupported",
+            "selected_image_id": "selected-image",
+            "source_kind": "data_uri"
+          },
+          "label": "legacy_model_eligibility",
+          "method": "GET",
+          "path": "/projects/project/motion_ref_requests",
+          "raw_response_sha256": "94181dce9c3be2390a126ffd0555b36e01330d2247e5282ca1b6bfc6fcae7825",
+          "request_query": {
+            "asset_id": "hero",
+            "asset_type": "full_body",
+            "batch_size": 1,
+            "has_audio": false
+          },
+          "status_code": 200
+        }
+      ],
+      "external_counts": {
+        "fetch": 0,
+        "query": 0,
+        "submit": 0
+      }
+    }
+  ]
+}

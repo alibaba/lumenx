@@ -21,7 +21,6 @@
  *
  * FUTURE SCANNING POINTS (other modules still using raw <img>, replace
  * opportunistically next time they're touched):
- *   - frontend/src/components/modules/PropertiesPanel.tsx
  *   - frontend/src/components/modules/VideoCreator.tsx
  *   - frontend/src/components/modules/CharacterWorkbench.tsx
  *   - frontend/src/components/modules/ConsistencyVault.tsx

@@ -1,19 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, RotateCcw, Clock, FileText, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslations } from 'next-intl';
-import { scriptEditorApi, SnapshotResponse } from '@/lib/scriptEditorApi';
+import { scriptEditorApi, SnapshotResponse, DocumentResponse } from '@/lib/scriptEditorApi';
 
 export interface SnapshotListDialogProps {
   open: boolean;
   onClose: () => void;
   projectId: string;
-  onRestore: (content: any) => void;
+  currentRevision: number;
+  canRestore?: boolean;
+  onRestore: (envelope: DocumentResponse) => boolean | void;
 }
 
-function formatRelativeTime(dateStr: string, t: (key: string, values?: Record<string, any>) => string): string {
+function formatRelativeTime(dateStr: string, t: (key: string, values?: Record<string, string | number>) => string): string {
   const date = new Date(dateStr);
   const now = Date.now();
   const diff = now - date.getTime();
@@ -45,6 +47,8 @@ export default function SnapshotListDialog({
   open,
   onClose,
   projectId,
+  currentRevision,
+  canRestore = true,
   onRestore,
 }: SnapshotListDialogProps) {
   const t = useTranslations('scriptEditor');
@@ -52,41 +56,75 @@ export default function SnapshotListDialog({
   const [loading, setLoading] = useState(false);
   const [confirmingTimestamp, setConfirmingTimestamp] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
+  const [errorKey, setErrorKey] = useState<'loadFailed' | 'restoreInvalid' | null>(null);
+  const listRunRef = useRef(0);
+  const restoreRunRef = useRef(0);
+  const activeDialogRef = useRef({ open, projectId });
+  activeDialogRef.current = { open, projectId };
 
   // Fetch snapshots when dialog opens
   useEffect(() => {
+    restoreRunRef.current += 1;
+    setRestoring(false);
+    setConfirmingTimestamp(null);
+    setSnapshots([]);
+    setLoading(false);
+    setErrorKey(null);
     if (!open || !projectId) return;
+    const run = ++listRunRef.current;
     setLoading(true);
+    setErrorKey(null);
     scriptEditorApi
       .listSnapshots(projectId)
       .then((list) => {
+        if (listRunRef.current !== run || !activeDialogRef.current.open || activeDialogRef.current.projectId !== projectId) return;
         // Sort by created_at descending (newest first)
         const sorted = [...list].sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
         setSnapshots(sorted);
       })
-      .catch((err) => {
-        console.error('[SnapshotListDialog] Failed to load snapshots:', err);
+      .catch(() => {
+        if (listRunRef.current !== run || !activeDialogRef.current.open || activeDialogRef.current.projectId !== projectId) return;
+        setErrorKey('loadFailed');
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (listRunRef.current === run && activeDialogRef.current.open && activeDialogRef.current.projectId === projectId) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      listRunRef.current += 1;
+      restoreRunRef.current += 1;
+    };
   }, [open, projectId]);
 
   const handleRestore = useCallback(
     async (timestamp: string) => {
+      if (!canRestore) return;
+      const run = ++restoreRunRef.current;
       setRestoring(true);
+      setErrorKey(null);
       try {
-        const result = await scriptEditorApi.restoreSnapshot(projectId, timestamp);
-        onRestore(result.content);
-        onClose();
-      } catch (err) {
-        console.error('[SnapshotListDialog] Restore failed:', err);
+        const result = await scriptEditorApi.restoreSnapshot(projectId, timestamp, { expectedRevision: currentRevision });
+        if (restoreRunRef.current !== run || !activeDialogRef.current.open || activeDialogRef.current.projectId !== projectId) return;
+        const accepted = onRestore(result);
+        if (accepted !== false) {
+          onClose();
+        } else {
+          setErrorKey('restoreInvalid');
+        }
+      } catch {
+        if (restoreRunRef.current !== run || !activeDialogRef.current.open || activeDialogRef.current.projectId !== projectId) return;
+        setErrorKey('restoreInvalid');
       } finally {
-        setRestoring(false);
-        setConfirmingTimestamp(null);
+        if (restoreRunRef.current === run && activeDialogRef.current.open && activeDialogRef.current.projectId === projectId) {
+          setRestoring(false);
+          setConfirmingTimestamp(null);
+        }
       }
     },
-    [projectId, onRestore, onClose]
+    [projectId, currentRevision, canRestore, onRestore, onClose]
   );
 
   if (!open) return null;
@@ -123,6 +161,12 @@ export default function SnapshotListDialog({
                 <X size={18} />
               </button>
             </div>
+
+            {errorKey && (
+              <div role="alert" className="border-b border-red-700/30 bg-red-900/30 px-5 py-2 text-xs text-red-200">
+                {t(`status.${errorKey}`)}
+              </div>
+            )}
 
             {/* Content */}
             <div className="max-h-[400px] overflow-y-auto px-5 py-3">
@@ -169,7 +213,7 @@ export default function SnapshotListDialog({
                           <button
                             type="button"
                             onClick={() => handleRestore(snap.timestamp)}
-                            disabled={restoring}
+                            disabled={restoring || !canRestore}
                             className="rounded-md bg-amber-600/80 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-50"
                           >
                             {restoring ? t('dialogs.snapshots.restoring') : t('dialogs.snapshots.confirmBtn')}
@@ -185,8 +229,9 @@ export default function SnapshotListDialog({
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setConfirmingTimestamp(snap.timestamp)}
-                          className="flex items-center gap-1 rounded-md border border-white/10 px-2.5 py-1 text-xs text-zinc-400 opacity-0 transition-all hover:border-white/20 hover:text-zinc-200 group-hover:opacity-100"
+                          onClick={() => canRestore && setConfirmingTimestamp(snap.timestamp)}
+                          disabled={!canRestore}
+                          className="flex items-center gap-1 rounded-md border border-white/10 px-2.5 py-1 text-xs text-zinc-400 opacity-0 transition-all hover:border-white/20 hover:text-zinc-200 disabled:opacity-30 group-hover:opacity-100"
                         >
                           <RotateCcw size={12} />
                           <span>{t('dialogs.snapshots.restore')}</span>

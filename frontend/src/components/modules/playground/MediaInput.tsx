@@ -1,11 +1,13 @@
 'use client';
 
-import { useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { ImagePlus, Film, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { API_URL, playgroundApi } from '@/lib/api';
 import { usePlaygroundStore, type PlaygroundMode } from './usePlaygroundStore';
 import AssetPickerModal from './AssetPickerModal';
+import { getModelOption, isReferenceImagePathAllowed } from './playgroundModels';
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment, type RuntimeEnvironment } from '@/lib/runtimeEnvironment';
 
 // ---------------------------------------------------------------------------
 // Mode config
@@ -18,6 +20,13 @@ interface ModeConfig {
   multiple: boolean;
   maxFiles: number;
   icon: 'image' | 'video';
+}
+
+interface MediaInputOwner {
+  activation: number;
+  mode: PlaygroundMode;
+  modelId: string;
+  environment: RuntimeEnvironment | null;
 }
 
 const MODE_CONFIG: Partial<Record<PlaygroundMode, ModeConfig>> = {
@@ -63,6 +72,12 @@ const MODE_CONFIG: Partial<Record<PlaygroundMode, ModeConfig>> = {
   },
 };
 
+function isReferenceImageFileAllowed(file: File, allowedTypes: string[] | undefined): boolean {
+  if (!allowedTypes?.length) return true;
+  if (file.type) return allowedTypes.includes(file.type);
+  return isReferenceImagePathAllowed(file.name, allowedTypes);
+}
+
 // ---------------------------------------------------------------------------
 // Shared style tokens (Line B — semantic tokens only, theme-safe)
 // ---------------------------------------------------------------------------
@@ -85,6 +100,17 @@ function getFileName(path: string): string {
 
 function isVideoPath(path: string): boolean {
   return /\.(mp4|mov|webm|avi|mkv)$/i.test(path);
+}
+
+
+function r2vImageLimitForModel(modelId: string): number | null {
+  const limit = getModelOption(modelId)?.maxReferenceImages ?? 0;
+  return limit > 0 ? limit : null;
+}
+
+function isSameRuntime(environment: RuntimeEnvironment | null): boolean {
+  if (!environment) return getRuntimeEnvironment() === null;
+  return isCurrentRuntimeEnvironment(environment.key, environment.generation);
 }
 
 // Resolve a stored media path to a browser-loadable URL. Local `output/...` paths
@@ -183,57 +209,147 @@ export default function MediaInput() {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const activationRef = useRef(0);
+  const pickerOwnerRef = useRef<MediaInputOwner | null>(null);
 
-  const isSeedance = modelId.startsWith('seedance');
+  useEffect(() => {
+    const unsubscribe = subscribeRuntimeEnvironment(() => {
+      activationRef.current += 1;
+      pickerOwnerRef.current = null;
+      setShowAssetPicker(false);
+      setUploading(false);
+      setMediaError(null);
+    });
+    return () => {
+      activationRef.current += 1;
+      pickerOwnerRef.current = null;
+      unsubscribe();
+    };
+  }, []);
 
-  let config = MODE_CONFIG[mode];
+  useEffect(() => {
+    let previous = {
+      mode: usePlaygroundStore.getState().mode,
+      modelId: usePlaygroundStore.getState().modelId,
+    };
+    return usePlaygroundStore.subscribe((state) => {
+      if (state.mode === previous.mode && state.modelId === previous.modelId) return;
+      previous = { mode: state.mode, modelId: state.modelId };
+      activationRef.current += 1;
+      pickerOwnerRef.current = null;
+      setShowAssetPicker(false);
+      setUploading(false);
+      setMediaError(null);
+    });
+  }, []);
 
-  // Override r2v config when Seedance is selected
-  if (config && mode === 'r2v' && isSeedance) {
+  const shouldRenderMediaInput = MODE_CONFIG[mode] !== undefined;
+  let config = MODE_CONFIG[mode] ?? MODE_CONFIG.t2i!;
+
+  const r2vImageLimit = mode === 'r2v' ? r2vImageLimitForModel(modelId) : null;
+
+  if (config && mode === 'r2v' && r2vImageLimit !== null) {
     config = {
       ...config,
-      labelKey: 'media.labelRefMaterialAV',
-      accept: 'image/*,video/*,audio/*',
-      hintKey: 'r2vSeedance',
+      maxFiles: r2vImageLimit,
     };
   }
 
-  // Don't render for t2v mode (no input media needed)
-  if (!config) return null;
+  const referenceImageMimeTypes = config.icon === 'image' ? getModelOption(modelId)?.referenceImageMimeTypes : undefined;
+  const maxImageBytes = config.icon === 'image' ? getModelOption(modelId)?.maxReferenceImageBytes : undefined;
+  const referenceFormats = referenceImageMimeTypes?.map(type => type.split('/')[1].toUpperCase()).join(' / ');
+  if (referenceImageMimeTypes?.length) config = { ...config, accept: referenceImageMimeTypes.join(',') };
+  const mediaHint = referenceFormats
+    ? t('media.hints.modelImageFormats', { formats: referenceFormats })
+    : t(`media.hints.${config.hintKey}`);
 
   const hasMedia = inputMedia.length > 0;
+  const overLimit = config.multiple && inputMedia.length > config.maxFiles;
   const canAddMore = config.multiple && inputMedia.length < config.maxFiles;
+
+  const showLimitError = useCallback((current = inputMedia.length, max = config.maxFiles) => {
+    setMediaError(t('media.limitReached', { max, current }));
+  }, [config.maxFiles, inputMedia.length, t]);
+
+  const isCurrentOwner = useCallback((owner: MediaInputOwner | null) => {
+    if (!owner) return false;
+    const state = usePlaygroundStore.getState();
+    return activationRef.current === owner.activation
+      && state.mode === owner.mode
+      && state.modelId === owner.modelId
+      && isSameRuntime(owner.environment);
+  }, []);
+
+  useEffect(() => {
+    if (!showAssetPicker) return;
+    if (isCurrentOwner(pickerOwnerRef.current)) return;
+    pickerOwnerRef.current = null;
+    setShowAssetPicker(false);
+  }, [isCurrentOwner, mode, modelId, showAssetPicker]);
 
   // -------------------------------------------------------------------------
   // Upload handler
   // -------------------------------------------------------------------------
 
-  const handleFiles = async (files: FileList | File[]) => {
+  const handleFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
     if (fileArray.length === 0) return;
 
-    // Respect max file limit
-    const available = config.maxFiles - inputMedia.length;
+    const available = config.multiple ? Math.max(0, config.maxFiles - inputMedia.length) : 1;
+    if (available <= 0) {
+      showLimitError();
+      return;
+    }
+
     const toUpload = fileArray.slice(0, available);
+    if (maxImageBytes && toUpload.some(file => file.size > maxImageBytes)) {
+      setMediaError(t('media.imageTooLarge', { max: maxImageBytes / 1024 / 1024 }));
+      return;
+    }
+    if (toUpload.some(file => !isReferenceImageFileAllowed(file, referenceImageMimeTypes))) {
+      setMediaError(t('media.unsupportedImageType', { formats: referenceFormats ?? '' }));
+      return;
+    }
+    if (fileArray.length > available) showLimitError(inputMedia.length + fileArray.length, config.maxFiles);
+    else setMediaError(null);
+
+    const capture = {
+      activation: activationRef.current,
+      mode,
+      modelId,
+      environment: getRuntimeEnvironment(),
+    };
 
     setUploading(true);
     try {
       const results = await Promise.all(
         toUpload.map((file) => playgroundApi.uploadMedia(file))
       );
+      if (!isCurrentOwner(capture)) return;
       const newPaths = results.map((r) => r.path);
 
       if (config.multiple) {
-        setInputMedia([...inputMedia, ...newPaths]);
+        const latest = usePlaygroundStore.getState().inputMedia;
+        const room = Math.max(0, config.maxFiles - latest.length);
+        if (room <= 0) {
+          showLimitError(latest.length + newPaths.length, config.maxFiles);
+          return;
+        }
+        const accepted = newPaths.slice(0, room);
+        setInputMedia([...latest, ...accepted]);
+        if (accepted.length < newPaths.length) showLimitError(latest.length + newPaths.length, config.maxFiles);
       } else {
-        setInputMedia(newPaths);
+        setInputMedia(newPaths.slice(0, 1));
       }
     } catch (err) {
+      if (!isCurrentOwner(capture)) return;
       console.error('[MediaInput] upload failed:', err);
+      setMediaError(t('media.uploadFailed'));
     } finally {
-      setUploading(false);
+      if (isCurrentOwner(capture)) setUploading(false);
     }
-  };
+  }, [isCurrentOwner, config.maxFiles, config.multiple, inputMedia.length, mode, modelId, setInputMedia, showLimitError, t, referenceImageMimeTypes, referenceFormats, maxImageBytes]);
 
   // -------------------------------------------------------------------------
   // Event handlers
@@ -272,11 +388,12 @@ export default function MediaInput() {
         handleFiles(e.dataTransfer.files);
       }
     },
-    [inputMedia, config]
+    [handleFiles]
   );
 
   const handleRemove = (index: number) => {
     const updated = inputMedia.filter((_, i) => i !== index);
+    setMediaError(null);
     setInputMedia(updated);
   };
 
@@ -284,17 +401,49 @@ export default function MediaInput() {
     fileInputRef.current?.click();
   };
 
+  const openAssetPicker = () => {
+    pickerOwnerRef.current = {
+      activation: activationRef.current,
+      mode,
+      modelId,
+      environment: getRuntimeEnvironment(),
+    };
+    setShowAssetPicker(true);
+  };
+
+  const closeAssetPicker = () => {
+    pickerOwnerRef.current = null;
+    setShowAssetPicker(false);
+  };
+
   const handleAssetSelect = (path: string) => {
-    setInputMedia([...inputMedia, path]);
+    if (!isCurrentOwner(pickerOwnerRef.current)) {
+      closeAssetPicker();
+      return;
+    }
+    if (!isReferenceImagePathAllowed(path, referenceImageMimeTypes)) {
+      setMediaError(t('media.unsupportedImageType', { formats: referenceFormats ?? '' }));
+      return;
+    }
+    if (!config.multiple) {
+      setMediaError(null);
+      setInputMedia([path]);
+      return;
+    }
+    const latest = usePlaygroundStore.getState().inputMedia;
+    if (latest.length >= config.maxFiles) {
+      showLimitError(latest.length + 1, config.maxFiles);
+      return;
+    }
+    setMediaError(null);
+    setInputMedia([...latest, path]);
   };
 
   // Determine accept type for AssetPickerModal
   const acceptType: 'image' | 'video' | 'all' =
-    mode === 'r2v' && isSeedance
-      ? 'all'
-      : config.icon === 'video'
-        ? 'video'
-        : 'image';
+    config.icon === 'video' ? 'video' : 'image';
+
+  if (!shouldRenderMediaInput) return null;
 
   // -------------------------------------------------------------------------
   // Render: hidden file input
@@ -348,7 +497,7 @@ export default function MediaInput() {
             {uploading ? t('media.uploading') : t('media.dragOrClick')}
           </span>
 
-          <span className="text-[0.6875rem] text-text-muted">{t(`media.hints.${config.hintKey}`)}</span>
+          <span className="text-[0.6875rem] text-text-muted">{mediaHint}</span>
         </div>
 
         {/* Action buttons */}
@@ -363,20 +512,27 @@ export default function MediaInput() {
           </button>
           <button
             type="button"
-            onClick={() => setShowAssetPicker(true)}
+            onClick={openAssetPicker}
             className={ACTION_BTN_CLASS}
           >
             {t('media.pickFromLibrary')}
           </button>
         </div>
 
+        {mediaError && (
+          <div role="alert" className="rounded-[12px] border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+            {mediaError}
+          </div>
+        )}
+
         {fileInput}
 
         <AssetPickerModal
           isOpen={showAssetPicker}
-          onClose={() => setShowAssetPicker(false)}
+          onClose={closeAssetPicker}
           onSelect={handleAssetSelect}
           accept={acceptType}
+          allowedImageMimeTypes={referenceImageMimeTypes}
         />
       </div>
     );
@@ -461,6 +617,11 @@ export default function MediaInput() {
           <div className="font-mono text-[0.6875rem] text-text-muted">
             {t('media.fileCount', { current: inputMedia.length, max: config.maxFiles })}
           </div>
+          {overLimit && (
+            <div role="alert" className="rounded-[12px] border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+              {t('media.limitExceeded', { max: config.maxFiles, current: inputMedia.length })}
+            </div>
+          )}
         </div>
       ) : (
         <SingleRefPreview
@@ -482,20 +643,27 @@ export default function MediaInput() {
         </button>
         <button
           type="button"
-          onClick={() => setShowAssetPicker(true)}
+          onClick={openAssetPicker}
           className={ACTION_BTN_CLASS}
         >
           {t('media.pickFromLibrary')}
         </button>
       </div>
 
+      {mediaError && (
+        <div role="alert" className="rounded-[12px] border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+          {mediaError}
+        </div>
+      )}
+
       {fileInput}
 
       <AssetPickerModal
         isOpen={showAssetPicker}
-        onClose={() => setShowAssetPicker(false)}
+        onClose={closeAssetPicker}
         onSelect={handleAssetSelect}
         accept={acceptType}
+        allowedImageMimeTypes={referenceImageMimeTypes}
       />
     </div>
   );

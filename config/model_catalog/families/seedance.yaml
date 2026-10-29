@@ -39,6 +39,9 @@ models:
     modes:
       t2v:
         legacy_id: seedance-2.0-t2v
+        runtime:
+          mulerouter:
+            api_model_id: seedance-2.0-t2v
         display_name: Seedance 2.0 T2V
         description: Text-to-video generation
         capabilities: [t2v]
@@ -57,12 +60,19 @@ models:
           resolution:
             options: [720p, 1080p]
             default: 1080p
-          seed: true
+          aspectRatio:
+            options: ["16:9", "9:16", "1:1", "4:3", "3:4"]
+            default: "16:9"
+          audio: {default: true}
+          seed: {min: -1, max: 4294967295}
           negativePrompt: false
           promptExtend: false
-          watermark: true
+          watermark: {default: false}
       i2v:
         legacy_id: seedance-2.0-i2v
+        runtime:
+          mulerouter:
+            api_model_id: seedance-2.0-i2v
         display_name: Seedance 2.0 I2V
         description: Image-to-video generation
         capabilities: [i2v]
@@ -81,16 +91,26 @@ models:
           resolution:
             options: [720p, 1080p]
             default: 1080p
-          seed: true
+          aspectRatio:
+            options: ["16:9", "9:16", "1:1", "4:3", "3:4"]
+            default: "16:9"
+          audio: {default: true}
+          seed: {min: -1, max: 4294967295}
           negativePrompt: false
           promptExtend: false
-          watermark: true
+          watermark: false
         inputs:
           reference_images:
             max: 1
             reference_type: image
+            mime_types: [image/jpeg, image/png, image/webp]
+            # Product input guard; not a verified provider service limit.
+            max_bytes: 20971520
       r2v:
         legacy_id: seedance-2.0-r2v
+        runtime:
+          mulerouter:
+            api_model_id: seedance-2.0-r2v
         display_name: Seedance 2.0 R2V
         description: Reference-to-video with multi-image input
         capabilities: [r2v]
@@ -109,10 +129,14 @@ models:
           resolution:
             options: [720p, 1080p]
             default: 1080p
-          seed: true
+          aspectRatio:
+            options: ["16:9", "9:16", "1:1", "4:3", "3:4"]
+            default: "16:9"
+          audio: {default: true}
+          seed: {min: -1, max: 4294967295}
           negativePrompt: false
           promptExtend: false
-          watermark: true
+          watermark: false
         docs:
           context_hub_doc_ids:
             - mulerouter/seedance-2.0
@@ -120,3 +144,6 @@ models:
           reference_images:
             max: 9
             reference_type: image
+            mime_types: [image/jpeg, image/png, image/webp]
+            # Product input guard; not a verified provider service limit.
+            max_bytes: 20971520

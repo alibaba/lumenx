@@ -6,8 +6,8 @@ report:
   1. Backend restart eats in-memory FastAPI BackgroundTasks. The persisted
      task on disk stays at status="pending" forever and the UI shows an
      eternal spinner. Fix: pipeline.__init__ runs _recover_orphan_tasks()
-     which marks pending/processing video tasks as failed with a clear
-     reason, so the existing Retry button becomes usable.
+     which preserves pending/processing tasks as needs_confirmation without
+     claiming a remote failure or enabling a failed-task retry.
 
   2. BG task wrapper in api.py used to silently log + drop exceptions
      that escaped pipeline.process_video_task's own try/except (e.g.
@@ -42,9 +42,7 @@ def pipeline(tmp_path):
          patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
          patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
          patch("src.apps.comic_gen.pipeline.ExportManager"):
-        p = ComicGenPipeline()
-    p.data_file = str(tmp_path / "projects.json")
-    p.series_data_file = str(tmp_path / "series.json")
+        p = ComicGenPipeline(data_dir=tmp_path / "output")
     p.scripts = {}
     p.series_store = {}
     return p
@@ -77,10 +75,10 @@ def _script_with_tasks(*tasks) -> Script:
 # ---------------------------------------------------------------------------
 
 
-def test_orphan_recovery_marks_pending_and_processing_as_failed(pipeline):
+def test_orphan_recovery_marks_pending_and_processing_as_unconfirmed(pipeline):
     """Pending/processing tasks left over from a prior process die in
-    mid-air when uvicorn restarts. _recover_orphan_tasks stamps them
-    failed so the UI's Retry path is reachable."""
+    mid-air when uvicorn restarts. Recovery retains uncertainty without
+    authorizing another paid request."""
     pending = _video_task(status="pending", task_id="t-pending")
     processing = _video_task(status="processing", task_id="t-processing")
     completed = _video_task(status="completed", task_id="t-completed")
@@ -92,9 +90,9 @@ def test_orphan_recovery_marks_pending_and_processing_as_failed(pipeline):
     pipeline._recover_orphan_tasks()
 
     by_id = {t.id: t for t in pipeline.scripts["p1"].video_tasks}
-    assert by_id["t-pending"].status == "failed"
+    assert by_id["t-pending"].status == "needs_confirmation"
     assert "Backend was restarted" in (by_id["t-pending"].error or "")
-    assert by_id["t-processing"].status == "failed"
+    assert by_id["t-processing"].status == "needs_confirmation"
     # Completed + failed are untouched.
     assert by_id["t-completed"].status == "completed"
     assert by_id["t-failed"].status == "failed"
@@ -110,7 +108,7 @@ def test_orphan_recovery_preserves_existing_error_message(pipeline):
     pipeline._recover_orphan_tasks()
 
     recovered = pipeline.scripts["p1"].video_tasks[0]
-    assert recovered.status == "failed"
+    assert recovered.status == "needs_confirmation"
     assert recovered.error == "DashScope provider timed out"
 
 
@@ -265,10 +263,16 @@ def test_model_settings_persists_r2v_model(pipeline):
     # Default value is wan2.7-r2v per ModelSettings field default.
     assert script.model_settings.r2v_model == "wan2.7-r2v"
 
-    # Update through the pipeline path the API endpoint uses.
-    with patch.object(pipeline, "_save_data"):
-        updated = pipeline.update_model_settings("p1", r2v_model="kling-v3-r2v")
+    # Exercise real temporary persistence: a mocked save cannot prove this
+    # contract now that the response intentionally reads committed state.
+    pipeline._save_data()
+    updated = pipeline.update_model_settings("p1", r2v_model="kling-v3-r2v")
     assert updated.model_settings.r2v_model == "kling-v3-r2v"
+    import json
+    from pathlib import Path
+    saved = Script.model_validate(json.loads(Path(pipeline.data_file).read_text())["p1"])
+    assert saved.model_settings.r2v_model == "kling-v3-r2v"
+    assert saved.revision == updated.revision == 1
 
     # Other fields untouched.
     assert updated.model_settings.i2v_model == script.model_settings.i2v_model
@@ -276,20 +280,17 @@ def test_model_settings_persists_r2v_model(pipeline):
 
 def test_create_video_task_accepts_r2v_with_refs(pipeline):
     pipeline.scripts = {"p1": _script_with_tasks()}
-    # Avoid touching disk for snapshot copy.
-    with patch.object(pipeline, "_save_data"):
-        # The snapshot copy logic also touches the filesystem; route a
-        # bogus URL through the http branch by setting a non-existent
-        # path so the function early-skips the snapshot but still
-        # creates the task.
-        script, task_id = pipeline.create_video_task(
-            script_id="p1",
-            image_url="http://example.com/img.png",
-            prompt="A scene",
-            model="wan2.7-r2v",
-            generation_mode="r2v",
-            reference_image_urls=["http://example.com/ref1.png"],
-        )
+    # The snapshot copy logic also touches the filesystem; route a
+    # bogus URL through the http branch so the function creates the task
+    # while using real temp storage and committed return semantics.
+    script, task_id = pipeline.create_video_task(
+        script_id="p1",
+        image_url="http://example.com/img.png",
+        prompt="A scene",
+        model="wan2.7-r2v",
+        generation_mode="r2v",
+        reference_image_urls=["http://example.com/ref1.png"],
+    )
 
     assert task_id
     assert any(t.id == task_id for t in script.video_tasks)
@@ -349,10 +350,9 @@ def test_video_task_workbench_tab_default_none():
 def test_update_frame_workbench_partial_writes(pipeline):
     frame = StoryboardFrame(id="f1", scene_id="s1")
     pipeline.scripts = {"p1": _script_with_frame(frame)}
-    with patch.object(pipeline, "_save_data"):
-        updated = pipeline.update_frame_workbench(
-            "p1", "f1", workbench_tab_mode="direct_r2v",
-        )
+    updated = pipeline.update_frame_workbench(
+        "p1", "f1", workbench_tab_mode="direct_r2v",
+    )
     assert updated is not None
     assert updated.workbench_tab_mode == "direct_r2v"
     # Other fields untouched.
@@ -374,10 +374,9 @@ def test_update_frame_workbench_caps_t2i_history_at_10(pipeline):
     frame = StoryboardFrame(id="f1", scene_id="s1")
     pipeline.scripts = {"p1": _script_with_frame(frame)}
     long_list = [f"http://img-{i}" for i in range(15)]
-    with patch.object(pipeline, "_save_data"):
-        updated = pipeline.update_frame_workbench(
-            "p1", "f1", t2i_image_urls=long_list,
-        )
+    updated = pipeline.update_frame_workbench(
+        "p1", "f1", t2i_image_urls=long_list,
+    )
     assert updated is not None
     # FIFO: oldest dropped, newest retained.
     assert updated.t2i_image_urls == [f"http://img-{i}" for i in range(5, 15)]
@@ -387,12 +386,11 @@ def test_update_frame_workbench_caps_t2i_history_at_10(pipeline):
 def test_update_frame_workbench_clamps_selected_index_against_new_list(pipeline):
     frame = StoryboardFrame(id="f1", scene_id="s1")
     pipeline.scripts = {"p1": _script_with_frame(frame)}
-    with patch.object(pipeline, "_save_data"):
-        updated = pipeline.update_frame_workbench(
-            "p1", "f1",
-            t2i_image_urls=["http://a", "http://b"],
-            t2i_selected_index=99,  # out of range
-        )
+    updated = pipeline.update_frame_workbench(
+        "p1", "f1",
+        t2i_image_urls=["http://a", "http://b"],
+        t2i_selected_index=99,  # out of range
+    )
     assert updated is not None
     assert updated.t2i_selected_index == 1  # clamped to len-1
 
@@ -404,43 +402,39 @@ def test_update_frame_workbench_clamps_selected_index_to_zero_when_empty(pipelin
         t2i_selected_index=0,
     )
     pipeline.scripts = {"p1": _script_with_frame(frame)}
-    with patch.object(pipeline, "_save_data"):
-        updated = pipeline.update_frame_workbench(
-            "p1", "f1", t2i_image_urls=[], t2i_selected_index=5,
-        )
+    updated = pipeline.update_frame_workbench(
+        "p1", "f1", t2i_image_urls=[], t2i_selected_index=5,
+    )
     assert updated is not None
     assert updated.t2i_image_urls == []
     assert updated.t2i_selected_index == 0
 
 
 def test_update_frame_workbench_clamps_generate_count_to_range(pipeline):
-    # Both bounds tested against the same frame; the helper mutates in
-    # place, so the second call overwrites the first — we capture each
-    # clamped value at the moment of the call instead of relying on the
-    # returned reference.
+    # Both updates use real temporary persistence and return independent
+    # committed snapshots, so the first response remains unchanged.
     frame = StoryboardFrame(id="f1", scene_id="s1")
     pipeline.scripts = {"p1": _script_with_frame(frame)}
-    with patch.object(pipeline, "_save_data"):
-        too_high = pipeline.update_frame_workbench(
-            "p1", "f1", workbench_generate_count=99,
-        )
-        assert too_high is not None
-        assert too_high.workbench_generate_count == 6  # clamped to upper bound
-        too_low = pipeline.update_frame_workbench(
-            "p1", "f1", workbench_generate_count=0,
-        )
-        assert too_low is not None
-        assert too_low.workbench_generate_count == 1  # clamped to lower bound
+    too_high = pipeline.update_frame_workbench(
+        "p1", "f1", workbench_generate_count=99,
+    )
+    assert too_high is not None
+    assert too_high.workbench_generate_count == 6  # clamped to upper bound
+    too_low = pipeline.update_frame_workbench(
+        "p1", "f1", workbench_generate_count=0,
+    )
+    assert too_low is not None
+    assert too_low.workbench_generate_count == 1  # clamped to lower bound
+    assert too_high.workbench_generate_count == 6
 
 
 def test_update_frame_workbench_filters_blank_t2i_urls(pipeline):
     frame = StoryboardFrame(id="f1", scene_id="s1")
     pipeline.scripts = {"p1": _script_with_frame(frame)}
-    with patch.object(pipeline, "_save_data"):
-        updated = pipeline.update_frame_workbench(
-            "p1", "f1",
-            t2i_image_urls=["http://a", "", "  ", "http://b", None],  # type: ignore[list-item]
-        )
+    updated = pipeline.update_frame_workbench(
+        "p1", "f1",
+        t2i_image_urls=["http://a", "", "  ", "http://b", None],  # type: ignore[list-item]
+    )
     assert updated is not None
     assert updated.t2i_image_urls == ["http://a", "http://b"]
 
@@ -453,15 +447,14 @@ def test_update_frame_workbench_returns_none_for_unknown(pipeline):
 
 def test_create_video_task_persists_workbench_tab(pipeline):
     pipeline.scripts = {"p1": _script_with_tasks()}
-    with patch.object(pipeline, "_save_data"):
-        script, task_id = pipeline.create_video_task(
-            script_id="p1",
-            image_url="http://example.com/img.png",
-            prompt="A scene",
-            model="wan2.7-i2v",
-            generation_mode="i2v",
-            workbench_tab="t2i_i2v",
-        )
+    script, task_id = pipeline.create_video_task(
+        script_id="p1",
+        image_url="http://example.com/img.png",
+        prompt="A scene",
+        model="wan2.7-i2v",
+        generation_mode="i2v",
+        workbench_tab="t2i_i2v",
+    )
     task = next(t for t in script.video_tasks if t.id == task_id)
     assert task.workbench_tab == "t2i_i2v"
 
@@ -469,13 +462,12 @@ def test_create_video_task_persists_workbench_tab(pipeline):
 def test_create_video_task_workbench_tab_defaults_to_none(pipeline):
     """Pre-Phase-2 callers don't supply workbench_tab — must not break."""
     pipeline.scripts = {"p1": _script_with_tasks()}
-    with patch.object(pipeline, "_save_data"):
-        script, task_id = pipeline.create_video_task(
-            script_id="p1",
-            image_url="http://example.com/img.png",
-            prompt="A scene",
-            model="wan2.7-i2v",
-            generation_mode="i2v",
-        )
+    script, task_id = pipeline.create_video_task(
+        script_id="p1",
+        image_url="http://example.com/img.png",
+        prompt="A scene",
+        model="wan2.7-i2v",
+        generation_mode="i2v",
+    )
     task = next(t for t in script.video_tasks if t.id == task_id)
     assert task.workbench_tab is None

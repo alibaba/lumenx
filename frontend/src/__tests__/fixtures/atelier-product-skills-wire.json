@@ -1,0 +1,32 @@
+{
+  "catalog": [
+    {
+      "category": "story",
+      "content_hash": "c849ee07c42d74a5e825128730eace561019876040abcf2759f5557bdffcac48",
+      "default_iteration_cap": 1,
+      "description": "Read the current canvas and summarize the next useful story move without changing the project.",
+      "disabled_reason": null,
+      "enabled": true,
+      "expected_tools": [
+        "canvas.readProject"
+      ],
+      "name": "story-scout",
+      "schema_version": 1,
+      "title": "Story Scout",
+      "version": "1.0.0"
+    }
+  ],
+  "story_scout_snapshot": {
+    "category": "story",
+    "content_hash": "c849ee07c42d74a5e825128730eace561019876040abcf2759f5557bdffcac48",
+    "description": "Read the current canvas and summarize the next useful story move without changing the project.",
+    "expected_tools": [
+      "canvas.readProject"
+    ],
+    "name": "story-scout",
+    "prompt_template": "Read the Atelier canvas as a story scout. Identify the current narrative material, call out missing context, and propose the next small creative move. Do not mutate the canvas.",
+    "schema_version": 1,
+    "title": "Story Scout",
+    "version": "1.0.0"
+  }
+}

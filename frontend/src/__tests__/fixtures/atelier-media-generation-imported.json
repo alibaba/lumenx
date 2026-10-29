@@ -1,0 +1,113 @@
+{
+  "id_map": {
+    "audio_tracks": {},
+    "candidates": {
+      "image-node:candidate-image": "fixture-candidate"
+    },
+    "candidate_judgments": {},
+    "exports": {},
+    "nodes": {
+      "image-node": "fixture-node"
+    },
+    "projects": {
+      "p1": "fixture-project"
+    },
+    "sequence": {}
+  },
+  "manifest": {
+    "agent_history": [],
+    "kind": "lumenx.atelier.project",
+    "media": [
+      {
+        "logical_ref": "assets/atelier/out.png",
+        "package_path": "media/assets/atelier/out.png",
+        "sha256": "33b51f3cc291518b966595f2478d2ed3880e13aeb74c45a16d5bf92b4060fca0",
+        "size_bytes": 720
+      }
+    ],
+    "schema_version": 1,
+    "source": {
+      "project_id": "p1",
+      "project_revision": 1,
+      "storage_id": "source-storage",
+      "title": "Canvas"
+    }
+  },
+  "media_map": {
+    "assets/atelier/out.png": "assets/imported/fixture-project/atelier/out.png"
+  },
+  "prepared_project": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1.0
+    },
+    "agent_turns": [],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 99.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "fixture-project",
+    "import_provenance": {
+      "agent_history": [],
+      "imported_at": 99.0,
+      "schema_version": 1,
+      "source_project_id": "p1",
+      "source_storage_id": "source-storage"
+    },
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 99.0,
+        "created_by": "user",
+        "data": {
+          "candidates": [
+            {
+              "attempt_id": null,
+              "authority": "imported",
+              "error_code": null,
+              "execution_contract": "atelier-provider-media-v2",
+              "execution_fingerprint": null,
+              "id": "fixture-candidate",
+              "media_kind": "image",
+              "media_url": "assets/imported/fixture-project/atelier/out.png",
+              "schema_version": 2,
+              "status": "completed"
+            }
+          ]
+        },
+        "frame_id": null,
+        "height": 180.0,
+        "id": "fixture-node",
+        "media_urls": [],
+        "project_id": "fixture-project",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "",
+        "type": "image",
+        "updated_at": 99.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 0,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Canvas",
+    "updated_at": 99.0
+  }
+}

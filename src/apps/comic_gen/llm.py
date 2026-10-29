@@ -31,7 +31,7 @@ class PolishError(Exception):
       - is_configured_false: LLM 未配置（缺 API key）
       - api_error: 上游 API 调用本身失败（网络/鉴权/限流/模型不可用）
       - json_parse_error: 模型返回内容不是合法 JSON
-      - missing_keys: JSON 缺 prompt_cn 或 prompt_en
+      - missing_keys: JSON 缺少必需字段、内容为空或结构不符合当前操作
       - model_echo: 模型几乎原文返回（warning 级别，不是 hard error，
         前端展示为黄色警告 + 保留原文双语，让用户追加 feedback 重试）
     """
@@ -65,7 +65,7 @@ def _is_echo(result_en: str, draft_en: str, threshold: float = 0.95) -> bool:
     return SequenceMatcher(None, a, b).ratio() >= threshold
 
 
-def _resolve_image_for_vision(url: str) -> Optional[str]:
+def _resolve_image_for_vision(url: str, output_root: str = "output") -> Optional[str]:
     """把任意形式的图像 URL 规整成 vision API 能直接消费的形式。
       - 已是 http(s):// 或 data:image/ → 原样返回（DashScope 能 fetch / 已内联）
       - 看起来是相对路径（output/* 或 /files/* 或裸文件名）→ 读本地文件做 base64 data URI
@@ -86,7 +86,7 @@ def _resolve_image_for_vision(url: str) -> Optional[str]:
             cleaned = cleaned[len(prefix):]
             break
     # 只允许解析到 output/ 目录内的文件，防止路径穿越（../../etc/passwd）
-    out_base = os.path.realpath("output")
+    out_base = os.path.realpath(output_root)
     abs_path = None
     for candidate in (os.path.join(out_base, cleaned), cleaned):
         resolved = os.path.realpath(candidate)
@@ -392,10 +392,14 @@ DEFAULT_STORYBOARD_EXTRACTION_PROMPT = """# 角色
 
 
 class ScriptProcessor:
-    def __init__(self, api_key: str = None):
+    def __init__(self, api_key: str = None, *, output_root: str = "output", env=None):
         self._api_key = api_key
+        self.output_root = os.fspath(output_root)
         from .llm_adapter import LLMAdapter
-        self.llm = LLMAdapter()
+        self.llm = LLMAdapter(**({"env": env} if env is not None else {}))
+
+    def _resolve_image_for_vision(self, url: str) -> Optional[str]:
+        return _resolve_image_for_vision(url, self.output_root)
 
     @property
     def is_configured(self):
@@ -913,6 +917,42 @@ class ScriptProcessor:
             }
         ]
     
+    def _call_storyboard_json(self, messages: List[Dict[str, Any]], *, json_object: bool = False) -> Dict[str, Any]:
+        """One transport call; never substitute drafts or invent storyboard data."""
+        if not self.is_configured:
+            raise PolishError(
+                reason="is_configured_false",
+                message_zh="LLM 未配置（缺少 DASHSCOPE_API_KEY），请到设置中检查。",
+                message_en="LLM not configured (missing DASHSCOPE_API_KEY). Please check settings.",
+            )
+        try:
+            kwargs = {"response_format": {"type": "json_object"}} if json_object else {}
+            content = self.llm.chat(messages=messages, **kwargs)
+        except Exception as exc:
+            logger.exception("Storyboard LLM API error")
+            raise PolishError(
+                reason="api_error",
+                message_zh="模型调用失败，请检查模型设置或稍后重试。",
+                message_en="Model call failed. Check model settings or try again later.",
+            ) from exc
+        try:
+            if not isinstance(content, str):
+                raise ValueError("Model response must be text")
+            result = json.loads(_strip_markdown_json(content))
+        except (ValueError, TypeError) as exc:
+            raise PolishError(
+                reason="json_parse_error",
+                message_zh="模型返回了无效 JSON，请检查输入后重试。",
+                message_en="Model returned invalid JSON. Check the input and retry.",
+            ) from exc
+        if not isinstance(result, dict):
+            raise PolishError(
+                reason="missing_keys",
+                message_zh="模型返回的结果结构不完整，请重试。",
+                message_en="Model returned an incomplete result structure. Please retry.",
+            )
+        return result
+
     def analyze_to_storyboard(self, text: str, entities_json: Dict[str, Any], custom_extraction_prompt: str = "") -> List[Dict[str, Any]]:
         """
         Analyzes script text and generates storyboard frames using Prompt B (Storyboard Director).
@@ -923,10 +963,6 @@ class ScriptProcessor:
         contain {entities_str} and {text} placeholders, substituted before the call.
         """
         logger.info(f"Analyzing text to storyboard: {text[:100]}...")
-        
-        if not self.is_configured:
-            logger.warning("DASHSCOPE_API_KEY not set. Returning mock frames.")
-            return self._mock_storyboard_frames(text)
         
         # Build entities context
         characters_list = entities_json.get("characters", [])
@@ -946,76 +982,26 @@ class ScriptProcessor:
         )
         system_prompt = template.replace("{entities_str}", entities_str).replace("{text}", text)
 
-        try:
-            content = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。"}
-                ],
-            ).strip()
-            logger.debug(f"Storyboard Analysis Raw Response: {content[:500]}...")
-
-            frames = self._parse_storyboard_json(content)
-            if frames is not None:
-                return frames
-
-            # First parse failed — retry once with response_format constraint
-            logger.warning("Storyboard JSON parse failed, retrying with response_format=json_object...")
-            retry_content = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。请务必输出合法的JSON格式。"}
-                ],
-                response_format={'type': 'json_object'},
-            ).strip()
-            logger.debug(f"Storyboard Analysis Retry Response: {retry_content[:500]}...")
-            frames = self._parse_storyboard_json(retry_content)
-            if frames is not None:
-                return frames
-
-            raise RuntimeError(
-                "AI 模型输出的 JSON 格式不合规，自动重试后仍然失败。请重新点击生成按钮再试一次。"
+        result = self._call_storyboard_json([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "请开始生成分镜帧列表，确保覆盖剧本中的所有内容。"},
+        ])
+        frames = result.get("frames")
+        if not isinstance(frames, list) or not frames:
+            raise PolishError(
+                reason="missing_keys",
+                message_zh="模型未返回可用的分镜列表，请重试。",
+                message_en="Model returned no usable storyboard frames. Please retry.",
             )
-
-        except RuntimeError:
-            raise  # Re-raise our own descriptive errors
-        except Exception as e:
-            logger.error(f"Error in storyboard analysis: {e}", exc_info=True)
-            raise RuntimeError(f"分镜分析过程出错: {str(e)}")
-    
-    def _parse_storyboard_json(self, content: str):
-        """Try to parse storyboard JSON from LLM output. Returns frames list or None on failure."""
-        content = _strip_markdown_json(content)
-
-        try:
-            result = json.loads(content.strip())
-            frames = result.get("frames", [])
-            if not frames:
-                logger.warning("Parsed JSON successfully but 'frames' array is empty")
-                return None
-            logger.info(f"Storyboard Analysis generated {len(frames)} frames")
-            return frames
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse storyboard analysis JSON: {e}")
-            return None
-
-    def _mock_storyboard_frames(self, text: str) -> List[Dict[str, Any]]:
-        """Returns mock storyboard frames for testing when API is unavailable."""
-        return [
-            {
-                "scene_ref_name": "卧室",
-                "character_ref_names": ["叶墨"],
-                "prop_ref_names": ["手机"],
-                "visual_atmosphere": "昏暗的卧室，窗外透进冷色调月光",
-                "character_acting": "叶墨眉头紧锁，眼神迷离",
-                "key_action_physics": "手机在柜上剧烈震动",
-                "shot_size": "中景",
-                "camera_angle": "平视",
-                "camera_movement": "Static",
-                "dialogue": None,
-                "speaker": None
-            }
-        ]
+        for frame in frames:
+            action = frame.get("action_summary", frame.get("action_description")) if isinstance(frame, dict) else None
+            if not isinstance(action, str) or not action.strip():
+                raise PolishError(
+                    reason="missing_keys",
+                    message_zh="模型返回的分镜缺少有效动作描述，请重试。",
+                    message_en="Model returned a frame without a valid action description. Please retry.",
+                )
+        return frames
 
     def refine_frame_to_rich(
         self,
@@ -1024,12 +1010,8 @@ class ScriptProcessor:
         scene_assets: List[Dict[str, Any]],
         prev_frame_context: Optional[str] = None,
         next_frame_context: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """Phase 2: Refine a coarse frame into a rich frame with full structured fields."""
-        if not self.is_configured:
-            logger.warning("LLM not configured, cannot refine frame")
-            return None
-
         system_prompt = f"""# Role
 You are a film storyboard refinement specialist. Enrich one coarse frame into full structured data + visual description.
 
@@ -1110,23 +1092,21 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
 # Next Frame Context
 {next_frame_context or "None (this is the last frame)"}
 """
-        try:
-            content = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Please refine this frame. Output valid JSON only, no markdown fences."}
-                ],
-                response_format={'type': 'json_object'},
-            ).strip()
-            content = _strip_markdown_json(content)
-            result = json.loads(content)
-            return result
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse frame refine JSON: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Frame refine LLM call failed: {e}")
-            return None
+        result = self._call_storyboard_json([
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Please refine this frame. Output valid JSON only, no markdown fences."},
+        ], json_object=True)
+        known_fields = {
+            "visual_description", "shot_size", "camera_angle", "duration", "transition_hint",
+            "camera_movement", "blocking", "dialogue_structured", "audio_note", "lighting",
+        }
+        if not known_fields.intersection(result):
+            raise PolishError(
+                reason="missing_keys",
+                message_zh="模型未返回有效的分镜精修字段，请重试。",
+                message_en="Model returned no usable frame refinement fields. Please retry.",
+            )
+        return result
 
     def polish_storyboard_prompt(self, draft_prompt: str, assets: List[Dict[str, Any]], feedback: str = "", custom_system_prompt: str = "") -> Dict[str, str]:
         """
@@ -1134,11 +1114,6 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         Returns a dict with 'prompt_cn' and 'prompt_en'.
         """
         logger.debug(f"Polishing prompt: {draft_prompt}")
-
-        fallback_result = {"prompt_cn": draft_prompt, "prompt_en": draft_prompt}
-
-        if not self.is_configured:
-             return fallback_result
 
         # Construct context about assets
         asset_context = []
@@ -1165,32 +1140,25 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
 请根据用户反馈修改提示词，只修改用户指出的问题，保持其他部分不变。
 """
 
-        try:
-            content = self.llm.chat(
-                messages=[{"role": "user", "content": user_content}],
-                response_format={'type': 'json_object'},
-            ).strip()
-            logger.debug(f"Polished Prompt Raw: {content}")
+        result = self._call_storyboard_json([
+            {"role": "user", "content": user_content},
+        ], json_object=True)
+        if any(not isinstance(result.get(key), str) or not result[key].strip() for key in ("prompt_cn", "prompt_en")):
+            raise PolishError(
+                reason="missing_keys",
+                message_zh="模型返回了不完整的双语结果，建议重试。",
+                message_en="Model returned incomplete bilingual result. Please retry.",
+            )
+        if _is_echo(result["prompt_en"], draft_prompt):
+            raise PolishError(
+                reason="model_echo",
+                message_zh="模型未做明显修改。建议补充具体要求（如构图、光影、情绪）后重试。",
+                message_en="Model made no notable changes. Add more specific feedback (composition, lighting, mood) and retry.",
+                prompt_cn=result["prompt_cn"],
+                prompt_en=result["prompt_en"],
+            )
+        return result
 
-            # Parse JSON response
-            content = _strip_markdown_json(content)
-
-            try:
-                result = json.loads(content.strip())
-                if "prompt_cn" in result and "prompt_en" in result:
-                    logger.debug(f"Polished Prompt CN: {result['prompt_cn'][:100]}...")
-                    logger.debug(f"Polished Prompt EN: {result['prompt_en'][:100]}...")
-                    return result
-                else:
-                    logger.warning("LLM response missing prompt_cn or prompt_en")
-                    return fallback_result
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse polish response JSON: {e}")
-                return fallback_result
-                
-        except Exception as e:
-            logger.error(f"Error polishing prompt: {e}", exc_info=True)
-            return fallback_result
     def polish_video_prompt(
         self,
         draft_prompt: str,
@@ -1275,7 +1243,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
             # before reading the text-side instructions.
             parts: List[Dict[str, Any]] = []
             for url in image_urls:
-                resolved = _resolve_image_for_vision(url)
+                resolved = self._resolve_image_for_vision(url)
                 if resolved:
                     parts.append({"type": "image_url", "image_url": {"url": resolved}})
             if not parts:
@@ -1419,7 +1387,7 @@ Return a JSON object with ALL fields below. null is acceptable for optional fiel
         if has_images:
             parts: List[Dict[str, Any]] = []
             for url in image_urls:
-                resolved = _resolve_image_for_vision(url)
+                resolved = self._resolve_image_for_vision(url)
                 if resolved:
                     parts.append({"type": "image_url", "image_url": {"url": resolved}})
             if not parts:

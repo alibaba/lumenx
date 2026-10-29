@@ -15,7 +15,7 @@ const env = {
 
 const backend = spawn(pythonPath, [
   '-m', 'uvicorn', 'src.apps.comic_gen.api:app',
-  '--reload', '--port', '17177', '--host', '0.0.0.0'
+  '--reload', '--port', '17177', '--host', '127.0.0.1'
 ], {
   stdio: 'inherit',
   env

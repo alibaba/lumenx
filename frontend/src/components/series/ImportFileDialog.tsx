@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Upload, FileText, Loader2, ChevronLeft, ChevronRight, Check, BookOpen } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, type SeriesImportPreview, type SeriesImportResult } from "@/lib/api";
 import { useTranslations } from "next-intl";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 
 interface ImportFileDialogProps {
     isOpen: boolean;
@@ -12,19 +13,19 @@ interface ImportFileDialogProps {
     onSuccess?: (result: any) => void;
 }
 
-interface EpisodePreview {
-    episode_number: number;
-    title: string;
-    summary: string;
-    estimated_duration?: string;
-}
-
-interface PreviewResult {
-    episodes: EpisodePreview[];
-    text: string;
-}
-
 type Step = 1 | 2 | 3;
+
+type ImportError = { response?: { status?: number; data?: { detail?: unknown } }; message?: unknown };
+
+function importErrorMessage(error: ImportError, fallback: string): string {
+    const detail = error?.response?.data?.detail;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail.map(item => typeof item === 'object' && item !== null && 'msg' in item && typeof item.msg === 'string'
+            ? item.msg : JSON.stringify(item)).join('; ');
+    }
+    return typeof error?.message === 'string' ? error.message : fallback;
+}
 
 export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportFileDialogProps) {
     // Step state
@@ -37,10 +38,18 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
     const [suggestedEpisodes, setSuggestedEpisodes] = useState(3);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const selectedFileRef = useRef<File | null>(null);
+    const session = useRef(0);
+    const mounted = useRef(false);
+    const open = useRef(isOpen);
+    const analyzing = useRef(false);
+    const previewStillCurrent = useRef<(() => boolean) | null>(null);
 
     // Step 2 state
-    const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
+    const [previewResult, setPreviewResult] = useState<SeriesImportPreview | null>(null);
     const [isCreating, setIsCreating] = useState(false);
+    const confirming = useRef(false);
+    const needsConfirmationRead = useRef(false);
 
     // Step 3 state
     const [createdResult, setCreatedResult] = useState<{ series_id: string; episode_count: number } | null>(null);
@@ -54,7 +63,12 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
     const t = useTranslations("series");
     const tc = useTranslations("common");
 
-    const resetState = () => {
+    const resetState = useCallback(() => {
+        session.current += 1;
+        selectedFileRef.current = null;
+        previewStillCurrent.current = null;
+        analyzing.current = false;
+        confirming.current = false;
         setStep(1);
         setFile(null);
         setSeriesTitle("");
@@ -63,22 +77,50 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
         setIsAnalyzing(false);
         setPreviewResult(null);
         setIsCreating(false);
+        needsConfirmationRead.current = false;
         setCreatedResult(null);
         setError(null);
         setIsDragOver(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    }, []);
+
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+            open.current = false;
+            session.current += 1;
+        };
+    }, []);
+
+    useEffect(() => {
+        open.current = isOpen;
+        resetState();
+    }, [isOpen, resetState]);
+
+    useEffect(() => subscribeRuntimeEnvironment(resetState), [resetState]);
+
+    const captureOwner = () => {
+        const environment = getRuntimeEnvironment();
+        const ownerSession = session.current;
+        return () => mounted.current && open.current && session.current === ownerSession && !!environment
+            && isCurrentRuntimeEnvironment(environment.key, environment.generation);
     };
 
     const handleClose = () => {
+        open.current = false;
         resetState();
         onClose();
     };
 
     const handleFileSelect = useCallback((selectedFile: File) => {
+        if (analyzing.current) return;
         const ext = selectedFile.name.split('.').pop()?.toLowerCase();
         if (ext !== 'txt' && ext !== 'md') {
             setError(t("onlyTxtMd"));
             return;
         }
+        selectedFileRef.current = selectedFile;
         setFile(selectedFile);
         setError(null);
         // Auto-fill title from filename if empty
@@ -101,7 +143,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
-        setIsDragOver(true);
+        if (!analyzing.current) setIsDragOver(true);
     }, []);
 
     const handleDragLeave = useCallback((e: React.DragEvent) => {
@@ -111,49 +153,91 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
 
     // Step 1 -> Step 2: Analyze file
     const handleAnalyze = async () => {
-        if (!file || !seriesTitle.trim()) return;
+        if (!file || !selectedFileRef.current || !seriesTitle.trim() || analyzing.current) return;
+        const stillCurrent = captureOwner();
+        if (!stillCurrent()) return;
+        analyzing.current = true;
         setIsAnalyzing(true);
         setError(null);
         try {
             const result = await api.importFilePreview(file, suggestedEpisodes);
+            if (!stillCurrent()) return;
             setPreviewResult(result);
+            previewStillCurrent.current = stillCurrent;
+            needsConfirmationRead.current = false;
             setStep(2);
-        } catch (err: any) {
-            const msg = err?.response?.data?.detail || err?.message || t("analysisFailed");
-            setError(msg);
+        } catch (err) {
+            if (stillCurrent()) setError(importErrorMessage(err as ImportError, t("analysisFailed")));
         } finally {
-            setIsAnalyzing(false);
+            if (stillCurrent()) {
+                analyzing.current = false;
+                setIsAnalyzing(false);
+            }
         }
     };
 
     // Step 2 -> Step 3: Confirm creation
     const handleConfirm = async () => {
-        if (!previewResult) return;
+        if (!previewResult || !previewStillCurrent.current?.() || confirming.current) return;
+        const stillCurrent = captureOwner();
+        confirming.current = true;
         setIsCreating(true);
         setError(null);
+        const finish = (result: SeriesImportResult) => {
+            if (!stillCurrent()) return;
+            setCreatedResult({ series_id: result.series.id, episode_count: result.episodes.length });
+            needsConfirmationRead.current = false;
+            setStep(3);
+        };
+        let confirmationSent = false;
         try {
+            if (needsConfirmationRead.current) {
+                const receipt = await api.importFileStatus(previewResult.import_id);
+                if (!stillCurrent()) return;
+                if (receipt.status === 'completed') {
+                    finish(receipt.result);
+                    return;
+                }
+            }
+            needsConfirmationRead.current = true;
+            confirmationSent = true;
             const result = await api.importFileConfirm({
                 title: seriesTitle.trim(),
                 description: description.trim() || undefined,
-                text: previewResult.text,
+                import_id: previewResult.import_id,
                 episodes: previewResult.episodes,
             });
-            setCreatedResult({
-                series_id: result.series_id,
-                episode_count: result.episodes?.length ?? previewResult.episodes.length,
-            });
-            setStep(3);
-        } catch (err: any) {
-            const msg = err?.response?.data?.detail || err?.message || t("createFailed");
-            setError(msg);
+            finish(result);
+        } catch (err) {
+            if (!stillCurrent()) return;
+            // A lost response is not evidence that creation failed. Resolve the
+            // original identity before allowing another confirmation attempt.
+            const status = (err as ImportError)?.response?.status;
+            if (confirmationSent && (!status || status >= 500)) {
+                try {
+                    const receipt = await api.importFileStatus(previewResult.import_id);
+                    if (!stillCurrent()) return;
+                    if (receipt.status === 'completed') {
+                        finish(receipt.result);
+                        return;
+                    }
+                    needsConfirmationRead.current = false;
+                } catch { /* Preserve unknown state and the original error. */ }
+            } else if (confirmationSent) {
+                needsConfirmationRead.current = false;
+            }
+            if (stillCurrent()) setError(importErrorMessage(err as ImportError, t("createFailed")));
         } finally {
-            setIsCreating(false);
+            if (stillCurrent()) {
+                confirming.current = false;
+                setIsCreating(false);
+            }
         }
     };
 
     // Step 3: View series
     const handleViewSeries = () => {
-        if (createdResult) {
+        if (createdResult && previewStillCurrent.current?.()) {
             onSuccess?.(createdResult);
             window.location.hash = `#/series/${createdResult.series_id}`;
         }
@@ -235,8 +319,9 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                         onDrop={handleDrop}
                                         onDragOver={handleDragOver}
                                         onDragLeave={handleDragLeave}
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                                        onClick={() => { if (!analyzing.current) fileInputRef.current?.click(); }}
+                                        aria-disabled={isAnalyzing}
+                                        className={`border-2 border-dashed rounded-xl p-8 text-center ${isAnalyzing ? 'cursor-wait' : 'cursor-pointer'} transition-colors ${
                                             isDragOver
                                                 ? 'border-primary bg-primary/10'
                                                 : file
@@ -248,6 +333,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                             ref={fileInputRef}
                                             type="file"
                                             accept=".txt,.md"
+                                            disabled={isAnalyzing}
                                             className="hidden"
                                             onChange={(e) => {
                                                 const f = e.target.files?.[0];
@@ -375,6 +461,7 @@ export default function ImportFileDialog({ isOpen, onClose, onSuccess }: ImportF
                                     <div className="flex gap-3 pt-4">
                                         <button
                                             onClick={() => { setStep(1); setError(null); }}
+                                            disabled={isCreating}
                                             className="flex-1 glass-button flex items-center justify-center gap-2"
                                         >
                                             <ChevronLeft size={16} />

@@ -8,7 +8,8 @@ Models: viduq3-pro (default), viduq3-turbo (fast)
 import logging
 import os
 import time
-from typing import Dict, Any, Tuple
+from types import MappingProxyType
+from typing import Dict, Any, Mapping, Tuple
 
 import requests
 
@@ -23,12 +24,21 @@ DEFAULT_I2V_MODEL = "viduq3-pro"
 
 
 class ViduModel(VideoGenModel):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, env: Mapping[str, str] | None = None):
         super().__init__(config)
-        self.api_key = config.get("api_key") or os.getenv("VIDU_API_KEY", "")
-        self.model_name = config.get("params", {}).get("model_name", DEFAULT_I2V_MODEL)
+        self._env = os.environ if env is None else MappingProxyType(dict(env))
+        self.api_key = self.config.get("api_key") or self._env.get("VIDU_API_KEY", "")
+        self.model_name = self.config.get("params", {}).get("model_name", DEFAULT_I2V_MODEL)
+
+    def _base_url(self) -> str:
+        return get_provider_base_url("VIDU", env=self._env)
+
+    def _uploader(self) -> OSSImageUploader:
+        return OSSImageUploader(env=self._env, output_root=self.output_root)
 
     def _headers(self) -> Dict[str, str]:
+        if not self.api_key:
+            raise RuntimeError("VIDU_API_KEY is required for Vidu vendor generation")
         return {
             "Authorization": f"Token {self.api_key}",
             "Content-Type": "application/json",
@@ -68,12 +78,15 @@ class ViduModel(VideoGenModel):
         if not image_ref:
             raise ValueError("Vidu image input requires img_path or img_url")
 
+        uploader = self._uploader()
         resolved = resolve_media_input(
             image_ref,
             model_name=model_name or self.model_name,
             modality="image",
             backend="vendor",
-            uploader=OSSImageUploader(),
+            uploader=uploader,
+            output_root=self.output_root,
+            oss_base_path=getattr(uploader, "base_path", None),
         )
         return resolved.value
 
@@ -87,7 +100,7 @@ class ViduModel(VideoGenModel):
         start_time = time.time()
 
         is_i2v = bool(img_url or img_path)
-        base_url = get_provider_base_url("VIDU")
+        base_url = self._base_url()
 
         if is_i2v:
             task_id, used_model = self._submit_i2v(
@@ -173,7 +186,7 @@ class ViduModel(VideoGenModel):
             "bgm": bgm,
         }
 
-        submit_url = f"{get_provider_base_url('VIDU')}/text2video"
+        submit_url = f"{self._base_url()}/text2video"
         logger.info(f"[Vidu] Submitting t2v task (model={used_model}, duration={duration}s)")
 
         resp = requests.post(submit_url, headers=self._headers(), json=body, timeout=30)
@@ -208,7 +221,7 @@ class ViduModel(VideoGenModel):
             "audio": audio,
         }
 
-        submit_url = f"{get_provider_base_url('VIDU')}/img2video"
+        submit_url = f"{self._base_url()}/img2video"
         logger.info(f"[Vidu] Submitting i2v task (model={used_model}, duration={duration}s)")
 
         resp = requests.post(submit_url, headers=self._headers(), json=body, timeout=30)

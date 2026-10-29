@@ -1,21 +1,24 @@
 "use client";
 
-import { useState, useRef, useEffect, type FormEvent, type ChangeEvent } from "react";
+import { useState, useRef, useEffect, useSyncExternalStore, type FormEvent, type ChangeEvent } from "react";
 import { useTranslations } from "next-intl";
 import { X, Loader2, Plus, Upload, Image as ImageIcon } from "lucide-react";
 import { api } from "@/lib/api";
+import { requireActiveRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import { getAssetUrl } from "@/lib/utils";
 import { toast } from "@/store/toastStore";
+import { useProjectStore } from "@/store/projectStore";
+import { findLibraryRecovery, forgetLibraryRecovery, getLibraryRecoveryVersion, libraryOperationKey, rememberLibraryRecovery, subscribeLibraryRecoveries, type LibraryAssetType } from "@/lib/libraryReadback";
 
 type AssetTab = "characters" | "scenes" | "props";
 
 // 资产类型 → 后端单数 type（/library/assets 端点用）。
-const SINGULAR: Record<AssetTab, string> = { characters: "character", scenes: "scene", props: "prop" };
+const SINGULAR: Record<AssetTab, LibraryAssetType> = { characters: "character", scenes: "scene", props: "prop" };
 
 interface NewLibraryAssetDialogProps {
   onClose: () => void;
   /** 创建成功后回调（父层刷新库以显示新资产）。 */
-  onCreated: () => void;
+  onCreated: (assetType: LibraryAssetType, assetId: string) => Promise<boolean>;
 }
 
 /**
@@ -26,19 +29,34 @@ interface NewLibraryAssetDialogProps {
 export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibraryAssetDialogProps) {
   const t = useTranslations("library");
   const tc = useTranslations("common");
+  const tp = useTranslations("project");
+  const runningOps = useProjectStore((state) => state.runningOps);
   const [assetType, setAssetType] = useState<AssetTab>("characters");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [readbackTarget, setReadbackTarget] = useState<{ key: string; assetType: LibraryAssetType; assetId: string; name: string } | null>(null);
+  const recoveryVersion = useSyncExternalStore(subscribeLibraryRecoveries, getLibraryRecoveryVersion, getLibraryRecoveryVersion);
 
   const nameRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const aliveRef = useRef(false);
   const onCloseRef = useRef(onClose);
   useEffect(() => {
     onCloseRef.current = onClose;
   });
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    const existing = findLibraryRecovery((record) => record.kind === "create");
+    setReadbackTarget(existing?.kind === "create" ? existing : null);
+  }, [recoveryVersion]);
   // a11y：打开时聚焦名称、Escape 关闭、关闭后还原焦点。
   useEffect(() => {
     const prevFocused = document.activeElement as HTMLElement | null;
@@ -77,8 +95,41 @@ export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibrary
     }
   };
 
+  const finishReadback = async (target: { key: string; assetType: LibraryAssetType; assetId: string; name: string }) => {
+    setSubmitting(true);
+    try {
+      const confirmed = await onCreated(target.assetType, target.assetId);
+      if (!confirmed) {
+        rememberLibraryRecovery({ kind: "create", ...target });
+        if (aliveRef.current) {
+          setReadbackTarget(target);
+          toast.error(t("loadFailed"), { body: t("loadFailedBody") });
+        }
+        return;
+      }
+      useProjectStore.getState().setRunningOp(target.key, false);
+      forgetLibraryRecovery(target.key);
+      if (!aliveRef.current) return;
+      setReadbackTarget(null);
+      toast.success(t("createSuccess"), { body: target.name });
+      onClose();
+    } catch {
+      rememberLibraryRecovery({ kind: "create", ...target });
+      if (aliveRef.current) {
+        setReadbackTarget(target);
+        toast.error(t("loadFailed"), { body: t("loadFailedBody") });
+      }
+    } finally {
+      if (aliveRef.current) setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e?: FormEvent) => {
     e?.preventDefault();
+    if (readbackTarget) {
+      await finishReadback(readbackTarget);
+      return;
+    }
     if (submitting || uploading) return;
     const trimmed = name.trim();
     if (!trimmed) {
@@ -86,20 +137,54 @@ export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibrary
       nameRef.current?.focus();
       return;
     }
+    const singularType = SINGULAR[assetType];
+    const operationKey = libraryOperationKey("create", requireActiveRuntimeEnvironment().key, [singularType, trimmed, imageUrl.trim() || ""]);
+    if (useProjectStore.getState().runningOps[operationKey]) return;
+    useProjectStore.getState().setRunningOp(operationKey, true);
     setSubmitting(true);
+    let acceptedTarget: { key: string; assetType: LibraryAssetType; assetId: string; name: string } | null = null;
     try {
-      await api.createLibraryAsset(SINGULAR[assetType], {
+      const created = await api.createLibraryAsset(singularType, {
         name: trimmed,
         description: description.trim() || undefined,
         image_url: imageUrl.trim() || undefined,
       });
+      const assetId = (created as { id?: unknown } | null)?.id;
+      if (typeof assetId !== "string" || !assetId.trim()) throw new Error(t("createFailed"));
+      const target = { key: operationKey, assetType: singularType, assetId, name: trimmed };
+      acceptedTarget = target;
+      rememberLibraryRecovery({ kind: "create", ...target });
+      if (!aliveRef.current) return;
+      const confirmed = await onCreated(singularType, assetId);
+      if (!confirmed) {
+        rememberLibraryRecovery({ kind: "create", ...target });
+        if (aliveRef.current) {
+          setReadbackTarget(target);
+          toast.error(t("loadFailed"), { body: t("loadFailedBody") });
+        }
+        return;
+      }
+      useProjectStore.getState().setRunningOp(operationKey, false);
+      forgetLibraryRecovery(operationKey);
+      if (!aliveRef.current) return;
       toast.success(t("createSuccess"), { body: trimmed });
-      onCreated();
       onClose();
     } catch (err) {
+      if (acceptedTarget) {
+        rememberLibraryRecovery({ kind: "create", ...acceptedTarget });
+        if (aliveRef.current) {
+          setReadbackTarget(acceptedTarget);
+          toast.error(t("loadFailed"), { body: t("loadFailedBody") });
+        }
+        return;
+      }
+      useProjectStore.getState().setRunningOp(operationKey, false);
+      forgetLibraryRecovery(operationKey);
+      if (!aliveRef.current) return;
       const msg = err instanceof Error ? err.message : t("createFailed");
       toast.error(t("createFailed"), { body: msg });
-      setSubmitting(false);
+    } finally {
+      if (aliveRef.current) setSubmitting(false);
     }
   };
 
@@ -272,11 +357,11 @@ export default function NewLibraryAssetDialog({ onClose, onCreated }: NewLibrary
             </button>
             <button
               type="submit"
-              disabled={submitting || uploading}
+              disabled={submitting || uploading || (readbackTarget ? false : runningOps[libraryOperationKey("create", requireActiveRuntimeEnvironment().key, [SINGULAR[assetType], name.trim(), imageUrl.trim() || ""])])}
               className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-accent text-sm font-semibold hover:bg-primary-hover transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {submitting ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
-              {submitting ? t("creating") : tc("create")}
+              {readbackTarget ? tp("readAgain") : submitting ? t("creating") : tc("create")}
             </button>
           </div>
         </form>

@@ -14,7 +14,9 @@ interface VariantSelectorProps {
     onDelete: (variantId: string) => void;
     onFavorite?: (variantId: string, isFavorited: boolean) => void;
     onGenerate: (batchSize: number) => void;
+    onBatchSizeChange?: (batchSize: number) => boolean | void;
     isGenerating: boolean;
+    generateDisabled?: boolean;
     generatingBatchSize?: number; // Persisted batch size from parent/store
     className?: string;
     aspectRatio?: string; // e.g., "9:16", "16:9", "1:1"
@@ -30,7 +32,9 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
     onDelete,
     onFavorite,
     onGenerate,
+    onBatchSizeChange,
     isGenerating,
+    generateDisabled = false,
     generatingBatchSize: propGeneratingBatchSize,
     className = "",
     aspectRatio = "9:16"
@@ -131,7 +135,10 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
                         {[1, 2, 3, 4].map(size => (
                             <button
                                 key={size}
-                                onClick={() => setBatchSize(size)}
+                                onClick={() => {
+                                    // The owner can reject an event retained by an exiting modal.
+                                    if (size !== batchSize && onBatchSizeChange?.(size) !== false) setBatchSize(size);
+                                }}
                                 className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${batchSize === size
                                     ? 'bg-blue-600 text-white'
                                     : 'text-text-secondary hover:text-foreground hover:bg-hover-bg'
@@ -144,7 +151,7 @@ export const VariantSelector: React.FC<VariantSelectorProps> = ({
 
                     <button
                         onClick={() => onGenerate(batchSize)}
-                        disabled={isGenerating}
+                        disabled={isGenerating || generateDisabled}
                         className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${isGenerating
                             ? 'bg-gray-700 text-text-secondary cursor-not-allowed'
                             : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20'

@@ -2,10 +2,10 @@
   "compat": {
     "legacy_model_ids": {
       "gpt-image-2": "gpt-image/gpt-image-2#image",
-      "happyhorse-1.0-video-edit": "happyhorse/happyhorse-1.0-video-edit#i2v",
+      "happyhorse-1.0-video-edit": "happyhorse/happyhorse-1.0-video-edit#v2v",
       "happyhorse-1.1-i2v": "happyhorse/happyhorse-1.1-video#i2v",
       "happyhorse-1.1-r2v": "happyhorse/happyhorse-1.1-video#r2v",
-      "happyhorse-1.1-t2v": "happyhorse/happyhorse-1.1-t2v#i2v",
+      "happyhorse-1.1-t2v": "happyhorse/happyhorse-1.1-t2v#t2v",
       "kling-v3-i2v": "kling/kling-v3-video#i2v",
       "kling-v3-r2v": "kling/kling-v3-video#r2v",
       "pixverse-c1-i2v": "pixverse/pixverse-c1-video#i2v",
@@ -39,7 +39,9 @@
       "wan2.7-image-pro": "wan/wan2.7-image-pro#image",
       "wan2.7-r2v": "wan/wan2.7-video#r2v",
       "wan2.7-t2v": "wan/wan2.7-video#t2v",
-      "wan2.7-videoedit": "wan/wan2.7-video#videoedit"
+      "wan2.7-videoedit": "wan/wan2.7-video#v2v",
+      "wan3.0-video": "wan/wan3.0-video#video",
+      "wan3.0-video-prime": "wan/wan3.0-video-prime#video"
     }
   },
   "defaults": {
@@ -367,7 +369,6 @@
         "vendor"
       ],
       "supported_modalities": [
-        "t2v",
         "i2v",
         "r2v"
       ],
@@ -397,7 +398,8 @@
       "display_name": "Wan (通义万相)",
       "docs": {
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -419,14 +421,17 @@
         "wan2.7-image-pro",
         "wan2.7-r2v",
         "wan2.7-t2v",
-        "wan2.7-videoedit"
+        "wan2.7-videoedit",
+        "wan3.0-video",
+        "wan3.0-video-prime"
       ],
       "provider": "aliyun",
       "routing_prefixes": [
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "supported_backends": [
         "dashscope"
@@ -436,7 +441,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -516,8 +522,8 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Video editing with reference images (hidden, still 1.0)",
-      "display_name": "HappyHorse V2V",
+      "description": "Video editing from one source video (hidden, still 1.0)",
+      "display_name": "HappyHorse 1.0 VideoEdit",
       "docs": {
         "context_hub_doc_ids": [
           "aliyun/happyhorse-video"
@@ -532,7 +538,7 @@
         "happyhorse-1.0-video-edit"
       ],
       "modes": [
-        "happyhorse/happyhorse-1.0-video-edit#i2v"
+        "happyhorse/happyhorse-1.0-video-edit#v2v"
       ],
       "provider": "aliyun",
       "release_stage": "stable",
@@ -540,7 +546,11 @@
         "happyhorse-1.0-",
         "happyhorse-1.1-"
       ],
-      "runtime": {},
+      "runtime": {
+        "dashscope": {
+          "gateway": "dashscope_workspace"
+        }
+      },
       "status": "hidden",
       "supported_backends": [
         "dashscope"
@@ -572,7 +582,7 @@
       },
       "default_backend": "dashscope",
       "description": "Text-to-video generation (hidden)",
-      "display_name": "HappyHorse T2V",
+      "display_name": "HappyHorse 1.1 T2V",
       "docs": {
         "context_hub_doc_ids": [
           "aliyun/happyhorse-video"
@@ -587,7 +597,7 @@
         "happyhorse-1.1-t2v"
       ],
       "modes": [
-        "happyhorse/happyhorse-1.1-t2v#i2v"
+        "happyhorse/happyhorse-1.1-t2v#t2v"
       ],
       "provider": "aliyun",
       "release_stage": "stable",
@@ -595,7 +605,11 @@
         "happyhorse-1.0-",
         "happyhorse-1.1-"
       ],
-      "runtime": {},
+      "runtime": {
+        "dashscope": {
+          "gateway": "dashscope_workspace"
+        }
+      },
       "status": "hidden",
       "supported_backends": [
         "dashscope"
@@ -654,7 +668,7 @@
       ],
       "runtime": {
         "dashscope": {
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -720,7 +734,7 @@
       ],
       "runtime": {
         "dashscope": {
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "kling"
@@ -787,7 +801,7 @@
       ],
       "runtime": {
         "dashscope": {
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -900,7 +914,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "pixverse/pixverse-v5.6-r2v",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -959,7 +973,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "pixverse/pixverse-v6-it2v",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -1199,7 +1213,7 @@
       ],
       "runtime": {
         "dashscope": {
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "vidu"
@@ -1211,7 +1225,6 @@
         "vendor"
       ],
       "supported_modalities": [
-        "t2v",
         "i2v",
         "r2v"
       ],
@@ -1270,7 +1283,7 @@
       ],
       "runtime": {
         "dashscope": {
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "vidu"
@@ -1282,7 +1295,6 @@
         "vendor"
       ],
       "supported_modalities": [
-        "t2v",
         "i2v",
         "r2v"
       ],
@@ -1316,7 +1328,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1333,7 +1346,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1345,7 +1359,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1374,7 +1389,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1391,7 +1407,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1403,7 +1420,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1432,7 +1450,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1449,7 +1468,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1461,7 +1481,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1490,7 +1511,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1507,7 +1529,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1519,7 +1542,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1548,7 +1572,8 @@
           "aliyun/wan-image"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1565,7 +1590,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1577,7 +1603,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1606,7 +1633,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1623,7 +1651,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1635,7 +1664,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1664,7 +1694,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1681,7 +1712,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1693,7 +1725,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1722,7 +1755,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1739,7 +1773,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1751,7 +1786,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1780,7 +1816,8 @@
           "aliyun/wan-image"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1797,7 +1834,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1809,7 +1847,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1838,7 +1877,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1855,7 +1895,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -1867,7 +1908,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1896,7 +1938,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1915,7 +1958,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -1931,7 +1975,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -1960,7 +2005,8 @@
           "aliyun/wan-image-27"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -1977,7 +2023,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -1994,7 +2041,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -2023,7 +2071,8 @@
           "aliyun/wan-image-27"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -2040,7 +2089,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -2057,7 +2107,8 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -2086,7 +2137,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "family": "wan",
@@ -2101,7 +2153,7 @@
         "wan/wan2.7-video#i2v",
         "wan/wan2.7-video#r2v",
         "wan/wan2.7-video#t2v",
-        "wan/wan2.7-video#videoedit"
+        "wan/wan2.7-video#v2v"
       ],
       "provider": "aliyun",
       "release_stage": "stable",
@@ -2109,7 +2161,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -2125,7 +2178,142 @@
         "i2i",
         "i2v",
         "r2v",
-        "v2v"
+        "v2v",
+        "t2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        },
+        "image_input_mode": {
+          "dashscope": "dashscope_multimodal_message"
+        },
+        "reference_video_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        }
+      }
+    },
+    "wan/wan3.0-video": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "dashscope": [
+          "DASHSCOPE_API_KEY"
+        ]
+      },
+      "default_backend": "dashscope",
+      "description": "Wan 3.0 all-in-one workspace video foundation for ordered media generation",
+      "display_name": "Wan 3.0 Video",
+      "docs": {
+        "context_hub_doc_ids": [],
+        "official_snapshot_ids": [
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
+        ],
+        "repo_local_snapshot_paths": [
+          "docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md"
+        ]
+      },
+      "family": "wan",
+      "id": "wan/wan3.0-video",
+      "legacy_model_ids": [
+        "wan3.0-video"
+      ],
+      "modes": [
+        "wan/wan3.0-video#video"
+      ],
+      "provider": "aliyun",
+      "release_stage": "preview",
+      "routing_prefixes": [
+        "wan2.2-",
+        "wan2.5-",
+        "wan2.6-",
+        "wan2.7-",
+        "wan3.0-"
+      ],
+      "runtime": {
+        "dashscope": {
+          "api_model_id": "wan3.0-video",
+          "gateway": "dashscope_workspace"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "dashscope"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "i2v",
+        "r2v",
+        "v2v",
+        "t2v"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        },
+        "image_input_mode": {
+          "dashscope": "dashscope_multimodal_message"
+        },
+        "reference_video_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        }
+      }
+    },
+    "wan/wan3.0-video-prime": {
+      "backend_env_key": null,
+      "credential_sources": {
+        "dashscope": [
+          "DASHSCOPE_API_KEY"
+        ]
+      },
+      "default_backend": "dashscope",
+      "description": "Wan 3.0 Prime all-in-one workspace video foundation for ordered media generation",
+      "display_name": "Wan 3.0 Video Prime",
+      "docs": {
+        "context_hub_doc_ids": [],
+        "official_snapshot_ids": [
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
+        ],
+        "repo_local_snapshot_paths": [
+          "docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md"
+        ]
+      },
+      "family": "wan",
+      "id": "wan/wan3.0-video-prime",
+      "legacy_model_ids": [
+        "wan3.0-video-prime"
+      ],
+      "modes": [
+        "wan/wan3.0-video-prime#video"
+      ],
+      "provider": "aliyun",
+      "release_stage": "preview",
+      "routing_prefixes": [
+        "wan2.2-",
+        "wan2.5-",
+        "wan2.6-",
+        "wan2.7-",
+        "wan3.0-"
+      ],
+      "runtime": {
+        "dashscope": {
+          "api_model_id": "wan3.0-video-prime",
+          "gateway": "dashscope_workspace"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "dashscope"
+      ],
+      "supported_modalities": [
+        "t2i",
+        "i2i",
+        "i2v",
+        "r2v",
+        "v2v",
+        "t2v"
       ],
       "transport": {
         "audio_input_mode": {
@@ -2238,8 +2426,8 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Video editing with reference images (hidden, still 1.0)",
-      "display_name": "HappyHorse V2V",
+      "description": "Video editing from one managed source video",
+      "display_name": "HappyHorse VideoEdit",
       "docs": {
         "context_hub_doc_ids": [
           "aliyun/happyhorse-video"
@@ -2251,19 +2439,31 @@
       "duration": null,
       "family": "happyhorse",
       "id": "happyhorse-1.0-video-edit",
-      "inputs": {},
+      "inputs": {
+        "media": {
+          "max": 1,
+          "reference_type": "video"
+        }
+      },
       "params": {
-        "negativePrompt": true,
-        "promptExtend": true,
-        "resolution": {
-          "default": "1080p",
+        "audioSetting": {
+          "default": "auto",
           "options": [
-            "720p",
-            "1080p"
+            "auto",
+            "origin"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": true
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -2305,7 +2505,7 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Image-to-video with reference character support",
+      "description": "Image-to-video with one first frame",
       "display_name": "HappyHorse I2V",
       "docs": {
         "context_hub_doc_ids": [
@@ -2326,21 +2526,23 @@
       "id": "happyhorse-1.1-i2v",
       "inputs": {
         "reference_images": {
-          "max": 9
+          "max": 1,
+          "reference_type": "image"
         }
       },
       "params": {
-        "negativePrompt": true,
-        "promptExtend": true,
         "resolution": {
-          "default": "1080p",
+          "default": "1080P",
           "options": [
-            "720p",
-            "1080p"
+            "480P",
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": true
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -2408,21 +2610,37 @@
       "id": "happyhorse-1.1-r2v",
       "inputs": {
         "reference_images": {
-          "max": 9
+          "max": 9,
+          "reference_type": "image"
         }
       },
       "params": {
-        "negativePrompt": true,
-        "promptExtend": true,
-        "resolution": {
-          "default": "1080p",
+        "ratio": {
+          "default": "16:9",
           "options": [
-            "720p",
-            "1080p"
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "9:21",
+            "21:9",
+            "4:5",
+            "5:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "480P",
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": true
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -2479,22 +2697,47 @@
           "aliyun/happyhorse/2026-04-28"
         ]
       },
-      "duration": null,
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 3,
+        "step": 1,
+        "type": "slider"
+      },
       "family": "happyhorse",
       "id": "happyhorse-1.1-t2v",
-      "inputs": {},
+      "inputs": {
+        "media": {
+          "max": 0
+        }
+      },
       "params": {
-        "negativePrompt": true,
-        "promptExtend": true,
-        "resolution": {
-          "default": "1080p",
+        "ratio": {
+          "default": "16:9",
           "options": [
-            "720p",
-            "1080p"
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "9:21",
+            "21:9",
+            "4:5",
+            "5:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "480P",
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": true
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -2519,7 +2762,7 @@
       },
       "ui": {
         "badges": [],
-        "order": 0,
+        "order": 120,
         "recommended": true,
         "selection_group": "i2v",
         "visible_in": []
@@ -2563,36 +2806,31 @@
       "inputs": {
         "reference_images": {
           "max": 1,
+          "mime_types": [
+            "image/jpeg",
+            "image/png"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
-        "aspectRatio": {
-          "default": "16:9",
-          "options": [
-            "16:9",
-            "9:16",
-            "1:1"
-          ]
-        },
-        "cfgScale": {
-          "default": 0.5,
-          "max": 1,
-          "min": 0,
-          "step": 0.1
+        "audio": {
+          "default": false
         },
         "mode": {
-          "default": "std",
+          "default": "pro",
           "options": [
             "std",
-            "pro"
+            "pro",
+            "4k"
           ]
         },
         "negativePrompt": true,
         "promptExtend": false,
         "seed": false,
-        "sound": true,
-        "watermark": false
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "kling",
       "release_stage": "stable",
@@ -2672,7 +2910,11 @@
       "id": "kling-v3-r2v",
       "inputs": {
         "reference_images": {
-          "max": 9,
+          "max": 7,
+          "mime_types": [
+            "image/jpeg",
+            "image/png"
+          ],
           "reference_type": "image"
         }
       },
@@ -2685,17 +2927,23 @@
             "1:1"
           ]
         },
+        "audio": {
+          "default": false
+        },
         "mode": {
-          "default": "std",
+          "default": "pro",
           "options": [
             "std",
-            "pro"
+            "pro",
+            "4k"
           ]
         },
         "negativePrompt": true,
         "promptExtend": false,
         "seed": false,
-        "watermark": false
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "kling",
       "release_stage": "stable",
@@ -2768,24 +3016,39 @@
       "inputs": {
         "reference_images": {
           "max": 1,
+          "max_bytes": 20971520,
+          "max_height": 10000,
+          "max_width": 10000,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
-        "audio": true,
+        "audio": {
+          "default": false
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "360p",
-            "540p",
-            "720p",
-            "1080p"
+            "360P",
+            "540P",
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "watermark": true
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "pixverse",
       "release_stage": "stable",
@@ -2844,8 +3107,8 @@
       },
       "duration": {
         "default": 5,
-        "max": 8,
-        "min": 3,
+        "max": 15,
+        "min": 1,
         "step": 1,
         "type": "slider"
       },
@@ -2854,21 +3117,47 @@
       "inputs": {
         "reference_images": {
           "max": 7,
+          "max_bytes": 20971520,
+          "max_height": 10000,
+          "max_width": 10000,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        "audio": {
+          "default": false
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "720p",
-            "1080p"
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "watermark": false
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "pixverse",
       "release_stage": "stable",
@@ -2982,31 +3271,70 @@
       },
       "duration": {
         "default": 5,
-        "max": 8,
-        "min": 3,
-        "step": 1,
-        "type": "slider"
+        "options": [
+          5,
+          8,
+          10
+        ],
+        "options_by_resolution": {
+          "1080P": [
+            5,
+            8
+          ],
+          "720P": [
+            5,
+            8,
+            10
+          ]
+        },
+        "type": "buttons"
       },
       "family": "pixverse",
       "id": "pixverse-v5.6-r2v",
       "inputs": {
         "reference_images": {
           "max": 7,
+          "max_bytes": 20971520,
+          "max_height": 10000,
+          "max_width": 10000,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        "audio": {
+          "default": false
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "720p",
-            "1080p"
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "watermark": false
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "pixverse",
       "release_stage": "stable",
@@ -3075,23 +3403,36 @@
       "inputs": {
         "reference_images": {
           "max": 1,
+          "max_bytes": 20971520,
+          "max_height": 10000,
+          "max_width": 10000,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
-        "audio": true,
+        "audio": {
+          "default": false
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "360p",
-            "540p",
-            "720p",
-            "1080p"
+            "360P",
+            "540P",
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
         "shotType": {
           "default": "single",
           "options": [
@@ -3099,7 +3440,9 @@
             "multi"
           ]
         },
-        "watermark": true
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "pixverse",
       "release_stage": "stable",
@@ -3168,6 +3511,9 @@
         "promptExtend": true,
         "seed": true,
         "size": {
+          "allow_custom_modes": [
+            "i2i"
+          ],
           "default": "1280*1280",
           "options": [
             "1024*1024",
@@ -3175,7 +3521,11 @@
             "1440*1440",
             "2048*2048",
             "1280*720",
-            "720*1280"
+            "720*1280",
+            "576*1024",
+            "768*1024",
+            "1024*768",
+            "1024*576"
           ]
         },
         "watermark": true
@@ -3243,6 +3593,9 @@
         "promptExtend": true,
         "seed": true,
         "size": {
+          "allow_custom_modes": [
+            "i2i"
+          ],
           "default": "1280*1280",
           "options": [
             "1024*1024",
@@ -3250,7 +3603,11 @@
             "1440*1440",
             "2048*2048",
             "1280*720",
-            "720*1280"
+            "720*1280",
+            "576*1024",
+            "768*1024",
+            "1024*768",
+            "1024*576"
           ]
         },
         "watermark": true
@@ -3322,10 +3679,29 @@
       "inputs": {
         "reference_images": {
           "max": 1,
+          "max_bytes": 20971520,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "audio": {
+          "default": true
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
@@ -3335,8 +3711,11 @@
             "1080p"
           ]
         },
-        "seed": true,
-        "watermark": true
+        "seed": {
+          "max": 4294967295,
+          "min": -1
+        },
+        "watermark": false
       },
       "provider": "mulerouter",
       "release_stage": "stable",
@@ -3407,10 +3786,29 @@
       "inputs": {
         "reference_images": {
           "max": 9,
+          "max_bytes": 20971520,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "audio": {
+          "default": true
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
@@ -3420,8 +3818,11 @@
             "1080p"
           ]
         },
-        "seed": true,
-        "watermark": true
+        "seed": {
+          "max": 4294967295,
+          "min": -1
+        },
+        "watermark": false
       },
       "provider": "mulerouter",
       "release_stage": "stable",
@@ -3491,6 +3892,19 @@
       "id": "seedance-2.0-t2v",
       "inputs": {},
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "audio": {
+          "default": true
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
@@ -3500,8 +3914,13 @@
             "1080p"
           ]
         },
-        "seed": true,
-        "watermark": true
+        "seed": {
+          "max": 4294967295,
+          "min": -1
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "mulerouter",
       "release_stage": "stable",
@@ -3575,33 +3994,40 @@
       "id": "viduq3-pro-i2v",
       "inputs": {
         "reference_images": {
+          "aspect_ratio": {
+            "max": 4,
+            "min": 0.25
+          },
           "max": 1,
+          "max_bytes": 52428800,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
-        "movementAmplitude": {
-          "default": "auto",
-          "options": [
-            "auto",
-            "small",
-            "medium",
-            "large"
-          ]
+        "audio": {
+          "default": false
         },
-        "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "540p",
-            "720p",
-            "1080p"
+            "540P",
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "viduAudio": true,
-        "watermark": true
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "vidu",
       "release_stage": "stable",
@@ -3679,23 +4105,49 @@
       "id": "viduq3-pro-r2v",
       "inputs": {
         "reference_images": {
+          "aspect_ratio": {
+            "max": 4,
+            "min": 0.25
+          },
           "max": 7,
+          "max_bytes": 52428800,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
-        "negativePrompt": false,
-        "promptExtend": false,
-        "resolution": {
-          "default": "720p",
+        "aspectRatio": {
+          "default": "16:9",
           "options": [
-            "540p",
-            "720p",
-            "1080p"
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
           ]
         },
-        "seed": true,
-        "watermark": false
+        "audio": {
+          "default": false
+        },
+        "promptExtend": false,
+        "resolution": {
+          "default": "720P",
+          "options": [
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "vidu",
       "release_stage": "stable",
@@ -3771,33 +4223,40 @@
       "id": "viduq3-turbo-i2v",
       "inputs": {
         "reference_images": {
+          "aspect_ratio": {
+            "max": 4,
+            "min": 0.25
+          },
           "max": 1,
+          "max_bytes": 52428800,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
-        "movementAmplitude": {
-          "default": "auto",
-          "options": [
-            "auto",
-            "small",
-            "medium",
-            "large"
-          ]
+        "audio": {
+          "default": false
         },
-        "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "540p",
-            "720p",
-            "1080p"
+            "540P",
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "viduAudio": true,
-        "watermark": true
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "vidu",
       "release_stage": "stable",
@@ -3873,23 +4332,50 @@
       "id": "viduq3-turbo-r2v",
       "inputs": {
         "reference_images": {
+          "aspect_ratio": {
+            "max": 4,
+            "min": 0.25
+          },
           "max": 7,
+          "max_bytes": 52428800,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
       "params": {
-        "negativePrompt": false,
-        "promptExtend": false,
-        "resolution": {
-          "default": "720p",
+        "aspectRatio": {
+          "default": "16:9",
           "options": [
-            "540p",
-            "720p",
-            "1080p"
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
           ]
         },
-        "seed": true,
-        "watermark": false
+        "audio": {
+          "default": false
+        },
+        "promptExtend": false,
+        "resolution": {
+          "default": "720P",
+          "options": [
+            "540P",
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "vidu",
       "release_stage": "stable",
@@ -3947,7 +4433,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -3975,7 +4462,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4018,7 +4506,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -4046,7 +4535,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4089,7 +4579,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4103,7 +4594,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4146,7 +4638,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4160,7 +4653,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4203,7 +4697,8 @@
           "aliyun/wan-image"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4221,7 +4716,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4264,7 +4760,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -4297,7 +4794,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4340,7 +4838,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4354,7 +4853,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4398,7 +4898,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -4432,7 +4933,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4475,7 +4977,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -4509,7 +5012,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4552,7 +5056,8 @@
           "aliyun/wan-image"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4570,7 +5075,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4613,7 +5119,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4632,7 +5139,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4675,7 +5183,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4689,7 +5198,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "deprecated",
       "supported_backends": [
@@ -4725,14 +5235,15 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Image-to-video with first/last frame, driving audio, and first clip support",
+      "description": "First-frame image-to-video; last-frame, driving audio, and clip continuation are not exposed in LumenX",
       "display_name": "Wan 2.7 I2V",
       "docs": {
         "context_hub_doc_ids": [
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -4753,16 +5264,6 @@
       "params": {
         "negativePrompt": true,
         "promptExtend": true,
-        "ratio": {
-          "default": "16:9",
-          "options": [
-            "16:9",
-            "9:16",
-            "1:1",
-            "4:3",
-            "3:4"
-          ]
-        },
         "resolution": {
           "default": "1080p",
           "options": [
@@ -4779,7 +5280,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "active",
       "supported_backends": [
@@ -4830,7 +5332,8 @@
           "aliyun/wan-image-27"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4846,6 +5349,9 @@
         "promptExtend": true,
         "seed": true,
         "size": {
+          "allow_custom_modes": [
+            "i2i"
+          ],
           "default": "1280*1280",
           "options": [
             "1024*1024",
@@ -4855,7 +5361,9 @@
             "1280*720",
             "720*1280",
             "1024*576",
-            "576*1024"
+            "576*1024",
+            "768*1024",
+            "1024*768"
           ]
         },
         "watermark": true
@@ -4866,7 +5374,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "active",
       "supported_backends": [
@@ -4914,7 +5423,8 @@
           "aliyun/wan-image-27"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -4930,6 +5440,9 @@
         "promptExtend": true,
         "seed": true,
         "size": {
+          "allow_custom_modes": [
+            "i2i"
+          ],
           "default": "1280*1280",
           "options": [
             "1024*1024",
@@ -4939,7 +5452,9 @@
             "1280*720",
             "720*1280",
             "1024*576",
-            "576*1024"
+            "576*1024",
+            "768*1024",
+            "1024*768"
           ]
         },
         "watermark": true
@@ -4950,7 +5465,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "active",
       "supported_backends": [
@@ -4999,13 +5515,14 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
         "default": 5,
         "max": 15,
-        "min": 3,
+        "min": 2,
         "step": 1,
         "type": "slider"
       },
@@ -5018,17 +5535,31 @@
         }
       },
       "params": {
-        "negativePrompt": false,
-        "promptExtend": false,
-        "resolution": {
-          "default": "1080p",
+        "negativePrompt": true,
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "16:9",
           "options": [
-            "720p",
-            "1080p"
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -5036,7 +5567,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "active",
       "supported_backends": [
@@ -5084,21 +5616,59 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
-      "duration": null,
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 2,
+        "step": 1,
+        "type": "slider"
+      },
       "family": "wan",
       "id": "wan2.7-t2v",
-      "inputs": {},
-      "params": {},
+      "inputs": {
+        "media": {
+          "max": 0
+        }
+      },
+      "params": {
+        "negativePrompt": true,
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": true,
+        "watermark": {
+          "default": false
+        }
+      },
       "provider": "aliyun",
       "release_stage": "stable",
       "routing_prefixes": [
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "hidden",
       "supported_backends": [
@@ -5134,28 +5704,83 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Video editing with reference images",
+      "description": "Source-video editing from one managed MP4/MOV input; optional reference images are not exposed in Playground yet",
       "display_name": "Wan 2.7 VideoEdit",
       "docs": {
         "context_hub_doc_ids": [
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
-      "duration": null,
+      "duration": {
+        "default": 0,
+        "options": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "type": "buttons"
+      },
       "family": "wan",
       "id": "wan2.7-videoedit",
-      "inputs": {},
-      "params": {},
+      "inputs": {
+        "reference_videos": {
+          "max": 1,
+          "reference_type": "video"
+        }
+      },
+      "params": {
+        "audioSetting": {
+          "default": "auto",
+          "options": [
+            "auto",
+            "origin"
+          ]
+        },
+        "negativePrompt": true,
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": true,
+        "watermark": {
+          "default": false
+        }
+      },
       "provider": "aliyun",
       "release_stage": "stable",
       "routing_prefixes": [
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "status": "hidden",
       "supported_backends": [
@@ -5178,6 +5803,234 @@
         "recommended": false,
         "selection_group": "i2v",
         "visible_in": []
+      }
+    },
+    "wan3.0-video": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v",
+        "v2v"
+      ],
+      "credential_sources": {
+        "dashscope": [
+          "DASHSCOPE_API_KEY"
+        ]
+      },
+      "default_backend": "dashscope",
+      "description": "Wan 3.0 all-in-one workspace video foundation for ordered media generation",
+      "display_name": "Wan 3.0 Video",
+      "docs": {
+        "context_hub_doc_ids": [],
+        "official_snapshot_ids": [
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
+        ],
+        "repo_local_snapshot_paths": [
+          "docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 30,
+        "min": 2,
+        "step": 1,
+        "supports_auto": true,
+        "type": "slider"
+      },
+      "family": "wan",
+      "id": "wan3.0-video",
+      "inputs": {
+        "media": {
+          "ordered": true,
+          "roles": [
+            "first_frame",
+            "last_frame",
+            "reference_image",
+            "reference_video",
+            "reference_audio"
+          ]
+        }
+      },
+      "params": {
+        "audio": {
+          "default": true
+        },
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "adaptive",
+          "options": [
+            "adaptive",
+            "21:9",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "480P",
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": true,
+        "watermark": {
+          "default": false
+        }
+      },
+      "provider": "aliyun",
+      "release_stage": "preview",
+      "routing_prefixes": [
+        "wan2.2-",
+        "wan2.5-",
+        "wan2.6-",
+        "wan2.7-",
+        "wan3.0-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "dashscope"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        },
+        "image_input_mode": {
+          "dashscope": "dashscope_multimodal_message"
+        },
+        "reference_video_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        }
+      },
+      "ui": {
+        "badges": [],
+        "order": 95,
+        "recommended": false,
+        "selection_group": "video",
+        "visible_in": [
+          "video_sidebar"
+        ]
+      }
+    },
+    "wan3.0-video-prime": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v",
+        "v2v"
+      ],
+      "credential_sources": {
+        "dashscope": [
+          "DASHSCOPE_API_KEY"
+        ]
+      },
+      "default_backend": "dashscope",
+      "description": "Wan 3.0 Prime all-in-one workspace video foundation for ordered media generation",
+      "display_name": "Wan 3.0 Video Prime",
+      "docs": {
+        "context_hub_doc_ids": [],
+        "official_snapshot_ids": [
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
+        ],
+        "repo_local_snapshot_paths": [
+          "docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 30,
+        "min": 2,
+        "step": 1,
+        "supports_auto": true,
+        "type": "slider"
+      },
+      "family": "wan",
+      "id": "wan3.0-video-prime",
+      "inputs": {
+        "media": {
+          "ordered": true,
+          "roles": [
+            "first_frame",
+            "last_frame",
+            "reference_image",
+            "reference_video",
+            "reference_audio"
+          ]
+        }
+      },
+      "params": {
+        "audio": {
+          "default": true
+        },
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "adaptive",
+          "options": [
+            "adaptive",
+            "21:9",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "480P",
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": true,
+        "watermark": {
+          "default": false
+        }
+      },
+      "provider": "aliyun",
+      "release_stage": "preview",
+      "routing_prefixes": [
+        "wan2.2-",
+        "wan2.5-",
+        "wan2.6-",
+        "wan2.7-",
+        "wan3.0-"
+      ],
+      "status": "active",
+      "supported_backends": [
+        "dashscope"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        },
+        "image_input_mode": {
+          "dashscope": "dashscope_multimodal_message"
+        },
+        "reference_video_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        }
+      },
+      "ui": {
+        "badges": [],
+        "order": 96,
+        "recommended": false,
+        "selection_group": "video",
+        "visible_in": [
+          "video_sidebar"
+        ]
       }
     }
   },
@@ -5276,7 +6129,7 @@
         ]
       }
     },
-    "happyhorse/happyhorse-1.0-video-edit#i2v": {
+    "happyhorse/happyhorse-1.0-video-edit#v2v": {
       "backend_env_key": null,
       "capabilities": [
         "v2v"
@@ -5287,8 +6140,8 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Video editing with reference images (hidden, still 1.0)",
-      "display_name": "HappyHorse V2V",
+      "description": "Video editing from one managed source video",
+      "display_name": "HappyHorse VideoEdit",
       "docs": {
         "context_hub_doc_ids": [
           "aliyun/happyhorse-video"
@@ -5299,23 +6152,35 @@
       },
       "duration": null,
       "family": "happyhorse",
-      "id": "happyhorse/happyhorse-1.0-video-edit#i2v",
-      "inputs": {},
+      "id": "happyhorse/happyhorse-1.0-video-edit#v2v",
+      "inputs": {
+        "media": {
+          "max": 1,
+          "reference_type": "video"
+        }
+      },
       "legacy_model_id": "happyhorse-1.0-video-edit",
-      "mode": "i2v",
+      "mode": "v2v",
       "model_line_id": "happyhorse/happyhorse-1.0-video-edit",
       "params": {
-        "negativePrompt": true,
-        "promptExtend": true,
-        "resolution": {
-          "default": "1080p",
+        "audioSetting": {
+          "default": "auto",
           "options": [
-            "720p",
-            "1080p"
+            "auto",
+            "origin"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": true
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -5323,7 +6188,11 @@
         "happyhorse-1.0-",
         "happyhorse-1.1-"
       ],
-      "runtime": {},
+      "runtime": {
+        "dashscope": {
+          "gateway": "dashscope_workspace"
+        }
+      },
       "status": "hidden",
       "supported_backends": [
         "dashscope"
@@ -5347,7 +6216,7 @@
         "visible_in": []
       }
     },
-    "happyhorse/happyhorse-1.1-t2v#i2v": {
+    "happyhorse/happyhorse-1.1-t2v#t2v": {
       "backend_env_key": null,
       "capabilities": [
         "t2v"
@@ -5368,25 +6237,50 @@
           "aliyun/happyhorse/2026-04-28"
         ]
       },
-      "duration": null,
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 3,
+        "step": 1,
+        "type": "slider"
+      },
       "family": "happyhorse",
-      "id": "happyhorse/happyhorse-1.1-t2v#i2v",
-      "inputs": {},
+      "id": "happyhorse/happyhorse-1.1-t2v#t2v",
+      "inputs": {
+        "media": {
+          "max": 0
+        }
+      },
       "legacy_model_id": "happyhorse-1.1-t2v",
-      "mode": "i2v",
+      "mode": "t2v",
       "model_line_id": "happyhorse/happyhorse-1.1-t2v",
       "params": {
-        "negativePrompt": true,
-        "promptExtend": true,
-        "resolution": {
-          "default": "1080p",
+        "ratio": {
+          "default": "16:9",
           "options": [
-            "720p",
-            "1080p"
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "9:21",
+            "21:9",
+            "4:5",
+            "5:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "480P",
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": true
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -5394,7 +6288,11 @@
         "happyhorse-1.0-",
         "happyhorse-1.1-"
       ],
-      "runtime": {},
+      "runtime": {
+        "dashscope": {
+          "gateway": "dashscope_workspace"
+        }
+      },
       "status": "hidden",
       "supported_backends": [
         "dashscope"
@@ -5412,7 +6310,7 @@
       },
       "ui": {
         "badges": [],
-        "order": 0,
+        "order": 120,
         "recommended": true,
         "selection_group": "i2v",
         "visible_in": []
@@ -5429,7 +6327,7 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Image-to-video with reference character support",
+      "description": "Image-to-video with one first frame",
       "display_name": "HappyHorse I2V",
       "docs": {
         "context_hub_doc_ids": [
@@ -5450,24 +6348,26 @@
       "id": "happyhorse/happyhorse-1.1-video#i2v",
       "inputs": {
         "reference_images": {
-          "max": 9
+          "max": 1,
+          "reference_type": "image"
         }
       },
       "legacy_model_id": "happyhorse-1.1-i2v",
       "mode": "i2v",
       "model_line_id": "happyhorse/happyhorse-1.1-video",
       "params": {
-        "negativePrompt": true,
-        "promptExtend": true,
         "resolution": {
-          "default": "1080p",
+          "default": "1080P",
           "options": [
-            "720p",
-            "1080p"
+            "480P",
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": true
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -5477,7 +6377,7 @@
       ],
       "runtime": {
         "dashscope": {
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -5540,24 +6440,40 @@
       "id": "happyhorse/happyhorse-1.1-video#r2v",
       "inputs": {
         "reference_images": {
-          "max": 9
+          "max": 9,
+          "reference_type": "image"
         }
       },
       "legacy_model_id": "happyhorse-1.1-r2v",
       "mode": "r2v",
       "model_line_id": "happyhorse/happyhorse-1.1-video",
       "params": {
-        "negativePrompt": true,
-        "promptExtend": true,
-        "resolution": {
-          "default": "1080p",
+        "ratio": {
+          "default": "16:9",
           "options": [
-            "720p",
-            "1080p"
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "9:21",
+            "21:9",
+            "4:5",
+            "5:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "480P",
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": true
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -5567,7 +6483,7 @@
       ],
       "runtime": {
         "dashscope": {
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -5636,6 +6552,10 @@
       "inputs": {
         "reference_images": {
           "max": 1,
+          "mime_types": [
+            "image/jpeg",
+            "image/png"
+          ],
           "reference_type": "image"
         }
       },
@@ -5643,32 +6563,23 @@
       "mode": "i2v",
       "model_line_id": "kling/kling-v3-video",
       "params": {
-        "aspectRatio": {
-          "default": "16:9",
-          "options": [
-            "16:9",
-            "9:16",
-            "1:1"
-          ]
-        },
-        "cfgScale": {
-          "default": 0.5,
-          "max": 1,
-          "min": 0,
-          "step": 0.1
+        "audio": {
+          "default": false
         },
         "mode": {
-          "default": "std",
+          "default": "pro",
           "options": [
             "std",
-            "pro"
+            "pro",
+            "4k"
           ]
         },
         "negativePrompt": true,
         "promptExtend": false,
         "seed": false,
-        "sound": true,
-        "watermark": false
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "kling",
       "release_stage": "stable",
@@ -5679,7 +6590,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "kling/kling-v3-video-generation",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "kling"
@@ -5757,7 +6668,11 @@
       "id": "kling/kling-v3-video#r2v",
       "inputs": {
         "reference_images": {
-          "max": 9,
+          "max": 7,
+          "mime_types": [
+            "image/jpeg",
+            "image/png"
+          ],
           "reference_type": "image"
         }
       },
@@ -5773,17 +6688,23 @@
             "1:1"
           ]
         },
+        "audio": {
+          "default": false
+        },
         "mode": {
-          "default": "std",
+          "default": "pro",
           "options": [
             "std",
-            "pro"
+            "pro",
+            "4k"
           ]
         },
         "negativePrompt": true,
         "promptExtend": false,
         "seed": false,
-        "watermark": false
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "kling",
       "release_stage": "stable",
@@ -5794,7 +6715,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "kling/kling-v3-omni-video-generation",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "kling"
@@ -5865,6 +6786,14 @@
       "inputs": {
         "reference_images": {
           "max": 1,
+          "max_bytes": 20971520,
+          "max_height": 10000,
+          "max_width": 10000,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -5872,20 +6801,27 @@
       "mode": "i2v",
       "model_line_id": "pixverse/pixverse-c1-video",
       "params": {
-        "audio": true,
+        "audio": {
+          "default": false
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "360p",
-            "540p",
-            "720p",
-            "1080p"
+            "360P",
+            "540P",
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "watermark": true
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "pixverse",
       "release_stage": "stable",
@@ -5896,7 +6832,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "pixverse/pixverse-c1-it2v",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -5950,8 +6886,8 @@
       },
       "duration": {
         "default": 5,
-        "max": 8,
-        "min": 3,
+        "max": 15,
+        "min": 1,
         "step": 1,
         "type": "slider"
       },
@@ -5960,6 +6896,14 @@
       "inputs": {
         "reference_images": {
           "max": 7,
+          "max_bytes": 20971520,
+          "max_height": 10000,
+          "max_width": 10000,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -5967,17 +6911,35 @@
       "mode": "r2v",
       "model_line_id": "pixverse/pixverse-c1-video",
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        "audio": {
+          "default": false
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "720p",
-            "1080p"
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "watermark": false
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "pixverse",
       "release_stage": "stable",
@@ -5988,7 +6950,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "pixverse/pixverse-c1-r2v",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -6101,16 +7063,37 @@
       },
       "duration": {
         "default": 5,
-        "max": 8,
-        "min": 3,
-        "step": 1,
-        "type": "slider"
+        "options": [
+          5,
+          8,
+          10
+        ],
+        "options_by_resolution": {
+          "1080P": [
+            5,
+            8
+          ],
+          "720P": [
+            5,
+            8,
+            10
+          ]
+        },
+        "type": "buttons"
       },
       "family": "pixverse",
       "id": "pixverse/pixverse-v5.6-r2v#r2v",
       "inputs": {
         "reference_images": {
           "max": 7,
+          "max_bytes": 20971520,
+          "max_height": 10000,
+          "max_width": 10000,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -6118,17 +7101,35 @@
       "mode": "r2v",
       "model_line_id": "pixverse/pixverse-v5.6-r2v",
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        "audio": {
+          "default": false
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "720p",
-            "1080p"
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "watermark": false
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "pixverse",
       "release_stage": "stable",
@@ -6139,7 +7140,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "pixverse/pixverse-v5.6-r2v",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -6203,6 +7204,14 @@
       "inputs": {
         "reference_images": {
           "max": 1,
+          "max_bytes": 20971520,
+          "max_height": 10000,
+          "max_width": 10000,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -6210,19 +7219,24 @@
       "mode": "i2v",
       "model_line_id": "pixverse/pixverse/pixverse-v6-video",
       "params": {
-        "audio": true,
+        "audio": {
+          "default": false
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "360p",
-            "540p",
-            "720p",
-            "1080p"
+            "360P",
+            "540P",
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
         "shotType": {
           "default": "single",
           "options": [
@@ -6230,7 +7244,9 @@
             "multi"
           ]
         },
-        "watermark": true
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "pixverse",
       "release_stage": "stable",
@@ -6241,7 +7257,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "pixverse/pixverse-v6-it2v",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         }
       },
       "status": "active",
@@ -6308,6 +7324,9 @@
         "promptExtend": true,
         "seed": true,
         "size": {
+          "allow_custom_modes": [
+            "i2i"
+          ],
           "default": "1280*1280",
           "options": [
             "1024*1024",
@@ -6315,7 +7334,11 @@
             "1440*1440",
             "2048*2048",
             "1280*720",
-            "720*1280"
+            "720*1280",
+            "576*1024",
+            "768*1024",
+            "1024*768",
+            "1024*576"
           ]
         },
         "watermark": true
@@ -6392,6 +7415,9 @@
         "promptExtend": true,
         "seed": true,
         "size": {
+          "allow_custom_modes": [
+            "i2i"
+          ],
           "default": "1280*1280",
           "options": [
             "1024*1024",
@@ -6399,7 +7425,11 @@
             "1440*1440",
             "2048*2048",
             "1280*720",
-            "720*1280"
+            "720*1280",
+            "576*1024",
+            "768*1024",
+            "1024*768",
+            "1024*576"
           ]
         },
         "watermark": true
@@ -6477,6 +7507,12 @@
       "inputs": {
         "reference_images": {
           "max": 1,
+          "max_bytes": 20971520,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -6484,6 +7520,19 @@
       "mode": "i2v",
       "model_line_id": "seedance/seedance-2.0-video",
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "audio": {
+          "default": true
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
@@ -6493,8 +7542,11 @@
             "1080p"
           ]
         },
-        "seed": true,
-        "watermark": true
+        "seed": {
+          "max": 4294967295,
+          "min": -1
+        },
+        "watermark": false
       },
       "provider": "mulerouter",
       "release_stage": "stable",
@@ -6504,6 +7556,7 @@
       ],
       "runtime": {
         "mulerouter": {
+          "api_model_id": "seedance-2.0-i2v",
           "gateway": "mulerouter"
         }
       },
@@ -6570,6 +7623,12 @@
       "inputs": {
         "reference_images": {
           "max": 9,
+          "max_bytes": 20971520,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -6577,6 +7636,19 @@
       "mode": "r2v",
       "model_line_id": "seedance/seedance-2.0-video",
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "audio": {
+          "default": true
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
@@ -6586,8 +7658,11 @@
             "1080p"
           ]
         },
-        "seed": true,
-        "watermark": true
+        "seed": {
+          "max": 4294967295,
+          "min": -1
+        },
+        "watermark": false
       },
       "provider": "mulerouter",
       "release_stage": "stable",
@@ -6597,6 +7672,7 @@
       ],
       "runtime": {
         "mulerouter": {
+          "api_model_id": "seedance-2.0-r2v",
           "gateway": "mulerouter"
         }
       },
@@ -6665,6 +7741,19 @@
       "mode": "t2v",
       "model_line_id": "seedance/seedance-2.0-video",
       "params": {
+        "aspectRatio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "audio": {
+          "default": true
+        },
         "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
@@ -6674,8 +7763,13 @@
             "1080p"
           ]
         },
-        "seed": true,
-        "watermark": true
+        "seed": {
+          "max": 4294967295,
+          "min": -1
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "mulerouter",
       "release_stage": "stable",
@@ -6685,6 +7779,7 @@
       ],
       "runtime": {
         "mulerouter": {
+          "api_model_id": "seedance-2.0-t2v",
           "gateway": "mulerouter"
         }
       },
@@ -6754,7 +7849,17 @@
       "id": "vidu/viduq3-pro-video#i2v",
       "inputs": {
         "reference_images": {
+          "aspect_ratio": {
+            "max": 4,
+            "min": 0.25
+          },
           "max": 1,
+          "max_bytes": 52428800,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -6762,28 +7867,25 @@
       "mode": "i2v",
       "model_line_id": "vidu/viduq3-pro-video",
       "params": {
-        "movementAmplitude": {
-          "default": "auto",
-          "options": [
-            "auto",
-            "small",
-            "medium",
-            "large"
-          ]
+        "audio": {
+          "default": false
         },
-        "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "540p",
-            "720p",
-            "1080p"
+            "540P",
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "viduAudio": true,
-        "watermark": true
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "vidu",
       "release_stage": "stable",
@@ -6794,7 +7896,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "vidu/viduq3-pro_img2video",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "vidu"
@@ -6870,7 +7972,17 @@
       "id": "vidu/viduq3-pro-video#r2v",
       "inputs": {
         "reference_images": {
+          "aspect_ratio": {
+            "max": 4,
+            "min": 0.25
+          },
           "max": 7,
+          "max_bytes": 52428800,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -6878,18 +7990,34 @@
       "mode": "r2v",
       "model_line_id": "vidu/viduq3-pro-video",
       "params": {
-        "negativePrompt": false,
-        "promptExtend": false,
-        "resolution": {
-          "default": "720p",
+        "aspectRatio": {
+          "default": "16:9",
           "options": [
-            "540p",
-            "720p",
-            "1080p"
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
           ]
         },
-        "seed": true,
-        "watermark": false
+        "audio": {
+          "default": false
+        },
+        "promptExtend": false,
+        "resolution": {
+          "default": "720P",
+          "options": [
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "vidu",
       "release_stage": "stable",
@@ -6900,7 +8028,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "vidu/viduq3-mix_reference2video",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "vidu"
@@ -6974,7 +8102,17 @@
       "id": "vidu/viduq3-turbo-video#i2v",
       "inputs": {
         "reference_images": {
+          "aspect_ratio": {
+            "max": 4,
+            "min": 0.25
+          },
           "max": 1,
+          "max_bytes": 52428800,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -6982,28 +8120,25 @@
       "mode": "i2v",
       "model_line_id": "vidu/viduq3-turbo-video",
       "params": {
-        "movementAmplitude": {
-          "default": "auto",
-          "options": [
-            "auto",
-            "small",
-            "medium",
-            "large"
-          ]
+        "audio": {
+          "default": false
         },
-        "negativePrompt": false,
         "promptExtend": false,
         "resolution": {
-          "default": "720p",
+          "default": "720P",
           "options": [
-            "540p",
-            "720p",
-            "1080p"
+            "540P",
+            "720P",
+            "1080P"
           ]
         },
-        "seed": true,
-        "viduAudio": true,
-        "watermark": true
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "vidu",
       "release_stage": "stable",
@@ -7014,7 +8149,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "vidu/viduq3-turbo_img2video",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "vidu"
@@ -7088,7 +8223,17 @@
       "id": "vidu/viduq3-turbo-video#r2v",
       "inputs": {
         "reference_images": {
+          "aspect_ratio": {
+            "max": 4,
+            "min": 0.25
+          },
           "max": 7,
+          "max_bytes": 52428800,
+          "mime_types": [
+            "image/jpeg",
+            "image/png",
+            "image/webp"
+          ],
           "reference_type": "image"
         }
       },
@@ -7096,18 +8241,35 @@
       "mode": "r2v",
       "model_line_id": "vidu/viduq3-turbo-video",
       "params": {
-        "negativePrompt": false,
-        "promptExtend": false,
-        "resolution": {
-          "default": "720p",
+        "aspectRatio": {
+          "default": "16:9",
           "options": [
-            "540p",
-            "720p",
-            "1080p"
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
           ]
         },
-        "seed": true,
-        "watermark": false
+        "audio": {
+          "default": false
+        },
+        "promptExtend": false,
+        "resolution": {
+          "default": "720P",
+          "options": [
+            "540P",
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": {
+          "max": 2147483647,
+          "min": 0
+        },
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "vidu",
       "release_stage": "stable",
@@ -7118,7 +8280,7 @@
       "runtime": {
         "dashscope": {
           "api_model_id": "vidu/viduq3-turbo_reference2video",
-          "gateway": "dashscope"
+          "gateway": "dashscope_workspace"
         },
         "vendor": {
           "gateway": "vidu"
@@ -7174,7 +8336,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -7205,7 +8368,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7249,7 +8413,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -7280,7 +8445,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7324,7 +8490,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -7341,7 +8508,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7385,7 +8553,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -7402,7 +8571,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7446,7 +8616,8 @@
           "aliyun/wan-image"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -7467,7 +8638,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7511,7 +8683,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -7547,7 +8720,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7591,7 +8765,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -7608,7 +8783,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7652,7 +8828,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -7689,7 +8866,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7733,7 +8911,8 @@
           "aliyun/wan-image"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -7754,7 +8933,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7798,7 +8978,8 @@
           "aliyun/wan-t2i"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -7815,7 +8996,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {},
       "status": "deprecated",
@@ -7860,7 +9042,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -7897,7 +9080,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -7945,7 +9129,8 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -7967,7 +9152,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -8016,7 +9202,8 @@
           "aliyun/wan-image-27"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -8035,6 +9222,9 @@
         "promptExtend": true,
         "seed": true,
         "size": {
+          "allow_custom_modes": [
+            "i2i"
+          ],
           "default": "1280*1280",
           "options": [
             "1024*1024",
@@ -8044,7 +9234,9 @@
             "1280*720",
             "720*1280",
             "1024*576",
-            "576*1024"
+            "576*1024",
+            "768*1024",
+            "1024*768"
           ]
         },
         "watermark": true
@@ -8055,7 +9247,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -8109,7 +9302,8 @@
           "aliyun/wan-image-27"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": null,
@@ -8128,6 +9322,9 @@
         "promptExtend": true,
         "seed": true,
         "size": {
+          "allow_custom_modes": [
+            "i2i"
+          ],
           "default": "1280*1280",
           "options": [
             "1024*1024",
@@ -8137,7 +9334,9 @@
             "1280*720",
             "720*1280",
             "1024*576",
-            "576*1024"
+            "576*1024",
+            "768*1024",
+            "1024*768"
           ]
         },
         "watermark": true
@@ -8148,7 +9347,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -8196,14 +9396,15 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Image-to-video with first/last frame, driving audio, and first clip support",
+      "description": "First-frame image-to-video; last-frame, driving audio, and clip continuation are not exposed in LumenX",
       "display_name": "Wan 2.7 I2V",
       "docs": {
         "context_hub_doc_ids": [
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
@@ -8227,16 +9428,6 @@
       "params": {
         "negativePrompt": true,
         "promptExtend": true,
-        "ratio": {
-          "default": "16:9",
-          "options": [
-            "16:9",
-            "9:16",
-            "1:1",
-            "4:3",
-            "3:4"
-          ]
-        },
         "resolution": {
           "default": "1080p",
           "options": [
@@ -8253,7 +9444,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -8308,13 +9500,14 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
       "duration": {
         "default": 5,
         "max": 15,
-        "min": 3,
+        "min": 2,
         "step": 1,
         "type": "slider"
       },
@@ -8330,17 +9523,31 @@
       "mode": "r2v",
       "model_line_id": "wan/wan2.7-video",
       "params": {
-        "negativePrompt": false,
-        "promptExtend": false,
-        "resolution": {
-          "default": "1080p",
+        "negativePrompt": true,
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "16:9",
           "options": [
-            "720p",
-            "1080p"
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "720P",
+            "1080P"
           ]
         },
         "seed": true,
-        "watermark": true
+        "watermark": {
+          "default": false
+        }
       },
       "provider": "aliyun",
       "release_stage": "stable",
@@ -8348,7 +9555,8 @@
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -8401,24 +9609,62 @@
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
-      "duration": null,
+      "duration": {
+        "default": 5,
+        "max": 15,
+        "min": 2,
+        "step": 1,
+        "type": "slider"
+      },
       "family": "wan",
       "id": "wan/wan2.7-video#t2v",
-      "inputs": {},
+      "inputs": {
+        "media": {
+          "max": 0
+        }
+      },
       "legacy_model_id": "wan2.7-t2v",
       "mode": "t2v",
       "model_line_id": "wan/wan2.7-video",
-      "params": {},
+      "params": {
+        "negativePrompt": true,
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": true,
+        "watermark": {
+          "default": false
+        }
+      },
       "provider": "aliyun",
       "release_stage": "stable",
       "routing_prefixes": [
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -8448,7 +9694,7 @@
         "visible_in": []
       }
     },
-    "wan/wan2.7-video#videoedit": {
+    "wan/wan2.7-video#v2v": {
       "backend_env_key": null,
       "capabilities": [
         "v2v"
@@ -8459,31 +9705,86 @@
         ]
       },
       "default_backend": "dashscope",
-      "description": "Video editing with reference images",
+      "description": "Source-video editing from one managed MP4/MOV input; optional reference images are not exposed in Playground yet",
       "display_name": "Wan 2.7 VideoEdit",
       "docs": {
         "context_hub_doc_ids": [
           "aliyun/wan-i2v-r2v"
         ],
         "official_snapshot_ids": [
-          "aliyun/wan/2026-04-25"
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
         ]
       },
-      "duration": null,
+      "duration": {
+        "default": 0,
+        "options": [
+          0,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "type": "buttons"
+      },
       "family": "wan",
-      "id": "wan/wan2.7-video#videoedit",
-      "inputs": {},
+      "id": "wan/wan2.7-video#v2v",
+      "inputs": {
+        "reference_videos": {
+          "max": 1,
+          "reference_type": "video"
+        }
+      },
       "legacy_model_id": "wan2.7-videoedit",
-      "mode": "videoedit",
+      "mode": "v2v",
       "model_line_id": "wan/wan2.7-video",
-      "params": {},
+      "params": {
+        "audioSetting": {
+          "default": "auto",
+          "options": [
+            "auto",
+            "origin"
+          ]
+        },
+        "negativePrompt": true,
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "16:9",
+          "options": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": true,
+        "watermark": {
+          "default": false
+        }
+      },
       "provider": "aliyun",
       "release_stage": "stable",
       "routing_prefixes": [
         "wan2.2-",
         "wan2.5-",
         "wan2.6-",
-        "wan2.7-"
+        "wan2.7-",
+        "wan3.0-"
       ],
       "runtime": {
         "dashscope": {
@@ -8511,6 +9812,252 @@
         "recommended": false,
         "selection_group": "i2v",
         "visible_in": []
+      }
+    },
+    "wan/wan3.0-video#video": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v",
+        "v2v"
+      ],
+      "credential_sources": {
+        "dashscope": [
+          "DASHSCOPE_API_KEY"
+        ]
+      },
+      "default_backend": "dashscope",
+      "description": "Wan 3.0 all-in-one workspace video foundation for ordered media generation",
+      "display_name": "Wan 3.0 Video",
+      "docs": {
+        "context_hub_doc_ids": [],
+        "official_snapshot_ids": [
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
+        ],
+        "repo_local_snapshot_paths": [
+          "docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 30,
+        "min": 2,
+        "step": 1,
+        "supports_auto": true,
+        "type": "slider"
+      },
+      "family": "wan",
+      "id": "wan/wan3.0-video#video",
+      "inputs": {
+        "media": {
+          "ordered": true,
+          "roles": [
+            "first_frame",
+            "last_frame",
+            "reference_image",
+            "reference_video",
+            "reference_audio"
+          ]
+        }
+      },
+      "legacy_model_id": "wan3.0-video",
+      "mode": "video",
+      "model_line_id": "wan/wan3.0-video",
+      "params": {
+        "audio": {
+          "default": true
+        },
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "adaptive",
+          "options": [
+            "adaptive",
+            "21:9",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "480P",
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": true,
+        "watermark": {
+          "default": false
+        }
+      },
+      "provider": "aliyun",
+      "release_stage": "preview",
+      "routing_prefixes": [
+        "wan2.2-",
+        "wan2.5-",
+        "wan2.6-",
+        "wan2.7-",
+        "wan3.0-"
+      ],
+      "runtime": {
+        "dashscope": {
+          "api_model_id": "wan3.0-video",
+          "gateway": "dashscope_workspace"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "dashscope"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        },
+        "image_input_mode": {
+          "dashscope": "dashscope_multimodal_message"
+        },
+        "reference_video_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        }
+      },
+      "ui": {
+        "badges": [],
+        "order": 95,
+        "recommended": false,
+        "selection_group": "video",
+        "visible_in": [
+          "video_sidebar"
+        ]
+      }
+    },
+    "wan/wan3.0-video-prime#video": {
+      "backend_env_key": null,
+      "capabilities": [
+        "t2v",
+        "i2v",
+        "r2v",
+        "v2v"
+      ],
+      "credential_sources": {
+        "dashscope": [
+          "DASHSCOPE_API_KEY"
+        ]
+      },
+      "default_backend": "dashscope",
+      "description": "Wan 3.0 Prime all-in-one workspace video foundation for ordered media generation",
+      "display_name": "Wan 3.0 Video Prime",
+      "docs": {
+        "context_hub_doc_ids": [],
+        "official_snapshot_ids": [
+          "aliyun/wan/2026-04-25",
+          "aliyun/wan3-shared-execution/2026-10-12"
+        ],
+        "repo_local_snapshot_paths": [
+          "docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md"
+        ]
+      },
+      "duration": {
+        "default": 5,
+        "max": 30,
+        "min": 2,
+        "step": 1,
+        "supports_auto": true,
+        "type": "slider"
+      },
+      "family": "wan",
+      "id": "wan/wan3.0-video-prime#video",
+      "inputs": {
+        "media": {
+          "ordered": true,
+          "roles": [
+            "first_frame",
+            "last_frame",
+            "reference_image",
+            "reference_video",
+            "reference_audio"
+          ]
+        }
+      },
+      "legacy_model_id": "wan3.0-video-prime",
+      "mode": "video",
+      "model_line_id": "wan/wan3.0-video-prime",
+      "params": {
+        "audio": {
+          "default": true
+        },
+        "promptExtend": {
+          "default": true
+        },
+        "ratio": {
+          "default": "adaptive",
+          "options": [
+            "adaptive",
+            "21:9",
+            "16:9",
+            "4:3",
+            "1:1",
+            "3:4",
+            "9:16"
+          ]
+        },
+        "resolution": {
+          "default": "1080P",
+          "options": [
+            "480P",
+            "720P",
+            "1080P"
+          ]
+        },
+        "seed": true,
+        "watermark": {
+          "default": false
+        }
+      },
+      "provider": "aliyun",
+      "release_stage": "preview",
+      "routing_prefixes": [
+        "wan2.2-",
+        "wan2.5-",
+        "wan2.6-",
+        "wan2.7-",
+        "wan3.0-"
+      ],
+      "runtime": {
+        "dashscope": {
+          "api_model_id": "wan3.0-video-prime",
+          "gateway": "dashscope_workspace"
+        }
+      },
+      "status": "active",
+      "supported_backends": [
+        "dashscope"
+      ],
+      "transport": {
+        "audio_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        },
+        "image_input_mode": {
+          "dashscope": "dashscope_multimodal_message"
+        },
+        "reference_video_input_mode": {
+          "dashscope": "dashscope_temp_file_url"
+        }
+      },
+      "ui": {
+        "badges": [],
+        "order": 96,
+        "recommended": false,
+        "selection_group": "video",
+        "visible_in": [
+          "video_sidebar"
+        ]
       }
     }
   },

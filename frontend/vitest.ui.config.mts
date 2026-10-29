@@ -7,6 +7,7 @@ export default defineConfig({
     },
     test: {
         environment: 'happy-dom',
+        fileParallelism: false,
         include: [
             'src/components/**/*.test.tsx',
             'src/components/**/*.spec.tsx',

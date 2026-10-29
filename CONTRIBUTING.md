@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing to LumenX Studio! We welcome contributions from the community.
 
+Before architecture or behavior changes, read the [shared development instructions](AGENTS.md), [product decisions and implementation index](docs/agents/context/lumenx-first-principles/README.md), and [current execution ledger](docs/agents/context/lumenx-first-principles/EXECUTION-STATUS.md). Use the documents from the same Git commit as your code; the ledger links version-specific validation evidence.
+
 ## 🌟 Ways to Contribute
 
 - **Bug Reports**: Submit detailed bug reports via [GitHub Issues](https://github.com/alibaba/lumenx/issues)
@@ -84,7 +86,7 @@ Minimum expected command sequence after catalog changes:
 ```bash
 python scripts/build_model_catalog.py
 python scripts/validate_model_catalog.py
-pytest -q
+python -S scripts/run_tests_isolated.py -- -q
 cd frontend && npm run typecheck
 cd frontend && npm run test:all
 cd frontend && npm run build
@@ -194,7 +196,7 @@ Before submitting your PR:
 
 ```bash
 # Run tests
-pytest  # Python tests
+python -S scripts/run_tests_isolated.py  # Python tests
 cd frontend && npm test  # Frontend tests
 
 # Check linting
@@ -246,13 +248,13 @@ Your PR should:
 
 ```bash
 # Run all tests
-pytest
+python -S scripts/run_tests_isolated.py
 
 # Run specific test file
-pytest tests/test_pipeline.py
+python -S scripts/run_tests_isolated.py tests/test_pipeline.py
 
 # Run with coverage
-pytest --cov=src tests/
+python -S scripts/run_tests_isolated.py -- -p pytest_cov --cov=src tests/
 ```
 
 ### Frontend Tests

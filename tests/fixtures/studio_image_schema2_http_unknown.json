@@ -1,0 +1,289 @@
+{
+  "p": {
+    "id": "p",
+    "asset_image_request_scope_id": "d0dea343-4e0e-4577-bc56-3aa601b2da51",
+    "asset_image_requests": [
+      {
+        "schema_version": 1,
+        "id": "363b86f8-308a-48d7-b69a-af472b17e1d3",
+        "created_at": 1792863164.0123992,
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.reference_sheet.v1",
+        "client_request_id": "gpt-sheet-request",
+        "request_fingerprint": "fcad5358c2c1969a9f3b1a95d4c269422ad8e1bec28aee0d905b01b84ea2ece5",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "d0dea343-4e0e-4577-bc56-3aa601b2da51",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "character",
+        "asset_id": "c",
+        "channel": "reference_sheet",
+        "input_guard": "71385a0db9755d1fc71adecbe349da986c652bc66ab0f8084c0425eaaa92c482",
+        "projection_guard": "7be2e30b2920a5b5afef356d244fb4ccac9a5263c5a70142c46aed774852ae6c",
+        "members": [
+          {
+            "variant_id": "3b3b7801-fcf5-4ba8-83f0-d2ccd1ba013d",
+            "execution": {
+              "schema_version": 2,
+              "execution_kind": "sync_artifact",
+              "media_kind": "image",
+              "output_ref": "assets/studio/3b3b7801-fcf5-4ba8-83f0-d2ccd1ba013d.png",
+              "attempt_id": "3b3b7801-fcf5-4ba8-83f0-d2ccd1ba013d",
+              "phase": "submitting",
+              "provider_model_id": "gpt-image-2",
+              "intent": {
+                "rules_version": "generation-parameters-v1",
+                "scope": "parameters-only",
+                "model_id": "gpt-image/gpt-image-2#image",
+                "catalog_mode": "image",
+                "mode": "t2i",
+                "prompt": "Author prompt",
+                "params": {
+                  "size": "1024x1536"
+                },
+                "sources": {
+                  "model_id": "request",
+                  "mode": "request",
+                  "prompt": "request",
+                  "params.size": "request"
+                },
+                "request_fields": [
+                  "mode",
+                  "model_id",
+                  "params.size",
+                  "prompt"
+                ],
+                "preset_id": null,
+                "preset_version": null
+              },
+              "media": [],
+              "scope": {
+                "provider": "mulerouter",
+                "backend": "mulerouter",
+                "gateway": "mulerouter_http",
+                "base_url": "https://api.mulerouter.ai",
+                "region": null,
+                "workspace_id": null,
+                "account_identity": null
+              },
+              "credential_ref": "4dc68fb9-5cea-4917-bc89-329d606b7b18",
+              "fingerprint": "de762182586a731aadcee512c022f1d276f59092a5ba5b78c1e06f083f1b2d39",
+              "handle": null,
+              "observation": null,
+              "prepared_artifact": null,
+              "artifact": null
+            }
+          },
+          {
+            "variant_id": "73acdc89-80fc-4db6-966b-3aae17803dc2",
+            "execution": {
+              "schema_version": 2,
+              "execution_kind": "sync_artifact",
+              "media_kind": "image",
+              "output_ref": "assets/studio/73acdc89-80fc-4db6-966b-3aae17803dc2.png",
+              "attempt_id": "73acdc89-80fc-4db6-966b-3aae17803dc2",
+              "phase": "cancelled",
+              "provider_model_id": "gpt-image-2",
+              "intent": {
+                "rules_version": "generation-parameters-v1",
+                "scope": "parameters-only",
+                "model_id": "gpt-image/gpt-image-2#image",
+                "catalog_mode": "image",
+                "mode": "t2i",
+                "prompt": "Author prompt",
+                "params": {
+                  "size": "1024x1536"
+                },
+                "sources": {
+                  "model_id": "request",
+                  "mode": "request",
+                  "prompt": "request",
+                  "params.size": "request"
+                },
+                "request_fields": [
+                  "mode",
+                  "model_id",
+                  "params.size",
+                  "prompt"
+                ],
+                "preset_id": null,
+                "preset_version": null
+              },
+              "media": [],
+              "scope": {
+                "provider": "mulerouter",
+                "backend": "mulerouter",
+                "gateway": "mulerouter_http",
+                "base_url": "https://api.mulerouter.ai",
+                "region": null,
+                "workspace_id": null,
+                "account_identity": null
+              },
+              "credential_ref": "4dc68fb9-5cea-4917-bc89-329d606b7b18",
+              "fingerprint": "857385631fa567c0d4bf2ff90afb18b3978fb62200078bbfcee937a520a7946c",
+              "handle": null,
+              "observation": null,
+              "prepared_artifact": null,
+              "artifact": null
+            }
+          }
+        ]
+      }
+    ],
+    "revision": 6,
+    "title": "P",
+    "original_text": "S",
+    "characters": [
+      {
+        "id": "c",
+        "name": "Alice",
+        "description": "red coat",
+        "persona": "",
+        "age": null,
+        "gender": null,
+        "clothing": null,
+        "visual_weight": 3,
+        "reference_sheet": {
+          "selected_image_id": "chosen",
+          "image_variants": [
+            {
+              "id": "chosen",
+              "url": "uploads/chosen.png",
+              "created_at": 1792863163.6052978,
+              "prompt_used": null,
+              "is_favorited": true,
+              "is_uploaded_source": false,
+              "upload_type": null
+            }
+          ],
+          "selected_video_id": null,
+          "video_variants": [],
+          "image_prompt": null,
+          "video_prompt": null,
+          "image_updated_at": 1792863163.585345,
+          "video_updated_at": 0.0
+        },
+        "reference_sheet_request_id": "363b86f8-308a-48d7-b69a-af472b17e1d3",
+        "full_body_request_id": null,
+        "three_view_request_id": null,
+        "headshot_request_id": null,
+        "full_body_motion_request_id": null,
+        "full_body": {
+          "selected_image_id": null,
+          "image_variants": [],
+          "selected_video_id": null,
+          "video_variants": [],
+          "image_prompt": null,
+          "video_prompt": null,
+          "image_updated_at": 1792863163.5853472,
+          "video_updated_at": 0.0
+        },
+        "three_views": {
+          "selected_image_id": null,
+          "image_variants": [],
+          "selected_video_id": null,
+          "video_variants": [],
+          "image_prompt": null,
+          "video_prompt": null,
+          "image_updated_at": 1792863163.5853481,
+          "video_updated_at": 0.0
+        },
+        "head_shot": {
+          "selected_image_id": null,
+          "image_variants": [],
+          "selected_video_id": null,
+          "video_variants": [],
+          "image_prompt": null,
+          "video_prompt": null,
+          "image_updated_at": 1792863163.585349,
+          "video_updated_at": 0.0
+        },
+        "full_body_image_url": null,
+        "full_body_prompt": null,
+        "full_body_asset": {
+          "selected_id": null,
+          "variants": []
+        },
+        "three_view_image_url": null,
+        "three_view_prompt": null,
+        "three_view_asset": {
+          "selected_id": null,
+          "variants": []
+        },
+        "headshot_image_url": null,
+        "headshot_prompt": null,
+        "headshot_asset": {
+          "selected_id": null,
+          "variants": []
+        },
+        "video_assets": [],
+        "video_prompt": null,
+        "image_url": "uploads/chosen.png",
+        "avatar_url": null,
+        "is_consistent": true,
+        "full_body_updated_at": 1792863163.585354,
+        "three_view_updated_at": 0.0,
+        "headshot_updated_at": 0.0,
+        "base_character_id": null,
+        "voice_id": null,
+        "voice_name": null,
+        "voice_speed": 1.0,
+        "voice_pitch": 1.0,
+        "voice_volume": 50,
+        "voice_origin": "system",
+        "locked": false,
+        "starred": false,
+        "status": "needs_confirmation"
+      }
+    ],
+    "scenes": [],
+    "props": [],
+    "frames": [],
+    "video_tasks": [],
+    "provider_request_receipts": [],
+    "style_preset": "realistic",
+    "style_prompt": null,
+    "art_direction": null,
+    "model_settings": {
+      "t2i_model": "gpt-image-2",
+      "i2i_model": "wan2.7-image-pro",
+      "image_model": "wan2.7-image-pro",
+      "i2v_model": "happyhorse-1.1-i2v",
+      "r2v_model": "wan2.7-r2v",
+      "character_aspect_ratio": "9:16",
+      "scene_aspect_ratio": "16:9",
+      "prop_aspect_ratio": "1:1",
+      "storyboard_aspect_ratio": "16:9"
+    },
+    "prompt_config": {
+      "storyboard_polish": "",
+      "video_polish": "",
+      "r2v_polish": "",
+      "entity_extraction": "",
+      "style_analysis": "",
+      "storyboard_extraction": "",
+      "polish_model": ""
+    },
+    "workflow_mode": "i2v_legacy",
+    "default_generation_mode": "r2v",
+    "merged_video_url": null,
+    "merged_video_source": null,
+    "bgm_url": null,
+    "mix_settings": {
+      "dialogue": 100,
+      "bgm": 35,
+      "sfx": 60
+    },
+    "series_id": null,
+    "episode_number": null,
+    "last_episode_summary_cache": null,
+    "last_episode_summary_revision": null,
+    "next_hook_cache": null,
+    "next_hook_revision": null,
+    "starred": false,
+    "created_at": 1.0,
+    "updated_at": 1.0
+  }
+}

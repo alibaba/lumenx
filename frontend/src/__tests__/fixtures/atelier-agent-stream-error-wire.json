@@ -1,0 +1,9 @@
+{
+  "request": {
+    "expected_revision": 0,
+    "client_turn_id": "turn-http-1",
+    "user_message": "生成视频",
+    "selected_node_id": "video"
+  },
+  "stream": "event: turn_planning_started\ndata: {\"type\": \"turn_planning_started\", \"project_id\": \"p\", \"turn_id\": \"turn-http-1\", \"call_id\": null, \"approval_id\": null, \"attempt_id\": null, \"candidate_id\": null, \"message\": null, \"ack\": null}\n\nevent: agent_error\ndata: {\"type\": \"agent_error\", \"project_id\": \"p\", \"turn_id\": \"turn-http-1\", \"code\": \"atelier_agent_start_rejected\", \"detail\": \"Agent stream stopped; read the saved turn before retrying\"}\n\n"
+}

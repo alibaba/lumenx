@@ -2,17 +2,20 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
-import { Play, Trash2, Film, Clock, MoreVertical, ExternalLink, Star } from "lucide-react";
+import { Download, Play, Trash2, Film, Clock, MoreVertical, ExternalLink, Star } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Project } from "@/store/projectStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { getAssetUrl } from "@/lib/utils";
-import { coverGradient, GRAIN_URL } from "@/lib/atelierCover";
+import { coverGradient, GRAIN_URL } from "@/lib/cover";
 import { api } from "@/lib/api";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, requireActiveRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import { isMergeVideoCurrent } from "@/lib/mergeFreshness";
+import { safeProjectPackageFilename } from "@/lib/projectPackage";
 
 interface ProjectCardProps {
     project: Project;
-    onDelete: (id: string) => void;
+    onDelete: (id: string) => Promise<void> | void;
 }
 
 export type DerivedStatus = "completed" | "processing" | "pending";
@@ -45,7 +48,7 @@ export function deriveCover(project: Project): string | undefined {
 // Status is absent on the data model, so derive a coarse lifecycle state:
 // a merged video => completed; rendered frames present => processing; else draft.
 export function deriveStatus(project: Project): DerivedStatus {
-    if (project.merged_video_url) return "completed";
+    if (isMergeVideoCurrent(project, getRuntimeEnvironment()?.key ?? "")) return "completed";
     const frames = (project.frames || []) as Array<Record<string, any>>;
     const rendered = frames.some((f) => f?.rendered_image_url || f?.image_url);
     if (rendered) return "processing";
@@ -55,11 +58,48 @@ export function deriveStatus(project: Project): DerivedStatus {
 export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
     const t = useTranslations("project");
     const tCommon = useTranslations("common");
+    const tPersistence = useTranslations("persistence");
     const locale = useSettingsStore((s) => s.locale);
 
     const [menuOpen, setMenuOpen] = useState(false);
+    const [deletePending, setDeletePending] = useState(false);
+    const [exportPending, setExportPending] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
+    const [exportError, setExportError] = useState<string | null>(null);
     const menuWrapRef = useRef<HTMLDivElement>(null);
     const firstItemRef = useRef<HTMLButtonElement>(null);
+    const mountedRef = useRef(false);
+    const latestProjectRef = useRef(project);
+    const exportInFlightRef = useRef(false);
+    const exportOperationRef = useRef(0);
+    const [runtimeRevision, setRuntimeRevision] = useState(0);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            exportOperationRef.current += 1;
+        };
+    }, []);
+
+    useEffect(() => {
+        latestProjectRef.current = project;
+    }, [project]);
+
+    useEffect(() => {
+        exportOperationRef.current += 1;
+        exportInFlightRef.current = false;
+        setExportPending(false);
+        setExportError(null);
+    }, [project.id]);
+
+    useEffect(() => subscribeRuntimeEnvironment(() => {
+        exportOperationRef.current += 1;
+        exportInFlightRef.current = false;
+        setExportPending(false);
+        setExportError(null);
+        setRuntimeRevision(value => value + 1);
+    }), []);
 
     // Close the actions menu on outside click / Escape, and move focus to the
     // first item when it opens (keyboard + a11y parity with the rest of Studio).
@@ -82,6 +122,7 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
         };
     }, [menuOpen]);
 
+    void runtimeRevision;
     const cover = deriveCover(project);
     const status = deriveStatus(project);
     const frameCount = project.frames?.length || 0;
@@ -114,10 +155,62 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
             : `#/project/${project.id}`;
     };
 
-    const handleDelete = (e: React.MouseEvent) => {
+    const handleDelete = async (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (confirm(t("confirmDelete", { title: project.title }))) {
-            onDelete(project.id);
+        if (deletePending) return;
+        setDeleteError(null);
+        if (!confirm(t("confirmDelete", { title: project.title }))) return;
+
+        setDeletePending(true);
+        try {
+            await onDelete(project.id);
+            setMenuOpen(false);
+        } catch (error) {
+            console.error('Failed to delete project:', error);
+            setDeleteError(tPersistence("failed"));
+            setMenuOpen(true);
+        } finally {
+            setDeletePending(false);
+        }
+    };
+
+    const handleExportPackage = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (exportInFlightRef.current) return;
+        const environment = requireActiveRuntimeEnvironment();
+        const capturedProject = project;
+        const operation = ++exportOperationRef.current;
+        const isCurrentExportOperation = () => operation === exportOperationRef.current && mountedRef.current
+            && latestProjectRef.current.id === capturedProject.id
+            && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+        let objectUrl: string | null = null;
+        setExportError(null);
+        exportInFlightRef.current = true;
+        setExportPending(true);
+        try {
+            const result = await api.exportProjectPackage(capturedProject.id);
+            if (!isCurrentExportOperation()) return;
+            objectUrl = URL.createObjectURL(result.blob);
+            const anchor = document.createElement("a");
+            anchor.href = objectUrl;
+            anchor.download = safeProjectPackageFilename(capturedProject.title, capturedProject.id, result.filename);
+            document.body.appendChild(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+            setMenuOpen(false);
+        } catch (error) {
+            if (!isCurrentExportOperation()) return;
+            console.error("Failed to export project package:", error);
+            setExportError(error instanceof Error ? error.message : t("exportPackageFailed"));
+            setMenuOpen(true);
+        } finally {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            if (isCurrentExportOperation()) {
+                exportInFlightRef.current = false;
+                setExportPending(false);
+            }
         }
     };
 
@@ -287,15 +380,38 @@ export default function ProjectCard({ project, onDelete }: ProjectCardProps) {
                                 type="button"
                                 role="menuitem"
                                 onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMenuOpen(false);
-                                    handleDelete(e);
+                                    void handleExportPackage(e);
                                 }}
-                                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left font-sans text-body-sm text-foreground transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:bg-red-500/10 focus-visible:text-red-400"
+                                disabled={exportPending}
+                                aria-busy={exportPending}
+                                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left font-sans text-body-sm text-foreground transition-colors hover:bg-primary/12 hover:text-primary focus-visible:outline-none focus-visible:bg-primary/12 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                <Download size={14} aria-hidden="true" />
+                                {exportPending ? t("exportPackageBusy") : t("exportPackage")}
+                            </button>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(e) => {
+                                    void handleDelete(e);
+                                }}
+                                disabled={deletePending}
+                                aria-busy={deletePending}
+                                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left font-sans text-body-sm text-foreground transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:bg-red-500/10 focus-visible:text-red-400 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                                 <Trash2 size={14} aria-hidden="true" />
                                 {tCommon("delete")}
                             </button>
+                            {deleteError ? (
+                                <p role="alert" className="px-3 pb-2 pt-1 text-xs text-status-error-fg">
+                                    {deleteError}
+                                </p>
+                            ) : null}
+                            {exportError ? (
+                                <p role="alert" className="px-3 pb-2 pt-1 text-xs text-status-error-fg">
+                                    {exportError}
+                                </p>
+                            ) : null}
                         </div>
                     ) : null}
                 </div>

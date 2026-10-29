@@ -1,91 +1,162 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
-import { motion, AnimatePresence } from "framer-motion";
-import { Wand2, Loader2, User, MapPin, Box, ChevronRight, ChevronLeft, Save, Sparkles, Plus, Trash2, X, ScrollText, PanelRightOpen, PanelRightClose } from "lucide-react";
-import { api, crudApi } from "@/lib/api";
-import { useProjectStore } from "@/store/projectStore";
+import { Wand2, Loader2 } from "lucide-react";
+import { api } from "@/lib/api";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import { extractionPreviewOperationKey, useProjectStore } from "@/store/projectStore";
 import { toast } from "@/store/toastStore";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import PreviousEpisodeSummary from "@/components/modules/PreviousEpisodeSummary";
 import ReconcileModal from "@/components/modules/ReconcileModal";
+import { scriptDraftKey, useScriptDraftStore } from "@/store/scriptDraftStore";
+import { readProjectOnce } from "@/lib/projectReadback";
 
-interface ScriptNode {
-    type: "character" | "scene" | "prop";
-    id?: string;
-    name: string;
-    desc: string;
-    // Extended attributes
-    age?: string;
-    gender?: string;
-    clothing?: string;
-    visual_weight?: number;
+let extractionSessionCounter = 0;
+
+function hasOtherExtractionOperation(runningOps: Record<string, boolean>, operationKey: string): boolean {
+    return Object.keys(runningOps).some(key => key !== operationKey
+        && (key.startsWith('script-extraction-preview:') || key.startsWith('script-extraction-confirm:')));
 }
 
 export default function ScriptProcessor() {
     const ts = useTranslations("script");
-    const tc = useTranslations("common");
+    const tp = useTranslations("persistence");
     const currentProject = useProjectStore((state) => state.currentProject);
-    const updateProject = useProjectStore((state) => state.updateProject);
-    const analyzeProject = useProjectStore((state) => state.analyzeProject);
+    const environment = useSyncExternalStore(subscribeRuntimeEnvironment, getRuntimeEnvironment, () => null);
+    const activeProject = environment && currentProject?.readEnvironment === environment.key ? currentProject : null;
     const isAnalyzing = useProjectStore((state) => state.isAnalyzing);
+    const mountedRef = useRef(false);
+    const activeExtractionSessionRef = useRef<string | null>(null);
+    const reviewRequestRef = useRef<object | null>(null);
+    const draftInteractionRef = useRef(0);
+    const pendingAnalyzeRef = useRef<object | null>(null);
+    const blurSaveRef = useRef<{
+        key: string; generation: number; text: string; interaction: number; promise: Promise<void>;
+    } | null>(null);
+    const [isWaitingForSave, setIsWaitingForSave] = useState(false);
+    const [review, setReview] = useState<{
+        key: string; generation: number; text: string; baseline: number | undefined;
+        status: 'reading' | 'ready' | 'failed'; savedText?: string; revision?: number;
+    } | null>(null);
 
     // Initialize from project data. Fallback to snake_case original_text
     // in case the API wrapper didn't map it (e.g. raw axios response, or a
     // store update that spread the backend payload without re-mapping).
-    const projectText = (currentProject?.originalText ?? (currentProject as any)?.original_text) || "";
-    const [script, setScript] = useState(projectText);
-    const [nodes, setNodes] = useState<ScriptNode[]>([]);
-
-    // UI State
-    const [selectedNode, setSelectedNode] = useState<ScriptNode | null>(null);
-    const [showPanel, setShowPanel] = useState(true);
-    const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-
-    // Sync from project. Bind on currentProject.id (not the whole object) so
-    // local textarea state isn't clobbered every time we mutate Zustand for
-    // unrelated reasons. We still re-pull text when the user switches
-    // projects, and we resync entity nodes whenever the entity arrays change.
+    const projectText = (activeProject?.originalText ?? (activeProject as any)?.original_text) || "";
+    const projectId = activeProject?.id ?? "";
+    const draftKey = environment && projectId ? scriptDraftKey(projectId) : null;
+    const { initialize, changeText, save } = useScriptDraftStore();
+    const draft = useScriptDraftStore(state => draftKey ? state.drafts[draftKey] : undefined) ?? {
+        text: projectText, savedText: projectText, revision: activeProject?.revision,
+        saving: false, error: null,
+    };
+    const script = draft.text;
+    const currentReview = review?.key === draftKey && review?.generation === environment?.generation
+        && review?.text === script && review?.baseline === draft.revision ? review : null;
+    // A dirty draft keeps the version on which editing began. A newer store
+    // snapshot must not silently grant permission to overwrite server changes.
     useEffect(() => {
-        if (currentProject) {
-            const txt = (currentProject as any)?.original_text ?? currentProject.originalText ?? "";
-            setScript(txt || "");
-        }
-    }, [currentProject?.id]);
+        mountedRef.current = true;
+        // Observe each owner change, including A→B→A changes batched by React.
+        const unsubscribe = useProjectStore.subscribe((state, previous) => {
+            if (state.currentProject?.id !== previous.currentProject?.id
+                || state.currentProject?.readEnvironment !== previous.currentProject?.readEnvironment) {
+                draftInteractionRef.current += 1;
+                pendingAnalyzeRef.current = null;
+                blurSaveRef.current = null;
+                setIsWaitingForSave(false);
+            }
+        });
+        return () => {
+            unsubscribe();
+            mountedRef.current = false;
+            activeExtractionSessionRef.current = null;
+            reviewRequestRef.current = null;
+            pendingAnalyzeRef.current = null;
+            blurSaveRef.current = null;
+        };
+    }, []);
 
     useEffect(() => {
-        if (!currentProject) {
-            setNodes([]);
-            return;
+        draftInteractionRef.current += 1;
+        pendingAnalyzeRef.current = null;
+        blurSaveRef.current = null;
+        setIsWaitingForSave(false);
+        reviewRequestRef.current = null;
+        setReview(null);
+    }, [draftKey, environment?.generation]);
+
+    useEffect(() => {
+        if (!draftKey || !environment || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
+        initialize(draftKey, projectText, activeProject?.revision);
+    }, [draftKey, environment, activeProject?.revision, projectText, initialize]);
+
+    useEffect(() => {
+        const owner = useProjectStore.getState().pendingExtractionOwner;
+        if (owner?.projectId === projectId
+            && (owner.environment !== currentProject?.readEnvironment
+                || owner.revision !== currentProject?.revision
+                || owner.text !== script)) {
+            useProjectStore.setState({
+                pendingExtraction: null,
+                pendingExtractionScript: null,
+                pendingExtractionOwner: null,
+            });
         }
-        const newNodes: ScriptNode[] = [
-            ...(currentProject.characters || []).map((c: any) => ({
-                type: "character" as const,
-                id: c.id,
-                name: c.name,
-                desc: c.description,
-                age: c.age,
-                gender: c.gender,
-                clothing: c.clothing,
-                visual_weight: c.visual_weight
-            })),
-            ...(currentProject.scenes || []).map((s: any) => ({
-                type: "scene" as const,
-                id: s.id,
-                name: s.name,
-                desc: s.description,
-                visual_weight: s.visual_weight
-            })),
-            ...(currentProject.props || []).map((p: any) => ({
-                type: "prop" as const,
-                id: p.id,
-                name: p.name,
-                desc: p.description
-            }))
-        ];
-        setNodes(newNodes);
-    }, [currentProject?.id, currentProject?.characters, currentProject?.scenes, currentProject?.props]);
+    }, [projectId, script, currentProject?.revision, currentProject?.readEnvironment]);
+
+    const saveDraft = (retry = false) => {
+        if (!draftKey || !environment || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
+        const initial = useScriptDraftStore.getState().drafts[draftKey];
+        const previous = blurSaveRef.current;
+        const request = save(draftKey, projectId, retry);
+        // A queued blur returns immediately; its original save Promise owns the
+        // queue and resolves only after the latest blurred text is acknowledged.
+        const promise = initial?.saving
+            ? previous?.key === draftKey && previous.generation === environment.generation ? previous.promise : null
+            : request;
+        blurSaveRef.current = initial && promise ? {
+            key: draftKey, generation: environment.generation, text: initial.text,
+            interaction: draftInteractionRef.current, promise,
+        } : null;
+        return request;
+    };
+
+    const readLatest = async () => {
+        if (!draftKey || !environment || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
+        const initial = useScriptDraftStore.getState().drafts[draftKey];
+        if (!initial || initial.saving || currentReview?.status === 'reading') return;
+        const token = {};
+        reviewRequestRef.current = token;
+        const captured = { key: draftKey, generation: environment.generation, text: initial.text, baseline: initial.revision };
+        const isCurrent = () => {
+            const latest = useScriptDraftStore.getState().drafts[draftKey];
+            return mountedRef.current && reviewRequestRef.current === token
+                && isCurrentRuntimeEnvironment(environment.key, environment.generation)
+                && useProjectStore.getState().currentProject?.id === projectId
+                && latest?.text === captured.text && latest.revision === captured.baseline;
+        };
+        setReview({ ...captured, status: 'reading' });
+        try {
+            const saved = await readProjectOnce(projectId, undefined, { isCurrent });
+            if (isCurrent()) setReview({ ...captured, status: 'ready', savedText: saved.originalText, revision: saved.revision });
+        } catch {
+            if (isCurrent()) setReview({ ...captured, status: 'failed' });
+        }
+    };
+
+    const adoptReview = (retainDraft: boolean) => {
+        if (!draftKey || !currentReview || currentReview.status !== 'ready'
+            || currentReview.revision === undefined || currentReview.savedText === undefined) return;
+        const adopted = useScriptDraftStore.getState().adoptReviewed(
+            draftKey, projectId, currentReview.savedText, currentReview.revision, retainDraft,
+        );
+        reviewRequestRef.current = null;
+        setReview(null);
+        if (adopted && retainDraft) void handleAnalyze();
+    };
 
     // R2V v2 Phase 4 — ReconcileModal opens after a successful analyze
     // when the episode belongs to a series (series_id !== null).
@@ -98,6 +169,7 @@ export default function ScriptProcessor() {
     }, []);
 
     const handleAnalyze = async () => {
+        if (!draftKey || !environment || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
         if (!script.trim()) {
             toast.warning(ts("scriptEmpty"), {
                 projectId: currentProject?.id,
@@ -105,17 +177,76 @@ export default function ScriptProcessor() {
             });
             return;
         }
-        if (!currentProject?.id) return;
+        if (!currentProject?.id || currentProject.readEnvironment !== environment.key) return;
         const projectId = currentProject.id;
         const projectTitle = currentProject.title;
+        if (pendingAnalyzeRef.current) return;
+        const interaction = draftInteractionRef.current;
+        let capturedDraft = useScriptDraftStore.getState().drafts[draftKey];
+        let expectedRevision: number | undefined = currentProject.revision;
+        if (capturedDraft?.saving) {
+            const blurSave = blurSaveRef.current;
+            if (!blurSave || blurSave.key !== draftKey || blurSave.generation !== environment.generation
+                || blurSave.text !== script || blurSave.interaction !== interaction) return;
+            const token = {};
+            pendingAnalyzeRef.current = token;
+            setIsWaitingForSave(true);
+            try {
+                await blurSave.promise;
+                if (!mountedRef.current || pendingAnalyzeRef.current !== token
+                    || draftInteractionRef.current !== interaction
+                    || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
+                capturedDraft = useScriptDraftStore.getState().drafts[draftKey];
+                if (!capturedDraft || capturedDraft.saving || capturedDraft.error
+                    || capturedDraft.text !== script || capturedDraft.savedText !== script) return;
+                // Only this save's acknowledgement may advance the author's
+                // baseline. A later project read cannot lend it a new revision.
+                expectedRevision = capturedDraft.revision;
+            } finally {
+                if (pendingAnalyzeRef.current === token) {
+                    pendingAnalyzeRef.current = null;
+                    setIsWaitingForSave(false);
+                }
+            }
+        }
+        if (!capturedDraft || typeof capturedDraft.revision !== 'number' || capturedDraft.revision !== expectedRevision
+            || !Number.isSafeInteger(capturedDraft.revision) || capturedDraft.revision < 0) {
+            useScriptDraftStore.getState().markConflict(draftKey);
+            return;
+        }
+        if (capturedDraft.error) return;
+        const projectRevision = capturedDraft.revision;
+        const sessionId = `${projectId}:${projectRevision}:${++extractionSessionCounter}`;
+        const operationKey = extractionPreviewOperationKey(projectId);
+        const store = useProjectStore.getState();
+        if (store.runningOps[operationKey]) return;
+
+        const capturedText = capturedDraft?.text ?? projectText;
+        if (capturedText !== script || store.currentProject?.id !== projectId
+            || store.currentProject.revision !== projectRevision || store.currentProject.readEnvironment !== environment.key) return;
+
+        activeExtractionSessionRef.current = sessionId;
+        store.setRunningOp(operationKey, true);
         useProjectStore.setState({ isAnalyzing: true });
         const toastId = toast.progress(ts("analyzingScript"), {
             projectId,
             projectTitle,
             body: ts("analyzingScriptBody"),
         });
+        const isCurrentSession = () => {
+            const latestProject = useProjectStore.getState().currentProject;
+            const latestDraft = useScriptDraftStore.getState().drafts[draftKey];
+            const latestText = latestDraft?.text ?? projectText;
+            return mountedRef.current && activeExtractionSessionRef.current === sessionId
+                && draftInteractionRef.current === interaction
+                && latestProject?.id === projectId && latestProject.revision === projectRevision
+                && latestProject.readEnvironment === environment.key && latestText === script
+                && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+        };
         try {
+            if (!isCurrentSession()) return;
             const preview = await api.extractPreview(projectId, script);
+            if (!isCurrentSession()) return;
             toast.update(toastId, {
                 kind: "success",
                 title: ts("analysisDone"),
@@ -129,76 +260,32 @@ export default function ScriptProcessor() {
             useProjectStore.setState({
                 pendingExtraction: preview,
                 pendingExtractionScript: script,
-                isAnalyzing: false,
+                pendingExtractionOwner: { projectId, environment: environment.key, generation: environment.generation, revision: projectRevision, text: script, sessionId },
             });
         } catch (error: any) {
-            useProjectStore.setState({ isAnalyzing: false });
-            console.error("Failed to analyze script:", error);
-            const errorMessage = error?.response?.data?.detail || error?.message || "未知错误";
-            toast.update(toastId, {
-                kind: "error",
-                title: ts("analysisFailedShort"),
-                body: String(errorMessage).slice(0, 240),
-                action: {
-                    label: ts("retry"),
-                    onClick: () => { handleAnalyze(); },
-                },
-            });
-        }
-    };
-
-    const handleDeleteNode = async (node: ScriptNode, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!currentProject) return;
-        if (!confirm(ts("confirmDelete", { name: node.name }))) return;
-
-        try {
-            if (node.type === "character" && node.id) {
-                await crudApi.deleteCharacter(currentProject.id, node.id);
-            } else if (node.type === "scene" && node.id) {
-                await crudApi.deleteScene(currentProject.id, node.id);
-            } else if (node.type === "prop" && node.id) {
-                await crudApi.deleteProp(currentProject.id, node.id);
+            if (isCurrentSession()) {
+                console.error("Failed to analyze script:", error);
+                const errorMessage = error?.response?.data?.detail || error?.message || "未知错误";
+                toast.update(toastId, {
+                    kind: "error",
+                    title: ts("analysisFailedShort"),
+                    body: String(errorMessage).slice(0, 240),
+                    action: {
+                        label: ts("retry"),
+                        onClick: () => {
+                            if (isCurrentSession()) void handleAnalyze();
+                        },
+                    },
+                });
             }
-
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
-        } catch (error) {
-            console.error("Failed to delete node:", error);
-            toast.error(ts("deleteFailed"), {
-                projectId: currentProject?.id,
-                projectTitle: currentProject?.title,
-            });
-        }
-    };
-
-    const handleCreateNode = async (data: any) => {
-        if (!currentProject) return;
-        try {
-            if (data.type === "character") {
-                await crudApi.createCharacter(currentProject.id, data);
-            } else if (data.type === "scene") {
-                await crudApi.createScene(currentProject.id, data);
-            } else if (data.type === "prop") {
-                await crudApi.createProp(currentProject.id, data);
+        } finally {
+            if (isCurrentRuntimeEnvironment(environment.key, environment.generation)) {
+                useProjectStore.getState().setRunningOp(operationKey, false);
+                if (!hasOtherExtractionOperation(useProjectStore.getState().runningOps, operationKey)) {
+                    useProjectStore.setState({ isAnalyzing: false });
+                }
             }
-
-            const updatedProject = await api.getProject(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
-            setIsCreateDialogOpen(false);
-        } catch (error) {
-            console.error("Failed to create node:", error);
-            toast.error(ts("createFailed"), {
-                projectId: currentProject?.id,
-                projectTitle: currentProject?.title,
-            });
         }
-    };
-
-    const handleNodeUpdate = (updatedNode: ScriptNode) => {
-        // Update local state
-        setNodes(prev => prev.map(n => n.name === updatedNode.name ? updatedNode : n));
-        setSelectedNode(updatedNode);
     };
 
     const tStep = useTranslations("stepHeader");
@@ -225,50 +312,58 @@ export default function ScriptProcessor() {
                         <button
                             type="button"
                             onClick={handleAnalyze}
-                            disabled={!script || isAnalyzing}
+                            disabled={!script || isAnalyzing || isWaitingForSave}
                             className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 font-sans text-[0.8125rem] font-semibold text-on-accent shadow-[var(--btn-pri-glow),inset_0_1.5px_0_rgba(255,255,255,0.14)] transition-all duration-fast ease-out-quart hover:bg-primary-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                         >
-                            {isAnalyzing ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
-                            <span>{isAnalyzing ? ts("analyzingScript") : ts("extractEntities")}</span>
+                            {isAnalyzing || isWaitingForSave ? <Loader2 size={13} className="animate-spin" /> : <Wand2 size={13} />}
+                            <span>{isWaitingForSave ? tp("saving") : isAnalyzing ? ts("analyzingScript") : ts("extractEntities")}</span>
                         </button>
                     )}
                 />
-                <div className="flex-1 relative p-6 bg-surface overflow-hidden">
+                <div className="flex-1 relative p-6 bg-surface overflow-hidden flex flex-col gap-2">
+                    {draft.error ? (
+                        <div role="alert" className="text-sm text-status-failed-fg">
+                            {tp(draft.error)}
+                            {draft.error !== "conflict" && draft.error !== "missingRevision" && (
+                                <button type="button" onClick={() => void saveDraft(true)} className="ml-3 underline">{tp("retry")}</button>
+                            )}
+                        </div>
+                    ) : (
+                        <p role="status" className="text-xs text-text-muted">{tp(draft.saving ? "saving" : script === draft.savedText ? "saved" : "unsaved")}</p>
+                    )}
+                    {(draft.error || script !== draft.savedText) && <p className="text-xs text-text-muted">{tp("sessionDraftHint")}</p>}
+                    {(draft.error === 'conflict' || draft.error === 'missingRevision') && (
+                        <div className="rounded-lg border border-glass-border bg-elevated p-3 text-sm space-y-2">
+                            <button type="button" disabled={currentReview?.status === 'reading'} onClick={() => void readLatest()} className="glass-button px-3 py-1.5">
+                                {ts(currentReview?.status === 'reading' ? 'readingLatest' : 'readLatest')}
+                            </button>
+                            {currentReview?.status === 'failed' && <p role="alert">{ts('readLatestFailed')}</p>}
+                            {currentReview?.status === 'ready' && <>
+                                <p className="text-text-muted">{ts('latestSavedText')}</p>
+                                <p className="max-h-32 overflow-auto whitespace-pre-wrap text-text-secondary">{currentReview.savedText}</p>
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="button" onClick={() => adoptReview(true)} className="glass-button px-3 py-1.5">{ts('reextractRetainedDraft')}</button>
+                                    <button type="button" onClick={() => adoptReview(false)} className="glass-button px-3 py-1.5">{ts('useSavedText')}</button>
+                                </div>
+                            </>}
+                        </div>
+                    )}
                     <textarea
+                        aria-label={ts("scriptEditor")}
                         value={script}
+                        disabled={!draftKey}
                         onChange={(e) => {
                             const newText = e.target.value;
-                            setScript(newText);
-                            // Update local Zustand state with BOTH the
-                            // camelCase view-model key and the snake_case
-                            // backend key, so any consumer that reads
-                            // either name (or anything spread from a
-                            // future API response) sees the same value.
-                            if (currentProject) {
-                                updateProject(currentProject.id, {
-                                    originalText: newText,
-                                    original_text: newText,
-                                } as any);
+                            if (draftKey && environment && isCurrentRuntimeEnvironment(environment.key, environment.generation)) {
+                                draftInteractionRef.current += 1;
+                                pendingAnalyzeRef.current = null;
+                                setIsWaitingForSave(false);
+                                changeText(draftKey, newText);
                             }
                         }}
-                        onBlur={async () => {
-                            // Persist the in-progress text to the backend on
-                            // blur so reloads / navigation don't lose work.
-                            // Goes through /update_text instead of /reparse
-                            // so we don't trigger a heavy LLM call just for
-                            // typing — that's reserved for the explicit
-                            // "提取实体" CTA.
-                            if (!currentProject) return;
-                            const stored = ((currentProject as any).original_text ?? currentProject.originalText) || "";
-                            if (stored === script) return;
-                            try {
-                                await api.updateScriptText(currentProject.id, script);
-                            } catch (err) {
-                                console.warn("Failed to persist script text:", err);
-                            }
-                        }}
+                        onBlur={() => void saveDraft()}
                         placeholder={ts("scriptPlaceholder")}
-                        className="w-full h-full bg-transparent text-text-secondary font-mono text-base leading-relaxed resize-none focus:outline-none"
+                        className="w-full flex-1 min-h-0 bg-transparent text-text-secondary font-mono text-base leading-relaxed resize-none focus:outline-none"
                         spellCheck={false}
                     />
                 </div>
@@ -279,78 +374,17 @@ export default function ScriptProcessor() {
                 episode index > 0; the component handles empty/first
                 episode state internally with a placeholder. */}
             <div className="w-[340px] shrink-0">
-                <PreviousEpisodeSummary scriptId={currentProject?.id ?? null} />
+                <PreviousEpisodeSummary scriptId={projectId || null} />
             </div>
 
             {/* R2V v2 Phase 4 — Reconcile modal (auto-opens after analyze
                 for series-affiliated episodes; ignored for standalone). */}
             <ReconcileModal
                 isOpen={reconcileOpen}
-                scriptId={currentProject?.id ?? null}
+                scriptId={projectId || null}
                 onClose={() => setReconcileOpen(false)}
             />
 
-        </div>
-    );
-}
-
-function CreateEntityDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (data: any) => void }) {
-    const ts = useTranslations("script");
-    const tc = useTranslations("common");
-    const [name, setName] = useState("");
-    const [desc, setDesc] = useState("");
-    const [type, setType] = useState<"character" | "scene" | "prop">("character");
-
-    const handleSubmit = () => {
-        if (!name.trim()) {
-            toast.warning(ts("nameRequired"));
-            return;
-        }
-        onCreate({ name, description: desc, type });
-    };
-
-    return (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={onClose}>
-            <div className="w-[400px] bg-elevated border border-glass-border rounded-xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
-                <h3 className="font-bold text-foreground">{ts("addEntity")}</h3>
-
-                <div className="flex gap-2 p-1 bg-surface rounded-lg">
-                    {(["character", "scene", "prop"] as const).map(t => (
-                        <button
-                            key={t}
-                            onClick={() => setType(t)}
-                            className={`flex-1 py-1.5 text-xs font-bold rounded capitalize ${type === t ? "bg-primary text-foreground" : "text-text-muted hover:text-foreground"}`}
-                        >
-                            {t}
-                        </button>
-                    ))}
-                </div>
-
-                <div>
-                    <label className="text-xs text-text-muted">{ts("nameLabel")}</label>
-                    <input
-                        className="glass-input w-full"
-                        value={name}
-                        onChange={e => setName(e.target.value)}
-                        placeholder={ts("entityNamePlaceholder")}
-                    />
-                </div>
-
-                <div>
-                    <label className="text-xs text-text-muted">{ts("descriptionLabel")}</label>
-                    <textarea
-                        className="glass-input w-full h-24 resize-none"
-                        value={desc}
-                        onChange={e => setDesc(e.target.value)}
-                        placeholder={ts("visualDescPlaceholder")}
-                    />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                    <button onClick={onClose} className="px-4 py-2 text-xs text-text-secondary hover:text-foreground">{tc("cancel")}</button>
-                    <button onClick={handleSubmit} className="px-4 py-2 bg-primary text-foreground rounded text-xs font-bold">{tc("create")}</button>
-                </div>
-            </div>
         </div>
     );
 }

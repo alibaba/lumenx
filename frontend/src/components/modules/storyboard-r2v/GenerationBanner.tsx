@@ -14,6 +14,7 @@ export interface GenerationBannerProps {
     dialogueProgress?: { current: number; total: number } | null;
     summary?: { frameCount: number; dialogueReady: number; dialogueMissing: number } | null;
     onGenerateDialogue?: () => void;
+    dialogueBusy?: boolean;
 }
 
 const CAPTION_INTERVAL = 3000;
@@ -25,6 +26,7 @@ export function GenerationBanner({
     dialogueProgress,
     summary,
     onGenerateDialogue,
+    dialogueBusy = false,
 }: GenerationBannerProps) {
     const [captionIndex, setCaptionIndex] = useState(0);
 
@@ -93,6 +95,7 @@ export function GenerationBanner({
                     key="summary"
                     summary={summary}
                     onGenerateDialogue={onGenerateDialogue}
+                    dialogueBusy={dialogueBusy}
                 />
             )}
         </AnimatePresence>
@@ -118,9 +121,11 @@ function BannerShell({ children }: { children: React.ReactNode }) {
 function SummaryBar({
     summary,
     onGenerateDialogue,
+    dialogueBusy,
 }: {
     summary: { frameCount: number; dialogueReady: number; dialogueMissing: number };
     onGenerateDialogue?: () => void;
+    dialogueBusy?: boolean;
 }) {
     const t = useTranslations("storyboardR2V");
     const showCTA = summary.dialogueReady > 0;
@@ -152,11 +157,12 @@ function SummaryBar({
                     <button
                         type="button"
                         onClick={onGenerateDialogue}
+                        disabled={dialogueBusy}
                         title={t("bannerSynthDialogueTooltip")}
-                        className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-status-starred-border bg-status-starred-bg px-3 py-1 text-[0.75rem] font-semibold text-status-starred-fg transition-colors duration-fast ease-out-quart hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-starred-border"
+                        className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-status-starred-border bg-status-starred-bg px-3 py-1 text-[0.75rem] font-semibold text-status-starred-fg transition-colors duration-fast ease-out-quart hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-starred-border disabled:opacity-45 disabled:cursor-not-allowed"
                     >
-                        <Mic size={12} aria-hidden="true" />
-                        {t("bannerSynthDialogue")}
+                        {dialogueBusy ? <Loader2 size={12} aria-hidden="true" className="animate-spin" /> : <Mic size={12} aria-hidden="true" />}
+                        {dialogueBusy ? t("bannerSynthDialogueBusy") : t("bannerSynthDialogue")}
                     </button>
                 )}
             </div>

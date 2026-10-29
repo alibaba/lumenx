@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Zap, Film } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -20,9 +20,26 @@ export default function CreateProjectDialog({ isOpen, onClose, seriesId, seriesT
     const [workflowMode, setWorkflowMode] = useState<"r2v" | "i2v_legacy">("r2v");
     const [isCreating, setIsCreating] = useState(false);
     const createProject = useProjectStore((state) => state.createProject);
+    const mountedRef = useRef(true);
+    const openRef = useRef(isOpen);
+    const sessionRef = useRef(0);
+    const creatingRef = useRef(false);
     const t = useTranslations("project");
     const tc = useTranslations("common");
 
+    useEffect(() => {
+        openRef.current = isOpen;
+        sessionRef.current += 1;
+    }, [isOpen]);
+
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+            openRef.current = false;
+            sessionRef.current += 1;
+        };
+    }, []);
 
     const handleCreate = async () => {
         if (!title) {
@@ -30,21 +47,25 @@ export default function CreateProjectDialog({ isOpen, onClose, seriesId, seriesT
             return;
         }
 
+        if (creatingRef.current) return;
+        creatingRef.current = true;
+        const session = sessionRef.current;
         setIsCreating(true);
         try {
-            await createProject(title, text, true, workflowMode, seriesId);
-            // Get the newly created project
-            const currentProject = useProjectStore.getState().currentProject;
-            if (currentProject) {
-                // Use hash-based routing to match the app's routing structure
-                window.location.hash = `#/project/${currentProject.id}`;
+            const project = await createProject(title, text, true, workflowMode, seriesId);
+            if (mountedRef.current && openRef.current && sessionRef.current === session) {
+                // Use hash-based routing to match the app's routing structure.
+                window.location.hash = `#/project/${project.id}`;
+                onClose();
             }
-            onClose();
         } catch (error: any) {
-            const errorMessage = error?.response?.data?.detail || error?.message || t("checkBackend");
-            alert(t("createFailed", { error: errorMessage }));
+            if (mountedRef.current && openRef.current && sessionRef.current === session) {
+                const errorMessage = error?.response?.data?.detail || error?.message || t("checkBackend");
+                alert(t("createFailed", { error: errorMessage }));
+            }
         } finally {
-            setIsCreating(false);
+            creatingRef.current = false;
+            if (mountedRef.current) setIsCreating(false);
         }
     };
 

@@ -1,0 +1,333 @@
+{
+  "request": {
+    "client_request_id": "ordered-r2v",
+    "contract_version": "ordered-media-v1",
+    "model": "wan3.0-video",
+    "generation_mode": "r2v",
+    "frame_id": "frame",
+    "prompt": "A reference image and audio driven shot",
+    "duration": -1,
+    "resolution": "1080P",
+    "ratio": "16:9",
+    "seed": 0,
+    "generate_audio": false,
+    "prompt_extend": false,
+    "watermark": false,
+    "workbench_tab": "direct_r2v",
+    "batch_size": 1,
+    "reference_image_urls": [
+      "uploads/ref.png"
+    ],
+    "reference_audio_urls": [
+      "uploads/ref.wav"
+    ]
+  },
+  "accepted": {
+    "client_request_id": "ordered-r2v",
+    "replayed": false,
+    "task_ids": [
+      "00000000-0000-4000-8000-00000000000e"
+    ],
+    "tasks": [
+      {
+        "id": "00000000-0000-4000-8000-00000000000e",
+        "project_id": "p",
+        "frame_id": "frame",
+        "asset_id": null,
+        "image_url": "",
+        "prompt": "A reference image and audio driven shot",
+        "last_frame_url": null,
+        "reference_audio_urls": [
+          "uploads/ref.wav"
+        ],
+        "status": "pending",
+        "error": null,
+        "video_url": null,
+        "duration": -1,
+        "seed": 0,
+        "resolution": "1080P",
+        "generate_audio": false,
+        "audio_url": null,
+        "prompt_extend": false,
+        "negative_prompt": null,
+        "model": "wan3.0-video",
+        "shot_type": "single",
+        "generation_mode": "r2v",
+        "reference_video_urls": [],
+        "mode": null,
+        "sound": null,
+        "cfg_scale": null,
+        "vidu_audio": null,
+        "movement_amplitude": null,
+        "reference_image_urls": [
+          "uploads/ref.png"
+        ],
+        "ratio": "16:9",
+        "audio_setting": null,
+        "watermark": false,
+        "provider_name": null,
+        "provider_task_id": null,
+        "provider_request_id": null,
+        "is_starred": false,
+        "label": null,
+        "workbench_tab": "direct_r2v",
+        "provider_execution": {
+          "schema_version": 1,
+          "attempt_id": "00000000-0000-4000-8000-00000000000f",
+          "phase": "accepted",
+          "provider_model_id": "wan3.0-video",
+          "intent": {
+            "rules_version": "generation-parameters-v1",
+            "scope": "parameters-only",
+            "model_id": "wan/wan3.0-video#video",
+            "catalog_mode": "video",
+            "mode": "r2v",
+            "prompt": "A reference image and audio driven shot",
+            "params": {
+              "audio": false,
+              "duration": -1,
+              "prompt_extend": false,
+              "ratio": "16:9",
+              "resolution": "1080P",
+              "seed": 0,
+              "watermark": false
+            },
+            "sources": {
+              "model_id": "request",
+              "mode": "request",
+              "prompt": "request",
+              "params.audio": "request",
+              "params.duration": "request",
+              "params.prompt_extend": "request",
+              "params.ratio": "request",
+              "params.resolution": "request",
+              "params.seed": "request",
+              "params.watermark": "request"
+            },
+            "request_fields": [
+              "mode",
+              "model_id",
+              "params.audio",
+              "params.duration",
+              "params.prompt_extend",
+              "params.ratio",
+              "params.resolution",
+              "params.seed",
+              "params.watermark",
+              "prompt"
+            ],
+            "preset_id": null,
+            "preset_version": null,
+            "admission_request_fields": [
+              "contract_version",
+              "duration",
+              "frame_id",
+              "generate_audio",
+              "generation_mode",
+              "model",
+              "prompt",
+              "prompt_extend",
+              "ratio",
+              "reference_audio_urls",
+              "reference_image_urls",
+              "resolution",
+              "seed",
+              "watermark",
+              "workbench_tab"
+            ]
+          },
+          "media": [
+            {
+              "sha256": "4d3281e4b14518c182c312dcf539f888b2d7f57343fd493e0ace76e1889d2ccf",
+              "size_bytes": 837,
+              "role": "reference_image",
+              "ordinal": 0,
+              "declared_media_type": "image/png",
+              "schema_version": 1
+            },
+            {
+              "sha256": "643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc",
+              "size_bytes": 32044,
+              "role": "reference_audio",
+              "ordinal": 0,
+              "declared_media_type": "audio/wav",
+              "schema_version": 1
+            }
+          ],
+          "scope": {
+            "provider": "dashscope",
+            "backend": "dashscope",
+            "gateway": "dashscope_workspace",
+            "base_url": "https://workspace.cn-beijing.maas.aliyuncs.com",
+            "region": "cn-beijing",
+            "workspace_id": "workspace",
+            "account_identity": null
+          },
+          "credential_ref": "00000000-0000-4000-8000-000000000006",
+          "fingerprint": "08534d658a8fb79b6998366234ef4a1c3f42a874f8c0f6c0f0e44ea279b12c82",
+          "handle": null,
+          "observation": null,
+          "prepared_artifact": null,
+          "artifact": null
+        },
+        "motion_reference": null,
+        "created_at": 1791700000.0
+      }
+    ],
+    "reason": null
+  },
+  "replay": {
+    "client_request_id": "ordered-r2v",
+    "replayed": true,
+    "task_ids": [
+      "00000000-0000-4000-8000-00000000000e"
+    ],
+    "tasks": [
+      {
+        "id": "00000000-0000-4000-8000-00000000000e",
+        "project_id": "p",
+        "frame_id": "frame",
+        "asset_id": null,
+        "image_url": "",
+        "prompt": "A reference image and audio driven shot",
+        "last_frame_url": null,
+        "reference_audio_urls": [
+          "uploads/ref.wav"
+        ],
+        "status": "pending",
+        "error": null,
+        "video_url": null,
+        "duration": -1,
+        "seed": 0,
+        "resolution": "1080P",
+        "generate_audio": false,
+        "audio_url": null,
+        "prompt_extend": false,
+        "negative_prompt": null,
+        "model": "wan3.0-video",
+        "shot_type": "single",
+        "generation_mode": "r2v",
+        "reference_video_urls": [],
+        "mode": null,
+        "sound": null,
+        "cfg_scale": null,
+        "vidu_audio": null,
+        "movement_amplitude": null,
+        "reference_image_urls": [
+          "uploads/ref.png"
+        ],
+        "ratio": "16:9",
+        "audio_setting": null,
+        "watermark": false,
+        "provider_name": null,
+        "provider_task_id": null,
+        "provider_request_id": null,
+        "is_starred": false,
+        "label": null,
+        "workbench_tab": "direct_r2v",
+        "provider_execution": {
+          "schema_version": 1,
+          "attempt_id": "00000000-0000-4000-8000-00000000000f",
+          "phase": "accepted",
+          "provider_model_id": "wan3.0-video",
+          "intent": {
+            "rules_version": "generation-parameters-v1",
+            "scope": "parameters-only",
+            "model_id": "wan/wan3.0-video#video",
+            "catalog_mode": "video",
+            "mode": "r2v",
+            "prompt": "A reference image and audio driven shot",
+            "params": {
+              "audio": false,
+              "duration": -1,
+              "prompt_extend": false,
+              "ratio": "16:9",
+              "resolution": "1080P",
+              "seed": 0,
+              "watermark": false
+            },
+            "sources": {
+              "model_id": "request",
+              "mode": "request",
+              "prompt": "request",
+              "params.audio": "request",
+              "params.duration": "request",
+              "params.prompt_extend": "request",
+              "params.ratio": "request",
+              "params.resolution": "request",
+              "params.seed": "request",
+              "params.watermark": "request"
+            },
+            "request_fields": [
+              "mode",
+              "model_id",
+              "params.audio",
+              "params.duration",
+              "params.prompt_extend",
+              "params.ratio",
+              "params.resolution",
+              "params.seed",
+              "params.watermark",
+              "prompt"
+            ],
+            "preset_id": null,
+            "preset_version": null,
+            "admission_request_fields": [
+              "contract_version",
+              "duration",
+              "frame_id",
+              "generate_audio",
+              "generation_mode",
+              "model",
+              "prompt",
+              "prompt_extend",
+              "ratio",
+              "reference_audio_urls",
+              "reference_image_urls",
+              "resolution",
+              "seed",
+              "watermark",
+              "workbench_tab"
+            ]
+          },
+          "media": [
+            {
+              "sha256": "4d3281e4b14518c182c312dcf539f888b2d7f57343fd493e0ace76e1889d2ccf",
+              "size_bytes": 837,
+              "role": "reference_image",
+              "ordinal": 0,
+              "declared_media_type": "image/png",
+              "schema_version": 1
+            },
+            {
+              "sha256": "643f8a8dc8bd9c19225afffad2becfec5426180b3749cb208abdf1a6c8354efc",
+              "size_bytes": 32044,
+              "role": "reference_audio",
+              "ordinal": 0,
+              "declared_media_type": "audio/wav",
+              "schema_version": 1
+            }
+          ],
+          "scope": {
+            "provider": "dashscope",
+            "backend": "dashscope",
+            "gateway": "dashscope_workspace",
+            "base_url": "https://workspace.cn-beijing.maas.aliyuncs.com",
+            "region": "cn-beijing",
+            "workspace_id": "workspace",
+            "account_identity": null
+          },
+          "credential_ref": "00000000-0000-4000-8000-000000000006",
+          "fingerprint": "08534d658a8fb79b6998366234ef4a1c3f42a874f8c0f6c0f0e44ea279b12c82",
+          "handle": null,
+          "observation": null,
+          "prepared_artifact": null,
+          "artifact": null
+        },
+        "motion_reference": null,
+        "created_at": 1791700000.0
+      }
+    ],
+    "reason": null
+  }
+}

@@ -1,0 +1,136 @@
+[
+  {
+    "name": "selected completed take wins",
+    "data": {
+      "selected_candidate_id": "selected",
+      "candidates": [
+        {
+          "id": "first",
+          "status": "completed",
+          "media_url": "video/first.mp4"
+        },
+        {
+          "id": "selected",
+          "status": "completed",
+          "media_url": "video/selected.mp4"
+        }
+      ]
+    },
+    "expected": "video/selected.mp4"
+  },
+  {
+    "name": "missing selected id uses first completed",
+    "data": {
+      "selected_candidate_id": "missing",
+      "candidates": [
+        {
+          "id": "active",
+          "status": "running",
+          "media_url": "video/running.mp4"
+        },
+        {
+          "id": "first",
+          "status": "completed",
+          "video_url": "video/first.mp4"
+        }
+      ]
+    },
+    "expected": "video/first.mp4"
+  },
+  {
+    "name": "selected completed without URL does not choose a different take",
+    "data": {
+      "selected_candidate_id": "selected",
+      "candidates": [
+        {
+          "id": "first",
+          "status": "completed",
+          "media_url": "video/first.mp4"
+        },
+        {
+          "id": "selected",
+          "status": "completed"
+        }
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "first completed without URL does not skip to a later take",
+    "data": {
+      "candidates": [
+        {
+          "id": "first",
+          "status": "completed"
+        },
+        {
+          "id": "later",
+          "status": "completed",
+          "media_url": "video/later.mp4"
+        }
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "nonempty malformed candidate array does not use old node media",
+    "data": {
+      "candidates": [
+        null,
+        "broken"
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "empty candidate array uses selected node media",
+    "data": {
+      "candidates": []
+    },
+    "expected": "video/node.mp4"
+  },
+  {
+    "name": "invalid truthy current alias does not authorize legacy alias",
+    "data": {
+      "candidates": [
+        {
+          "id": "first",
+          "status": "completed",
+          "media_url": {
+            "invalid": "value"
+          },
+          "video_url": "video/legacy.mp4"
+        }
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "blank current alias does not authorize legacy alias",
+    "data": {
+      "candidates": [
+        {
+          "id": "first",
+          "status": "completed",
+          "media_url": "  ",
+          "video_url": "video/legacy.mp4"
+        }
+      ]
+    },
+    "expected": null
+  },
+  {
+    "name": "empty current alias falls back to legacy alias",
+    "data": {
+      "candidates": [
+        {
+          "id": "first",
+          "status": "completed",
+          "media_url": "",
+          "video_url": "video/legacy.mp4"
+        }
+      ]
+    },
+    "expected": "video/legacy.mp4"
+  }
+]
