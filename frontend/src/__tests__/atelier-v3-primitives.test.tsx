@@ -65,7 +65,22 @@ describe("Atelier V3 primitives", () => {
     expect(link).toHaveAttribute("href", "https://example.com");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noreferrer noopener");
-    expect(screen.getByText(/<script>/)).toBeInTheDocument();
+    expect(screen.getByText("<script>", { exact: false })).toBeInTheDocument();
+  });
+
+  it.each([
+    '<script>alert(1)</script>',
+    '<SCRIPT>alert(1)</SCRIPT>',
+    '<ScRiPt>alert(1)</sCrIpT>',
+    '<script>alert(1)</script ignored="value">',
+    '<img src=x onerror="alert(1)">',
+    '<svg onload="alert(1)"></svg>',
+    '<iframe srcdoc="<script>alert(1)</script>"></iframe>',
+  ])("renders HTML-looking input as literal text: %s", (source) => {
+    const { container } = render(<MiniMarkdown source={source} />);
+
+    expect(container.textContent).toBe(source);
+    expect(container.querySelector("script, img, svg, iframe")).toBeNull();
   });
 
   it("invokes toolbar and nav callbacks while respecting disabled undo and redo", () => {

@@ -8,6 +8,7 @@ import { renderWithIntl } from "../../series/__tests__/test-utils";
 import VideoCreator from "../VideoCreator";
 import type PromptBuilder from "../PromptBuilder";
 import { ack, deferred, enriched, frame, project } from "./frame-command-fixtures";
+import images from "@/__tests__/fixtures/inline-raster-display.json";
 const TEST_STORAGE_ID = '11111111-1111-4111-8111-111111111111';
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -95,6 +96,26 @@ beforeEach(() => {
 });
 
 describe("VideoCreator guarded readbacks", () => {
+  it.each([
+    ["inline JPEG", images.jpeg, images.jpeg],
+    ["HTML data URL", "data:text/html,<script>alert(1)</script>", ""],
+    ["SVG data URL", 'data:image/svg+xml,<svg onload="alert(1)"></svg>', ""],
+  ])("keeps both selected-image views safe for %s", (_kind, url, expected) => {
+    const current = useProjectStore.getState().currentProject!;
+    useProjectStore.setState({ currentProject: {
+      ...current,
+      frames: current.frames.map((item) => item.id === "f1" ? { ...item, image_url: url } : item),
+    } });
+    const { container } = renderCreator();
+    fireEvent.click(screen.getByAltText("Frame f1"));
+    expect(screen.getByAltText("Selected")).toHaveAttribute("src", expected);
+
+    fireEvent.click(screen.getByRole("button", { name: /Upload|上传/ }));
+    expect(screen.getByAltText("Input 0")).toHaveAttribute("src", expected);
+    expect(container.querySelector("script, iframe")).toBeNull();
+    expect(api.createVideoTask).not.toHaveBeenCalled();
+  });
+
   it("stops queued batch submissions after the submitting session is unmounted", async () => {
     vi.mocked(api.uploadFile).mockResolvedValueOnce({ url: '/one.png' }).mockResolvedValueOnce({ url: '/two.png' });
     const request = deferred<unknown>();

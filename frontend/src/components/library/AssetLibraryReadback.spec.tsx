@@ -7,6 +7,8 @@ import { toast } from '@/store/toastStore';
 import { useProjectStore, type Project } from '@/store/projectStore';
 import AssetLibraryPage from './AssetLibraryPage';
 import AssetInspector from './AssetInspector';
+import NewLibraryAssetDialog from './NewLibraryAssetDialog';
+import images from '@/__tests__/fixtures/inline-raster-display.json';
 import { clearLibraryRecoveries } from '@/lib/libraryReadback';
 const TEST_STORAGE_ID = '11111111-1111-4111-8111-111111111111';
 const currentEnvKey = () => getRuntimeEnvironment()?.key ?? activateRuntimeEnvironment({ schema_version: 1, storage_id: TEST_STORAGE_ID }).key;
@@ -118,6 +120,24 @@ describe('AssetLibraryPage readback boundaries', () => {
     vi.useRealTimers();
     clearLibraryRecoveries();
     vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['inline JPEG', images.jpeg, images.jpeg],
+    ['HTML data URL', 'data:text/html,<script>alert(1)</script>', ''],
+    ['SVG data URL', 'data:image/svg+xml,<svg onload="alert(1)"></svg>', ''],
+    ['attribute breakout', `${images.jpeg}" onerror="alert(1)`, ''],
+  ])('keeps the new asset preview safe for %s entered in the URL field', (_kind, url, expected) => {
+    const { container } = renderWithIntl(<NewLibraryAssetDialog onClose={vi.fn()} onCreated={vi.fn()} />);
+    const input = container.querySelector<HTMLInputElement>('#lib-asset-image');
+    expect(input).not.toBeNull();
+    fireEvent.change(input!, { target: { value: url } });
+
+    const preview = container.querySelector('img');
+    expect(preview).toHaveAttribute('src', expected);
+    expect(preview).not.toHaveAttribute('onerror');
+    expect(container.querySelector('script, iframe')).toBeNull();
+    expect(api.createLibraryAsset).not.toHaveBeenCalled();
   });
 
 

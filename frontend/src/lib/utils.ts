@@ -24,7 +24,11 @@ function isInlineRasterUrl(path: string): boolean {
 
 export function getAssetUrl(path: string | null | undefined): string {
     if (!path) return "";
-    if (/^\s*data:/i.test(path)) return isInlineRasterUrl(path) ? path : "";
+    if (/^\s*data:/i.test(path)) {
+        // Encode at the URL output boundary as well as checking the raster contract.
+        // All permitted MIME/base64 characters are unchanged by encodeURI.
+        return isInlineRasterUrl(path) ? encodeURI(path) : "";
+    }
     if (path.startsWith("http") || path.startsWith("blob:")) {
         // Only pass through well-formed http(s)/blob URLs; anything else
         // (e.g. javascript: smuggled behind a weird prefix) is dropped.
