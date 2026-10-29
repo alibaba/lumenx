@@ -1604,10 +1604,41 @@ def list_projects(active_pipeline: Any = Depends(get_pipeline)):
     return signed_response(scripts, runtime=active_pipeline)
 
 
-def _package_error_response(status_code: int, code: str, detail: str) -> JSONResponse:
+def _public_exception_detail(exc: Exception, messages: tuple[str, ...], fallback: str) -> str:
+    """Return server-owned feedback, never text taken from an exception."""
+    detail = str(exc)
+    for message in messages:
+        if detail == message:
+            return message
+    logger.warning("Studio request rejected", exc_info=(type(exc), exc, exc.__traceback__))
+    return fallback
+
+
+_PACKAGE_VALIDATION_DETAILS = (
+    "Invalid project package zip", "Project package is too large",
+    "Project package has too many media files", "Project package is missing required metadata",
+    "Project package metadata could not be read", "Project package project payload is invalid",
+    "Project package metadata is not strict JSON", "Project package source metadata is invalid",
+    "Unsupported package schema", "Unsupported package kind", "Unexpected package entry",
+    "Media manifest does not match project references", "Missing or ambiguous packaged task asset",
+    "Invalid prepared image history", "Prepared image has no managed output",
+    "Prepared image proofs disagree", "Prepared image bytes differ from their proof",
+    "Prepared image is stored at another owner", "Prepared frame image belongs to another owner",
+    "Prepared frame image has no unique packaged frame", "Variant identity refers to different media",
+    "Selected take belongs to a different frame", "Video task points at a different project",
+) + tuple(
+    f"Prepared {label} {problem}"
+    for label in ("three-view image", "reference sheet", "headshot image", "full-body image", "scene image", "prop image")
+    for problem in ("has lost its project owner", "has no unique packaged target", "has no unique packaged character")
+)
+
+
+def _package_error_response(status_code: int, code: str, exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=status_code,
-        content={"code": code, "detail": detail},
+        content={"code": code, "detail": _public_exception_detail(
+            exc, _PACKAGE_VALIDATION_DETAILS, "Project package is invalid",
+        )},
         headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
     )
 
@@ -1640,11 +1671,11 @@ def export_project_package(script_id: str, active_pipeline: Any = Depends(get_pi
     try:
         artifact = active_pipeline.export_project_package(script_id)
     except ProjectPackageError as exc:
-        return _package_error_response(422, "project_package_invalid", str(exc))
+        return _package_error_response(422, "project_package_invalid", exc)
     except ValueError as exc:
         if str(exc) == "Script not found":
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return _package_error_response(422, "project_package_invalid", str(exc))
+        return _package_error_response(422, "project_package_invalid", exc)
     filename = f"lumenx-project-{script_id}.lumenx.zip"
     return Response(
         content=artifact.data,
@@ -1663,11 +1694,11 @@ async def import_project_package(request: Request, active_pipeline: Any = Depend
         package_bytes = await _read_raw_project_package(request)
         script = await asyncio.to_thread(active_pipeline.import_project_package, package_bytes)
     except ProjectPackageTooLarge as exc:
-        return _package_error_response(413, "project_package_too_large", str(exc))
+        return _package_error_response(413, "project_package_too_large", exc)
     except ProjectPackageError as exc:
-        return _package_error_response(422, "project_package_invalid", str(exc))
+        return _package_error_response(422, "project_package_invalid", exc)
     except ValueError as exc:
-        return _package_error_response(422, "project_package_invalid", str(exc))
+        return _package_error_response(422, "project_package_invalid", exc)
     return signed_response(script, runtime=active_pipeline)
 
 
@@ -3736,9 +3767,10 @@ def recover_motion_ref_request(
             script_id, client_request_id, **request.model_dump(),
         )
     except StorageConflictError as exc:
-        if str(exc) not in {"motion_reference_recover_not_allowed", "provider_operation_running"}:
-            raise
-        return JSONResponse(status_code=409, content={"code": str(exc), "detail": str(exc)})
+        for code in ("motion_reference_recover_not_allowed", "provider_operation_running"):
+            if str(exc) == code:
+                return JSONResponse(status_code=409, content={"code": code, "detail": code})
+        raise
     except ValueError as exc:
         if str(exc) in {"Script not found", "Video task not found", "Motion reference request not found"}:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -3757,9 +3789,10 @@ def continue_provider_video_task(
             script_id, task_id, **request.model_dump(),
         )
     except StorageConflictError as exc:
-        if str(exc) not in {"provider_continue_not_allowed", "provider_operation_running"}:
-            raise
-        return JSONResponse(status_code=409, content={"code": str(exc), "detail": str(exc)})
+        for code in ("provider_continue_not_allowed", "provider_operation_running"):
+            if str(exc) == code:
+                return JSONResponse(status_code=409, content={"code": code, "detail": code})
+        raise
     except ValueError as exc:
         if str(exc) in {"Script not found", "Video task not found"}:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -3791,9 +3824,10 @@ def create_provider_video_tasks(
             batch_size=request.batch_size,
         )
     except StorageConflictError as exc:
-        if str(exc) not in {"provider_request_conflict", "provider_request_receipt_invalid"}:
-            raise
-        return JSONResponse(status_code=409, content={"code": str(exc), "detail": str(exc)})
+        for code in ("provider_request_conflict", "provider_request_receipt_invalid"):
+            if str(exc) == code:
+                return JSONResponse(status_code=409, content={"code": code, "detail": code})
+        raise
     except ValueError as exc:
         if str(exc) == "Script not found":
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -3802,7 +3836,13 @@ def create_provider_video_tasks(
                 "code": "provider_recovery_unavailable",
                 "detail": "The current provider configuration does not support this generation entry.",
             })
-        return JSONResponse(status_code=422, content={"code": "provider_request_invalid", "detail": str(exc)})
+        return JSONResponse(status_code=422, content={
+            "code": "provider_request_invalid",
+            "detail": _public_exception_detail(
+                exc, ("provider_batch_size_invalid", "provider_request_batch_size_transport_field"),
+                "Invalid provider video request; check the model, mode, parameters and references.",
+            ),
+        })
 
     tasks_by_id = {task.id: task for task in result.script.video_tasks}
     response = ProviderVideoAdmissionResponse(
@@ -3879,6 +3919,29 @@ def create_video_task(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+_IMAGE_REQUEST_VALIDATION_DETAILS = (
+    "studio_image_channel_not_supported", "studio_image_reference_variant_not_supported",
+    "studio_image_reference_source_not_supported", "studio_storyboard_image_request_not_supported",
+    "studio_image_frame_fields_not_supported", "studio_image_prepared_channel_not_supported",
+    "studio_image_contract_not_supported", "studio_image_success_observation_required",
+    "studio_image_recovery_action_invalid", "studio_storyboard_project_required",
+    "studio_storyboard_image_inputs_not_supported", "studio_image_reference_not_supported",
+    "studio_image_aspect_ratio_invalid", "studio_image_negative_prompt_not_supported",
+    "studio_gpt_image_negative_prompt_not_supported", "studio_full_body_base_character_not_supported",
+    "studio_headshot_selected_reference_ambiguous", "studio_image_base_prompt_required",
+    "studio_image_negative_prompt_exceeds_500_characters", "studio_gpt_image_channel_not_supported",
+    "studio_gpt_image_parameter_not_supported", "studio_image_model_not_supported",
+    "studio_image_request_root_invalid", "seed must be omitted or an integer from 0 to 2147483647",
+) + tuple(
+    f"studio_{channel}_{problem}"
+    for channel in ("reference_sheet", "full_body", "three_view", "headshot", "scene", "prop")
+    for problem in (
+        "model_not_supported", "parameter_not_supported", "selected_local_reference_required",
+        "fallback_reference_not_supported", "fallback_reference_changed", "fallback_local_reference_required",
+    )
+)
+
+
 def _asset_image_request_error(exc: ValueError) -> JSONResponse:
     from .pipeline import ProjectContextError
 
@@ -3888,8 +3951,19 @@ def _asset_image_request_error(exc: ValueError) -> JSONResponse:
             "detail": "No retained receipt is available for this request.",
         })
     if isinstance(exc, ProjectContextError):
-        return JSONResponse(status_code=404 if exc.not_found else 422, content={"detail": str(exc)})
-    return JSONResponse(status_code=422, content={"code": "studio_image_request_invalid", "detail": str(exc)})
+        return JSONResponse(status_code=404 if exc.not_found else 422, content={
+            "detail": _public_exception_detail(
+                exc, ("Script not found", "Project not found", "Asset request root not found", "Asset not found"),
+                "Image request target not found" if exc.not_found else "Invalid image request target context",
+            ),
+        })
+    return JSONResponse(status_code=422, content={
+        "code": "studio_image_request_invalid",
+        "detail": _public_exception_detail(
+            exc, _IMAGE_REQUEST_VALIDATION_DETAILS,
+            "Invalid image request; check the model, parameters and references.",
+        ),
+    })
 
 
 def _admit_asset_image_request(root_kind, root_id, request, background_tasks, active_pipeline):
