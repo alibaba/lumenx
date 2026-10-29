@@ -12,6 +12,7 @@ import math
 import os
 import stat
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -140,6 +141,33 @@ def _fsync_directory_path(root: Path) -> None:
         os.close(fd)
 
 
+def _identity_file_stamp(info: os.stat_result) -> tuple[int, int, int, int, int]:
+    # These are observable change indicators, not proof against a writer able
+    # to restore or forge metadata. The directory writer lease remains required.
+    # Exclude atime: reading an otherwise unchanged identity may update it.
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+
+
+def _read_verified_identity(
+    fd: int, expected: os.stat_result, stat_entry: Callable[[], os.stat_result]
+) -> StorageIdentity:
+    try:
+        opened = os.fstat(fd)
+        stamp = _identity_file_stamp(opened)
+        if not stat.S_ISREG(opened.st_mode) or stamp != _identity_file_stamp(expected):
+            raise StorageError("Storage identity changed during read")
+        identity = validate_storage_identity(_read_bounded_json(fd))
+        finished = os.fstat(fd)
+        current_entry = stat_entry()
+        if (_identity_file_stamp(finished) != stamp
+                or not stat.S_ISREG(current_entry.st_mode)
+                or _identity_file_stamp(current_entry) != stamp):
+            raise StorageError("Storage identity changed during read")
+        return identity
+    except OSError as exc:
+        raise StorageError("Storage identity changed during read") from exc
+
+
 def _read_identity_from_owned_root(root_fd: int) -> StorageIdentity | None:
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     try:
@@ -159,11 +187,10 @@ def _read_identity_from_owned_root(root_fd: int) -> StorageIdentity | None:
     except OSError as exc:
         raise StorageError(f"Cannot open storage identity: {exc}") from exc
     try:
-        opened = os.fstat(fd)
-        if (not stat.S_ISREG(opened.st_mode)
-                or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino)):
-            raise StorageError("Storage identity changed during read")
-        return validate_storage_identity(_read_bounded_json(fd))
+        return _read_verified_identity(
+            fd, info,
+            lambda: os.stat(STORAGE_IDENTITY_FILENAME, dir_fd=root_fd, follow_symlinks=False),
+        )
     finally:
         os.close(fd)
 
@@ -188,11 +215,7 @@ def _read_identity_by_path(root: Path) -> StorageIdentity | None:
     except OSError as exc:
         raise StorageError(f"Cannot open storage identity {path}: {exc}") from exc
     try:
-        opened = os.fstat(fd)
-        if (not stat.S_ISREG(opened.st_mode)
-                or (opened.st_dev, opened.st_ino) != (info.st_dev, info.st_ino)):
-            raise StorageError("Storage identity changed during read")
-        return validate_storage_identity(_read_bounded_json(fd))
+        return _read_verified_identity(fd, info, path.lstat)
     finally:
         os.close(fd)
 

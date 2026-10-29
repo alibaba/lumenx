@@ -101,21 +101,27 @@ def test_corrupt_or_noncanonical_identity_fails_closed_without_rotation(tmp_path
 
 
 
-def test_identity_rejects_entry_replaced_between_stat_and_open(tmp_path, monkeypatch):
+@pytest.mark.parametrize("directory_fd", [True, False], ids=["dir-fd", "path"])
+def test_identity_rejects_entry_replaced_between_stat_and_open(tmp_path, monkeypatch, directory_fd):
     original = {"schema_version": 1, "storage_id": "00000000-0000-4000-8000-000000000000"}
     replacement = {"schema_version": 1, "storage_id": "11111111-1111-4111-8111-111111111111"}
     path = tmp_path / STORAGE_IDENTITY_FILENAME
+    retained = tmp_path / "previous-storage-identity.json"
     path.write_text(json.dumps(original), encoding="utf-8")
-    monkeypatch.setattr(storage_identity_module, "_directory_fd_ops_supported", lambda: True)
+    monkeypatch.setattr(storage_identity_module, "_directory_fd_ops_supported", lambda: directory_fd)
     real_open = storage_identity_module.os.open
     replaced = False
 
     def racing_open(file, flags, mode=0o777, *, dir_fd=None):
         nonlocal replaced
-        if file == STORAGE_IDENTITY_FILENAME and dir_fd is not None and not replaced:
+        if Path(file).name == STORAGE_IDENTITY_FILENAME and not replaced:
             replaced = True
-            path.unlink()
+            # Keep the old inode allocated: unlink/recreate may immediately
+            # reuse its number on Linux and does not prove a distinct entry.
+            path.rename(retained)
             path.write_text(json.dumps(replacement), encoding="utf-8")
+            previous_info, current_info = retained.stat(), path.stat()
+            assert (previous_info.st_dev, previous_info.st_ino) != (current_info.st_dev, current_info.st_ino)
         return real_open(file, flags, mode, dir_fd=dir_fd)
 
     monkeypatch.setattr(storage_identity_module.os, "open", racing_open)
@@ -124,7 +130,115 @@ def test_identity_rejects_entry_replaced_between_stat_and_open(tmp_path, monkeyp
             initialize_storage_identity(tmp_path, writer_lock=lease)
 
     assert replaced
-    assert json.loads(path.read_text(encoding="utf-8")) == replacement
+    assert retained.read_bytes() == json.dumps(original).encode("utf-8")
+    assert path.read_bytes() == json.dumps(replacement).encode("utf-8")
+
+
+@pytest.mark.parametrize("directory_fd", [True, False], ids=["dir-fd", "path"])
+@pytest.mark.parametrize("operation", [initialize_storage_identity, load_storage_identity], ids=["initialize", "load"])
+@pytest.mark.parametrize("race_point", ["before-open", "during-read"])
+def test_identity_rejects_same_inode_rewrite_during_read(tmp_path, monkeypatch, directory_fd, operation, race_point):
+    original = {"schema_version": 1, "storage_id": "00000000-0000-4000-8000-000000000000"}
+    replacement = {"schema_version": 1, "storage_id": "11111111-1111-4111-8111-111111111111"}
+    path = tmp_path / STORAGE_IDENTITY_FILENAME
+    path.write_text(json.dumps(original), encoding="utf-8")
+    original_info = path.stat()
+    monkeypatch.setattr(storage_identity_module, "_directory_fd_ops_supported", lambda: directory_fd)
+    real_open = storage_identity_module.os.open
+    real_read = storage_identity_module.os.read
+    identity_fd = None
+    rewritten = False
+
+    def rewrite_in_place():
+        nonlocal rewritten
+        rewritten = True
+        path.write_text(json.dumps(replacement), encoding="utf-8")
+        # A deliberate timestamp change makes the race independent of clock
+        # resolution, scheduling, and whether an equal-size write is noticed.
+        storage_identity_module.os.utime(path, ns=(original_info.st_atime_ns, original_info.st_mtime_ns + 2_000_000_000))
+        current = path.stat()
+        assert (current.st_dev, current.st_ino, current.st_size) == (
+            original_info.st_dev, original_info.st_ino, original_info.st_size,
+        )
+        assert current.st_mtime_ns != original_info.st_mtime_ns
+
+    def racing_open(file, flags, mode=0o777, *, dir_fd=None):
+        nonlocal identity_fd
+        if Path(file).name == STORAGE_IDENTITY_FILENAME:
+            if race_point == "before-open" and not rewritten:
+                rewrite_in_place()
+            identity_fd = real_open(file, flags, mode, dir_fd=dir_fd)
+            return identity_fd
+        return real_open(file, flags, mode, dir_fd=dir_fd)
+
+    def racing_read(fd, size):
+        chunk = real_read(fd, size)
+        if race_point == "during-read" and fd == identity_fd and chunk and not rewritten:
+            rewrite_in_place()
+        return chunk
+
+    monkeypatch.setattr(storage_identity_module.os, "open", racing_open)
+    monkeypatch.setattr(storage_identity_module.os, "read", racing_read)
+    with DirectoryWriterLock(tmp_path) as lease:
+        with pytest.raises(StorageError, match="changed during read"):
+            operation(tmp_path, writer_lock=lease)
+
+    assert rewritten
+    assert path.read_bytes() == json.dumps(replacement).encode("utf-8")
+
+
+@pytest.mark.parametrize("directory_fd", [True, False], ids=["dir-fd", "path"])
+@pytest.mark.parametrize("operation", [initialize_storage_identity, load_storage_identity], ids=["initialize", "load"])
+def test_identity_rejects_entry_replaced_while_reading_old_fd(tmp_path, monkeypatch, directory_fd, operation):
+    original = {"schema_version": 1, "storage_id": "00000000-0000-4000-8000-000000000000"}
+    replacement = {"schema_version": 1, "storage_id": "11111111-1111-4111-8111-111111111111"}
+    path = tmp_path / STORAGE_IDENTITY_FILENAME
+    retained = tmp_path / "previous-storage-identity.json"
+    path.write_text(json.dumps(original), encoding="utf-8")
+    original_info = path.stat()
+    monkeypatch.setattr(storage_identity_module, "_directory_fd_ops_supported", lambda: directory_fd)
+    real_open = storage_identity_module.os.open
+    real_read = storage_identity_module.os.read
+    real_fstat = storage_identity_module.os.fstat
+    identity_fd = None
+    replaced = False
+
+    def racing_open(file, flags, mode=0o777, *, dir_fd=None):
+        nonlocal identity_fd
+        fd = real_open(file, flags, mode, dir_fd=dir_fd)
+        if Path(file).name == STORAGE_IDENTITY_FILENAME:
+            identity_fd = fd
+        return fd
+
+    def racing_read(fd, size):
+        nonlocal replaced
+        chunk = real_read(fd, size)
+        if fd == identity_fd and chunk and not replaced:
+            replaced = True
+            path.rename(retained)
+            path.write_text(json.dumps(replacement), encoding="utf-8")
+            current = path.stat()
+            assert (current.st_dev, current.st_ino) != (original_info.st_dev, original_info.st_ino)
+        return chunk
+
+    def stable_old_fd_stat(fd):
+        # The opened file still has its original bytes. Model a filesystem
+        # whose observable metadata does not change on this rename, so the
+        # current directory entry must be checked independently of the FD.
+        if fd == identity_fd and replaced:
+            return original_info
+        return real_fstat(fd)
+
+    monkeypatch.setattr(storage_identity_module.os, "open", racing_open)
+    monkeypatch.setattr(storage_identity_module.os, "read", racing_read)
+    monkeypatch.setattr(storage_identity_module.os, "fstat", stable_old_fd_stat)
+    with DirectoryWriterLock(tmp_path) as lease:
+        with pytest.raises(StorageError, match="changed during read"):
+            operation(tmp_path, writer_lock=lease)
+
+    assert replaced
+    assert retained.read_bytes() == json.dumps(original).encode("utf-8")
+    assert path.read_bytes() == json.dumps(replacement).encode("utf-8")
 
 
 def test_identity_rejects_entry_removed_between_stat_and_open_without_rotation(tmp_path, monkeypatch):
