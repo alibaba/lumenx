@@ -811,6 +811,7 @@ def test_missing_private_gpt_credentials_cannot_fall_back_to_host_home(runtime, 
         result = client.post("/projects/p/asset_image_requests", json=raw())
         assert result.status_code == 422 and persisted(runtime) == before
         assert "profile" in result.text
+        assert result.json()["detail"] == "Invalid MuleRun profile"
     assert not transport["calls"] and not transport["cli"]
 
 

@@ -3852,7 +3852,11 @@ def create_provider_video_tasks(
         return JSONResponse(status_code=422, content={
             "code": "provider_request_invalid",
             "detail": _public_exception_detail(
-                exc, ("provider_batch_size_invalid", "provider_request_batch_size_transport_field"),
+                exc, (
+                    "provider_batch_size_invalid", "provider_request_batch_size_transport_field",
+                    "provider_secret_unavailable", "Invalid credential",
+                    "seedance_http_key_required", "seedance_cli_submission_unsafe",
+                ),
                 "Invalid provider video request; check the model, mode, parameters and references.",
             ),
         })
@@ -3944,6 +3948,11 @@ _IMAGE_REQUEST_VALIDATION_DETAILS = (
     "studio_headshot_selected_reference_ambiguous", "studio_image_base_prompt_required",
     "studio_three_view_selected_reference_ambiguous", "studio_full_body_uploaded_reference_ambiguous",
     "Invalid asset image inputs", "Invalid storyboard image inputs",
+    "Invalid MuleRun profile",
+    "Invalid provider credential", "Invalid credential", "conflicting_mulerun_routes",
+    "Unsupported MuleRun login site", "Unsupported MuleRun studio site",
+    "Invalid MuleRun login site", "Invalid MuleRun studio site",
+    "Invalid MuleRun login base URL", "Invalid MuleRun studio base URL",
     "studio_image_negative_prompt_exceeds_500_characters", "studio_gpt_image_channel_not_supported",
     "studio_gpt_image_parameter_not_supported", "studio_image_model_not_supported",
     "studio_image_request_root_invalid", "seed must be omitted or an integer from 0 to 2147483647",
