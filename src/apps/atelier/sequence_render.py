@@ -504,7 +504,9 @@ def _mix_audio_tracks(
     for index, track in enumerate(tracks):
         source = inputs[("audio", index)]
         cmd += [*_input_limits(str(source), "audio"), "-i", str(source)]
-    filters = ["[0:a]aresample=48000,aformat=channel_layouts=stereo[basea]"]
+    # Keep the first mix input open until the snapshot cutoff: FFmpeg 6 can
+    # discard its queued samples on EOF before the other inputs catch up.
+    filters = ["[0:a]aresample=48000,aformat=channel_layouts=stereo,apad[basea]"]
     mix_inputs = ["[basea]"]
     timeline_duration = float(snapshot["duration"])
     for index, track in enumerate(tracks, start=1):
@@ -544,7 +546,8 @@ def _mix_audio_tracks(
         "aac",
         "-b:a",
         "192k",
-        "-shortest",
+        "-t",
+        f"{timeline_duration:.6f}",
         "-movflags",
         "+faststart",
         str(output),

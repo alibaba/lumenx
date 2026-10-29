@@ -5,10 +5,13 @@ from pathlib import Path
 from threading import RLock, Thread
 from types import SimpleNamespace
 import json
+import math
 import os
 import shutil
+import struct
 import subprocess
 import time
+import wave
 
 import pytest
 
@@ -164,6 +167,8 @@ def _render_timing_diagnostics(monkeypatch, directory: Path, expected_duration: 
                         "pts_time", "best_effort_timestamp_time", "pkt_duration_time", "duration_time",
                     )} if frames else None,
                 }
+                if kind == "audio":
+                    frame_timing[kind]["samples"] = sum(int(frame.get("nb_samples", 0)) for frame in frames)
             stages.append({
                 "stage": output.name,
                 "duration": info.get("format", {}).get("duration"),
@@ -221,21 +226,21 @@ def _project() -> AtelierProject:
     )
 
 
-def _snapshot(owner):
+def _snapshot(owner, *, include_audio=True, audio_loop=True, clip_duration=0.6, fade_duration=0.2):
     _make_clip(owner.root / "uploads" / "red.mp4", color="red", duration=0.9, frequency=440)
     _make_clip(owner.root / "uploads" / "blue.mp4", color="blue", duration=0.9, frequency=550)
     _make_tone(owner.root / "uploads" / "tone.wav", duration=0.25, frequency=990)
     return resolve_sequence_snapshot(
         _project(),
         [
-            {"id": "red", "parentId": "clip-red", "trimStart": 0.0, "trimEnd": 0.6, "gain": 0.75},
+            {"id": "red", "parentId": "clip-red", "trimStart": 0.0, "trimEnd": clip_duration, "gain": 0.75},
             {
                 "id": "blue",
                 "parentId": "clip-blue",
                 "trimStart": 0.0,
-                "trimEnd": 0.6,
+                "trimEnd": clip_duration,
                 "gain": 0.5,
-                "transition": {"kind": "fade", "duration": 0.2},
+                "transition": {"kind": "fade" if fade_duration else "cut", "duration": fade_duration},
             },
         ],
         audio_tracks=[
@@ -246,11 +251,40 @@ def _snapshot(owner):
                 "trim_start": 0.0,
                 "trim_end": 0.2,
                 "gain": 0.4,
-                "loop": True,
+                "loop": audio_loop,
             }
-        ],
+        ] if include_audio else [],
         media_scope=owner.scope,
     )
+
+
+def _tail_tone_amplitudes(path: Path, directory: Path, duration: float) -> dict[int, float]:
+    decoded = directory / "decoded.wav"
+    subprocess.run(
+        [
+            _tool("ffmpeg"), "-y", "-hide_banner", "-loglevel", "error", "-i", str(path),
+            "-vn", "-ac", "1", "-ar", "48000", "-c:a", "pcm_s16le", str(decoded),
+        ],
+        check=True, capture_output=True, timeout=30,
+    )
+    with wave.open(str(decoded), "rb") as audio:
+        sample_rate = audio.getframerate()
+        pcm = audio.readframes(audio.getnframes())
+    samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
+    start = round((duration - 0.06) * sample_rate)
+    end = round((duration - 0.01) * sample_rate)
+    tail = samples[start:end]
+    assert len(tail) == end - start
+    return {
+        frequency: 2 * abs(sum(
+            sample * complex(
+                math.cos(2 * math.pi * frequency * index / sample_rate),
+                math.sin(2 * math.pi * frequency * index / sample_rate),
+            )
+            for index, sample in enumerate(tail)
+        )) / (len(tail) * 32768)
+        for frequency in (550, 990)
+    }
 
 
 def test_render_uses_frozen_snapshot_bytes_and_cleans_private_file(owner, monkeypatch):
@@ -273,6 +307,46 @@ def test_render_uses_frozen_snapshot_bytes_and_cleans_private_file(owner, monkey
         rendered_path = result.path
 
     assert not rendered_path.exists()
+
+
+@pytest.mark.parametrize(
+    ("cpu_count", "include_audio", "audio_loop", "clip_duration", "fade_duration"),
+    [
+        pytest.param(1, True, True, 0.6, 0.2, id="loop-cpu-1"),
+        pytest.param(2, True, True, 0.6, 0.2, id="loop-cpu-2"),
+        pytest.param(4, True, True, 0.6, 0.2, id="loop-cpu-4"),
+        pytest.param(4, True, False, 0.6, 0.2, id="one-shot-audio"),
+        pytest.param(4, False, False, 0.6, 0.2, id="no-added-audio"),
+        pytest.param(4, True, True, 0.1, 0.0, id="short-loop"),
+        pytest.param(4, False, False, 0.1, 0.0, id="short-no-added-audio"),
+    ],
+)
+def test_audio_mix_preserves_timeline_and_tail_across_worker_counts(
+    owner, monkeypatch, cpu_count, include_audio, audio_loop, clip_duration, fade_duration,
+):
+    snapshot = _snapshot(
+        owner, include_audio=include_audio, audio_loop=audio_loop,
+        clip_duration=clip_duration, fade_duration=fade_duration,
+    )
+    real_run = SequenceRenderCancelToken.run
+
+    def with_cpu_count(self, cmd, *, timeout):
+        if Path(cmd[0]).name == "ffmpeg":
+            cmd = [cmd[0], "-cpucount", str(cpu_count), *cmd[1:]]
+        return real_run(self, cmd, timeout=timeout)
+
+    monkeypatch.setattr(SequenceRenderCancelToken, "run", with_cpu_count)
+    with _render_timing_diagnostics(monkeypatch, owner.root.parent, snapshot["duration"]), render_sequence_to_private_file(snapshot, media_scope=owner.scope) as result:
+        info = _probe(result.path, frames=True)
+        video = next(stream for stream in info["streams"] if stream["codec_type"] == "video")
+        audio = next(stream for stream in info["streams"] if stream["codec_type"] == "audio")
+        assert int(video["nb_frames"]) == round(snapshot["duration"] * result.fps)
+        assert float(video["duration"]) == pytest.approx(snapshot["duration"], abs=1 / result.fps)
+        assert float(audio["duration"]) == pytest.approx(snapshot["duration"], abs=1 / result.fps)
+        amplitudes = _tail_tone_amplitudes(result.path, owner.root.parent, snapshot["duration"])
+        assert amplitudes[550] > 0.008, "The final clip's audio must survive the mix"
+        if include_audio and audio_loop:
+            assert amplitudes[990] > 0.008, "The looped background audio must reach the timeline end"
 
 
 def test_publication_uses_core_no_overwrite_and_prepared_proof(owner):
