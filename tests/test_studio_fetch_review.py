@@ -101,4 +101,3 @@ def test_managed_media_file_exists_does_not_treat_symlink_parent_as_missing(owne
             writer_lock=owner.lease,
             storage_guard=owner.guard,
         )
-

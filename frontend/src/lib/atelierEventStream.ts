@@ -273,4 +273,3 @@ export async function postAtelierEventStream<Ack, Event extends AckEvent<Ack>>(
         unsubscribeRuntime();
     }
 }
-

@@ -180,7 +180,7 @@ class ComicGenPipeline:
         for name in ("script", "assets", "storyboard", "video", "audio"):
             self._component(name)
         self.export_manager = ExportManager(self._component_config("export", self.data_dir / "export", output_root))
-        
+
         self.data_file = str(self.data_dir / "projects.json")
         self.series_data_file = str(self.data_dir / "series.json")
         self.library_data_file = str(self.data_dir / "library_assets.json")
@@ -793,7 +793,7 @@ class ComicGenPipeline:
         script = self.scripts.get(script_id)
         if not script:
             raise ValueError("Script not found")
-            
+
         export_url = self.export_manager.render_project(script, options)
         return export_url
 
@@ -933,7 +933,7 @@ class ComicGenPipeline:
             del self.scripts[script_id]
             self._commit_storage("projects.json", "series.json")
             return script
-    
+
     def reconcile_project_assets(self, script_id: str, actions: Dict[str, List[Dict[str, Any]]]) -> Script:
         """Move local assets and their frame references in one saved command."""
         with self._save_lock:
@@ -2124,7 +2124,7 @@ class ComicGenPipeline:
         """
         Syncs entity descriptions from ScriptProcessor parsed entities.
         This clears saved prompts so the UI will regenerate them from the current description.
-        
+
         Note: This only updates prompts, not generated images/videos.
         """
         with self._save_lock:
@@ -2238,7 +2238,7 @@ class ComicGenPipeline:
             script.updated_at = time.time()
             self._save_data()
             return script.model_copy(deep=True)
-    
+
     def _find_asset_with_source(
         self, script: "Script", asset_id: str, asset_type: str
     ) -> Tuple[Optional[object], Optional[str]]:
@@ -2712,7 +2712,7 @@ class ComicGenPipeline:
                     if pname == pn or pn in pname or pname in pn:
                         prop_ids.append(prop.id)
                         break
-            
+
             frame = StoryboardFrame(
                 id=str(uuid.uuid4()),
                 scene_id=scene_id,
@@ -2729,7 +2729,7 @@ class ComicGenPipeline:
                 status=GenerationStatus.PENDING
             )
             new_frames.append(frame)
-        
+
         return new_frames
 
     def refine_frame(self, script_id: str, frame_id: str) -> StoryboardFrame:
@@ -3846,18 +3846,18 @@ class ComicGenPipeline:
         """Downloads an image to a temporary file."""
         import requests
         import tempfile
-        
+
         # If it's a local file path (relative to output)
         if not url.startswith("http"):
             local_path = self._output_ref_path(url)
             if os.path.exists(local_path):
                 return local_path
-                
+
         # Download from URL
         try:
             response = requests.get(url, stream=True)
             response.raise_for_status()
-            
+
             # Create temp file
             fd, path = tempfile.mkstemp(suffix=".png")
             with os.fdopen(fd, 'wb') as f:
@@ -4694,19 +4694,19 @@ class ComicGenPipeline:
     def _extract_ffmpeg_error_message(self, stderr: str, video_paths: List[str]) -> str:
         """
         Extract a user-friendly error message from ffmpeg stderr output.
-        
+
         Args:
             stderr: The stderr output from ffmpeg
             video_paths: List of video file paths that were being processed
-            
+
         Returns:
             A user-friendly error message
         """
         if not stderr:
             return "FFmpeg merge failed with no error output. Please check the log files."
-        
+
         stderr_lower = stderr.lower()
-        
+
         # Common error patterns with user-friendly messages
         if "no such file or directory" in stderr_lower:
             return (
@@ -4714,41 +4714,41 @@ class ComicGenPipeline:
                 "The videos may have been deleted or moved.\n"
                 "Please try regenerating the missing videos."
             )
-        
+
         if "invalid data found" in stderr_lower or "invalid file" in stderr_lower or "moov atom not found" in stderr_lower:
             return (
                 "One or more video files are corrupted or incomplete.\n"
                 "This can happen if video generation was interrupted.\n"
                 "Please try regenerating the affected videos."
             )
-        
+
         if ("codec" in stderr_lower and ("not supported" in stderr_lower or "unknown" in stderr_lower)):
             return (
                 "Video codec compatibility issue detected.\n"
                 "The video format may not be supported by your FFmpeg installation.\n"
                 "Try updating FFmpeg to the latest version."
             )
-        
+
         if "permission denied" in stderr_lower or "access is denied" in stderr_lower:
             return (
                 "Permission denied when accessing video files.\n"
                 "Please check that the application has read/write permissions\n"
                 "for the output directory."
             )
-        
+
         if "disk full" in stderr_lower or "no space" in stderr_lower:
             return (
                 "Insufficient disk space to create the merged video.\n"
                 "Please free up some space and try again."
             )
-        
+
         if "height not divisible" in stderr_lower or "width not divisible" in stderr_lower:
             return (
                 "Video resolution compatibility issue.\n"
                 "The videos have incompatible dimensions.\n"
                 "This should not happen - please report this issue."
             )
-        
+
         if "invalid argument" in stderr_lower:
             # Check if it's related to file list
             if any("filelist" in line.lower() or "concat" in line.lower() for line in stderr.split('\n')):
@@ -4757,7 +4757,7 @@ class ComicGenPipeline:
                     "This might be a file path encoding issue.\n"
                     "Please ensure video filenames don't contain special characters."
                 )
-        
+
         # Fallback: extract the most relevant error line
         # Usually the last non-empty line before the final summary
         error_lines = [line.strip() for line in stderr.split('\n') if line.strip()]
@@ -4770,13 +4770,13 @@ class ComicGenPipeline:
                     if len(line) > 200:
                         line = line[:200] + "..."
                     return f"FFmpeg error: {line}\n\nPlease check the application logs for more details."
-            
+
             # If no error keyword found, use last line
             last_line = error_lines[-1]
             if len(last_line) > 200:
                 last_line = last_line[:200] + "..."
             return f"FFmpeg merge failed: {last_line}\n\nPlease check the application logs for more details."
-        
+
         return "FFmpeg merge failed with unknown error. Please check the application logs for details."
 
     def create_asset_video_task(self, script_id: str, asset_id: str, asset_type: str, prompt: str, duration: int = 5, aspect_ratio: str = None) -> Tuple[Script, str]:

@@ -86,4 +86,3 @@ python3 docs/agents/tools/check_lumenx_refactor_docs.py
 `.venv` 是已安装项目依赖的测试解释器示例，不使用个人应用数据。执行前按本分支 CI 核对 Python/Node 版本及 FFmpeg/ffprobe；完整命令、结果、退出码与跳过须记录，catalog 生成后核对 Git 无意外差异。原始 lint 失败、既有基线和无新增检查分别报告，不伪造退出成功。
 
 架构边界由 `tests/test_core_dependency_boundaries.py` 与 `frontend/src/__tests__/product-boundaries.test.ts` 保护。浏览器工具在 `docs/agents/tools/`，它们既是运行夹具也有自身回归；工具测试通过不等于已完成真实浏览器旅程。发布前还需按实际源码与安装入口核验依赖可重建性和所声明的环境。
-

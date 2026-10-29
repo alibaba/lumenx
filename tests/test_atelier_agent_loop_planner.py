@@ -101,4 +101,3 @@ def test_actual_loop_uses_read_proposal_approval_and_typed_failed_observation_on
     assert len(scheduled) == 1 and len(finished.project.generation_attempts) == 1
     assert not finished.project.nodes[1].data.get("selected_candidate_id")
     assert loop.resume_loop("p", paused.turn.id).replayed is True
-

@@ -32,4 +32,6 @@ The previous snapshot has backend 9,460 passing tests and frontend 2,104 logic p
 
 ## Rollback
 
+Publication whitespace check: normalize only the ten paths reported by `git diff --check github/main...HEAD` (five public documents, two implementation files and three tests). Remove trailing whitespace and redundant final blank lines only; verify each change equals that mechanical transformation. Existing full suites protect behavior, and final Linux checks must use the resulting commit.
+
 Discarding this separate release candidate leaves the original development branch and public main intact. No live data migration, deployment, history rewrite or cleanup of another worktree is part of this task.

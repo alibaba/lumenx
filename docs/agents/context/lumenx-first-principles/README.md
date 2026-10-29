@@ -49,4 +49,3 @@ python3 -B docs/agents/tools/test_check_lumenx_refactor_docs.py -v
 检查保留文件及本仓链接、ADR 状态、阶段与功能/场景/发现编号映射；不导入应用、不执行产品测试、不判断审美或供应商质量。缺文件、失效链接和非法映射必须失败，不能通过忽略全部历史目录把检查变成无条件成功。
 
 [检查器回归](../../tools/test_check_lumenx_refactor_docs.py)包含正常文档和受控坏例；只在内存替换读取内容，不修改项目或个人数据。导航页不能充当“已验证”阶段所需的实际运行记录。
-

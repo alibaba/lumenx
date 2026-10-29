@@ -369,4 +369,3 @@ def test_interruption_before_transaction_decision_restores_preview_and_relations
         assert client.get(f"/series/import/{request['import_id']}").json()["status"] == "preview"
         assert client.post("/series/import/confirm", json=request).status_code == 200
     assert len(restored.scripts) == 2 and len(restored.series_store) == 1
-
