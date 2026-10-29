@@ -101,6 +101,8 @@ def test_invalid_preferred_uploaded_source_cannot_fall_back(runtime, transport, 
         # The existing legacy endpoint maps plain media ValueError to 404.
         expected_status = 404 if legacy and mutation == "missing" else 422
         assert result.status_code == expected_status, result.text
+        if mutation == "duplicate" and not legacy:
+            assert result.json()["detail"] == "studio_full_body_uploaded_reference_ambiguous"
         assert gpt_sheet.persisted(runtime) == saved and boundaries.saved_files(runtime) == media
         assert not runtime.asset_generation_tasks and not transport["calls"] and not transport["cli"]
 

@@ -1620,6 +1620,19 @@ _PACKAGE_VALIDATION_DETAILS = (
     "Project package metadata could not be read", "Project package project payload is invalid",
     "Project package metadata is not strict JSON", "Project package source metadata is invalid",
     "Unsupported package schema", "Unsupported package kind", "Unexpected package entry",
+    "Imported media target collision",
+    "Project package could not be written", "Package source series differs from the project relation",
+    "Unsafe dynamic field contains external reference", "Unsafe dynamic field contains undeclared media reference",
+    "Project package manifest must be an object", "Project package media manifest is invalid",
+    "Image selection is outside its asset", "Variant selection is outside its asset",
+    "Missing packaged asset for video task", "Duplicate project entity identity",
+    "Project package metadata is not valid JSON", "Media reference must be a non-empty string",
+    "Package media directory changed", "Package media path is unavailable or unsafe",
+    "Package media must be a bounded regular file", "Package media exceeds size limit",
+    "Package media changed during export", "Duplicate package entry", "Project package has too many files",
+    "Project package media entry is invalid", "Project package media path is invalid",
+    "Project package media path does not match logical ref", "Project package media hash is invalid",
+    "Project package media size is invalid", "Package media target changed",
     "Media manifest does not match project references", "Missing or ambiguous packaged task asset",
     "Invalid prepared image history", "Prepared image has no managed output",
     "Prepared image proofs disagree", "Prepared image bytes differ from their proof",
@@ -3929,6 +3942,8 @@ _IMAGE_REQUEST_VALIDATION_DETAILS = (
     "studio_image_aspect_ratio_invalid", "studio_image_negative_prompt_not_supported",
     "studio_gpt_image_negative_prompt_not_supported", "studio_full_body_base_character_not_supported",
     "studio_headshot_selected_reference_ambiguous", "studio_image_base_prompt_required",
+    "studio_three_view_selected_reference_ambiguous", "studio_full_body_uploaded_reference_ambiguous",
+    "Invalid asset image inputs", "Invalid storyboard image inputs",
     "studio_image_negative_prompt_exceeds_500_characters", "studio_gpt_image_channel_not_supported",
     "studio_gpt_image_parameter_not_supported", "studio_image_model_not_supported",
     "studio_image_request_root_invalid", "seed must be omitted or an integer from 0 to 2147483647",
@@ -3953,7 +3968,7 @@ def _asset_image_request_error(exc: ValueError) -> JSONResponse:
     if isinstance(exc, ProjectContextError):
         return JSONResponse(status_code=404 if exc.not_found else 422, content={
             "detail": _public_exception_detail(
-                exc, ("Script not found", "Project not found", "Asset request root not found", "Asset not found"),
+                exc, ("Script not found", "Project not found", "Asset request root not found", "Asset not found", "Frame not found"),
                 "Image request target not found" if exc.not_found else "Invalid image request target context",
             ),
         })

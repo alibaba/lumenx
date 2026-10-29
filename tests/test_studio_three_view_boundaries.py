@@ -394,6 +394,7 @@ def test_duplicate_selected_reference_id_rejects_before_freeze_and_binding(runti
         before, frozen = first.gpt_sheet.persisted(runtime), saved_files(runtime)
         result = client.post(first.PUBLIC, json=body())
         assert result.status_code == 422, result.text
+        assert result.json()["detail"] == "studio_three_view_selected_reference_ambiguous"
         assert first.gpt_sheet.persisted(runtime) == before and saved_files(runtime) == frozen
         assert not transport["calls"] and not transport["cli"]
         assert not runtime.asset_generation_tasks and not getattr(runtime, "_asset_image_runs", {})
