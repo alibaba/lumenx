@@ -108,6 +108,11 @@ jobs:
       - name: Check workflow mirror parity
         run: python -B scripts/check_workflow_parity.py 2>&1 | tee "$RUNNER_TEMP/lumenx-backend-reports/workflow-parity.log"
 
+      - name: Check public contracts and test mappings
+        run: |
+          python -B docs/agents/tools/check_lumenx_refactor_docs.py 2>&1 | tee "$RUNNER_TEMP/lumenx-backend-reports/documents.log"
+          python -B docs/agents/tools/test_check_lumenx_refactor_docs.py -v 2>&1 | tee "$RUNNER_TEMP/lumenx-backend-reports/document-checker-tests.log"
+
       - name: Retain backend verification evidence
         if: always()
         uses: actions/upload-artifact@v4

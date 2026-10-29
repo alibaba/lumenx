@@ -21,6 +21,13 @@ Status: preparation in progress; no merge or release approval is implied.
 
 ## Acceptance boundaries
 
+### Public documentation cleanup
+
+- Keep the accepted product contract, six ADRs, architecture and phase dependencies, 24 journey specifications, and 44 feature-to-source/test mappings. Preserve product decisions while removing machine-specific source links and private session history.
+- Replace the full development ledger with a public candidate ledger that separates reported source-snapshot results from checks actually rerun on this release candidate. Preserve all original records in `7765f9e816088a88f8489a737ad70eb7211de051`; do not publish broken links or imply that omitted evidence is publicly reviewable.
+- Retain a compact historical finding registry so the documentation checker can still verify phase/feature/scenario ownership without requiring the unpublished review archives. Check every retained local link, ADR and mapping. Verify checker failures with temporary copies containing missing documents and invalid mappings.
+- Publish portable headless operation and migration instructions. Do not carry private ECS host details, local home directories, credentials, screenshots, raw logs, or the original `SESSION.md` into this branch.
+
 The previous snapshot has backend 9,460 passing tests and frontend 2,104 logic plus 1,844 component tests. These are historical results, not fresh candidate results. The 416 existing frontend lint diagnostics are debt, not a passing raw lint command. Formal macOS cold start/signing/notarization, Windows, public HTTPS sessions and paid-provider quality are separate acceptance work; this preparation does not claim them.
 
 ## Rollback
