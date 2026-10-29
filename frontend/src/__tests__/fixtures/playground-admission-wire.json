@@ -1,0 +1,401 @@
+{
+  "request": {
+    "client_request_id": "wire-playground-request",
+    "mode": "t2v",
+    "model_id": "wan2.7-t2v",
+    "prompt": "月光与海 · wire",
+    "negative_prompt": "",
+    "parameters": {
+      "seed": 0,
+      "watermark": false,
+      "duration": 5
+    },
+    "batch_size": 2
+  },
+  "accepted": {
+    "schema_version": 1,
+    "replayed": false,
+    "request_status": "accepted",
+    "generation": {
+      "record_type": "generation",
+      "schema_version": 1,
+      "id": "11111111-1111-4111-8111-111111111111",
+      "client_request_id": "wire-playground-request",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "8173490e60c0ef51f4a84b5ff42fda681a399c595b76026692404ccc01c08831",
+      "mode": "t2v",
+      "model_id": "wan2.7-t2v",
+      "prompt": "月光与海 · wire",
+      "negative_prompt": "",
+      "input_media": [],
+      "parameters": {
+        "seed": 0,
+        "watermark": false,
+        "duration": 5
+      },
+      "batch_size": 2,
+      "outputs": [],
+      "attempts": [
+        {
+          "attempt_id": "wire-playground-request-0",
+          "ordinal": 0,
+          "status": "pending",
+          "error": null,
+          "provider_execution": {
+            "schema_version": 1,
+            "attempt_id": "wire-playground-request-0",
+            "phase": "accepted",
+            "provider_model_id": "wan2.7-t2v",
+            "intent": {
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "model_id": "wan/wan2.7-video#t2v",
+              "catalog_mode": "t2v",
+              "mode": "t2v",
+              "prompt": "月光与海 · wire",
+              "params": {
+                "duration": 5,
+                "negative_prompt": "",
+                "prompt_extend": true,
+                "ratio": "16:9",
+                "resolution": "1080P",
+                "seed": 0,
+                "watermark": false
+              },
+              "sources": {
+                "model_id": "request",
+                "mode": "request",
+                "prompt": "request",
+                "params.duration": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "catalog",
+                "params.ratio": "catalog",
+                "params.resolution": "catalog",
+                "params.seed": "request",
+                "params.watermark": "request"
+              },
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ],
+              "preset_id": null,
+              "preset_version": null,
+              "admission_request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ]
+            },
+            "media": [],
+            "scope": {
+              "provider": "dashscope",
+              "backend": "dashscope",
+              "gateway": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "region": "cn-beijing",
+              "workspace_id": null,
+              "account_identity": null
+            },
+            "credential_ref": "11111111-1111-4111-8111-111111111111",
+            "fingerprint": "1f934b44bcdc880021317d5f2b41745e1a6acbc21ac6fd8c804a2b66c8c0a4af",
+            "handle": null,
+            "observation": null,
+            "prepared_artifact": null,
+            "artifact": null
+          }
+        },
+        {
+          "attempt_id": "wire-playground-request-1",
+          "ordinal": 1,
+          "status": "pending",
+          "error": null,
+          "provider_execution": {
+            "schema_version": 1,
+            "attempt_id": "wire-playground-request-1",
+            "phase": "accepted",
+            "provider_model_id": "wan2.7-t2v",
+            "intent": {
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "model_id": "wan/wan2.7-video#t2v",
+              "catalog_mode": "t2v",
+              "mode": "t2v",
+              "prompt": "月光与海 · wire",
+              "params": {
+                "duration": 5,
+                "negative_prompt": "",
+                "prompt_extend": true,
+                "ratio": "16:9",
+                "resolution": "1080P",
+                "seed": 0,
+                "watermark": false
+              },
+              "sources": {
+                "model_id": "request",
+                "mode": "request",
+                "prompt": "request",
+                "params.duration": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "catalog",
+                "params.ratio": "catalog",
+                "params.resolution": "catalog",
+                "params.seed": "request",
+                "params.watermark": "request"
+              },
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ],
+              "preset_id": null,
+              "preset_version": null,
+              "admission_request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ]
+            },
+            "media": [],
+            "scope": {
+              "provider": "dashscope",
+              "backend": "dashscope",
+              "gateway": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "region": "cn-beijing",
+              "workspace_id": null,
+              "account_identity": null
+            },
+            "credential_ref": "11111111-1111-4111-8111-111111111111",
+            "fingerprint": "15894a14a6e6be1f2c66b371cb7f2e0202d706254486a885932737e483a513b3",
+            "handle": null,
+            "observation": null,
+            "prepared_artifact": null,
+            "artifact": null
+          }
+        }
+      ],
+      "status": "pending",
+      "error": null,
+      "created_at": "2026-10-13T00:00:00+00:00"
+    },
+    "tombstone": null
+  },
+  "readback": {
+    "schema_version": 1,
+    "replayed": true,
+    "request_status": "accepted",
+    "generation": {
+      "record_type": "generation",
+      "schema_version": 1,
+      "id": "11111111-1111-4111-8111-111111111111",
+      "client_request_id": "wire-playground-request",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "8173490e60c0ef51f4a84b5ff42fda681a399c595b76026692404ccc01c08831",
+      "mode": "t2v",
+      "model_id": "wan2.7-t2v",
+      "prompt": "月光与海 · wire",
+      "negative_prompt": "",
+      "input_media": [],
+      "parameters": {
+        "seed": 0,
+        "watermark": false,
+        "duration": 5
+      },
+      "batch_size": 2,
+      "outputs": [],
+      "attempts": [
+        {
+          "attempt_id": "wire-playground-request-0",
+          "ordinal": 0,
+          "status": "pending",
+          "error": null,
+          "provider_execution": {
+            "schema_version": 1,
+            "attempt_id": "wire-playground-request-0",
+            "phase": "accepted",
+            "provider_model_id": "wan2.7-t2v",
+            "intent": {
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "model_id": "wan/wan2.7-video#t2v",
+              "catalog_mode": "t2v",
+              "mode": "t2v",
+              "prompt": "月光与海 · wire",
+              "params": {
+                "duration": 5,
+                "negative_prompt": "",
+                "prompt_extend": true,
+                "ratio": "16:9",
+                "resolution": "1080P",
+                "seed": 0,
+                "watermark": false
+              },
+              "sources": {
+                "model_id": "request",
+                "mode": "request",
+                "prompt": "request",
+                "params.duration": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "catalog",
+                "params.ratio": "catalog",
+                "params.resolution": "catalog",
+                "params.seed": "request",
+                "params.watermark": "request"
+              },
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ],
+              "preset_id": null,
+              "preset_version": null,
+              "admission_request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ]
+            },
+            "media": [],
+            "scope": {
+              "provider": "dashscope",
+              "backend": "dashscope",
+              "gateway": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "region": "cn-beijing",
+              "workspace_id": null,
+              "account_identity": null
+            },
+            "credential_ref": "11111111-1111-4111-8111-111111111111",
+            "fingerprint": "1f934b44bcdc880021317d5f2b41745e1a6acbc21ac6fd8c804a2b66c8c0a4af",
+            "handle": null,
+            "observation": null,
+            "prepared_artifact": null,
+            "artifact": null
+          }
+        },
+        {
+          "attempt_id": "wire-playground-request-1",
+          "ordinal": 1,
+          "status": "pending",
+          "error": null,
+          "provider_execution": {
+            "schema_version": 1,
+            "attempt_id": "wire-playground-request-1",
+            "phase": "accepted",
+            "provider_model_id": "wan2.7-t2v",
+            "intent": {
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "model_id": "wan/wan2.7-video#t2v",
+              "catalog_mode": "t2v",
+              "mode": "t2v",
+              "prompt": "月光与海 · wire",
+              "params": {
+                "duration": 5,
+                "negative_prompt": "",
+                "prompt_extend": true,
+                "ratio": "16:9",
+                "resolution": "1080P",
+                "seed": 0,
+                "watermark": false
+              },
+              "sources": {
+                "model_id": "request",
+                "mode": "request",
+                "prompt": "request",
+                "params.duration": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "catalog",
+                "params.ratio": "catalog",
+                "params.resolution": "catalog",
+                "params.seed": "request",
+                "params.watermark": "request"
+              },
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ],
+              "preset_id": null,
+              "preset_version": null,
+              "admission_request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ]
+            },
+            "media": [],
+            "scope": {
+              "provider": "dashscope",
+              "backend": "dashscope",
+              "gateway": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "region": "cn-beijing",
+              "workspace_id": null,
+              "account_identity": null
+            },
+            "credential_ref": "11111111-1111-4111-8111-111111111111",
+            "fingerprint": "15894a14a6e6be1f2c66b371cb7f2e0202d706254486a885932737e483a513b3",
+            "handle": null,
+            "observation": null,
+            "prepared_artifact": null,
+            "artifact": null
+          }
+        }
+      ],
+      "status": "pending",
+      "error": null,
+      "created_at": "2026-10-13T00:00:00+00:00"
+    },
+    "tombstone": null
+  },
+  "deleted": {
+    "schema_version": 1,
+    "replayed": true,
+    "request_status": "deleted",
+    "generation": null,
+    "tombstone": {
+      "record_type": "tombstone",
+      "schema_version": 1,
+      "client_request_id": "wire-playground-request",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "8173490e60c0ef51f4a84b5ff42fda681a399c595b76026692404ccc01c08831",
+      "generation_id": "11111111-1111-4111-8111-111111111111",
+      "deleted_at": "2026-10-13T00:00:00+00:00",
+      "deleted_status": "pending"
+    }
+  }
+}

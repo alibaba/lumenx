@@ -1,0 +1,1027 @@
+{
+  "deleted": {
+    "node_ids": [
+      "clip",
+      "audio",
+      "image",
+      "region"
+    ],
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 10.0
+      },
+      "agent_turns": [],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 10.0,
+      "description": "",
+      "exports": [],
+      "id": "history-project",
+      "node_delete_receipts": [
+        {
+          "audio_tracks_change": {
+            "after": [],
+            "before": [
+              {
+                "gain": 1.0,
+                "id": "audio-track",
+                "loop": false,
+                "node_id": "audio",
+                "start": 0.0,
+                "trim_end": null,
+                "trim_start": null
+              }
+            ],
+            "removed_node_ids": [
+              "clip",
+              "audio",
+              "image",
+              "region"
+            ]
+          },
+          "base_revision": 0,
+          "data_change_groups": [
+            {
+              "after": {
+                "reference_audio_urls": {
+                  "exists": true,
+                  "value": []
+                },
+                "reference_image_urls": {
+                  "exists": true,
+                  "value": [
+                    "uploads/other.png",
+                    "standalone.png"
+                  ]
+                },
+                "reference_node_ids": {
+                  "exists": true,
+                  "value": [
+                    "other"
+                  ]
+                },
+                "reference_video_urls": {
+                  "exists": false,
+                  "value": null
+                }
+              },
+              "before": {
+                "reference_audio_urls": {
+                  "exists": true,
+                  "value": [
+                    "audio/sound.mp3"
+                  ]
+                },
+                "reference_image_urls": {
+                  "exists": true,
+                  "value": [
+                    "uploads/image.png",
+                    "uploads/other.png",
+                    "standalone.png"
+                  ]
+                },
+                "reference_node_ids": {
+                  "exists": true,
+                  "value": [
+                    "image",
+                    "other",
+                    "audio"
+                  ]
+                },
+                "reference_video_urls": {
+                  "exists": false,
+                  "value": null
+                }
+              },
+              "group": "references",
+              "node_id": "target",
+              "source_proofs": [
+                {
+                  "source_node_id": "audio",
+                  "source_type": "audio",
+                  "target_node_id": "target",
+                  "urls": [
+                    "audio/sound.mp3"
+                  ]
+                },
+                {
+                  "source_node_id": "image",
+                  "source_type": "image",
+                  "target_node_id": "target",
+                  "urls": [
+                    "uploads/image.png"
+                  ]
+                }
+              ]
+            },
+            {
+              "after": {
+                "parent_node_id": {
+                  "exists": true,
+                  "value": "target"
+                },
+                "reference_role": {
+                  "exists": true,
+                  "value": "video_reference_image"
+                }
+              },
+              "before": {
+                "parent_node_id": {
+                  "exists": true,
+                  "value": "clip"
+                },
+                "reference_role": {
+                  "exists": true,
+                  "value": "video_reference_image"
+                }
+              },
+              "group": "parent",
+              "node_id": "other",
+              "source_proofs": []
+            },
+            {
+              "after": {
+                "region_id": {
+                  "exists": false,
+                  "value": null
+                }
+              },
+              "before": {
+                "region_id": {
+                  "exists": true,
+                  "value": "region"
+                }
+              },
+              "group": "region",
+              "node_id": "target",
+              "source_proofs": []
+            }
+          ],
+          "deleted_at": 20.0,
+          "last_restore_skips": [],
+          "node_ids": [
+            "clip",
+            "audio",
+            "image",
+            "region"
+          ],
+          "node_snapshots": [
+            {
+              "node": {
+                "asset_id": null,
+                "created_at": 10.0,
+                "created_by": "user",
+                "data": {
+                  "candidates": [
+                    {
+                      "id": "take",
+                      "media_url": "video/take.mp4",
+                      "status": "completed"
+                    }
+                  ],
+                  "reference_image_urls": [
+                    "uploads/image.png",
+                    "uploads/other.png"
+                  ],
+                  "reference_node_ids": [
+                    "image",
+                    "other"
+                  ]
+                },
+                "frame_id": null,
+                "height": 180.0,
+                "id": "clip",
+                "media_urls": [
+                  "video/take.mp4"
+                ],
+                "project_id": "history-project",
+                "prompt": "",
+                "source_project_id": null,
+                "status": "completed",
+                "title": "",
+                "type": "video",
+                "updated_at": 10.0,
+                "video_task_id": null,
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "original_index": 2,
+              "reference_media_urls": [
+                "video/take.mp4"
+              ],
+              "referenced_source_ids": [
+                "image",
+                "other"
+              ],
+              "source_proofs": [
+                {
+                  "source_node_id": "image",
+                  "source_type": "image",
+                  "target_node_id": "clip",
+                  "urls": [
+                    "uploads/image.png"
+                  ]
+                },
+                {
+                  "source_node_id": "other",
+                  "source_type": "image",
+                  "target_node_id": "clip",
+                  "urls": [
+                    "uploads/other.png"
+                  ]
+                }
+              ]
+            },
+            {
+              "node": {
+                "asset_id": null,
+                "created_at": 10.0,
+                "created_by": "user",
+                "data": {
+                  "parent_node_id": "target",
+                  "reference_role": "video_reference_audio"
+                },
+                "frame_id": null,
+                "height": 180.0,
+                "id": "audio",
+                "media_urls": [
+                  "audio/sound.mp3"
+                ],
+                "project_id": "history-project",
+                "prompt": "",
+                "source_project_id": null,
+                "status": "completed",
+                "title": "",
+                "type": "audio",
+                "updated_at": 10.0,
+                "video_task_id": null,
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "original_index": 4,
+              "reference_media_urls": [
+                "audio/sound.mp3"
+              ],
+              "referenced_source_ids": [],
+              "source_proofs": []
+            },
+            {
+              "node": {
+                "asset_id": null,
+                "created_at": 10.0,
+                "created_by": "user",
+                "data": {
+                  "parent_node_id": "target",
+                  "reference_role": "video_reference_image"
+                },
+                "frame_id": null,
+                "height": 180.0,
+                "id": "image",
+                "media_urls": [
+                  "uploads/image.png"
+                ],
+                "project_id": "history-project",
+                "prompt": "",
+                "source_project_id": null,
+                "status": "completed",
+                "title": "",
+                "type": "image",
+                "updated_at": 10.0,
+                "video_task_id": null,
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "original_index": 1,
+              "reference_media_urls": [
+                "uploads/image.png"
+              ],
+              "referenced_source_ids": [],
+              "source_proofs": []
+            },
+            {
+              "node": {
+                "asset_id": null,
+                "created_at": 10.0,
+                "created_by": "user",
+                "data": {
+                  "collapsed": false,
+                  "color": "#646cff"
+                },
+                "frame_id": null,
+                "height": 180.0,
+                "id": "region",
+                "media_urls": [],
+                "project_id": "history-project",
+                "prompt": "",
+                "source_project_id": null,
+                "status": "completed",
+                "title": "",
+                "type": "region",
+                "updated_at": 10.0,
+                "video_task_id": null,
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "original_index": 5,
+              "reference_media_urls": [],
+              "referenced_source_ids": [],
+              "source_proofs": []
+            }
+          ],
+          "project_id": "history-project",
+          "receipt_id": "delete-receipt",
+          "restore_base_revision": null,
+          "restored_at": null,
+          "schema_version": 1,
+          "sequence_change": {
+            "after": [],
+            "before": [
+              {
+                "candidateId": "take",
+                "gain": 1.0,
+                "id": "clip-entry",
+                "parentId": "clip",
+                "transition": {
+                  "duration": 0.0,
+                  "kind": "cut"
+                },
+                "trimEnd": null,
+                "trimStart": null
+              }
+            ],
+            "removed_node_ids": [
+              "clip",
+              "audio",
+              "image",
+              "region"
+            ]
+          }
+        }
+      ],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 10.0,
+          "created_by": "user",
+          "data": {
+            "reference_audio_urls": [],
+            "reference_image_urls": [
+              "uploads/other.png",
+              "standalone.png"
+            ],
+            "reference_node_ids": [
+              "other"
+            ]
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "target",
+          "media_urls": [],
+          "project_id": "history-project",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "completed",
+          "title": "",
+          "type": "video",
+          "updated_at": 20.0,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset_id": null,
+          "created_at": 10.0,
+          "created_by": "user",
+          "data": {
+            "parent_node_id": "target",
+            "reference_role": "video_reference_image"
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "other",
+          "media_urls": [
+            "uploads/other.png"
+          ],
+          "project_id": "history-project",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "completed",
+          "title": "",
+          "type": "image",
+          "updated_at": 20.0,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 1,
+      "sequence": [],
+      "source_project_id": null,
+      "title": "Receipt contract",
+      "updated_at": 20.0,
+      "sequence_export_jobs": [],
+      "generation_attempts": [],
+      "generation_request_receipts": []
+    },
+    "receipt_id": "delete-receipt"
+  },
+  "restored": {
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 10.0
+      },
+      "agent_turns": [],
+      "audio_tracks": [
+        {
+          "gain": 1.0,
+          "id": "audio-track",
+          "loop": false,
+          "node_id": "audio",
+          "start": 0.0,
+          "trim_end": null,
+          "trim_start": null
+        }
+      ],
+      "compacted_through_turn_id": null,
+      "created_at": 10.0,
+      "description": "",
+      "exports": [],
+      "id": "history-project",
+      "node_delete_receipts": [
+        {
+          "audio_tracks_change": {
+            "after": [],
+            "before": [
+              {
+                "gain": 1.0,
+                "id": "audio-track",
+                "loop": false,
+                "node_id": "audio",
+                "start": 0.0,
+                "trim_end": null,
+                "trim_start": null
+              }
+            ],
+            "removed_node_ids": [
+              "clip",
+              "audio",
+              "image",
+              "region"
+            ]
+          },
+          "base_revision": 0,
+          "data_change_groups": [
+            {
+              "after": {
+                "reference_audio_urls": {
+                  "exists": true,
+                  "value": []
+                },
+                "reference_image_urls": {
+                  "exists": true,
+                  "value": [
+                    "uploads/other.png",
+                    "standalone.png"
+                  ]
+                },
+                "reference_node_ids": {
+                  "exists": true,
+                  "value": [
+                    "other"
+                  ]
+                },
+                "reference_video_urls": {
+                  "exists": false,
+                  "value": null
+                }
+              },
+              "before": {
+                "reference_audio_urls": {
+                  "exists": true,
+                  "value": [
+                    "audio/sound.mp3"
+                  ]
+                },
+                "reference_image_urls": {
+                  "exists": true,
+                  "value": [
+                    "uploads/image.png",
+                    "uploads/other.png",
+                    "standalone.png"
+                  ]
+                },
+                "reference_node_ids": {
+                  "exists": true,
+                  "value": [
+                    "image",
+                    "other",
+                    "audio"
+                  ]
+                },
+                "reference_video_urls": {
+                  "exists": false,
+                  "value": null
+                }
+              },
+              "group": "references",
+              "node_id": "target",
+              "source_proofs": [
+                {
+                  "source_node_id": "audio",
+                  "source_type": "audio",
+                  "target_node_id": "target",
+                  "urls": [
+                    "audio/sound.mp3"
+                  ]
+                },
+                {
+                  "source_node_id": "image",
+                  "source_type": "image",
+                  "target_node_id": "target",
+                  "urls": [
+                    "uploads/image.png"
+                  ]
+                }
+              ]
+            },
+            {
+              "after": {
+                "parent_node_id": {
+                  "exists": true,
+                  "value": "target"
+                },
+                "reference_role": {
+                  "exists": true,
+                  "value": "video_reference_image"
+                }
+              },
+              "before": {
+                "parent_node_id": {
+                  "exists": true,
+                  "value": "clip"
+                },
+                "reference_role": {
+                  "exists": true,
+                  "value": "video_reference_image"
+                }
+              },
+              "group": "parent",
+              "node_id": "other",
+              "source_proofs": []
+            },
+            {
+              "after": {
+                "region_id": {
+                  "exists": false,
+                  "value": null
+                }
+              },
+              "before": {
+                "region_id": {
+                  "exists": true,
+                  "value": "region"
+                }
+              },
+              "group": "region",
+              "node_id": "target",
+              "source_proofs": []
+            }
+          ],
+          "deleted_at": 20.0,
+          "last_restore_skips": [],
+          "node_ids": [
+            "clip",
+            "audio",
+            "image",
+            "region"
+          ],
+          "node_snapshots": [
+            {
+              "node": {
+                "asset_id": null,
+                "created_at": 10.0,
+                "created_by": "user",
+                "data": {
+                  "candidates": [
+                    {
+                      "id": "take",
+                      "media_url": "video/take.mp4",
+                      "status": "completed"
+                    }
+                  ],
+                  "reference_image_urls": [
+                    "uploads/image.png",
+                    "uploads/other.png"
+                  ],
+                  "reference_node_ids": [
+                    "image",
+                    "other"
+                  ]
+                },
+                "frame_id": null,
+                "height": 180.0,
+                "id": "clip",
+                "media_urls": [
+                  "video/take.mp4"
+                ],
+                "project_id": "history-project",
+                "prompt": "",
+                "source_project_id": null,
+                "status": "completed",
+                "title": "",
+                "type": "video",
+                "updated_at": 10.0,
+                "video_task_id": null,
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "original_index": 2,
+              "reference_media_urls": [
+                "video/take.mp4"
+              ],
+              "referenced_source_ids": [
+                "image",
+                "other"
+              ],
+              "source_proofs": [
+                {
+                  "source_node_id": "image",
+                  "source_type": "image",
+                  "target_node_id": "clip",
+                  "urls": [
+                    "uploads/image.png"
+                  ]
+                },
+                {
+                  "source_node_id": "other",
+                  "source_type": "image",
+                  "target_node_id": "clip",
+                  "urls": [
+                    "uploads/other.png"
+                  ]
+                }
+              ]
+            },
+            {
+              "node": {
+                "asset_id": null,
+                "created_at": 10.0,
+                "created_by": "user",
+                "data": {
+                  "parent_node_id": "target",
+                  "reference_role": "video_reference_audio"
+                },
+                "frame_id": null,
+                "height": 180.0,
+                "id": "audio",
+                "media_urls": [
+                  "audio/sound.mp3"
+                ],
+                "project_id": "history-project",
+                "prompt": "",
+                "source_project_id": null,
+                "status": "completed",
+                "title": "",
+                "type": "audio",
+                "updated_at": 10.0,
+                "video_task_id": null,
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "original_index": 4,
+              "reference_media_urls": [
+                "audio/sound.mp3"
+              ],
+              "referenced_source_ids": [],
+              "source_proofs": []
+            },
+            {
+              "node": {
+                "asset_id": null,
+                "created_at": 10.0,
+                "created_by": "user",
+                "data": {
+                  "parent_node_id": "target",
+                  "reference_role": "video_reference_image"
+                },
+                "frame_id": null,
+                "height": 180.0,
+                "id": "image",
+                "media_urls": [
+                  "uploads/image.png"
+                ],
+                "project_id": "history-project",
+                "prompt": "",
+                "source_project_id": null,
+                "status": "completed",
+                "title": "",
+                "type": "image",
+                "updated_at": 10.0,
+                "video_task_id": null,
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "original_index": 1,
+              "reference_media_urls": [
+                "uploads/image.png"
+              ],
+              "referenced_source_ids": [],
+              "source_proofs": []
+            },
+            {
+              "node": {
+                "asset_id": null,
+                "created_at": 10.0,
+                "created_by": "user",
+                "data": {
+                  "collapsed": false,
+                  "color": "#646cff"
+                },
+                "frame_id": null,
+                "height": 180.0,
+                "id": "region",
+                "media_urls": [],
+                "project_id": "history-project",
+                "prompt": "",
+                "source_project_id": null,
+                "status": "completed",
+                "title": "",
+                "type": "region",
+                "updated_at": 10.0,
+                "video_task_id": null,
+                "width": 320.0,
+                "x": 0.0,
+                "y": 0.0
+              },
+              "original_index": 5,
+              "reference_media_urls": [],
+              "referenced_source_ids": [],
+              "source_proofs": []
+            }
+          ],
+          "project_id": "history-project",
+          "receipt_id": "delete-receipt",
+          "restore_base_revision": 1,
+          "restored_at": 30.0,
+          "schema_version": 1,
+          "sequence_change": {
+            "after": [],
+            "before": [
+              {
+                "candidateId": "take",
+                "gain": 1.0,
+                "id": "clip-entry",
+                "parentId": "clip",
+                "transition": {
+                  "duration": 0.0,
+                  "kind": "cut"
+                },
+                "trimEnd": null,
+                "trimStart": null
+              }
+            ],
+            "removed_node_ids": [
+              "clip",
+              "audio",
+              "image",
+              "region"
+            ]
+          }
+        }
+      ],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 10.0,
+          "created_by": "user",
+          "data": {
+            "reference_audio_urls": [
+              "audio/sound.mp3"
+            ],
+            "reference_image_urls": [
+              "uploads/image.png",
+              "uploads/other.png",
+              "standalone.png"
+            ],
+            "reference_node_ids": [
+              "image",
+              "other",
+              "audio"
+            ],
+            "region_id": "region"
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "target",
+          "media_urls": [],
+          "project_id": "history-project",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "completed",
+          "title": "",
+          "type": "video",
+          "updated_at": 30.0,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset_id": null,
+          "created_at": 10.0,
+          "created_by": "user",
+          "data": {
+            "parent_node_id": "target",
+            "reference_role": "video_reference_image"
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [
+            "uploads/image.png"
+          ],
+          "project_id": "history-project",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "completed",
+          "title": "",
+          "type": "image",
+          "updated_at": 10.0,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset_id": null,
+          "created_at": 10.0,
+          "created_by": "user",
+          "data": {
+            "candidates": [
+              {
+                "id": "take",
+                "media_url": "video/take.mp4",
+                "status": "completed"
+              }
+            ],
+            "reference_image_urls": [
+              "uploads/image.png",
+              "uploads/other.png"
+            ],
+            "reference_node_ids": [
+              "image",
+              "other"
+            ]
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "clip",
+          "media_urls": [
+            "video/take.mp4"
+          ],
+          "project_id": "history-project",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "completed",
+          "title": "",
+          "type": "video",
+          "updated_at": 10.0,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset_id": null,
+          "created_at": 10.0,
+          "created_by": "user",
+          "data": {
+            "parent_node_id": "clip",
+            "reference_role": "video_reference_image"
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "other",
+          "media_urls": [
+            "uploads/other.png"
+          ],
+          "project_id": "history-project",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "completed",
+          "title": "",
+          "type": "image",
+          "updated_at": 30.0,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset_id": null,
+          "created_at": 10.0,
+          "created_by": "user",
+          "data": {
+            "parent_node_id": "target",
+            "reference_role": "video_reference_audio"
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "audio",
+          "media_urls": [
+            "audio/sound.mp3"
+          ],
+          "project_id": "history-project",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "completed",
+          "title": "",
+          "type": "audio",
+          "updated_at": 10.0,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "asset_id": null,
+          "created_at": 10.0,
+          "created_by": "user",
+          "data": {
+            "collapsed": false,
+            "color": "#646cff"
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "region",
+          "media_urls": [],
+          "project_id": "history-project",
+          "prompt": "",
+          "source_project_id": null,
+          "status": "completed",
+          "title": "",
+          "type": "region",
+          "updated_at": 10.0,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 2,
+      "sequence": [
+        {
+          "candidateId": "take",
+          "gain": 1.0,
+          "id": "clip-entry",
+          "parentId": "clip",
+          "transition": {
+            "duration": 0.0,
+            "kind": "cut"
+          },
+          "trimEnd": null,
+          "trimStart": null
+        }
+      ],
+      "source_project_id": null,
+      "title": "Receipt contract",
+      "updated_at": 30.0,
+      "sequence_export_jobs": [],
+      "generation_attempts": [],
+      "generation_request_receipts": []
+    },
+    "receipt_id": "delete-receipt",
+    "restored_node_ids": [
+      "clip",
+      "audio",
+      "image",
+      "region"
+    ],
+    "skips": []
+  }
+}

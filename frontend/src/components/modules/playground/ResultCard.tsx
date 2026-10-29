@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Download, Video, Copy, Check, Replace, Crown, Bookmark } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { API_URL, playgroundApi } from '@/lib/api';
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from '@/lib/runtimeEnvironment';
+import { appAccessFetch } from '@/lib/appAccess';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
 
 interface ResultCardProps {
@@ -44,15 +46,23 @@ function getElapsedProgress(createdAt: string): number {
 }
 
 function FailedCard({ generation, onRetry, onDelete }: { generation: PlaygroundGeneration; onRetry?: (g: PlaygroundGeneration) => void; onDelete?: (g: PlaygroundGeneration) => void }) {
-  const { prompt, model_id, mode, created_at, error } = generation;
+  const { prompt, model_id, mode, created_at, error, status, attempts } = generation;
   const t = useTranslations('playground');
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const failedAttempts = attempts?.filter((attempt) => attempt.status === 'failed' || attempt.status === 'needs_confirmation' || attempt.status === 'cancelled') ?? [];
+  const statusLabel = status === 'needs_confirmation'
+    ? t('card.needsConfirmation')
+    : status === 'cancelled'
+      ? t('card.cancelled')
+      : t('card.failed');
+  const errorText = error ?? failedAttempts.map((attempt) => attempt.error).filter(Boolean).join('\n');
+
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!error) return;
-    navigator.clipboard.writeText(error).then(() => {
+    if (!errorText) return;
+    navigator.clipboard.writeText(errorText).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -67,10 +77,15 @@ function FailedCard({ generation, onRetry, onDelete }: { generation: PlaygroundG
       >
         <div className="absolute inset-0 bg-status-failed-bg" />
         <div className="relative text-center px-4 py-3 w-full">
-          <p className="font-mono text-[0.625rem] text-status-failed-fg uppercase mb-2">{t('card.failed')}</p>
-          {error && (
+          <p className="font-mono text-[0.625rem] text-status-failed-fg uppercase mb-2">{statusLabel}</p>
+          {errorText && (
             <p className={`text-[0.625rem] text-text-muted leading-relaxed break-all ${expanded ? '' : 'line-clamp-2'}`}>
-              {error}
+              {errorText}
+            </p>
+          )}
+          {failedAttempts.length > 0 && (
+            <p className="mt-2 font-mono text-[0.5625rem] uppercase tracking-[0.08em] text-status-failed-fg/70">
+              {t('card.partialAttempts', { count: failedAttempts.length })}
             </p>
           )}
         </div>
@@ -93,7 +108,7 @@ function FailedCard({ generation, onRetry, onDelete }: { generation: PlaygroundG
               × {t('card.delete')}
             </button>
           )}
-          {error && (
+          {errorText && (
             <button
               onClick={handleCopy}
               className="inline-flex items-center gap-1 px-2 py-1 rounded text-[0.625rem] font-medium text-text-muted hover:text-foreground hover:bg-hover-bg transition-colors"
@@ -129,21 +144,38 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
   const output = outputs[outputIndex];
   const isVideo = output?.media_type === 'video' || ['t2v', 'i2v', 'r2v', 'v2v'].includes(mode);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(false);
   const [imgError, setImgError] = useState(false);
 
   const saved = output?.saved_to_library ?? false;
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
-  const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
-  const useResultAsReference = usePlaygroundStore((s) => s.useResultAsReference);
+  const patchGenerationOutput = usePlaygroundStore((s) => s.patchGenerationOutput);
+  const addResultAsReference = usePlaygroundStore((s) => s.useResultAsReference);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
   const toggleFeatured = usePlaygroundStore((s) => s.toggleFeatured);
   const featured = output ? featuredByGen[generation.id] === output.id : false;
+  const activationRef = useRef(0);
+
+  useEffect(() => {
+    activationRef.current += 1;
+    const activation = activationRef.current;
+    const unsubscribe = subscribeRuntimeEnvironment(() => {
+      activationRef.current += 1;
+      setSaving(false);
+      setSaveError(false);
+    });
+    return () => {
+      unsubscribe();
+      if (activationRef.current === activation) activationRef.current += 1;
+    };
+  }, []);
 
   const handleDownload = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!mediaUrl) return;
     try {
-      const resp = await fetch(mediaUrl);
+      const resp = await appAccessFetch(mediaUrl);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -153,41 +185,44 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      window.open(mediaUrl, '_blank');
+    } catch (error) {
+      console.error('[Playground] Download failed:', error);
     }
   }, [mediaUrl, output]);
 
   const handleSaveToLibrary = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!output || saving) return;
+    if (!output || saving || saved) return;
+    const capturedRuntime = getRuntimeEnvironment();
+    const activation = activationRef.current;
     setSaving(true);
+    setSaveError(false);
     try {
-      const newSaved = !saved;
-      if (newSaved) {
-        await playgroundApi.saveToLibrary(generation.id, output.id);
-      }
-      const updatedOutputs = generation.outputs.map((o) =>
-        o.id === output.id ? { ...o, saved_to_library: newSaved } : o
-      );
-      updateGeneration({ ...generation, outputs: updatedOutputs });
+      await playgroundApi.saveToLibrary(generation.id, output.id);
+      if (activationRef.current !== activation || (capturedRuntime && !isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) return;
+      patchGenerationOutput(generation.id, output.id, { saved_to_library: true });
     } catch (err) {
+      if (activationRef.current === activation && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+        setSaveError(true);
+      }
       console.error('[Playground] Save to library failed:', err);
     } finally {
-      setSaving(false);
+      if (activationRef.current === activation && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+        setSaving(false);
+      }
     }
-  }, [generation, output, saved, saving, updateGeneration]);
+  }, [generation.id, output, patchGenerationOutput, saved, saving]);
 
   const handleUseAsReference = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (!output?.media_path) return;
-    useResultAsReference(output.media_path, output.media_type);
-  }, [output, useResultAsReference]);
+    addResultAsReference(output.media_path, output.media_type);
+  }, [addResultAsReference, output]);
 
   return (
     <div
       className={`group rounded-[20px] border bg-glass atelier-asset-card overflow-hidden transition cursor-pointer ${saved ? 'border-primary/40 ring-1 ring-primary/30' : 'border-glass-border hover:border-foreground/30'}`}
-      onClick={() => onOpenDetail?.(generation, output.id)}
+      onClick={() => onOpenDetail?.(generation, output?.id)}
     >
       {/* Media area */}
       <div className="relative overflow-hidden bg-elevated" style={{ aspectRatio: '16/9' }}>
@@ -292,12 +327,12 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
             {model_id || mode}
           </span>
           {/* Size or resolution tag */}
-          {generation.parameters.size && (
+          {typeof generation.parameters.size === 'string' && generation.parameters.size && (
             <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
               {(generation.parameters.size as string).replace(/[*x]/g, '×')}
             </span>
           )}
-          {generation.parameters.resolution && !generation.parameters.size && (
+          {typeof generation.parameters.resolution === 'string' && generation.parameters.resolution && !generation.parameters.size && (
             <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
               {generation.parameters.resolution as string}
             </span>
@@ -313,13 +348,16 @@ function CompletedCard({ generation, outputIndex, onGenerateVideo, onOpenDetail 
             </span>
           )}
         </div>
+        {saveError && (
+          <p className="mt-2 text-[0.625rem] text-status-failed-fg">{t('card.saveFailed')}</p>
+        )}
       </div>
     </div>
   );
 }
 
 export default function ResultCard({ generation, outputIndex = 0, onGenerateVideo, onRetry, onOpenDetail, onDelete }: ResultCardProps) {
-  const { status, prompt, model_id, mode, created_at } = generation;
+  const { status, prompt, model_id, mode, created_at, attempts, outputs } = generation;
   const t = useTranslations('playground');
 
   // ─── PROCESSING STATE ───────────────────────────────────────────────────────
@@ -373,11 +411,32 @@ export default function ResultCard({ generation, outputIndex = 0, onGenerateVide
     );
   }
 
-  // ─── FAILED STATE ───────────────────────────────────────────────────────────
-  if (status === 'failed') {
+  const terminalIssue = status === 'failed' || status === 'needs_confirmation' || status === 'cancelled';
+  const failedAttemptCount = attempts?.filter((attempt) => attempt.status === 'failed' || attempt.status === 'needs_confirmation' || attempt.status === 'cancelled').length ?? 0;
+  const issueLabel = status === 'needs_confirmation'
+    ? t('card.needsConfirmation')
+    : status === 'cancelled'
+      ? t('card.cancelled')
+      : failedAttemptCount > 0
+        ? t('card.partialAttempts', { count: failedAttemptCount })
+        : t('card.failed');
+
+  // ─── FAILED / NEEDS-HUMAN / CANCELLED STATE ───────────────────────────────
+  if (terminalIssue && outputs.length === 0) {
     return <FailedCard generation={generation} onRetry={onRetry} onDelete={onDelete} />;
   }
 
-  // ─── COMPLETED STATE ────────────────────────────────────────────────────────
-  return <CompletedCard generation={generation} outputIndex={outputIndex} onGenerateVideo={onGenerateVideo} onOpenDetail={onOpenDetail} />;
+  const showIssueBadge = terminalIssue || (status === 'completed' && failedAttemptCount > 0 && outputs.length > 0);
+
+  // ─── COMPLETED / PARTIAL OUTPUT STATE ──────────────────────────────────────
+  return (
+    <div className="relative">
+      {showIssueBadge && (
+        <div className="pointer-events-none absolute left-3 top-3 z-10 rounded border border-status-failed-border bg-status-failed-bg px-2 py-1 font-mono text-[0.5625rem] uppercase tracking-[0.08em] text-status-failed-fg">
+          {issueLabel}
+        </div>
+      )}
+      <CompletedCard generation={generation} outputIndex={outputIndex} onGenerateVideo={onGenerateVideo} onOpenDetail={onOpenDetail} />
+    </div>
+  );
 }

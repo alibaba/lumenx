@@ -1,12 +1,14 @@
 'use client';
 
 import { useEditor } from '@tiptap/react';
+import { useEffect } from 'react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import CharacterCount from '@tiptap/extension-character-count';
 import { useTranslations } from 'next-intl';
 import { useEditorStore } from '@/store/editorStore';
 import { scriptExtensions } from '../extensions';
+import { useDerivation } from './useDerivation';
 
 interface UseEditorSetupOptions {
   /** Initial document content (Tiptap JSON or HTML string) */
@@ -77,18 +79,25 @@ export function useEditorSetup(options: UseEditorSetupOptions = {}) {
     ],
     content: content || '',
     editable,
-    onUpdate: ({ editor }) => {
-      const store = useEditorStore.getState();
-      store.setDirty(true);
-      // Update word count derivation
-      const text = editor.state.doc.textContent;
-      store.updateDerivation({ wordCount: text.length });
+    onUpdate: () => {
+      useEditorStore.getState().setDirty(true);
     },
     onSelectionUpdate: ({ editor: _editor }) => {
       // Reserved for right panel context switching
       // Will inspect current node type and update activeRightPanel
     },
   });
+
+  useDerivation(editor);
+
+  useEffect(() => {
+    if (!editor) return;
+    // These flags describe this editor instance. The previous instance's
+    // document draft is retained by useAutoSave under its captured owner.
+    const store = useEditorStore.getState();
+    store.setDirty(false);
+    store.setLastSavedAt(null);
+  }, [editor]);
 
   const isReady = !!editor && !editor.isDestroyed;
 

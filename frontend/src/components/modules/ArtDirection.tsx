@@ -1,24 +1,76 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Palette, Wand2, Plus, Check, ChevronRight, Lock, RotateCcw, ArrowUp, AlertTriangle, X, Image as ImageIcon, Pencil } from "lucide-react";
-import { useProjectStore, type StyleConfig, type StylePreset, type StylePresetCategory } from "@/store/projectStore";
+import { useProjectStore, type Project, type StyleConfig, type StylePreset, type StylePresetCategory, type ArtDirection as ArtDirectionConfig } from "@/store/projectStore";
 import { api } from "@/lib/api";
+import { publicAssetPath } from "@/lib/publicAsset";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import { persistenceFailure, type PersistenceFailure } from "@/lib/persistenceFeedback";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 import { toast } from "@/store/toastStore";
+import { confirmRawProjectAck, ProjectReadbackError, readProjectOnce } from "@/lib/projectReadback";
+import { frameCommandSnapshot } from "@/lib/frameCommandSnapshot";
+
+type SessionEnvironment = string | null;
+type RuntimeSession = { environment: SessionEnvironment; generation: number | undefined };
+type StyleDraftSource = RuntimeSession & { projectId: string | null; token: number; revision: number | undefined };
+type ModalDraftSource = StyleDraftSource & { authoring: boolean };
+type SeriesReadSnapshot = {
+    id?: unknown;
+    revision?: unknown;
+    art_direction?: { style_config?: StyleConfig | null } | null;
+};
+
+function projectEnvironment(project: Project | null | undefined): SessionEnvironment {
+    return typeof project?.readEnvironment === "string" ? project.readEnvironment : null;
+}
+
+function commandKey(kind: "style" | "analyze" | "promote", projectId: string, environment: SessionEnvironment) {
+    return `art-direction-${kind}:${encodeURIComponent(environment ?? "unknown")}:${encodeURIComponent(projectId)}`;
+}
+
+async function confirmStyleAck(projectId: string, response: unknown, expectedRevision: number, isCurrent: () => boolean) {
+    try {
+        const saved = frameCommandSnapshot(projectId, response);
+        if (saved.revision !== expectedRevision && saved.revision !== expectedRevision + 1) {
+            throw new ProjectReadbackError("Unexpected style command revision");
+        }
+        await confirmRawProjectAck(projectId, response, { isCurrent });
+        return saved.revision;
+    } catch (error) {
+        if (error instanceof ProjectReadbackError) throw error;
+        throw new ProjectReadbackError("Style command acknowledgement could not be confirmed");
+    }
+}
+
+
+function matchesSeriesVersion(project: Project | null | undefined, seriesId: string, revision: number, session: RuntimeSession) {
+    const captured = project?.read_versions?.series;
+    return !!project
+        && !!session.environment
+        && project.readEnvironment === session.environment
+        && isCurrentRuntimeEnvironment(session.environment, session.generation)
+        && !project.sharedAssetsNeedRefresh
+        && project.series_id === seriesId
+        && captured?.id === seriesId
+        && captured.revision === revision;
+}
 
 export default function ArtDirection() {
     const ta = useTranslations("artDirection");
+    const tp = useTranslations("persistence");
+    const tf = useTranslations("frameCommands");
     const tStep = useTranslations("stepHeader");
-    const {
-        currentProject,
-        updateProject,
-        isAnalyzingArtStyle,
-        analyzeArtStyle
-    } = useProjectStore();
+    const { currentProject } = useProjectStore();
+    const runtimeSessionFor = (environment: SessionEnvironment): RuntimeSession => {
+        const runtime = getRuntimeEnvironment();
+        return { environment, generation: runtime?.key === environment ? runtime.generation : undefined };
+    };
+    const isActiveRuntimeEnvironment = (session: RuntimeSession) => !!session.environment && isCurrentRuntimeEnvironment(session.environment, session.generation);
 
     const [selectedStyle, setSelectedStyle] = useState<StyleConfig | null>(null);
     const [customStyles, setCustomStyles] = useState<StyleConfig[]>([]);
@@ -47,6 +99,7 @@ export default function ArtDirection() {
     const [editingPositive, setEditingPositive] = useState("");
     const [editingNegative, setEditingNegative] = useState("");
     const [isSaving, setIsSaving] = useState(false);
+    const [isAnalyzingArtStyle, setIsAnalyzingArtStyle] = useState(false);
 
     const filteredPresets = useMemo(() => {
         if (activeCategory === "all") return presets;
@@ -55,27 +108,198 @@ export default function ArtDirection() {
 
     // Series baseline (inherit source)
     const [seriesBaseline, setSeriesBaseline] = useState<StyleConfig | null>(null);
+    const [seriesVersion, setSeriesVersion] = useState<{ projectId: string; seriesId: string; revision: number } | null>(null);
+    const [promotionError, setPromotionError] = useState<PersistenceFailure | null>(null);
+    const [readbackError, setReadbackError] = useState<string | null>(null);
+    const [styleFailure, setStyleFailure] = useState<PersistenceFailure | null>(null);
+    const [isReadingLatest, setIsReadingLatest] = useState(false);
+    const [latestReadFailed, setLatestReadFailed] = useState(false);
+    const [latestSavedStyle, setLatestSavedStyle] = useState<StyleConfig | null | undefined>(undefined);
+    const draftDirtyRef = useRef(false);
+    const draftVersionRef = useRef(0);
+    const draftBaseRevisionRef = useRef<number | undefined>(undefined);
+    const pendingStyleRef = useRef<object | null>(null);
+    const modalDraftSourceRef = useRef<ModalDraftSource | null>(null);
+    const aiModalDraftSourceRef = useRef<ModalDraftSource | null>(null);
+    const overrideDraftSourceRef = useRef<StyleDraftSource | null>(null);
+    const promotingProjects = useRef(new Set<string>());
+    const view = useMemo(() => ({ projectId: currentProject?.id, seriesId: currentProject?.series_id }), [currentProject?.id, currentProject?.series_id]);
+    const activeView = useRef(view);
+    activeView.current = view;
     const [seriesBaselineLoading, setSeriesBaselineLoading] = useState(false);
     const [bannerBusy, setBannerBusy] = useState(false);
     const [pendingOverrideStyle, setPendingOverrideStyle] = useState<StyleConfig | null>(null);
     const [overrideAccepted, setOverrideAccepted] = useState(false);
+    const currentEnvironment = projectEnvironment(currentProject);
+    const initialRuntimeSession = runtimeSessionFor(currentEnvironment);
+    const sessionRef = useRef({ projectId: currentProject?.id ?? null, environment: currentEnvironment, generation: initialRuntimeSession.generation, token: 0 });
+    const lastHydratedProjectRef = useRef<string | null>(null);
 
     useEffect(() => {
+        const projectId = currentProject?.id ?? null;
+        const environment = projectEnvironment(currentProject);
+        const runtimeSession = runtimeSessionFor(environment);
+        const key = `${environment}:${projectId ?? ""}`;
+        if (sessionRef.current.projectId !== projectId
+            || sessionRef.current.environment !== environment
+            || sessionRef.current.generation !== runtimeSession.generation) {
+            sessionRef.current = { projectId, environment, generation: runtimeSession.generation, token: sessionRef.current.token + 1 };
+            setIsSaving(false);
+            setIsAnalyzingArtStyle(false);
+            setReadbackError(null);
+            setStyleFailure(null);
+            setIsReadingLatest(false);
+            setLatestReadFailed(false);
+            setLatestSavedStyle(undefined);
+            pendingStyleRef.current = null;
+            modalDraftSourceRef.current = null;
+            aiModalDraftSourceRef.current = null;
+            overrideDraftSourceRef.current = null;
+            setModalPreset(null);
+            setModalEditing(false);
+            setAiModalStyle(null);
+            setAiModalEditing(false);
+            setPendingOverrideStyle(null);
+            draftBaseRevisionRef.current = undefined;
+            draftDirtyRef.current = false;
+            draftVersionRef.current += 1;
+        }
+        if (lastHydratedProjectRef.current !== key) {
+            lastHydratedProjectRef.current = key;
+            setAiRecommendations(currentProject?.art_direction?.ai_recommendations ?? []);
+        }
+    }, [currentProject]);
+
+    useEffect(() => () => {
+        sessionRef.current = {
+            projectId: sessionRef.current.projectId,
+            environment: sessionRef.current.environment,
+            generation: sessionRef.current.generation,
+            token: sessionRef.current.token + 1,
+        };
+    }, []);
+
+    const isActiveSession = (projectId: string, environment: SessionEnvironment, generation: number | undefined, token: number) => {
+        const activeProject = useProjectStore.getState().currentProject;
+        return sessionRef.current.projectId === projectId
+            && sessionRef.current.environment === environment
+            && sessionRef.current.generation === generation
+            && sessionRef.current.token === token
+            && activeProject?.id === projectId
+            && projectEnvironment(activeProject) === environment
+            && !!environment
+            && isCurrentRuntimeEnvironment(environment, generation);
+    };
+
+    const captureDraftSource = (): StyleDraftSource => ({ ...sessionRef.current, revision: draftBaseRevisionRef.current });
+    const isCurrentDraftSource = (source: StyleDraftSource) => !!source.projectId
+        && isActiveSession(source.projectId, source.environment, source.generation, source.token);
+    const isCurrentModalSource = (source: ModalDraftSource | null, current: ModalDraftSource | null): source is ModalDraftSource =>
+        source !== null && source === current && isCurrentDraftSource(source);
+
+    const beginOperation = (key: string) => {
+        const state = useProjectStore.getState();
+        if (state.runningOps[key]) return false;
+        state.setRunningOp(key, true);
+        return true;
+    };
+
+    const endOperation = (key: string) => useProjectStore.getState().setRunningOp(key, false);
+
+    const markDraftDirty = () => {
+        draftDirtyRef.current = true;
+        draftVersionRef.current += 1;
+    };
+
+    const clearDraftDirtyIfUnchanged = (capturedVersion: number) => {
+        if (draftVersionRef.current === capturedVersion) draftDirtyRef.current = false;
+    };
+
+    const captureStyleRevision = () => {
+        const revision = draftBaseRevisionRef.current;
+        if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0) {
+            setStyleFailure("missingRevision");
+            return undefined;
+        }
+        return revision;
+    };
+
+    const handleReadLatestStyle = async () => {
+        if (!currentProject || pendingStyleRef.current || readbackError) return;
+        const { projectId, environment, generation, token } = sessionRef.current;
+        if (!projectId || !isActiveRuntimeEnvironment({ environment, generation })) return;
+        const isActive = () => isActiveSession(projectId, environment, generation, token);
+        const owner = {};
+        pendingStyleRef.current = owner;
+        draftDirtyRef.current = true;
+        setIsReadingLatest(true);
+        setLatestReadFailed(false);
+        try {
+            const latest = await readProjectOnce(projectId, undefined, { isCurrent: isActive });
+            if (!isActive()) return;
+            draftBaseRevisionRef.current = latest.revision;
+            setLatestSavedStyle(latest.art_direction?.style_config ?? null);
+            setStyleFailure(null);
+        } catch {
+            if (isActive()) setLatestReadFailed(true);
+        } finally {
+            if (pendingStyleRef.current === owner) pendingStyleRef.current = null;
+            if (isActive()) setIsReadingLatest(false);
+        }
+    };
+
+    useEffect(() => {
+        let cancelled = false;
         setOverrideAccepted(false);
         setPendingOverrideStyle(null);
+        setSeriesVersion(null);
+        setPromotionError(null);
+        setSeriesBaseline(null);
+        setBannerBusy(promotingProjects.current.has(currentProject?.id ?? ""));
         const seriesId = currentProject?.series_id;
-        if (!seriesId) {
-            setSeriesBaseline(null);
-            return;
+        const projectId = currentProject?.id;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const runtimeSession = { environment, generation };
+        const token = sessionRef.current.token;
+        const isActive = () => !cancelled
+            && isActiveSession(projectId ?? "", environment, generation, token)
+            && activeView.current.seriesId === seriesId;
+        if (!seriesId || !projectId || !isActiveRuntimeEnvironment(runtimeSession)) {
+            setSeriesBaselineLoading(false);
+            return () => { cancelled = true; };
         }
         setSeriesBaselineLoading(true);
         api.getSeries(seriesId)
-            .then((s: any) => {
+            .then(async (s: SeriesReadSnapshot) => {
+                if (!isActive()) return;
+                const revision = s.revision;
+                if (s?.id !== seriesId || !Number.isSafeInteger(revision) || (revision as number) < 0) {
+                    setPromotionError("missingRevision");
+                    return;
+                }
+                const accepted = useProjectStore.getState().applySeriesReadSnapshot(projectId, seriesId, s);
+                if (!accepted) {
+                    try {
+                        await readProjectOnce(projectId, undefined, { isCurrent: isActive });
+                    } catch {
+                        if (isActive()) setReadbackError(tf("readFailed"));
+                        return;
+                    }
+                }
+                if (!isActive()) return;
+                const confirmedProject = useProjectStore.getState().currentProject;
+                if (!matchesSeriesVersion(confirmedProject, seriesId, revision as number, runtimeSession)) {
+                    setPromotionError("missingRevision");
+                    return;
+                }
                 setSeriesBaseline(s?.art_direction?.style_config ?? null);
+                setSeriesVersion({ projectId, seriesId, revision: revision as number });
             })
-            .catch(() => setSeriesBaseline(null))
-            .finally(() => setSeriesBaselineLoading(false));
-    }, [currentProject?.series_id, currentProject?.id]);
+            .catch(() => { if (isActive()) setPromotionError("missingRevision"); })
+            .finally(() => { if (isActive()) setSeriesBaselineLoading(false); });
+        return () => { cancelled = true; };
+    }, [currentProject?.series_id, currentProject?.id, currentProject?.readEnvironment, tf]);
 
     const projectStyle = currentProject?.art_direction?.style_config ?? null;
     const inSeries = !!currentProject?.series_id;
@@ -85,45 +309,114 @@ export default function ArtDirection() {
     const isPreview = isInherit && overrideAccepted;
 
     const handleResetToSeries = async () => {
-        if (!currentProject?.id) return;
+        if (!currentProject?.id || pendingStyleRef.current || styleFailure === "conflict") return;
+        const expectedRevision = captureStyleRevision();
+        if (expectedRevision === undefined) return;
+        const projectId = currentProject.id;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const runtimeSession = { environment, generation };
+        const token = sessionRef.current.token;
+        const key = `${commandKey("style", projectId, environment)}:${generation}:${token}`;
+        const isActive = () => isActiveSession(projectId, environment, generation, token);
+        const draftVersion = draftVersionRef.current;
+        if (readbackError || !isActiveRuntimeEnvironment(runtimeSession) || !beginOperation(key)) return;
+        const owner = {};
+        pendingStyleRef.current = owner;
         setBannerBusy(true);
+        setReadbackError(null);
+        setStyleFailure(null);
+        setLatestReadFailed(false);
         try {
-            const fresh = await api.clearProjectArtDirection(currentProject.id);
-            updateProject(currentProject.id, fresh);
-            setSelectedStyle(null);
-            setEditingName("");
-            setEditingPositive("");
-            setEditingNegative("");
-            setIsModified(false);
-            setOverrideAccepted(false);
+            const fresh = await api.clearProjectArtDirection(projectId, expectedRevision);
+            if (!isActive()) return;
+            const savedRevision = await confirmStyleAck(projectId, fresh, expectedRevision, isActive);
+            if (!isActive()) return;
+            draftBaseRevisionRef.current = savedRevision;
+            setLatestSavedStyle(undefined);
+            if (draftVersionRef.current === draftVersion) {
+                setSelectedStyle(null);
+                setEditingName("");
+                setEditingPositive("");
+                setEditingNegative("");
+                setIsModified(false);
+                setOverrideAccepted(false);
+                clearDraftDirtyIfUnchanged(draftVersion);
+            }
             toast.success(ta("toastResetDone"), {
-                projectId: currentProject.id,
+                projectId,
                 projectTitle: currentProject.title,
             });
         } catch (err) {
+            if (!isActive()) return;
+            draftDirtyRef.current = true;
+            setLatestSavedStyle(undefined);
             console.error("Reset to series baseline failed", err);
-            toast.error(ta("toastResetFailed"), {
+            if (err instanceof ProjectReadbackError) setReadbackError(tf("savedReadFailed"));
+            else setStyleFailure(persistenceFailure(err));
+            toast.error(err instanceof ProjectReadbackError ? tf("savedReadFailed") : ta("toastResetFailed"), {
                 projectId: currentProject?.id,
                 projectTitle: currentProject?.title,
             });
         } finally {
-            setBannerBusy(false);
+            if (pendingStyleRef.current === owner) pendingStyleRef.current = null;
+            if (isActive()) setBannerBusy(false);
+            endOperation(key);
         }
     };
 
     const handlePromoteToSeries = async () => {
-        if (!currentProject?.series_id || !currentProject?.art_direction) return;
+        if (!currentProject?.series_id || !currentProject?.art_direction || seriesBaselineLoading
+            || promotingProjects.current.has(currentProject.id) || promotionError === "conflict" || readbackError) return;
+        if (!seriesVersion || seriesVersion.projectId !== currentProject.id || seriesVersion.seriesId !== currentProject.series_id) {
+            setPromotionError("missingRevision");
+            return;
+        }
+        const projectId = currentProject.id;
+        const seriesId = currentProject.series_id;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const runtimeSession = { environment, generation };
+        const token = sessionRef.current.token;
+        const isActive = () => isActiveSession(projectId, environment, generation, token) && activeView.current.seriesId === seriesId;
+        const key = commandKey("promote", projectId, environment);
+        if (!isActiveRuntimeEnvironment(runtimeSession) || !beginOperation(key)) return;
+        promotingProjects.current.add(projectId);
         setBannerBusy(true);
+        setPromotionError(null);
+        setReadbackError(null);
         try {
-            await api.updateSeries(currentProject.series_id, {
-                art_direction: currentProject.art_direction as any,
+            const saved = await api.updateSeries(seriesId, {
+                expected_revision: seriesVersion.revision,
+                art_direction: currentProject.art_direction as ArtDirectionConfig,
             });
-            const s = await api.getSeries(currentProject.series_id);
-            setSeriesBaseline(s?.art_direction?.style_config ?? null);
+            if (!isActive()) return;
+            if (saved?.id !== seriesId || !Number.isSafeInteger(saved?.revision) || saved.revision < 0) {
+                setPromotionError("missingRevision");
+                return;
+            }
+            const accepted = useProjectStore.getState().applySeriesReadSnapshot(projectId, seriesId, saved);
+            if (!accepted) {
+                try {
+                    await readProjectOnce(projectId, undefined, { isCurrent: isActive });
+                } catch {
+                    if (isActive()) setReadbackError(tf("savedReadFailed"));
+                    return;
+                }
+            }
+            if (!isActive()) return;
+            if (!matchesSeriesVersion(useProjectStore.getState().currentProject, seriesId, saved.revision, runtimeSession)) {
+                setPromotionError("missingRevision");
+                return;
+            }
+            setSeriesBaseline(saved?.art_direction?.style_config ?? null);
+            setSeriesVersion({ ...seriesVersion, revision: saved.revision });
         } catch (err) {
-            console.error("Promote to series baseline failed", err);
+            if (isActive()) setPromotionError(persistenceFailure(err));
         } finally {
-            setBannerBusy(false);
+            promotingProjects.current.delete(projectId);
+            if (isActive()) setBannerBusy(false);
+            endOperation(key);
         }
     };
 
@@ -131,7 +424,7 @@ export default function ArtDirection() {
         loadPresets();
     }, []);
 
-    const resolvePositivePrompt = (style: StyleConfig | null): string => {
+    const resolvePositivePrompt = useCallback((style: StyleConfig | null): string => {
         if (!style) return "";
         if (style.positive_prompt) return style.positive_prompt;
         if (style.id && presets.length > 0) {
@@ -139,34 +432,42 @@ export default function ArtDirection() {
             if (match) return match.positive_prompt || "";
         }
         return "";
-    };
+    }, [presets]);
 
     useEffect(() => {
+        const projectKey = `${projectEnvironment(currentProject) ?? "unknown"}:${currentProject?.id ?? ""}`;
+        if ((draftDirtyRef.current || pendingStyleRef.current || styleFailure || readbackError)
+            && lastHydratedProjectRef.current === projectKey) return;
+        draftBaseRevisionRef.current = currentProject?.revision;
         const projectAD = currentProject?.art_direction;
         const projectStyleConfig = projectAD?.style_config ?? null;
+        const hydrateStyle = (style: StyleConfig) => {
+            setSelectedStyle(style);
+            setEditingName(style.name || "");
+            setEditingPositive(resolvePositivePrompt(style));
+            setEditingNegative(style.negative_prompt || "");
+            setIsModified(false);
+            draftDirtyRef.current = false;
+        };
         if (projectStyleConfig) {
-            setSelectedStyle(projectStyleConfig);
-            setEditingName(projectStyleConfig.name || "");
-            setEditingPositive(resolvePositivePrompt(projectStyleConfig));
-            setEditingNegative(projectStyleConfig.negative_prompt || "");
+            hydrateStyle(projectStyleConfig);
             setCustomStyles(projectAD?.custom_styles || []);
             if (projectAD?.ai_recommendations && projectAD.ai_recommendations.length > 0) {
                 setAiRecommendations(projectAD.ai_recommendations);
             }
         } else if (seriesBaseline) {
-            setSelectedStyle(seriesBaseline);
-            setEditingName(seriesBaseline.name || "");
-            setEditingPositive(resolvePositivePrompt(seriesBaseline));
-            setEditingNegative(seriesBaseline.negative_prompt || "");
+            hydrateStyle(seriesBaseline);
             setCustomStyles(projectAD?.custom_styles || []);
+        } else {
+            setSelectedStyle(null);
+            setEditingName("");
+            setEditingPositive("");
+            setEditingNegative("");
+            setIsModified(false);
+            setCustomStyles(projectAD?.custom_styles || []);
+            draftDirtyRef.current = false;
         }
-    }, [currentProject?.id, currentProject?.art_direction, seriesBaseline, presets]);
-
-    useEffect(() => {
-        if (currentProject?.art_direction?.ai_recommendations) {
-            setAiRecommendations(currentProject.art_direction.ai_recommendations);
-        }
-    }, [currentProject?.art_direction?.ai_recommendations]);
+    }, [currentProject, seriesBaseline, resolvePositivePrompt, isSaving, bannerBusy, isReadingLatest, styleFailure, readbackError]);
 
     const loadPresets = async () => {
         try {
@@ -179,18 +480,31 @@ export default function ArtDirection() {
     };
 
     const handleAnalyze = async () => {
-        if (!currentProject) return;
+        if (!currentProject || readbackError) return;
+        const projectId = currentProject.id;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const runtimeSession = { environment, generation };
+        const token = sessionRef.current.token;
+        const key = commandKey("analyze", projectId, environment);
+        const isActive = () => isActiveSession(projectId, environment, generation, token);
+        if (!isActiveRuntimeEnvironment(runtimeSession) || !beginOperation(key)) return;
+        setIsAnalyzingArtStyle(true);
         try {
-            await analyzeArtStyle(
-                currentProject.id,
-                currentProject.originalText || currentProject.title
-            );
+            const data = await api.analyzeScriptForStyles(projectId, currentProject.originalText || currentProject.title);
+            if (!isActive()) return;
+            setAiRecommendations(data?.recommendations ?? []);
+            markDraftDirty();
         } catch (error) {
+            if (!isActive()) return;
             console.error("Failed to analyze script:", error);
             toast.error(ta("analysisFailed"), {
                 projectId: currentProject?.id,
                 projectTitle: currentProject?.title,
             });
+        } finally {
+            if (isActive()) setIsAnalyzingArtStyle(false);
+            endOperation(key);
         }
     };
 
@@ -215,12 +529,14 @@ export default function ArtDirection() {
         setEditingPositive(normalizedStyle.positive_prompt);
         setEditingNegative(normalizedStyle.negative_prompt);
         setIsModified(false);
+        markDraftDirty();
     };
 
     const handleSelectStyle = (style: StyleConfig | StylePreset) => {
         const normalizedStyle = toStyleConfig(style);
         const isSeriesBaseline = isInherit && seriesBaseline && normalizedStyle.id === seriesBaseline.id;
         if (isInherit && !overrideAccepted && !isSeriesBaseline) {
+            overrideDraftSourceRef.current = captureDraftSource();
             setPendingOverrideStyle(normalizedStyle);
             return;
         }
@@ -228,7 +544,9 @@ export default function ArtDirection() {
     };
 
     const confirmOverridePreview = () => {
-        if (!pendingOverrideStyle) return;
+        const source = overrideDraftSourceRef.current;
+        if (!pendingOverrideStyle || !source || !isCurrentDraftSource(source)) return;
+        draftBaseRevisionRef.current = source.revision;
         setOverrideAccepted(true);
         applyStyleToState(pendingOverrideStyle);
         toast.info(ta("toastOverridePreviewing", { name: pendingOverrideStyle.name }), {
@@ -236,39 +554,50 @@ export default function ArtDirection() {
             projectTitle: currentProject?.title,
             body: ta("toastOverridePreviewingBody"),
         });
+        overrideDraftSourceRef.current = null;
         setPendingOverrideStyle(null);
     };
 
-    const cancelOverrideConfirm = () => setPendingOverrideStyle(null);
+    const cancelOverrideConfirm = () => {
+        overrideDraftSourceRef.current = null;
+        setPendingOverrideStyle(null);
+    };
 
     // Modal: open preset detail
     const openPresetModal = (preset: StylePreset) => {
+        modalDraftSourceRef.current = { ...captureDraftSource(), authoring: false };
         setModalPreset(preset);
         setModalEditing(false);
         setModalPositive(preset.positive_prompt);
         setModalNegative(preset.negative_prompt);
     };
 
-    const closePresetModal = () => {
+    const closePresetModal = (source: ModalDraftSource | null) => {
+        if (!isCurrentModalSource(source, modalDraftSourceRef.current)) return;
+        modalDraftSourceRef.current = null;
         setModalPreset(null);
         setModalEditing(false);
     };
 
     // AI Recommendation modal handlers
     const openAiModal = (style: StyleConfig) => {
+        aiModalDraftSourceRef.current = { ...captureDraftSource(), authoring: false };
         setAiModalStyle(style);
         setAiModalEditing(false);
         setAiModalPositive(style.positive_prompt);
         setAiModalNegative(style.negative_prompt);
     };
 
-    const closeAiModal = () => {
+    const closeAiModal = (source: ModalDraftSource | null) => {
+        if (!isCurrentModalSource(source, aiModalDraftSourceRef.current)) return;
+        aiModalDraftSourceRef.current = null;
         setAiModalStyle(null);
         setAiModalEditing(false);
     };
 
-    const handleAiModalApply = () => {
-        if (!aiModalStyle) return;
+    const handleAiModalApply = (source: ModalDraftSource | null) => {
+        if (!aiModalStyle || !isCurrentModalSource(source, aiModalDraftSourceRef.current)) return;
+        const draftSource = source.authoring ? source : { ...source, revision: draftBaseRevisionRef.current };
         const isCustomized = aiModalEditing && (
             aiModalPositive !== aiModalStyle.positive_prompt ||
             aiModalNegative !== aiModalStyle.negative_prompt
@@ -284,22 +613,26 @@ export default function ArtDirection() {
 
         const isSeriesBaseline = isInherit && seriesBaseline && config.id === seriesBaseline.id;
         if (isInherit && !overrideAccepted && !isSeriesBaseline) {
+            overrideDraftSourceRef.current = draftSource;
             setPendingOverrideStyle(config);
-            closeAiModal();
+            closeAiModal(source);
             return;
         }
 
+        draftBaseRevisionRef.current = draftSource.revision;
         setSelectedStyle(config);
         setEditingName(config.name);
         setEditingPositive(config.positive_prompt);
         setEditingNegative(config.negative_prompt);
         setIsModified(isCustomized);
-        closeAiModal();
+        markDraftDirty();
+        closeAiModal(source);
     };
 
     // Modal: use this style (original or customized)
-    const handleModalApplyStyle = () => {
-        if (!modalPreset) return;
+    const handleModalApplyStyle = (source: ModalDraftSource | null) => {
+        if (!modalPreset || !isCurrentModalSource(source, modalDraftSourceRef.current)) return;
+        const draftSource = source.authoring ? source : { ...source, revision: draftBaseRevisionRef.current };
         const isCustomized = modalEditing && (
             modalPositive !== modalPreset.positive_prompt ||
             modalNegative !== modalPreset.negative_prompt
@@ -316,17 +649,20 @@ export default function ArtDirection() {
         // Go through override check if in series inherit mode
         const isSeriesBaseline = isInherit && seriesBaseline && config.id === seriesBaseline.id;
         if (isInherit && !overrideAccepted && !isSeriesBaseline) {
+            overrideDraftSourceRef.current = draftSource;
             setPendingOverrideStyle(config);
-            closePresetModal();
+            closePresetModal(source);
             return;
         }
 
+        draftBaseRevisionRef.current = draftSource.revision;
         setSelectedStyle(config);
         setEditingName(config.name);
         setEditingPositive(config.positive_prompt);
         setEditingNegative(config.negative_prompt);
         setIsModified(isCustomized);
-        closePresetModal();
+        markDraftDirty();
+        closePresetModal(source);
     };
 
     // Restore to original preset prompts
@@ -337,10 +673,12 @@ export default function ArtDirection() {
             setEditingPositive(original.positive_prompt);
             setEditingNegative(original.negative_prompt);
             setIsModified(false);
+            markDraftDirty();
         }
     };
 
     const handleApply = async () => {
+        if (isSaving || pendingStyleRef.current || readbackError || styleFailure === "conflict") return;
         if (!currentProject || !selectedStyle) {
             toast.warning(ta("selectStyleFirst"), {
                 projectId: currentProject?.id,
@@ -348,6 +686,8 @@ export default function ArtDirection() {
             });
             return;
         }
+        const expectedRevision = captureStyleRevision();
+        if (expectedRevision === undefined) return;
 
         const finalConfig: StyleConfig = {
             ...selectedStyle,
@@ -356,32 +696,66 @@ export default function ArtDirection() {
             negative_prompt: editingNegative
         };
 
+        const projectId = currentProject.id;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const runtimeSession = { environment, generation };
+        const token = sessionRef.current.token;
+        const key = `${commandKey("style", projectId, environment)}:${generation}:${token}`;
+        const isActive = () => isActiveSession(projectId, environment, generation, token);
+        const draftVersion = draftVersionRef.current;
+        if (!isActiveRuntimeEnvironment(runtimeSession) || !beginOperation(key)) return;
+        const owner = {};
+        pendingStyleRef.current = owner;
         setIsSaving(true);
+        setReadbackError(null);
+        setStyleFailure(null);
+        setLatestReadFailed(false);
         try {
             const updated = await api.saveArtDirection(
-                currentProject.id,
+                projectId,
                 finalConfig.id,
                 finalConfig,
                 customStyles,
-                aiRecommendations
+                aiRecommendations,
+                expectedRevision,
             );
-            updateProject(currentProject.id, updated);
-            setOverrideAccepted(false);
+            if (!isActive()) return;
+            const savedRevision = await confirmStyleAck(projectId, updated, expectedRevision, isActive);
+            if (!isActive()) return;
+            draftBaseRevisionRef.current = savedRevision;
+            setLatestSavedStyle(undefined);
+            if (draftVersionRef.current === draftVersion) {
+                clearDraftDirtyIfUnchanged(draftVersion);
+                setOverrideAccepted(false);
+            }
             toast.success(ta("styleApplied"), {
-                projectId: currentProject.id,
+                projectId,
                 projectTitle: currentProject.title,
                 body: ta("styleAppliedBody", { name: finalConfig.name }),
             });
         } catch (error) {
+            if (!isActive()) return;
+            draftDirtyRef.current = true;
+            setLatestSavedStyle(undefined);
             console.error("Failed to save art direction:", error);
-            toast.error(ta("saveFailedShort"), {
+            if (error instanceof ProjectReadbackError) setReadbackError(tf("savedReadFailed"));
+            else setStyleFailure(persistenceFailure(error));
+            toast.error(error instanceof ProjectReadbackError ? tf("savedReadFailed") : ta("saveFailedShort"), {
                 projectId: currentProject?.id,
                 projectTitle: currentProject?.title,
             });
         } finally {
-            setIsSaving(false);
+            if (pendingStyleRef.current === owner) pendingStyleRef.current = null;
+            if (isActive()) setIsSaving(false);
+            endOperation(key);
         }
     };
+
+    // Exiting AnimatePresence children keep these callbacks. Capture the exact
+    // modal instance so an old callback cannot borrow a newer session's ref.
+    const modalSource = modalDraftSourceRef.current;
+    const aiModalSource = aiModalDraftSourceRef.current;
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
@@ -450,6 +824,7 @@ export default function ArtDirection() {
                                     variant="secondary"
                                     size="sm"
                                     loading={bannerBusy}
+                                    disabled={isSaving || isReadingLatest || !!readbackError || styleFailure === "conflict"}
                                     leftIcon={<RotateCcw />}
                                     onClick={handleResetToSeries}
                                 >
@@ -470,12 +845,36 @@ export default function ArtDirection() {
                                     loading={bannerBusy}
                                     leftIcon={<ArrowUp />}
                                     onClick={handlePromoteToSeries}
+                                    disabled={!seriesVersion || promotionError === "conflict"}
                                 >
                                     {ta("promoteBtn")}
                                 </WorkflowActionButton>
                             </div>
                         )}
                     </>
+                )}
+                {promotionError && <p role="alert" className="text-sm text-status-failed-fg">{tp(promotionError)}</p>}
+                {readbackError && <p role="alert" className="text-sm text-status-failed-fg">{readbackError}</p>}
+                {styleFailure && <p role="alert" className="text-sm text-status-failed-fg">{tp(styleFailure)}</p>}
+                {(styleFailure === "conflict" || styleFailure === "missingRevision") && (
+                    <div className="flex items-center gap-3 text-sm text-text-secondary">
+                        <span>{tf("conflictDraftKept")}</span>
+                        <WorkflowActionButton variant="secondary" size="sm" loading={isReadingLatest} onClick={handleReadLatestStyle}>
+                            {tf("readLatest")}
+                        </WorkflowActionButton>
+                    </div>
+                )}
+                {latestReadFailed && <p className="text-sm text-status-failed-fg">{tf("conflictReadFailed")}</p>}
+                {latestSavedStyle !== undefined && (
+                    <section aria-label={ta("latestSavedStyleLabel")} className="rounded-lg border border-border-subtle p-3 text-sm text-text-secondary">
+                        <p className="font-medium text-foreground">{ta("latestSavedStyleLabel")}</p>
+                        {latestSavedStyle ? <>
+                            <p>{latestSavedStyle.name}</p>
+                            <p className="whitespace-pre-wrap">{latestSavedStyle.positive_prompt}</p>
+                            {latestSavedStyle.negative_prompt && <p className="whitespace-pre-wrap">{latestSavedStyle.negative_prompt}</p>}
+                        </> : <p>{ta("latestSavedStyleEmpty")}</p>}
+                        <p className="mt-2">{tf("conflictReady")}</p>
+                    </section>
                 )}
 
                 {/* AI Recommendations */}
@@ -490,7 +889,7 @@ export default function ArtDirection() {
                             loading={isAnalyzingArtStyle}
                             leftIcon={<Wand2 />}
                             onClick={handleAnalyze}
-                            disabled={isAnalyzingArtStyle}
+                            disabled={isAnalyzingArtStyle || !!readbackError}
                         >
                             {isAnalyzingArtStyle ? ta("analyzing") : ta("analyzeScript")}
                         </WorkflowActionButton>
@@ -605,9 +1004,9 @@ export default function ArtDirection() {
                     loading={isSaving}
                     rightIcon={<ChevronRight />}
                     onClick={handleApply}
-                    disabled={!selectedStyle}
+                    disabled={!selectedStyle || !!readbackError || bannerBusy || isReadingLatest || styleFailure === "conflict"}
                 >
-                    {isSaving ? ta("saving") : ta("applyAndContinue")}
+                    {isSaving ? ta("saving") : latestSavedStyle !== undefined ? tf("saveRetainedDraft") : ta("applyAndContinue")}
                 </WorkflowActionButton>
             </div>
 
@@ -620,11 +1019,22 @@ export default function ArtDirection() {
                         editing={aiModalEditing}
                         positivePrompt={aiModalPositive}
                         negativePrompt={aiModalNegative}
-                        onPositiveChange={setAiModalPositive}
-                        onNegativeChange={setAiModalNegative}
-                        onStartEditing={() => setAiModalEditing(true)}
-                        onApply={handleAiModalApply}
-                        onClose={closeAiModal}
+                        onPositiveChange={(value) => {
+                            if (isCurrentModalSource(aiModalSource, aiModalDraftSourceRef.current)) setAiModalPositive(value);
+                        }}
+                        onNegativeChange={(value) => {
+                            if (isCurrentModalSource(aiModalSource, aiModalDraftSourceRef.current)) setAiModalNegative(value);
+                        }}
+                        onStartEditing={() => {
+                            if (!isCurrentModalSource(aiModalSource, aiModalDraftSourceRef.current)) return;
+                            if (!aiModalSource.authoring) {
+                                aiModalSource.revision = draftBaseRevisionRef.current;
+                                aiModalSource.authoring = true;
+                            }
+                            setAiModalEditing(true);
+                        }}
+                        onApply={() => handleAiModalApply(aiModalSource)}
+                        onClose={() => closeAiModal(aiModalSource)}
                     />
                 )}
             </AnimatePresence>
@@ -638,17 +1048,25 @@ export default function ArtDirection() {
                         editing={modalEditing}
                         positivePrompt={modalPositive}
                         negativePrompt={modalNegative}
-                        onPositiveChange={setModalPositive}
-                        onNegativeChange={setModalNegative}
-                        onStartEditing={() => setModalEditing(true)}
-                        onApply={handleModalApplyStyle}
-                        onClose={closePresetModal}
+                        onPositiveChange={(value) => {
+                            if (isCurrentModalSource(modalSource, modalDraftSourceRef.current)) setModalPositive(value);
+                        }}
+                        onNegativeChange={(value) => {
+                            if (isCurrentModalSource(modalSource, modalDraftSourceRef.current)) setModalNegative(value);
+                        }}
+                        onStartEditing={() => {
+                            if (!isCurrentModalSource(modalSource, modalDraftSourceRef.current)) return;
+                            if (!modalSource.authoring) {
+                                modalSource.revision = draftBaseRevisionRef.current;
+                                modalSource.authoring = true;
+                            }
+                            setModalEditing(true);
+                        }}
+                        onApply={() => handleModalApplyStyle(modalSource)}
+                        onClose={() => closePresetModal(modalSource)}
                         sameCategoryPresets={presets.filter(p => p.category === modalPreset.category && p.id !== modalPreset.id)}
-                        onSwitchPreset={(p) => {
-                            setModalPreset(p);
-                            setModalEditing(false);
-                            setModalPositive(p.positive_prompt);
-                            setModalNegative(p.negative_prompt);
+                        onSwitchPreset={(preset) => {
+                            if (isCurrentModalSource(modalSource, modalDraftSourceRef.current)) openPresetModal(preset);
                         }}
                     />
                 )}
@@ -748,9 +1166,9 @@ function AIRecommendationCard({ style, isSelected, onClick }: {
                 )}
 
                 {/* Reason */}
-                {(style as any).reason && (
+                {style.reason && (
                     <p className="text-[0.625rem] text-yellow-400/80 leading-relaxed line-clamp-2 border-l-2 border-yellow-400/30 pl-2">
-                        {(style as any).reason}
+                        {style.reason}
                     </p>
                 )}
             </div>
@@ -822,11 +1240,11 @@ function AIRecommendationModal({ style, isSelected, editing, positivePrompt, neg
                 <div className="flex-1 min-h-0 flex overflow-hidden">
                     {/* Left panel: reason + keyword tags */}
                     <div className="w-[38%] shrink-0 bg-glass border-r border-glass-border p-6 flex flex-col justify-center">
-                        {(style as any).reason && (
+                        {style.reason && (
                             <div className="mb-6">
                                 <p className="font-mono text-[0.5625rem] uppercase tracking-[0.18em] text-yellow-400/70 mb-2">{ta("reasonLabel")}</p>
                                 <p className="text-[0.875rem] text-foreground leading-relaxed">
-                                    {(style as any).reason}
+                                    {style.reason}
                                 </p>
                             </div>
                         )}
@@ -919,7 +1337,11 @@ function AIRecommendationModal({ style, isSelected, editing, positivePrompt, neg
     );
 }
 
-export function StylePresetCard({ style, isSelected, onSelect }: any) {
+export function StylePresetCard({ style, isSelected, onSelect }: {
+    style: StyleConfig;
+    isSelected: boolean;
+    onSelect: () => void;
+}) {
     return (
         <motion.div
             layout
@@ -964,7 +1386,7 @@ function StylePresetCardV2({ style, isSelected, onClick }: {
             <div className="relative aspect-[4/3] bg-elevated overflow-hidden">
                 {style.thumbnail ? (
                     <img
-                        src={style.thumbnail}
+                        src={publicAssetPath(style.thumbnail)}
                         alt={style.name_zh}
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                         style={{ objectPosition: style.object_position || "center" }}
@@ -1052,7 +1474,7 @@ function PresetDetailModal({ preset, isSelected, editing, positivePrompt, negati
                     <div className="bg-black/40 flex items-center justify-center p-4 overflow-hidden">
                         {preset.thumbnail ? (
                             <img
-                                src={preset.thumbnail}
+                                src={publicAssetPath(preset.thumbnail)}
                                 alt={preset.name_zh}
                                 className="max-w-full max-h-full object-contain rounded-lg"
                             />
@@ -1168,7 +1590,7 @@ function PresetDetailModal({ preset, isSelected, editing, positivePrompt, negati
                                 >
                                     {p.thumbnail ? (
                                         <img
-                                            src={p.thumbnail}
+                                            src={publicAssetPath(p.thumbnail)}
                                             alt={p.name_zh}
                                             className="w-full aspect-[16/9] object-cover"
                                             style={{ objectPosition: p.object_position || "center" }}

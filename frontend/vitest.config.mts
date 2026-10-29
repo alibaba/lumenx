@@ -7,6 +7,7 @@ export default defineConfig({
     },
     test: {
         environment: 'node',
+        fileParallelism: false,
         include: [
             'src/__tests__/**/*.test.ts',
             'src/__tests__/**/*.spec.ts',

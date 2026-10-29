@@ -111,6 +111,7 @@ def _resolve_dashscope_image(
     *,
     uploader,
     local_path: Optional[str],
+    allow_raw_file_fallback: bool = True,
 ) -> ResolvedMediaInput:
     if ref_type == MEDIA_REF_REMOTE_URL:
         return _resolved(ref, source_ref=ref, media_ref_type=ref_type)
@@ -134,7 +135,7 @@ def _resolve_dashscope_image(
     if ref_type == MEDIA_REF_BLOB_URL:
         raise ValueError("Blob URLs are ephemeral and unsupported for backend media resolution.")
     # Fallback: treat unknown ref types as local file paths if the file exists on disk.
-    if ref_type == MEDIA_REF_UNKNOWN and os.path.isfile(ref):
+    if allow_raw_file_fallback and ref_type == MEDIA_REF_UNKNOWN and os.path.isfile(ref):
         signed_url = _upload_then_sign(ref, uploader)
         if signed_url:
             return _resolved(signed_url, source_ref=ref, media_ref_type=MEDIA_REF_LOCAL_PATH)
@@ -149,6 +150,7 @@ def _resolve_dashscope_temp_url(
     uploader,
     local_path: Optional[str],
     dashscope_temp_url_resolver: Optional[Callable[[str], str]],
+    allow_raw_file_fallback: bool = True,
 ) -> ResolvedMediaInput:
     if ref_type == MEDIA_REF_REMOTE_URL:
         return _resolved(ref, source_ref=ref, media_ref_type=ref_type)
@@ -182,7 +184,7 @@ def _resolve_dashscope_temp_url(
         return _resolved(temp_url, source_ref=ref, media_ref_type=ref_type, headers=headers)
     # Fallback: treat unknown ref types as local file paths if the file exists on disk.
     # This handles cases like /var/folders/... temp files that are outside the project output root.
-    if ref_type == MEDIA_REF_UNKNOWN and os.path.isfile(ref):
+    if allow_raw_file_fallback and ref_type == MEDIA_REF_UNKNOWN and os.path.isfile(ref):
         signed_url = _upload_then_sign(ref, uploader)
         if signed_url:
             return _resolved(signed_url, source_ref=ref, media_ref_type=MEDIA_REF_LOCAL_PATH)
@@ -205,6 +207,7 @@ def _resolve_vendor_kling_image(
     ref_type: str,
     *,
     local_path: Optional[str],
+    allow_raw_file_fallback: bool = True,
 ) -> ResolvedMediaInput:
     if ref_type == MEDIA_REF_LOCAL_PATH:
         if not local_path:
@@ -212,6 +215,8 @@ def _resolve_vendor_kling_image(
         return _resolved(_encode_local_file_base64(local_path), source_ref=ref, media_ref_type=ref_type)
     if ref_type == MEDIA_REF_DATA_URI:
         return _resolved(_strip_data_uri_prefix(ref), source_ref=ref, media_ref_type=ref_type)
+    if allow_raw_file_fallback and ref_type == MEDIA_REF_UNKNOWN and os.path.isfile(ref):
+        return _resolved(_encode_local_file_base64(ref), source_ref=ref, media_ref_type=MEDIA_REF_LOCAL_PATH)
     raise ValueError(
         "Kling vendor image input requires local file or data URI so it can be sent as base64."
     )
@@ -225,6 +230,7 @@ def _resolve_vendor_url_mode(
     local_path: Optional[str],
     provider_label: str,
     modality: str,
+    allow_raw_file_fallback: bool = True,
 ) -> ResolvedMediaInput:
     if ref_type == MEDIA_REF_REMOTE_URL:
         return _resolved(ref, source_ref=ref, media_ref_type=ref_type)
@@ -236,6 +242,10 @@ def _resolve_vendor_url_mode(
         signed_url = _upload_then_sign(local_path, uploader)
         if signed_url:
             return _resolved(signed_url, source_ref=ref, media_ref_type=ref_type)
+    if allow_raw_file_fallback and ref_type == MEDIA_REF_UNKNOWN and os.path.isfile(ref):
+        signed_url = _upload_then_sign(ref, uploader)
+        if signed_url:
+            return _resolved(signed_url, source_ref=ref, media_ref_type=MEDIA_REF_LOCAL_PATH)
 
     raise ValueError(
         f"{provider_label} vendor {modality} input requires a URL-compatible media source. "
@@ -252,6 +262,7 @@ def resolve_media_input(
     uploader=None,
     registry: Optional[ProviderRegistry] = None,
     project_root: Optional[str] = None,
+    output_root: Optional[str] = None,
     oss_base_path: Optional[str] = None,
     dashscope_temp_url_resolver: Optional[Callable[[str], str]] = None,
 ) -> ResolvedMediaInput:
@@ -274,9 +285,13 @@ def resolve_media_input(
     ref_type = classify_media_ref(
         ref,
         project_root=project_root,
-        oss_base_path=oss_base_path,
+        output_root=output_root,
+        oss_base_path=(oss_base_path if oss_base_path is not None
+                       else getattr(uploader, "base_path", None)),
     )
-    local_path = resolve_local_media_path(ref, project_root=project_root)
+    local_path = resolve_local_media_path(ref, project_root=project_root, output_root=output_root)
+
+    allow_raw_file_fallback = output_root is None
 
     if mode in {"dashscope_multimodal_message", "dashscope_image_to_video"}:
         return _resolve_dashscope_image(
@@ -284,6 +299,7 @@ def resolve_media_input(
             ref_type,
             uploader=uploader,
             local_path=local_path,
+            allow_raw_file_fallback=allow_raw_file_fallback,
         )
     if mode == "dashscope_temp_file_url":
         return _resolve_dashscope_temp_url(
@@ -292,9 +308,15 @@ def resolve_media_input(
             uploader=uploader,
             local_path=local_path,
             dashscope_temp_url_resolver=dashscope_temp_url_resolver,
+            allow_raw_file_fallback=allow_raw_file_fallback,
         )
     if mode == "kling_vendor_base64_image":
-        return _resolve_vendor_kling_image(ref, ref_type, local_path=local_path)
+        return _resolve_vendor_kling_image(
+            ref,
+            ref_type,
+            local_path=local_path,
+            allow_raw_file_fallback=allow_raw_file_fallback,
+        )
     if (
         mode.startswith("vidu_vendor_")
         or mode.startswith("kling_vendor_")
@@ -313,6 +335,7 @@ def resolve_media_input(
             local_path=local_path,
             provider_label=provider_label,
             modality=normalized_modality,
+            allow_raw_file_fallback=allow_raw_file_fallback,
         )
 
     raise ValueError(
@@ -330,6 +353,7 @@ def resolve_media_inputs(
     uploader=None,
     registry: Optional[ProviderRegistry] = None,
     project_root: Optional[str] = None,
+    output_root: Optional[str] = None,
     oss_base_path: Optional[str] = None,
     dashscope_temp_url_resolver: Optional[Callable[[str], str]] = None,
 ) -> List[ResolvedMediaInput]:
@@ -342,6 +366,7 @@ def resolve_media_inputs(
             uploader=uploader,
             registry=registry,
             project_root=project_root,
+            output_root=output_root,
             oss_base_path=oss_base_path,
             dashscope_temp_url_resolver=dashscope_temp_url_resolver,
         )

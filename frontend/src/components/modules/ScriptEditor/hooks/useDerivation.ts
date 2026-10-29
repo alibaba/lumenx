@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { Editor } from '@tiptap/react';
+import { Editor, type EditorEvents } from '@tiptap/react';
 import { useEditorStore, DerivedScene, DerivedCharacter } from '@/store/editorStore';
 
 const DEBOUNCE_MS = 500;
@@ -44,14 +44,12 @@ function deriveFromDocument(editor: Editor) {
   const doc = editor.state.doc;
   const scenes: DerivedScene[] = [];
   const characterMap = new Map<string, { name: string; count: number; firstScene: number }>();
-  let totalChars = 0;
+  const totalChars = doc.textContent.length;
   let structuredChars = 0;
   let sceneIndex = 0;
 
   // 遍历文档节点
   doc.descendants((node) => {
-    totalChars += node.textContent.length;
-
     if (node.type.name === 'sceneHeading') {
       sceneIndex++;
       const text = node.textContent;
@@ -105,7 +103,7 @@ function deriveFromDocument(editor: Editor) {
 /**
  * L1 实时派生引擎
  *
- * 监听 Editor 的 update 事件，debounce 500ms 后：
+ * 初始化和静默载入立即派生；真实文档编辑 debounce 500ms 后：
  * 1. 遍历 AST 提取 Scene 节点 → derivedScenes
  * 2. 遍历 AST 提取 CharacterCue 节点 → derivedCharacters（去重）
  * 3. 计算总字数
@@ -118,7 +116,7 @@ export function useDerivation(editor: Editor | null) {
   const updateDerivation = useEditorStore((state) => state.updateDerivation);
 
   const runDerivation = useCallback(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
 
     const { scenes, characters, wordCount, estimatedDuration, confidenceScore } =
       deriveFromDocument(editor);
@@ -138,23 +136,31 @@ export function useDerivation(editor: Editor | null) {
     // 初始派生一次
     runDerivation();
 
-    const handleUpdate = () => {
-      // 清除旧的 debounce timer
+    const handleTransaction = ({ transaction, appendedTransactions }: EditorEvents['transaction']) => {
+      if (!transaction.docChanged && !appendedTransactions.some(item => item.docChanged)) return;
       if (timerRef.current) {
         clearTimeout(timerRef.current);
+        timerRef.current = null;
       }
-      // 设置新的 debounce timer
+      // Loading/recovering a document suppresses update to avoid marking it
+      // dirty, but its visible statistics must follow that document immediately.
+      if (transaction.getMeta('preventUpdate')) {
+        runDerivation();
+        return;
+      }
       timerRef.current = setTimeout(() => {
+        timerRef.current = null;
         runDerivation();
       }, DEBOUNCE_MS);
     };
 
-    editor.on('update', handleUpdate);
+    editor.on('transaction', handleTransaction);
 
     return () => {
-      editor.off('update', handleUpdate);
+      editor.off('transaction', handleTransaction);
       if (timerRef.current) {
         clearTimeout(timerRef.current);
+        timerRef.current = null;
       }
     };
   }, [editor, runDerivation]);

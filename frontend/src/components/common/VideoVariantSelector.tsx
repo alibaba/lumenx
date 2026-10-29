@@ -13,6 +13,7 @@ interface VideoVariantSelectorProps {
     onDelete: (videoId: string) => void;
     onGenerate: (duration: number) => void;
     isGenerating: boolean;
+    generateDisabled?: boolean;
     className?: string;
     aspectRatio?: string;
 }
@@ -25,6 +26,7 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
     onDelete,
     onGenerate,
     isGenerating,
+    generateDisabled = false,
     className = "",
     aspectRatio = "16:9"
 }) => {
@@ -132,8 +134,8 @@ export const VideoVariantSelector: React.FC<VideoVariantSelectorProps> = ({
 
                     <button
                         onClick={() => onGenerate(duration)}
-                        disabled={isGenerating}
-                        className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${isGenerating
+                        disabled={isGenerating || generateDisabled}
+                        className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${isGenerating || generateDisabled
                             ? 'bg-gray-700 text-text-secondary cursor-not-allowed'
                             : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/20'
                             }`}

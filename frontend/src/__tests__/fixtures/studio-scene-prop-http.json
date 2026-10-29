@@ -1,0 +1,1970 @@
+{
+  "prop-global-completed": {
+    "command": {
+      "client_request_id": "prop-global-completed",
+      "asset_id": "c",
+      "asset_type": "prop",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-global-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-global-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-global-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    }
+  },
+  "prop-global-unknown": {
+    "command": {
+      "client_request_id": "prop-global-unknown",
+      "asset_id": "c",
+      "asset_type": "prop",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-global-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-global-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-global-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    }
+  },
+  "prop-local-completed": {
+    "command": {
+      "client_request_id": "prop-local-completed",
+      "asset_id": "c",
+      "asset_type": "prop",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-local-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-local-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-local-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    }
+  },
+  "prop-local-unknown": {
+    "command": {
+      "client_request_id": "prop-local-unknown",
+      "asset_id": "c",
+      "asset_type": "prop",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-local-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-local-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-local-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    }
+  },
+  "prop-series-completed": {
+    "command": {
+      "client_request_id": "prop-series-completed",
+      "asset_id": "c",
+      "asset_type": "prop",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-series-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-series-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-series-completed",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    }
+  },
+  "prop-series-unknown": {
+    "command": {
+      "client_request_id": "prop-series-unknown",
+      "asset_id": "c",
+      "asset_type": "prop",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-series-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-series-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-series-unknown",
+        "request_fingerprint": "5228871a6d1da3581609a9162d449ff87d67b91cef9ad53b7db714c5fab7ad46",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    }
+  },
+  "prop-standalone-completed": {
+    "command": {
+      "client_request_id": "prop-standalone-completed",
+      "asset_id": "c",
+      "asset_type": "prop",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-standalone-completed",
+        "request_fingerprint": "142e626eb72334fe2c153e4d6e81d323c999f45e7995660224d54a6ce900c81a",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-standalone-completed",
+        "request_fingerprint": "142e626eb72334fe2c153e4d6e81d323c999f45e7995660224d54a6ce900c81a",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-standalone-completed",
+        "request_fingerprint": "142e626eb72334fe2c153e4d6e81d323c999f45e7995660224d54a6ce900c81a",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    }
+  },
+  "prop-standalone-unknown": {
+    "command": {
+      "client_request_id": "prop-standalone-unknown",
+      "asset_id": "c",
+      "asset_type": "prop",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-standalone-unknown",
+        "request_fingerprint": "142e626eb72334fe2c153e4d6e81d323c999f45e7995660224d54a6ce900c81a",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-standalone-unknown",
+        "request_fingerprint": "142e626eb72334fe2c153e4d6e81d323c999f45e7995660224d54a6ce900c81a",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "prop-standalone-unknown",
+        "request_fingerprint": "142e626eb72334fe2c153e4d6e81d323c999f45e7995660224d54a6ce900c81a",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "prop",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    }
+  },
+  "scene-global-completed": {
+    "command": {
+      "client_request_id": "scene-global-completed",
+      "asset_id": "c",
+      "asset_type": "scene",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-global-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-global-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-global-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    }
+  },
+  "scene-global-unknown": {
+    "command": {
+      "client_request_id": "scene-global-unknown",
+      "asset_id": "c",
+      "asset_type": "scene",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-global-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-global-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-global-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "global",
+        "owner_id": "library",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    }
+  },
+  "scene-local-completed": {
+    "command": {
+      "client_request_id": "scene-local-completed",
+      "asset_id": "c",
+      "asset_type": "scene",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-local-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-local-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-local-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    }
+  },
+  "scene-local-unknown": {
+    "command": {
+      "client_request_id": "scene-local-unknown",
+      "asset_id": "c",
+      "asset_type": "scene",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-local-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-local-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-local-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "script",
+        "owner_id": "p",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    }
+  },
+  "scene-series-completed": {
+    "command": {
+      "client_request_id": "scene-series-completed",
+      "asset_id": "c",
+      "asset_type": "scene",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-series-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-series-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-series-completed",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    }
+  },
+  "scene-series-unknown": {
+    "command": {
+      "client_request_id": "scene-series-unknown",
+      "asset_id": "c",
+      "asset_type": "scene",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-series-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-series-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-series-unknown",
+        "request_fingerprint": "c305eb6ee43ce678ee4453f255ebccdb072ec4699a767f44b578a27b72bc6da8",
+        "request_root_kind": "project",
+        "request_root_id": "p",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": "s",
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    }
+  },
+  "scene-standalone-completed": {
+    "command": {
+      "client_request_id": "scene-standalone-completed",
+      "asset_id": "c",
+      "asset_type": "scene",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-standalone-completed",
+        "request_fingerprint": "e3212b0c2989a53e92117940e669c3e845b895e0011577c0ed95a4d7de58f415",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-standalone-completed",
+        "request_fingerprint": "e3212b0c2989a53e92117940e669c3e845b895e0011577c0ed95a4d7de58f415",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-standalone-completed",
+        "request_fingerprint": "e3212b0c2989a53e92117940e669c3e845b895e0011577c0ed95a4d7de58f415",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000001.png"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "completed",
+            "reason": null,
+            "output_ref": "assets/studio/00000000-0000-0000-0000-000000000002.png"
+          }
+        ]
+      }
+    }
+  },
+  "scene-standalone-unknown": {
+    "command": {
+      "client_request_id": "scene-standalone-unknown",
+      "asset_id": "c",
+      "asset_type": "scene",
+      "generation_type": "all",
+      "apply_style": false,
+      "batch_size": 2,
+      "seed": 0,
+      "watermark": false,
+      "prompt": null
+    },
+    "initial": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": false,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-standalone-unknown",
+        "request_fingerprint": "e3212b0c2989a53e92117940e669c3e845b895e0011577c0ed95a4d7de58f415",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "pending",
+            "reason": null
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "pending",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "terminal": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-standalone-unknown",
+        "request_fingerprint": "e3212b0c2989a53e92117940e669c3e845b895e0011577c0ed95a4d7de58f415",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    },
+    "replay": {
+      "schema_version": 1,
+      "contract_version": "studio-asset-image-request-v1",
+      "replayed": true,
+      "reason": null,
+      "request": {
+        "id": "00000000-0000-0000-0000-000000000004",
+        "request_contract_version": "request-json-v1",
+        "entrypoint": "studio.asset.scene_prop.v1",
+        "client_request_id": "scene-standalone-unknown",
+        "request_fingerprint": "e3212b0c2989a53e92117940e669c3e845b895e0011577c0ed95a4d7de58f415",
+        "request_root_kind": "series",
+        "request_root_id": "s",
+        "request_root_scope_id": "00000000-0000-0000-0000-000000000003",
+        "request_root_series_id": null,
+        "owner_kind": "series",
+        "owner_id": "s",
+        "asset_type": "scene",
+        "asset_id": "c",
+        "channel": "image",
+        "members": [
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000001",
+            "attempt_id": "00000000-0000-0000-0000-000000000001",
+            "status": "needs_confirmation",
+            "reason": "provider_image_submission_unknown"
+          },
+          {
+            "variant_id": "00000000-0000-0000-0000-000000000002",
+            "attempt_id": "00000000-0000-0000-0000-000000000002",
+            "status": "cancelled",
+            "reason": null
+          }
+        ]
+      }
+    }
+  }
+}

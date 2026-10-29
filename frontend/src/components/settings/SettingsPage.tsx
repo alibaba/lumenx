@@ -4,6 +4,13 @@ import { useState, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { Save, Loader2, ChevronDown, ChevronRight, FolderOpen, WifiOff, Copy, Check } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api, type EnvConfigPayload, type ProviderMode, API_URL } from "@/lib/api";
+import {
+  environmentLocalStorageKey,
+  getRuntimeEnvironment,
+  isCurrentRuntimeEnvironment,
+  subscribeRuntimeEnvironment,
+  type RuntimeEnvironment,
+} from "@/lib/runtimeEnvironment";
 import { ASPECT_RATIOS } from "@/store/projectStore";
 import {
   DEFAULT_MODEL_SETTINGS,
@@ -16,7 +23,7 @@ import {
 import { useSettingsStore, type Locale, type ThemePreset } from "@/store/settingsStore";
 import { toast } from "@/store/toastStore";
 import { rovingKeyDown } from "@/lib/a11y";
-import { Image, Video, Layout, User, Building, Box } from "lucide-react";
+import { Image as ImageIcon, Video, Layout, User, Building, Box } from "lucide-react";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 import LumenXBranding from "@/components/layout/LumenXBranding";
 import UpdateChecker from "./UpdateChecker";
@@ -31,6 +38,8 @@ import {
 } from "./SettingsControls";
 
 const APP_VERSION = "v0.2.0";
+
+type EnvConfigOwner = { key: string; generation: number };
 
 type EnvConfig = EnvConfigPayload & {
   DASHSCOPE_API_KEY: string;
@@ -89,7 +98,6 @@ const normalizeEnvConfig = (existing: EnvConfig, data?: EnvConfigPayload): EnvCo
 
 const getValidationErrors = (env: EnvConfig): string[] => {
   const errors: string[] = [];
-  if (!env.DASHSCOPE_API_KEY?.trim()) errors.push("DashScope API Key");
   if (env.KLING_PROVIDER_MODE === "vendor") {
     if (!env.KLING_ACCESS_KEY?.trim()) errors.push("Kling Access Key (vendor mode)");
     if (!env.KLING_SECRET_KEY?.trim()) errors.push("Kling Secret Key (vendor mode)");
@@ -187,17 +195,23 @@ export default function SettingsPage() {
   const { locale, theme, animations, setLocale, setTheme, setAnimations } = useSettingsStore();
 
   const [active, setActive] = useState<SettingsCategory>("general");
+  const [runtimeEnvironment, setRuntimeEnvironment] = useState(() => getRuntimeEnvironment());
 
   // ── API Config ──
   const [config, setConfig] = useState<EnvConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [endpointsOpen, setEndpointsOpen] = useState(false);
 
   // ── Default Model Settings ──
   const [modelSettings, setModelSettings] = useState<FrontendModelSettings>(() =>
-    normalizeModelSettings(loadFromLS(LS_KEY_MODEL, DEFAULT_MODEL_SETTINGS), "global_settings")
+    normalizeModelSettings(
+      getRuntimeEnvironment()
+        ? loadFromLS(environmentLocalStorageKey(LS_KEY_MODEL, getRuntimeEnvironment()!.key), DEFAULT_MODEL_SETTINGS)
+        : DEFAULT_MODEL_SETTINGS,
+      "global_settings",
+    )
   );
 
   // ── Default Prompt Config ──
@@ -206,7 +220,9 @@ export default function SettingsPage() {
   // `promptDefaults` holds the real built-in defaults fetched from the backend
   // so we can pre-fill the fields and run the delta comparison on save.
   const [promptConfig, setPromptConfig] = useState<DefaultPromptConfig>(() =>
-    loadFromLS(LS_KEY_PROMPT, EMPTY_PROMPT_CONFIG)
+    getRuntimeEnvironment()
+      ? loadFromLS(environmentLocalStorageKey(LS_KEY_PROMPT, getRuntimeEnvironment()!.key), EMPTY_PROMPT_CONFIG)
+      : EMPTY_PROMPT_CONFIG
   );
   const [promptDefaults, setPromptDefaults] = useState<Record<string, string>>({});
 
@@ -218,23 +234,83 @@ export default function SettingsPage() {
   const [systemLoading, setSystemLoading] = useState(false);
   const [systemChecked, setSystemChecked] = useState(false);
   const [copiedPath, setCopiedPath] = useState<string | null>(null);
-
-  const loadConfig = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await api.getEnvConfig();
-      setConfig((prev) => normalizeEnvConfig(prev, data));
-    } catch {
-      setLoadError(t("loadConfigFailed"));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [configOwner, setConfigOwner] = useState<EnvConfigOwner | null>(null);
+  const configOwnerRef = useRef<EnvConfigOwner | null>(null);
+  const configLoadGenerationRef = useRef(0);
+  const mountedRef = useRef(false);
+  const savingGenerationRef = useRef<number | null>(null);
 
   useEffect(() => {
-    loadConfig();
-  }, [loadConfig]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      configLoadGenerationRef.current += 1;
+      savingGenerationRef.current = null;
+    };
+  }, []);
+
+  const setLoadedConfigOwner = useCallback((owner: EnvConfigOwner | null) => {
+    configOwnerRef.current = owner;
+    setConfigOwner(owner);
+  }, []);
+
+  const loadConfig = useCallback(async (environment: RuntimeEnvironment | null = getRuntimeEnvironment()) => {
+    const loadGeneration = configLoadGenerationRef.current + 1;
+    configLoadGenerationRef.current = loadGeneration;
+    savingGenerationRef.current = null;
+    setSaving(false);
+    setLoadedConfigOwner(null);
+    setConfig(DEFAULT_CONFIG);
+    if (!environment) {
+      setLoading(false);
+      setLoadError(false);
+      return;
+    }
+
+    const owner = { key: environment.key, generation: environment.generation };
+    const stillCurrent = () => (
+      mountedRef.current && loadGeneration === configLoadGenerationRef.current
+      && isCurrentRuntimeEnvironment(owner.key, owner.generation)
+    );
+
+    setLoading(true);
+    setLoadError(false);
+    try {
+      const data = await api.getEnvConfig();
+      if (!stillCurrent()) return;
+      setConfig(normalizeEnvConfig(DEFAULT_CONFIG, data));
+      setLoadedConfigOwner(owner);
+    } catch {
+      if (stillCurrent()) {
+        setLoadError(true);
+        setLoadedConfigOwner(null);
+      }
+    } finally {
+      if (stillCurrent()) setLoading(false);
+    }
+  }, [setLoadedConfigOwner]);
+
+  useEffect(() => subscribeRuntimeEnvironment(() => {
+    setRuntimeEnvironment(getRuntimeEnvironment());
+  }), []);
+
+  useEffect(() => {
+    if (!runtimeEnvironment) {
+      setModelSettings(DEFAULT_MODEL_SETTINGS);
+      setPromptConfig(EMPTY_PROMPT_CONFIG);
+      setPromptDefaults({});
+      return;
+    }
+    setModelSettings(normalizeModelSettings(
+      loadFromLS(environmentLocalStorageKey(LS_KEY_MODEL, runtimeEnvironment.key), DEFAULT_MODEL_SETTINGS),
+      "global_settings",
+    ));
+    setPromptConfig(loadFromLS(environmentLocalStorageKey(LS_KEY_PROMPT, runtimeEnvironment.key), EMPTY_PROMPT_CONFIG));
+  }, [runtimeEnvironment]);
+
+  useEffect(() => {
+    loadConfig(runtimeEnvironment);
+  }, [runtimeEnvironment, loadConfig]);
 
   // Pre-fill the prompt fields with the real built-in defaults so users can see
   // and edit from them. We remember the fetched defaults for the delta-save
@@ -242,10 +318,14 @@ export default function SettingsPage() {
   // If the fetch fails we leave the fields empty (placeholder) — no crash.
   useEffect(() => {
     let cancelled = false;
+    const environment = runtimeEnvironment;
+    if (!environment) return () => {
+      cancelled = true;
+    };
     (async () => {
       try {
         const defaults = await api.fetchPromptDefaults();
-        if (cancelled || !defaults) return;
+        if (cancelled || !defaults || !isCurrentRuntimeEnvironment(environment.key, environment.generation)) return;
         setPromptDefaults(defaults);
         setPromptConfig((prev) => {
           const next = { ...prev };
@@ -262,7 +342,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [runtimeEnvironment]);
 
   // Online/offline detection for the banner.
   useEffect(() => {
@@ -309,6 +389,11 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const hasCurrentConfigOwner = useCallback(() => {
+    const owner = configOwnerRef.current;
+    return !!owner && isCurrentRuntimeEnvironment(owner.key, owner.generation);
+  }, []);
+
   // Self-healing lazy load: auto-run the system check when the About tab
   // becomes active and we don't yet have a successful result. Driven off a
   // tab-transition ref so it fires once per entry (no render thrash) and is
@@ -322,41 +407,50 @@ export default function SettingsPage() {
     }
   }, [active, systemChecked, systemLoading, loadSystem]);
 
-  const handleSaveApiConfig = async () => {
-    const errors = getValidationErrors(config);
+  const saveConfig = async (validateProviders: boolean) => {
+    if (savingGenerationRef.current !== null || !mountedRef.current) return;
+    if (!hasCurrentConfigOwner()) {
+      toast.error(t("saveConfigFailed"));
+      return;
+    }
+    const errors = validateProviders ? getValidationErrors(config) : [];
     if (errors.length > 0) {
       toast.error(t("fillRequired"), { body: `- ${errors.join("\n- ")}` });
       return;
     }
+    const owner = configOwnerRef.current!;
+    const generation = configLoadGenerationRef.current;
+    const stillCurrent = () => (
+      mountedRef.current
+      && generation === configLoadGenerationRef.current
+      && isCurrentRuntimeEnvironment(owner.key, owner.generation)
+    );
+    savingGenerationRef.current = generation;
     setSaving(true);
     try {
       await api.saveEnvConfig(config);
-      toast.success(t("saveSuccess"));
+      if (stillCurrent()) toast.success(t("saveSuccess"));
     } catch {
-      toast.error(t("saveConfigFailed"));
+      if (stillCurrent()) toast.error(t("saveConfigFailed"));
     } finally {
-      setSaving(false);
+      if (savingGenerationRef.current === generation) {
+        savingGenerationRef.current = null;
+        if (stillCurrent()) setSaving(false);
+      }
     }
   };
 
-  // Storage(OSS) 保存不应被 DashScope / 生成相关必填项挡住——它们与存储无关。
-  const handleSaveStorage = async () => {
-    setSaving(true);
-    try {
-      await api.saveEnvConfig(config);
-      toast.success(t("saveSuccess"));
-    } catch {
-      toast.error(t("saveConfigFailed"));
-    } finally {
-      setSaving(false);
-    }
-  };
+  const handleSaveApiConfig = () => saveConfig(true);
+  // Storage settings can be saved independently of generation credentials.
+  const handleSaveStorage = () => saveConfig(false);
 
   const handleChange = (key: keyof EnvConfig, value: string) => {
+    if (!hasCurrentConfigOwner()) return;
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleEndpointChange = (envKey: string, value: string) => {
+    if (!hasCurrentConfigOwner()) return;
     setConfig((prev) => ({
       ...prev,
       endpoint_overrides: { ...prev.endpoint_overrides, [envKey]: value },
@@ -364,6 +458,7 @@ export default function SettingsPage() {
   };
 
   const handleSaveModelDefaults = () => {
+    if (!runtimeEnvironment || !isCurrentRuntimeEnvironment(runtimeEnvironment.key, runtimeEnvironment.generation)) return;
     const normalized = normalizeModelSettings(modelSettings, "global_settings");
     // T2I and I2I share one image model in the UI; persist both backend
     // fields plus image_model so per-project backfill stays consistent.
@@ -372,12 +467,13 @@ export default function SettingsPage() {
       i2i_model: normalized.t2i_model,
       image_model: normalized.t2i_model,
     };
-    localStorage.setItem(LS_KEY_MODEL, JSON.stringify(merged));
+    localStorage.setItem(environmentLocalStorageKey(LS_KEY_MODEL, runtimeEnvironment.key), JSON.stringify(merged));
     setModelSettings(merged);
     toast.success(t("saved"));
   };
 
   const handleSavePromptDefaults = () => {
+    if (!runtimeEnvironment || !isCurrentRuntimeEnvironment(runtimeEnvironment.key, runtimeEnvironment.generation)) return;
     // DELTA persistence: a field equal to its built-in default is stored as ""
     // (=> use built-in, no snapshot pinning); only genuine overrides are saved.
     const delta: DefaultPromptConfig = { ...EMPTY_PROMPT_CONFIG };
@@ -385,7 +481,7 @@ export default function SettingsPage() {
       const text = promptConfig[k] ?? "";
       delta[k] = text === promptDefaults[k] ? "" : text;
     });
-    localStorage.setItem(LS_KEY_PROMPT, JSON.stringify(delta));
+    localStorage.setItem(environmentLocalStorageKey(LS_KEY_PROMPT, runtimeEnvironment.key), JSON.stringify(delta));
     toast.success(t("saved"));
   };
 
@@ -400,11 +496,122 @@ export default function SettingsPage() {
     }
   };
 
-  // MuleRun 登录轮询的 interval 句柄：卸载时清理，避免轮询泄漏 + setConfig-after-unmount。
+  // MuleRun 登录轮询是一次带环境身份的会话：重入、环境切换、卸载都必须让旧回调失效。
+  const [mulerunLoginActive, setMulerunLoginActive] = useState(false);
+  const mulerunLoginActiveRef = useRef(false);
+  const mulerunLoginGenerationRef = useRef(0);
   const mulerunPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => () => {
-    if (mulerunPollRef.current) clearInterval(mulerunPollRef.current);
+  const mulerunPollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const setMulerunLoginRunning = useCallback((running: boolean) => {
+    mulerunLoginActiveRef.current = running;
+    setMulerunLoginActive(running);
   }, []);
+
+  const clearMulerunLoginTimers = useCallback(() => {
+    if (mulerunPollRef.current) {
+      clearInterval(mulerunPollRef.current);
+      mulerunPollRef.current = null;
+    }
+    if (mulerunPollTimeoutRef.current) {
+      clearTimeout(mulerunPollTimeoutRef.current);
+      mulerunPollTimeoutRef.current = null;
+    }
+  }, []);
+
+  const finishMulerunLogin = useCallback((generation: number) => {
+    if (generation !== mulerunLoginGenerationRef.current) return;
+    mulerunLoginGenerationRef.current += 1;
+    clearMulerunLoginTimers();
+    setMulerunLoginRunning(false);
+  }, [clearMulerunLoginTimers, setMulerunLoginRunning]);
+
+  const cancelMulerunLogin = useCallback(() => {
+    mulerunLoginGenerationRef.current += 1;
+    clearMulerunLoginTimers();
+    setMulerunLoginRunning(false);
+  }, [clearMulerunLoginTimers, setMulerunLoginRunning]);
+
+  const getErrorDetail = (error: unknown): string | null => {
+    if (!error || typeof error !== "object" || !("response" in error)) return null;
+    const response = (error as { response?: { data?: { detail?: unknown } } }).response;
+    return typeof response?.data?.detail === "string" ? response.data.detail : null;
+  };
+
+  const startMulerunLogin = useCallback(async () => {
+    if (mulerunLoginActiveRef.current) return;
+    const environment = getRuntimeEnvironment();
+    if (!environment) {
+      toast.error(t("loginFailed"));
+      return;
+    }
+
+    const generation = mulerunLoginGenerationRef.current + 1;
+    mulerunLoginGenerationRef.current = generation;
+    clearMulerunLoginTimers();
+    setMulerunLoginRunning(true);
+
+    const stillCurrent = () => (
+      generation === mulerunLoginGenerationRef.current
+      && isCurrentRuntimeEnvironment(environment.key, environment.generation)
+    );
+
+    try {
+      await api.triggerMulerunLogin();
+      if (!stillCurrent()) {
+        finishMulerunLogin(generation);
+        return;
+      }
+
+      let pollInFlight = false;
+      const poll = async () => {
+        if (pollInFlight) return;
+        if (!stillCurrent()) {
+          finishMulerunLogin(generation);
+          return;
+        }
+        pollInFlight = true;
+        try {
+          const env = await api.getEnvConfig();
+          if (!stillCurrent()) {
+            finishMulerunLogin(generation);
+            return;
+          }
+          if (env.MULERUN_CLI_LOGGED_IN) {
+            finishMulerunLogin(generation);
+            setConfig((current) => ({ ...current, MULERUN_CLI_LOGGED_IN: true }));
+          }
+        } catch {
+          if (!stillCurrent()) finishMulerunLogin(generation);
+        } finally {
+          if (generation === mulerunLoginGenerationRef.current) pollInFlight = false;
+        }
+      };
+
+      mulerunPollRef.current = setInterval(() => {
+        void poll();
+      }, 3000);
+      mulerunPollTimeoutRef.current = setTimeout(() => {
+        if (!stillCurrent()) {
+          finishMulerunLogin(generation);
+          return;
+        }
+        finishMulerunLogin(generation);
+        toast.error(t("loginFailed"));
+      }, 120000);
+    } catch (error: unknown) {
+      if (stillCurrent()) toast.error(getErrorDetail(error) || t("loginFailed"));
+      finishMulerunLogin(generation);
+    }
+  }, [clearMulerunLoginTimers, finishMulerunLogin, setMulerunLoginRunning, t]);
+
+  useEffect(() => subscribeRuntimeEnvironment(cancelMulerunLogin), [cancelMulerunLogin]);
+
+  useEffect(() => () => {
+    mulerunLoginGenerationRef.current += 1;
+    clearMulerunLoginTimers();
+    mulerunLoginActiveRef.current = false;
+  }, [clearMulerunLoginTimers]);
 
   const PathField = ({ value, label }: { value: string; label: string }) => (
     <div>
@@ -524,7 +731,7 @@ export default function SettingsPage() {
       {/* Image model (T2I + I2I unified) */}
       <FormRow label={t("imageModelLabel")} hint={t("imageModelHint")}>
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-3">
-          <Image size={15} className="text-emerald-400" />
+          <ImageIcon size={15} className="text-emerald-400" />
           <span>{t("imageModelCaption")}</span>
         </div>
         <GroupedModelGrid
@@ -673,12 +880,12 @@ export default function SettingsPage() {
         </div>
       ) : loadError ? (
         <div className="bg-status-failed-bg border border-status-failed-border rounded-lg p-4 text-sm text-status-failed-fg">
-          {loadError}
+          {t("loadConfigFailed")}
         </div>
       ) : (
         <div className="space-y-1">
           <FormRow label={t("dashscopeKeyLabel")} hint={t("dashscopeKeyHint")}>
-            <FieldLabel>DASHSCOPE_API_KEY *</FieldLabel>
+            <FieldLabel>DASHSCOPE_API_KEY</FieldLabel>
             <KeyField
               value={config.DASHSCOPE_API_KEY}
               onChange={(v) => handleChange("DASHSCOPE_API_KEY", v)}
@@ -735,33 +942,9 @@ export default function SettingsPage() {
             {!config.MULEROUTER_API_KEY && !config.MULERUN_CLI_LOGGED_IN && (
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    await api.triggerMulerunLogin();
-                    if (mulerunPollRef.current) clearInterval(mulerunPollRef.current); // 重入守卫
-                    const stop = () => {
-                      if (mulerunPollRef.current) {
-                        clearInterval(mulerunPollRef.current);
-                        mulerunPollRef.current = null;
-                      }
-                    };
-                    mulerunPollRef.current = setInterval(async () => {
-                      try {
-                        const env = await api.getEnvConfig();
-                        if (env.MULERUN_CLI_LOGGED_IN) {
-                          stop();
-                          setConfig((c) => ({ ...c, MULERUN_CLI_LOGGED_IN: true }));
-                        }
-                      } catch {
-                        /* silent */
-                      }
-                    }, 3000);
-                    setTimeout(stop, 120000);
-                  } catch (err: any) {
-                    toast.error(err?.response?.data?.detail || t("loginFailed"));
-                  }
-                }}
-                className="w-full py-2.5 rounded-lg bg-primary text-on-accent text-sm font-medium hover:bg-primary-hover transition-colors mb-3"
+                onClick={startMulerunLogin}
+                disabled={mulerunLoginActive}
+                className="w-full py-2.5 rounded-lg bg-primary text-on-accent text-sm font-medium hover:bg-primary-hover transition-colors mb-3 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {t("mulerunLogin")}
               </button>
@@ -774,14 +957,9 @@ export default function SettingsPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={async () => {
-                    try {
-                      await api.triggerMulerunLogin();
-                    } catch (err: any) {
-                      toast.error(err?.response?.data?.detail || t("loginFailed"));
-                    }
-                  }}
-                  className="text-xs text-text-secondary hover:text-foreground transition-colors underline underline-offset-2"
+                  onClick={startMulerunLogin}
+                  disabled={mulerunLoginActive}
+                  className="text-xs text-text-secondary hover:text-foreground transition-colors underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {t("reLogin")}
                 </button>
@@ -858,7 +1036,7 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={handleSaveApiConfig}
-              disabled={saving || loading || !online}
+              disabled={saving || loading || !online || !configOwner}
               className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-on-accent text-sm font-medium rounded-lg transition-all disabled:opacity-50"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
@@ -876,6 +1054,16 @@ export default function SettingsPage() {
       title={t("secStorageTitle")}
       desc={t("secStorageDesc")}
     >
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 size={24} className="animate-spin text-primary" />
+          <span className="ml-2 text-text-secondary">{t("loadingConfig")}</span>
+        </div>
+      ) : loadError ? (
+        <div className="bg-status-failed-bg border border-status-failed-border rounded-lg p-4 text-sm text-status-failed-fg">
+          {t("loadConfigFailed")}
+        </div>
+      ) : (<>
       <FormRow label={t("cloudStorageLabel")}>
         <Toggle
           checked={config.OSS_ENABLE}
@@ -960,13 +1148,14 @@ export default function SettingsPage() {
         <button
           type="button"
           onClick={handleSaveStorage}
-          disabled={saving || loading || !online}
+          disabled={saving || loading || !online || !configOwner}
           className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-hover text-on-accent text-sm font-medium rounded-lg transition-all disabled:opacity-50"
         >
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
           {saving ? t("saving") : t("saveConfig")}
         </button>
       </div>
+      </>)}
     </Section>
   );
 

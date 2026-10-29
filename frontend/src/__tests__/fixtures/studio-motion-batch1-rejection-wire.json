@@ -1,0 +1,85 @@
+{
+  "cases": [
+    {
+      "case": "batch1_model_change_zero_admission",
+      "checks": {
+        "actual_author_command_batch_size": 1,
+        "actual_author_command_duration": 5,
+        "configuration_change_setup": "isolated pipeline config video.model.params.i2v_model_name",
+        "managed_files_unchanged_after_post_and_read": true,
+        "original_preflight_stamp_preserved": true,
+        "same_command_body_preserved": true,
+        "zero_task_and_receipt": true
+      },
+      "events": [
+        {
+          "body": {
+            "asset_id": "hero",
+            "asset_type": "full_body",
+            "eligible": true,
+            "expected_target": "418818e0349d603342e40d15790f64cba25fc6399f520ba565976869f1244972",
+            "model_id": "wan2.7-i2v",
+            "owner": {
+              "id": "project",
+              "kind": "script"
+            },
+            "project_id": "project",
+            "reason": null,
+            "selected_image_id": "selected-image",
+            "source_kind": "data_uri"
+          },
+          "label": "eligible_batch1_before_model_change",
+          "method": "GET",
+          "path": "/projects/project/motion_ref_requests",
+          "raw_response_sha256": "247fae8d33854f50a058b5072199699fd5750192551887ecd96e97b2cd1e47ff",
+          "request_query": {
+            "asset_id": "hero",
+            "asset_type": "full_body",
+            "batch_size": 1,
+            "has_audio": false
+          },
+          "status_code": 200
+        },
+        {
+          "body": {
+            "accepted": false,
+            "client_request_id": "motion-request",
+            "code": "motion_reference_not_eligible",
+            "detail": "The command was not accepted. Review the current asset before a new action.",
+            "reason": "model_unsupported"
+          },
+          "label": "zero_admission_batch1_model_changed",
+          "method": "POST",
+          "path": "/projects/project/motion_ref_requests",
+          "raw_response_sha256": "337c5bf606bbd0d3da318703060d263bda5e67bb6721ff6101f55b00c14a3efe",
+          "request_body": {
+            "asset_id": "hero",
+            "asset_type": "full_body",
+            "batch_size": 1,
+            "client_request_id": "motion-request",
+            "duration": 5,
+            "expected_target": "418818e0349d603342e40d15790f64cba25fc6399f520ba565976869f1244972",
+            "prompt": "One slow rotation"
+          },
+          "status_code": 422
+        },
+        {
+          "body": {
+            "detail": "Motion reference request not found"
+          },
+          "label": "batch1_rejection_original_key_404",
+          "method": "GET",
+          "path": "/projects/project/motion_ref_requests/motion-request",
+          "raw_response_sha256": "15e8ecb274f61d8268ae49783fe6a1c74e978107feda41939c24068a0dcb17e8",
+          "status_code": 404
+        }
+      ],
+      "external_counts": {
+        "fetch": 0,
+        "query": 0,
+        "submit": 0
+      }
+    }
+  ],
+  "format": "lumenx-motion-http-field-projection-v1"
+}

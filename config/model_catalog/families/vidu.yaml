@@ -15,7 +15,6 @@ credential_sources:
   vendor:
     - VIDU_API_KEY
 supported_modalities:
-  - t2v
   - i2v
   - r2v
 transport:
@@ -39,7 +38,7 @@ models:
     release_stage: stable
     runtime:
       dashscope:
-        gateway: dashscope
+        gateway: dashscope_workspace
       vendor:
         gateway: vidu
     docs:
@@ -55,6 +54,7 @@ models:
         runtime:
           dashscope:
             api_model_id: vidu/viduq3-pro_img2video
+            gateway: dashscope_workspace
         ui:
           selection_group: i2v
           visible_in: [project_settings, series_settings, video_sidebar, global_settings]
@@ -68,21 +68,25 @@ models:
           default: 5
         params:
           resolution:
-            options: [540p, 720p, 1080p]
-            default: 720p
-          seed: true
-          negativePrompt: false
+            options: [540P, 720P, 1080P]
+            default: 720P
+          seed:
+            min: 0
+            max: 2147483647
           promptExtend: false
-          watermark: false
-          viduAudio: true
-          movementAmplitude:
-            options: [auto, small, medium, large]
-            default: auto
-          watermark: true
+          watermark:
+            default: false
+          audio:
+            default: false
         inputs:
           reference_images:
             max: 1
             reference_type: image
+            mime_types: [image/jpeg, image/png, image/webp]
+            max_bytes: 52428800
+            aspect_ratio:
+              min: 0.25
+              max: 4
       r2v:
         legacy_id: viduq3-pro-r2v
         display_name: Vidu Q3 Pro R2V
@@ -91,6 +95,7 @@ models:
         runtime:
           dashscope:
             api_model_id: vidu/viduq3-mix_reference2video
+            gateway: dashscope_workspace
         ui:
           selection_group: r2v
           visible_in: [project_settings, series_settings, video_sidebar, global_settings]
@@ -103,16 +108,28 @@ models:
           default: 5
         params:
           resolution:
-            options: [540p, 720p, 1080p]
-            default: 720p
-          seed: true
-          negativePrompt: false
+            options: [720P, 1080P]
+            default: 720P
+          aspectRatio:
+            options: ["16:9", "4:3", "1:1", "3:4", "9:16"]
+            default: "16:9"
+          seed:
+            min: 0
+            max: 2147483647
           promptExtend: false
-          watermark: false
+          watermark:
+            default: false
+          audio:
+            default: false
         inputs:
           reference_images:
             max: 7
             reference_type: image
+            mime_types: [image/jpeg, image/png, image/webp]
+            max_bytes: 52428800
+            aspect_ratio:
+              min: 0.25
+              max: 4
 
   - id: vidu/viduq3-turbo-video
     display_name: Vidu Q3 Turbo Video
@@ -121,7 +138,7 @@ models:
     release_stage: stable
     runtime:
       dashscope:
-        gateway: dashscope
+        gateway: dashscope_workspace
       vendor:
         gateway: vidu
     docs:
@@ -137,6 +154,7 @@ models:
         runtime:
           dashscope:
             api_model_id: vidu/viduq3-turbo_img2video
+            gateway: dashscope_workspace
         ui:
           selection_group: i2v
           visible_in: [project_settings, series_settings, video_sidebar, global_settings]
@@ -149,21 +167,25 @@ models:
           default: 5
         params:
           resolution:
-            options: [540p, 720p, 1080p]
-            default: 720p
-          seed: true
-          negativePrompt: false
+            options: [540P, 720P, 1080P]
+            default: 720P
+          seed:
+            min: 0
+            max: 2147483647
           promptExtend: false
-          watermark: false
-          viduAudio: true
-          movementAmplitude:
-            options: [auto, small, medium, large]
-            default: auto
-          watermark: true
+          watermark:
+            default: false
+          audio:
+            default: false
         inputs:
           reference_images:
             max: 1
             reference_type: image
+            mime_types: [image/jpeg, image/png, image/webp]
+            max_bytes: 52428800
+            aspect_ratio:
+              min: 0.25
+              max: 4
       r2v:
         legacy_id: viduq3-turbo-r2v
         display_name: Vidu Q3 Turbo R2V
@@ -172,6 +194,7 @@ models:
         runtime:
           dashscope:
             api_model_id: vidu/viduq3-turbo_reference2video
+            gateway: dashscope_workspace
         ui:
           selection_group: r2v
           visible_in: [project_settings, series_settings, video_sidebar, global_settings]
@@ -184,13 +207,25 @@ models:
           default: 5
         params:
           resolution:
-            options: [540p, 720p, 1080p]
-            default: 720p
-          seed: true
-          negativePrompt: false
+            options: [540P, 720P, 1080P]
+            default: 720P
+          aspectRatio:
+            options: ["16:9", "4:3", "1:1", "3:4", "9:16"]
+            default: "16:9"
+          seed:
+            min: 0
+            max: 2147483647
           promptExtend: false
-          watermark: false
+          watermark:
+            default: false
+          audio:
+            default: false
         inputs:
           reference_images:
             max: 7
             reference_type: image
+            mime_types: [image/jpeg, image/png, image/webp]
+            max_bytes: 52428800
+            aspect_ratio:
+              min: 0.25
+              max: 4

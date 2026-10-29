@@ -1,55 +1,144 @@
 import axios from 'axios';
+import { API_URL } from '@/lib/apiUrl';
 import type { L3Result } from '@/store/editorStore';
 
-// Reuse the same API URL detection logic as the main api.ts
-const BACKEND_PORT = process.env.NEXT_PUBLIC_BACKEND_PORT || '17177';
-
-const getApiUrl = (): string => {
-  const override = process.env.NEXT_PUBLIC_API_URL;
-  if (override && override.trim()) {
-    return override.trim().replace(/\/+$/, '');
-  }
-
-  if (typeof window !== 'undefined') {
-    const { protocol, hostname, port } = window.location;
-
-    if (process.env.NODE_ENV === 'development') {
-      return `${protocol}//${hostname}:${BACKEND_PORT}`;
-    }
-
-    return `${protocol}//${hostname}${port ? ':' + port : ''}`;
-  }
-
-  return `http://localhost:${BACKEND_PORT}`;
-};
-
-const API_BASE = getApiUrl();
+const API_BASE = API_URL;
 
 export interface DocumentResponse {
   project_id: string;
+  revision: number;
+  updated_at: string | null;
   content: object;
-  updated_at: string;
 }
 
 export interface SnapshotResponse {
   project_id: string;
+  snapshot_id: string;
   timestamp: string;
   created_at: string;
+  revision: number;
+  size_bytes: number;
+}
+
+export interface SaveDocumentOptions {
+  expectedRevision: number;
+  createSnapshot?: boolean;
+}
+
+export interface RestoreSnapshotOptions {
+  expectedRevision: number;
+}
+
+export interface SyncDerivationOptions {
+  expectedRevision: number;
+  sourceDocumentRevision: number;
+}
+
+export interface DerivationSidecarResponse {
+  status?: string;
+  revision: number;
+  updated_at: string;
+  source_document_revision: number;
+  data: Record<string, unknown>;
+}
+
+export interface DeriveGapsRequest {
+  already_extracted?: { scenes: string[]; characters: string[] };
+  gaps?: string[];
+  raw_text_blocks?: string[];
+}
+
+export interface DeriveGapsOptions {
+  signal?: AbortSignal;
+}
+
+export interface DeriveGapsClientResponse {
+  results: L3Result[];
+  cached: boolean;
+}
+
+export interface ConfirmShotBlockOptions {
+  expectedRevision: number;
+  sourceDocumentRevision: number;
+}
+
+export interface ShotBlockResponse {
+  shot_id: string;
+  status: string;
+  revision: number;
+  source_document_revision: number;
+  [key: string]: unknown;
+}
+
+function assertDeriveGapsResponse(data: unknown): DeriveGapsClientResponse {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Invalid derive_gaps response: expected object');
+  }
+
+  const raw = data as Record<string, unknown>;
+  if (!Array.isArray(raw.entities)) {
+    throw new Error('Invalid derive_gaps response: missing entities');
+  }
+
+  const results = raw.entities.map((item, index): L3Result => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`Invalid derive_gaps response: entity ${index} is not an object`);
+    }
+    const entity = item as Record<string, unknown>;
+    if (
+      entity.type !== 'character' &&
+      entity.type !== 'prop' &&
+      entity.type !== 'beat' &&
+      entity.type !== 'location'
+    ) {
+      throw new Error(`Invalid derive_gaps response: entity ${index} has invalid type`);
+    }
+    if (typeof entity.name !== 'string' || entity.name.trim() === '') {
+      throw new Error(`Invalid derive_gaps response: entity ${index} has invalid name`);
+    }
+    if (typeof entity.confidence !== 'number' || !Number.isFinite(entity.confidence) || entity.confidence < 0 || entity.confidence > 1) {
+      throw new Error(`Invalid derive_gaps response: entity ${index} has invalid confidence`);
+    }
+    if (entity.description !== undefined && entity.description !== null && typeof entity.description !== 'string') {
+      throw new Error(`Invalid derive_gaps response: entity ${index} has invalid description`);
+    }
+    if (
+      entity.scene_index !== undefined &&
+      entity.scene_index !== null &&
+      (!Number.isSafeInteger(entity.scene_index) || (entity.scene_index as number) < 0)
+    ) {
+      throw new Error(`Invalid derive_gaps response: entity ${index} has invalid scene_index`);
+    }
+
+    return {
+      type: entity.type,
+      name: entity.name.trim(),
+      ...(typeof entity.description === 'string' ? { description: entity.description } : {}),
+      confidence: entity.confidence,
+      ...(entity.scene_index !== undefined && entity.scene_index !== null ? { sceneIndex: entity.scene_index as number } : {}),
+    };
+  });
+
+  return {
+    results,
+    cached: raw.cached === true,
+  };
 }
 
 export const scriptEditorApi = {
   /** 保存文档 */
-  saveDocument: async (projectId: string, content: object, createSnapshot = false): Promise<DocumentResponse> => {
+  saveDocument: async (projectId: string, content: object, options: SaveDocumentOptions): Promise<DocumentResponse> => {
     const res = await axios.post(`${API_BASE}/projects/${projectId}/document`, {
       content,
-      create_snapshot: createSnapshot,
+      expected_revision: options.expectedRevision,
+      create_snapshot: options.createSnapshot ?? false,
     });
     return res.data;
   },
 
   /** 加载文档 */
-  loadDocument: async (projectId: string): Promise<DocumentResponse> => {
-    const res = await axios.get(`${API_BASE}/projects/${projectId}/document`);
+  loadDocument: async (projectId: string, options?: { signal?: AbortSignal }): Promise<DocumentResponse> => {
+    const res = await axios.get(`${API_BASE}/projects/${projectId}/document`, { signal: options?.signal });
     return res.data;
   },
 
@@ -66,9 +155,10 @@ export const scriptEditorApi = {
   },
 
   /** 恢复快照 */
-  restoreSnapshot: async (projectId: string, timestamp: string): Promise<DocumentResponse> => {
+  restoreSnapshot: async (projectId: string, timestamp: string, options: RestoreSnapshotOptions): Promise<DocumentResponse> => {
     const res = await axios.post(
-      `${API_BASE}/projects/${projectId}/document/snapshots/${timestamp}/restore`
+      `${API_BASE}/projects/${projectId}/document/snapshots/${timestamp}/restore`,
+      { expected_revision: options.expectedRevision }
     );
     return res.data;
   },
@@ -102,27 +192,43 @@ export const scriptEditorApi = {
   },
 
   /** 同步派生数据到后端 */
-  syncDerivation: async (projectId: string, data: any): Promise<void> => {
-    await axios.post(`${API_BASE}/projects/${projectId}/sync_derivation`, data);
+  syncDerivation: async (
+    projectId: string,
+    data: Record<string, unknown>,
+    options: SyncDerivationOptions
+  ): Promise<DerivationSidecarResponse> => {
+    const res = await axios.post(`${API_BASE}/projects/${projectId}/sync_derivation`, {
+      ...data,
+      expected_revision: options.expectedRevision,
+      source_document_revision: options.sourceDocumentRevision,
+    });
+    return res.data;
   },
 
   /** L3 LLM 增量补全请求 */
   deriveGaps: async (
     projectId: string,
-    params: {
-      already_extracted?: { scenes: string[]; characters: string[] };
-      gaps?: string[]; // e.g. ['props', 'beats', 'locations']
-    }
-  ): Promise<{ results: L3Result[]; task_id?: string }> => {
-    const res = await axios.post(`${API_BASE}/projects/${projectId}/derive_gaps`, params);
-    return res.data;
+    params: DeriveGapsRequest,
+    options?: DeriveGapsOptions
+  ): Promise<DeriveGapsClientResponse> => {
+    const res = await axios.post(`${API_BASE}/projects/${projectId}/derive_gaps`, params, { signal: options?.signal });
+    return assertDeriveGapsResponse(res.data);
   },
 
   /** 确认 ShotBlock */
-  confirmShotBlock: async (projectId: string, shotId: string, data: any): Promise<any> => {
+  confirmShotBlock: async (
+    projectId: string,
+    shotId: string,
+    data: Record<string, unknown>,
+    options: ConfirmShotBlockOptions
+  ): Promise<ShotBlockResponse> => {
     const res = await axios.post(
       `${API_BASE}/projects/${projectId}/shot_blocks/${shotId}/confirm`,
-      data
+      {
+        ...data,
+        expected_revision: options.expectedRevision,
+        source_document_revision: options.sourceDocumentRevision,
+      }
     );
     return res.data;
   },

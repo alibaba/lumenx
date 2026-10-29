@@ -31,10 +31,13 @@ def pipeline(tmp_path):
          patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
          patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
          patch("src.apps.comic_gen.pipeline.ExportManager"):
-        p = ComicGenPipeline()
-    p.data_file = str(tmp_path / "projects.json")
-    p.series_data_file = str(tmp_path / "series.json")
-    p.library_data_file = str(tmp_path / "library_assets.json")
+        p = ComicGenPipeline(data_dir=tmp_path / "output")
+    def complete_asset(asset, **kwargs):
+        asset.status = GenerationStatus.COMPLETED
+        return asset
+    p.asset_generator.generate_character.side_effect = complete_asset
+    p.asset_generator.generate_scene.side_effect = complete_asset
+    p.asset_generator.generate_prop.side_effect = complete_asset
     p.scripts = {}
     p.series_store = {}
     return p
@@ -99,11 +102,13 @@ class TestCreateProject:
 
 class TestGenerateAssets:
     def test_all_assets_completed(self, pipeline, project):
+        pipeline.update_model_settings(project.id, t2i_model="wan2.6-t2i")
         script = pipeline.generate_assets(project.id)
         assert all(c.status == GenerationStatus.COMPLETED for c in script.characters)
         assert all(s.status == GenerationStatus.COMPLETED for s in script.scenes)
 
     def test_generators_called_per_asset(self, pipeline, project):
+        pipeline.update_model_settings(project.id, t2i_model="wan2.6-t2i")
         pipeline.generate_assets(project.id)
         assert pipeline.asset_generator.generate_character.call_count == 2
         assert pipeline.asset_generator.generate_scene.call_count == 1
@@ -119,13 +124,14 @@ class TestGenerateAssets:
 
 class TestGenerateStoryboard:
     def test_storyboard_generator_receives_resolved_assets(self, pipeline, project):
-        pipeline.storyboard_generator.generate_storyboard.side_effect = \
-            lambda script, **kwargs: script
+        pipeline.storyboard_generator.generate_frame.side_effect = \
+            lambda frame, characters, scene, **kwargs: frame
         result = pipeline.generate_storyboard(project.id)
-        assert result is project
-        _, kwargs = pipeline.storyboard_generator.generate_storyboard.call_args
-        assert [c.id for c in kwargs["characters"]] == [c.id for c in project.characters]
-        assert [s.id for s in kwargs["scenes"]] == [s.id for s in project.scenes]
+        assert result is not project
+        args, _ = pipeline.storyboard_generator.generate_frame.call_args
+        assert args[0] is not project.frames[0]
+        assert [c.id for c in args[1]] == project.frames[0].character_ids
+        assert args[2].id == project.frames[0].scene_id
 
 
 # ---------------------------------------------------------------------------
@@ -133,16 +139,14 @@ class TestGenerateStoryboard:
 # ---------------------------------------------------------------------------
 
 class TestGenerateVideo:
-    def test_frames_receive_video_urls(self, pipeline, project):
-        def fake_generate(script):
-            for frame in script.frames:
-                frame.video_url = f"http://example.com/{frame.id}.mp4"
-            return script
+    def test_legacy_script_wide_video_generation_is_unsupported(self, pipeline, project):
+        with pytest.raises(NotImplementedError, match="video_tasks"):
+            pipeline.generate_video(project.id)
+        pipeline.video_generator.generate_video.assert_not_called()
 
-        pipeline.video_generator.generate_video.side_effect = fake_generate
-        result = pipeline.generate_video(project.id)
-        assert all(f.video_url for f in result.frames)
-        pipeline.video_generator.generate_video.assert_called_once_with(project)
+    def test_unknown_script_raises(self, pipeline):
+        with pytest.raises(ValueError, match="Script not found"):
+            pipeline.generate_video("no-such-id")
 
 
 # ---------------------------------------------------------------------------
@@ -150,24 +154,28 @@ class TestGenerateVideo:
 # ---------------------------------------------------------------------------
 
 class TestGenerateAudio:
-    def test_dialogue_sfx_and_bgm_generated(self, pipeline, project):
-        pipeline.generate_audio(project.id)
-        # One frame with dialogue + speaker → one dialogue call
-        assert pipeline.audio_generator.generate_dialogue.call_count == 1
-        # One frame with an action description → one SFX call
-        assert pipeline.audio_generator.generate_sfx.call_count == 1
-        # BGM is generated for every frame
-        assert pipeline.audio_generator.generate_bgm.call_count == 1
-        # No video yet → no video-to-audio SFX
-        pipeline.audio_generator.generate_sfx_from_video.assert_not_called()
+    def test_legacy_audio_delegates_dialogue_batch_only(self, pipeline, project, monkeypatch):
+        calls = []
 
-    def test_dialogue_uses_speaker_voice_settings(self, pipeline, project):
-        pipeline.generate_audio(project.id)
-        frame = project.frames[0]
-        speaker = next(c for c in project.characters if c.id == frame.character_ids[0])
-        pipeline.audio_generator.generate_dialogue.assert_called_once_with(
-            frame, speaker,
-            speed=speaker.voice_speed,
-            pitch=speaker.voice_pitch,
-            volume=speaker.voice_volume,
-        )
+        def fake_batch(script_id):
+            calls.append(script_id)
+            return project, {"generated": 1}, []
+
+        monkeypatch.setattr(pipeline, "generate_dialogue_audio_batch", fake_batch)
+        result = pipeline.generate_audio(project.id)
+
+        assert result is project
+        assert calls == [project.id]
+        pipeline.audio_generator.generate_dialogue.assert_not_called()
+        pipeline.audio_generator.generate_sfx.assert_not_called()
+        pipeline.audio_generator.generate_sfx_from_video.assert_not_called()
+        pipeline.audio_generator.generate_bgm.assert_not_called()
+
+    def test_dialogue_batch_errors_propagate(self, pipeline, project, monkeypatch):
+        error = RuntimeError("dialogue failed")
+        def fail_batch(_script_id):
+            raise error
+
+        monkeypatch.setattr(pipeline, "generate_dialogue_audio_batch", fail_batch)
+        with pytest.raises(RuntimeError, match="dialogue failed"):
+            pipeline.generate_audio(project.id)

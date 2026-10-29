@@ -23,6 +23,7 @@ export interface VideoConfig {
     r2vModel: string;
     duration: number;
     resolution: string;
+    ratio?: string;
     promptExtend: boolean;
     negativePrompt: string;
     // Kling

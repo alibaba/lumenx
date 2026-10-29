@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { ListOrdered, X, Minus, Plus } from 'lucide-react';
+import { ListOrdered, X, Minus, Plus, RefreshCw } from 'lucide-react';
 import { usePlaygroundStore } from './usePlaygroundStore';
 
 /**
@@ -17,7 +17,8 @@ export default function QueuePanel() {
   const activeCount = usePlaygroundStore((s) => s.activeGenerationIds.length);
   const maxConcurrent = usePlaygroundStore((s) => s.maxConcurrent);
   const setMaxConcurrent = usePlaygroundStore((s) => s.setMaxConcurrent);
-  const removeFromQueue = usePlaygroundStore((s) => s.removeFromQueue);
+  const cancelPendingRequest = usePlaygroundStore((s) => s.cancelPendingRequest);
+  const requestReadback = usePlaygroundStore((s) => s.requestReadback);
 
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -87,18 +88,36 @@ export default function QueuePanel() {
                 >
                   <span
                     className={`font-mono text-[0.5625rem] uppercase px-1.5 py-[1px] rounded shrink-0 ${
-                      q.status === 'dispatching' ? 'bg-primary/15 text-primary' : 'bg-glass text-text-muted'
+                      q.status === 'dispatching'
+                        ? 'bg-primary/15 text-primary'
+                        : q.status === 'needs_readback'
+                          ? 'bg-status-warning-bg text-status-warning-fg'
+                          : 'bg-glass text-text-muted'
                     }`}
                   >
-                    {q.status === 'dispatching' ? t('queue.dispatching') : t('queue.pending')}
+                    {q.status === 'dispatching'
+                      ? t('queue.dispatching')
+                      : q.status === 'needs_readback'
+                        ? t('queue.needsReadback')
+                        : t('queue.pending')}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[0.6875rem] text-text-secondary">
-                    {q.prompt || '(empty)'}
+                    {q.body.prompt || '(empty)'}
                   </span>
+                  {q.status === 'needs_readback' && (
+                    <button
+                      type="button"
+                      onClick={() => requestReadback(q.id)}
+                      title={t('queue.refreshReadback')}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                    </button>
+                  )}
                   {q.status === 'pending' && (
                     <button
                       type="button"
-                      onClick={() => removeFromQueue(q.id)}
+                      onClick={() => cancelPendingRequest(q.id)}
                       title={t('queue.cancel')}
                       className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-status-failed-bg hover:text-status-failed-fg"
                     >

@@ -5,8 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Loader2, RefreshCw, Copy, Download, Trash2, AlertCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 
-import { VideoTask, API_URL } from "@/lib/api";
+import type { VideoTask } from "@/lib/api";
 import { getAssetUrl } from "@/lib/utils";
+
+type VideoQueueFilter = "all" | "processing" | "completed" | "needs_confirmation" | "failed";
 
 interface VideoQueueProps {
     tasks: VideoTask[];
@@ -15,7 +17,7 @@ interface VideoQueueProps {
 
 export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
     const tv = useTranslations("video");
-    const [filter, setFilter] = useState<"all" | "processing" | "completed" | "failed">("all");
+    const [filter, setFilter] = useState<VideoQueueFilter>("all");
 
     const filteredTasks = tasks.filter(t => {
         if (filter === "all") return true;
@@ -38,14 +40,15 @@ export default function VideoQueue({ tasks, onRemix }: VideoQueueProps) {
                 </div>
 
                 <div className="flex bg-glass rounded-lg p-1 gap-1">
-                    {[
+                    {([
                         { id: "all", label: tv("all") },
                         { id: "processing", label: tv("processing") },
                         { id: "completed", label: tv("completed") },
-                    ].map((tab) => (
+                        { id: "needs_confirmation", label: tv("needsConfirmationTab") },
+                    ] satisfies Array<{ id: VideoQueueFilter; label: string }>).map((tab) => (
                         <button
                             key={tab.id}
-                            onClick={() => setFilter(tab.id as any)}
+                            onClick={() => setFilter(tab.id)}
                             className={`flex-1 py-1.5 text-xs rounded-md transition-colors ${filter === tab.id
                                 ? "bg-hover-bg text-foreground font-medium shadow-sm"
                                 : "text-text-muted hover:text-text-secondary"
@@ -80,7 +83,7 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
     const isCompleted = task.status === "completed";
     const isProcessing = task.status === "processing" || task.status === "pending";
     const isFailed = task.status === "failed";
-
+    const isNeedsConfirmation = task.status === "needs_confirmation";
 
     const getDisplayUrl = (url: string) => {
         return getAssetUrl(url);
@@ -94,7 +97,8 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
             exit={{ opacity: 0, scale: 0.95 }}
             className={`rounded-xl overflow-hidden border transition-all ${isProcessing ? "bg-glass border-glass-border" :
                 isFailed ? "bg-red-500/5 border-red-500/20" :
-                    "bg-surface border-glass-border hover:border-glass-border"
+                    isNeedsConfirmation ? "bg-amber-500/5 border-amber-500/25" :
+                        "bg-surface border-glass-border hover:border-glass-border"
                 }`}
         >
             {/* Processing State (Compact) */}
@@ -211,6 +215,41 @@ function TaskCard({ task, onRemix }: { task: VideoTask; onRemix: (t: VideoTask) 
                             <button className="p-1.5 hover:bg-red-500/20 rounded text-text-muted hover:text-red-400">
                                 <Trash2 size={14} />
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Needs-confirmation State */}
+            {isNeedsConfirmation && (
+                <div className="p-3">
+                    <div className="flex items-center gap-2 text-amber-300 mb-2">
+                        <AlertCircle size={16} />
+                        <span className="text-sm font-medium">{tv("needsConfirmation")}</span>
+                    </div>
+                    <p className="text-xs text-text-muted mb-3">{tv("needsConfirmationDetail")}</p>
+                    {task.video_url ? (
+                        <div className="mb-3 overflow-hidden rounded border border-amber-500/20 bg-black/40">
+                            <video src={getAssetUrl(task.video_url)} controls className="h-28 w-full object-cover" />
+                            <div className="px-2 py-1 text-[0.625rem] text-amber-200/80">{tv("historicalUnconfirmed")}</div>
+                        </div>
+                    ) : null}
+                    <div className="space-y-1 rounded border border-glass-border/60 bg-black/30 px-2 py-1.5 font-mono text-[0.6875rem] text-text-secondary">
+                        {task.provider_task_id ? (
+                            <div className="flex gap-1.5">
+                                <span className="text-text-muted">{tv("providerTaskId")}:</span>
+                                <code className="min-w-0 flex-1 truncate" title={task.provider_task_id}>{task.provider_task_id}</code>
+                            </div>
+                        ) : null}
+                        {task.provider_request_id ? (
+                            <div className="flex gap-1.5">
+                                <span className="text-text-muted">{tv("providerRequestId")}:</span>
+                                <code className="min-w-0 flex-1 truncate" title={task.provider_request_id}>{task.provider_request_id}</code>
+                            </div>
+                        ) : null}
+                        <div className="flex gap-1.5">
+                            <span className="text-text-muted">local:</span>
+                            <code className="min-w-0 flex-1 truncate" title={task.id}>{task.id}</code>
                         </div>
                     </div>
                 </div>

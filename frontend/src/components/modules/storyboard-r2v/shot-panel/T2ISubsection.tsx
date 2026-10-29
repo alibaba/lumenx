@@ -60,6 +60,7 @@ interface T2ISubsectionProps {
     /** Whether the user typed a prompt — gates the hero "Generate" CTA so
      *  we never silently early-return like the legacy +Gen tile did. */
     promptIsEmpty: boolean;
+    generationDisabled?: boolean;
     /** True while a T2I generation is in flight. */
     generating: boolean;
     inFlightTaskId?: string;
@@ -73,6 +74,10 @@ interface T2ISubsectionProps {
      *  upload error code (or void if success). Host owns the actual
      *  api.uploadT2IFrame call + state mutation. */
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    lastFrameEnabled?: boolean;
+    lastFrameUrl?: string;
+    onLastFrameUpload?: (file: File) => Promise<T2IUploadError | void>;
+    onLastFrameClear?: () => void;
     resolveUrl?: (url: string) => string;
 }
 
@@ -81,6 +86,7 @@ export default function T2ISubsection({
     selectedIndex,
     storyboardFrameUrl,
     promptIsEmpty,
+    generationDisabled = false,
     generating,
     inFlightTaskId,
     inFlightStatus,
@@ -88,6 +94,10 @@ export default function T2ISubsection({
     onRemove,
     onGenerate,
     onUpload,
+    lastFrameEnabled = false,
+    lastFrameUrl,
+    onLastFrameUpload,
+    onLastFrameClear,
     resolveUrl,
 }: T2ISubsectionProps) {
     const t = useTranslations("storyboardR2V");
@@ -101,17 +111,32 @@ export default function T2ISubsection({
     // Step 1 完成的判据：有任何 active frame 来源（T2I or storyboard）
     const stepOneDone = hasGeneratedOrUploaded || hasStoryboardFrame;
 
+    const renderLastFrameControl = (disabled: boolean) => lastFrameEnabled && onLastFrameUpload ? (
+        <LastFrameControl
+            t={t}
+            url={lastFrameUrl}
+            uploadingDisabled={disabled}
+            onUpload={onLastFrameUpload}
+            onClear={onLastFrameClear}
+        />
+    ) : null;
+
     if (!stepOneDone) {
+        const uploadDisabled = generating;
         return (
-            <Hero
-                t={t}
-                promptIsEmpty={promptIsEmpty}
-                generating={generating}
-                inFlightTaskId={inFlightTaskId}
-                inFlightStatus={inFlightStatus}
-                onGenerate={onGenerate}
-                onUpload={onUpload}
-            />
+            <>
+                <Hero
+                    t={t}
+                    promptIsEmpty={promptIsEmpty}
+                    generationDisabled={generationDisabled}
+                    generating={generating}
+                    inFlightTaskId={inFlightTaskId}
+                    inFlightStatus={inFlightStatus}
+                    onGenerate={onGenerate}
+                    onUpload={onUpload}
+                />
+                {renderLastFrameControl(uploadDisabled)}
+            </>
         );
     }
 
@@ -125,11 +150,102 @@ export default function T2ISubsection({
             inFlightTaskId={inFlightTaskId}
             inFlightStatus={inFlightStatus}
             promptIsEmpty={promptIsEmpty}
+            generationDisabled={generationDisabled}
             onSelect={onSelect}
             onRemove={onRemove}
             onGenerate={onGenerate}
             onUpload={onUpload}
+            lastFrameEnabled={lastFrameEnabled}
+            lastFrameUrl={lastFrameUrl}
+            onLastFrameUpload={onLastFrameUpload}
+            onLastFrameClear={onLastFrameClear}
         />
+    );
+}
+
+function LastFrameControl({
+    t, url, uploadingDisabled, onUpload, onClear,
+}: {
+    t: ReturnType<typeof useTranslations>;
+    url?: string;
+    uploadingDisabled: boolean;
+    onUpload: (file: File) => Promise<T2IUploadError | void>;
+    onClear?: () => void;
+}) {
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
+
+    const handleFile = async (file: File) => {
+        setUploadError(null);
+        if (!ALLOWED_UPLOAD_TYPES.includes(file.type)) {
+            setUploadError("type");
+            return;
+        }
+        if (file.size > MAX_UPLOAD_BYTES) {
+            setUploadError("size");
+            return;
+        }
+        setUploading(true);
+        try {
+            const result = await onUpload(file);
+            if (result) setUploadError(result);
+        } catch (error) {
+            debugLog.error("Studio", "Last frame upload failed", error);
+            setUploadError("network");
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-glass-border bg-black/20 px-3 py-2">
+            <span className="font-mono text-chrome-sm uppercase tracking-tight text-text-muted">
+                {t("lastFrameLabel")}
+            </span>
+            {url ? (
+                <span className="max-w-[14rem] truncate font-mono text-chrome-sm text-text-secondary" title={url}>
+                    {url}
+                </span>
+            ) : (
+                <span className="font-sans text-body-sm text-text-muted">{t("lastFrameEmpty")}</span>
+            )}
+            <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={uploadingDisabled || uploading}
+                className="ml-auto inline-flex min-h-[28px] items-center gap-1.5 rounded-md border border-glass-border bg-black/20 px-2.5 py-1 font-mono text-chrome-sm text-text-secondary transition-colors hover:border-primary/45 hover:text-primary disabled:opacity-50"
+            >
+                {uploading ? <Loader2 size={12} className="animate-spin" aria-hidden="true" /> : <Upload size={12} aria-hidden="true" />}
+                {url ? t("lastFrameReplace") : t("lastFrameUpload")}
+            </button>
+            {url && onClear ? (
+                <button
+                    type="button"
+                    onClick={onClear}
+                    disabled={uploading}
+                    className="inline-flex min-h-[28px] items-center rounded-md px-2.5 py-1 font-mono text-chrome-sm text-text-muted transition-colors hover:bg-hover-bg hover:text-foreground disabled:opacity-50"
+                >
+                    {t("lastFrameClear")}
+                </button>
+            ) : null}
+            <input
+                ref={inputRef}
+                type="file"
+                accept={ALLOWED_UPLOAD_TYPES.join(",")}
+                className="sr-only"
+                onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleFile(file);
+                    event.target.value = "";
+                }}
+            />
+            {uploadError ? (
+                <p role="alert" className="basis-full font-sans text-body-sm text-status-failed-fg">
+                    {formatUploadError(uploadError, t)}
+                </p>
+            ) : null}
+        </div>
     );
 }
 
@@ -141,6 +257,7 @@ export default function T2ISubsection({
 interface HeroProps {
     t: ReturnType<typeof useTranslations>;
     promptIsEmpty: boolean;
+    generationDisabled?: boolean;
     generating: boolean;
     inFlightTaskId?: string;
     inFlightStatus?: "pending" | "processing" | "completed" | "failed";
@@ -149,7 +266,7 @@ interface HeroProps {
 }
 
 function Hero({
-    t, promptIsEmpty, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
+    t, promptIsEmpty, generationDisabled = false, generating, inFlightTaskId, inFlightStatus, onGenerate, onUpload,
 }: HeroProps) {
     const [uploading, setUploading] = useState(false);
     const [uploadError, setUploadError] = useState<T2IUploadError | null>(null);
@@ -179,7 +296,7 @@ function Hero({
     };
 
     const uploadDisabled = uploading || generating;
-    const generateDisabled = promptIsEmpty || generating || uploading;
+    const generateDisabled = generationDisabled || promptIsEmpty || generating || uploading;
 
     return (
         <div
@@ -310,16 +427,21 @@ interface CompactProps {
     inFlightTaskId?: string;
     inFlightStatus?: "pending" | "processing" | "completed" | "failed";
     promptIsEmpty: boolean;
+    generationDisabled?: boolean;
     onSelect: (index: number) => void;
     onRemove: (index: number) => void;
     onGenerate: () => void;
     onUpload: (file: File) => Promise<T2IUploadError | void>;
+    lastFrameEnabled?: boolean;
+    lastFrameUrl?: string;
+    onLastFrameUpload?: (file: File) => Promise<T2IUploadError | void>;
+    onLastFrameClear?: () => void;
 }
 
 function Compact({
     t, imageUrls, selectedIndex, storyboardFrameUrl, generating,
-    inFlightTaskId, inFlightStatus, promptIsEmpty,
-    onSelect, onRemove, onGenerate, onUpload,
+    inFlightTaskId, inFlightStatus, promptIsEmpty, generationDisabled = false,
+    onSelect, onRemove, onGenerate, onUpload, lastFrameEnabled = false, lastFrameUrl, onLastFrameUpload, onLastFrameClear,
 }: CompactProps) {
     // 数据模型：active frame 来源优先级 = getActiveT2IImageUrl 然后 fallback shot.imageUrl。
     // 简化 v1 决定：storyboard frame thumb 只在 T2I 历史为空时显示（自动成为 active）；
@@ -420,7 +542,7 @@ function Compact({
                     <button
                         type="button"
                         onClick={onGenerate}
-                        disabled={promptIsEmpty || generating}
+                        disabled={generationDisabled || promptIsEmpty || generating}
                         aria-label={t("t2iCompactReroll")}
                         title={promptIsEmpty ? t("t2iCompactRerollDisabled") : t("t2iCompactRerollTooltip")}
                         className="btn-tip inline-flex items-center gap-1 px-1.5 h-7 rounded font-mono text-[0.65625rem] uppercase tracking-tight text-text-muted transition-colors duration-fast ease-out-quart hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-text-muted"
@@ -473,7 +595,7 @@ function Compact({
                                         setMenuOpen(false);
                                         onGenerate();
                                     }}
-                                    disabled={promptIsEmpty || generating}
+                                    disabled={generationDisabled || promptIsEmpty || generating}
                                     title={promptIsEmpty ? t("t2iHeroGenerateDisabledTooltip") : undefined}
                                     className="btn-tip flex w-full min-h-[36px] items-center gap-2 px-3 py-2 text-left font-sans text-body-sm text-foreground transition-colors duration-fast ease-out-quart hover:bg-primary/12 hover:text-primary focus-visible:outline-none focus-visible:bg-primary/12 disabled:cursor-not-allowed disabled:opacity-50"
                                 >
@@ -573,6 +695,16 @@ function Compact({
                     generating={generating}
                     inFlightTaskId={inFlightTaskId}
                     inFlightStatus={inFlightStatus}
+                />
+            ) : null}
+
+            {lastFrameEnabled && onLastFrameUpload ? (
+                <LastFrameControl
+                    t={t}
+                    url={lastFrameUrl}
+                    uploadingDisabled={uploading || generating}
+                    onUpload={onLastFrameUpload}
+                    onClear={onLastFrameClear}
                 />
             ) : null}
 

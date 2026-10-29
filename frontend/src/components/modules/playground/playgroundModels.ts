@@ -1,5 +1,6 @@
 import rawCatalog from '@/generated/modelCatalog.json';
 import type { PlaygroundMode } from './usePlaygroundStore';
+import { allowsPlaygroundWorkspaceGateway, resolvePlaygroundCatalogModelId } from './playgroundModelAliases';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -15,7 +16,7 @@ export interface PlaygroundModelOption {
   capabilities: string[];
   duration:
     | { type: 'slider'; min: number; max: number; step: number; default: number }
-    | { type: 'buttons'; options: number[]; default: number }
+    | { type: 'buttons'; options: number[]; default: number; options_by_resolution?: Record<string, number[]> }
     | { type: 'fixed'; value: number }
     | null;
   params: {
@@ -23,12 +24,18 @@ export interface PlaygroundModelOption {
     ratio?: { options: string[]; default: string };
     size?: { options: string[]; default: string };
     quality?: { options: string[]; default: string };
-    seed?: boolean;
-    negativePrompt?: boolean;
-    promptExtend?: boolean;
-    watermark?: boolean;
+    seed?: boolean | { min: number; max: number };
+    negativePrompt?: boolean | { default: boolean };
+    promptExtend?: boolean | { default: boolean };
+    watermark?: boolean | { default: boolean };
+    audioSetting?: { options: string[]; default: string };
+    shotType?: { options: string[]; default: string };
+    mode?: { options: string[]; default: string };
+    audio?: boolean | { default: boolean };
   };
   maxReferenceImages: number;
+  referenceImageMimeTypes?: string[];
+  maxReferenceImageBytes?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +50,7 @@ interface CatalogDuration {
   default?: number;
   value?: number;
   options?: number[];
+  options_by_resolution?: Record<string, number[]>;
 }
 
 interface CatalogModel {
@@ -55,8 +63,9 @@ interface CatalogModel {
   duration?: CatalogDuration | null;
   params?: Record<string, unknown>;
   inputs?: {
-    reference_images?: { max?: number };
+    reference_images?: { max?: number; mime_types?: string[]; max_bytes?: number };
   };
+  runtime?: Record<string, { gateway?: string }>;
   ui: {
     selection_group: string;
     visible_in: string[];
@@ -66,7 +75,11 @@ interface CatalogModel {
   };
 }
 
-const catalog = rawCatalog as { models: Record<string, CatalogModel> };
+const catalog = rawCatalog as {
+  models: Record<string, CatalogModel>;
+  modes?: Record<string, { runtime?: Record<string, { gateway?: string }> }>;
+  compat?: { legacy_model_ids?: Record<string, string> };
+};
 const allModels = Object.entries(catalog.models);
 
 // ---------------------------------------------------------------------------
@@ -97,6 +110,11 @@ function getFamilyPriority(family: string, mode: PlaygroundMode): number {
   return map[family] ?? FALLBACK_PRIORITY;
 }
 
+function getDashscopeGateway(modelId: string, model: CatalogModel): string | undefined {
+  return model.runtime?.dashscope?.gateway
+    ?? catalog.modes?.[catalog.compat?.legacy_model_ids?.[modelId] ?? '']?.runtime?.dashscope?.gateway;
+}
+
 // ---------------------------------------------------------------------------
 // Duration normalizer
 // ---------------------------------------------------------------------------
@@ -121,6 +139,7 @@ function normalizeDuration(
       type: 'buttons',
       options: raw.options ?? [],
       default: raw.default ?? (raw.options?.[0] ?? 5),
+      ...(raw.options_by_resolution ? { options_by_resolution: raw.options_by_resolution } : {}),
     };
   }
 
@@ -193,13 +212,62 @@ function normalizeParams(
     }
   }
 
+  // audio setting (Wan VideoEdit)
+  const audioSetting = raw.audioSetting;
+  if (audioSetting && typeof audioSetting === 'object' && 'options' in (audioSetting as object)) {
+    const a = audioSetting as { options?: string[]; default?: string };
+    if (a.options) {
+      result.audioSetting = {
+        options: a.options,
+        default: a.default ?? a.options[0] ?? '',
+      };
+    }
+  }
+
+  const shotType = raw.shotType;
+  if (shotType && typeof shotType === 'object' && 'options' in shotType) {
+    const option = shotType as { options?: string[]; default?: string };
+    if (option.options) result.shotType = { options: option.options, default: option.default ?? option.options[0] ?? '' };
+  }
+
+  const videoMode = raw.mode;
+  if (videoMode && typeof videoMode === 'object' && 'options' in videoMode) {
+    const option = videoMode as { options?: string[]; default?: string };
+    if (option.options) result.mode = { options: option.options, default: option.default ?? option.options[0] ?? '' };
+  }
+
   // boolean flags
-  if (typeof raw.seed === 'boolean') result.seed = raw.seed;
-  if (typeof raw.negativePrompt === 'boolean') result.negativePrompt = raw.negativePrompt;
-  if (typeof raw.promptExtend === 'boolean') result.promptExtend = raw.promptExtend;
-  if (typeof raw.watermark === 'boolean') result.watermark = raw.watermark;
+  result.seed = normalizeSeedParam(raw.seed);
+  result.negativePrompt = normalizeBooleanParam(raw.negativePrompt);
+  result.promptExtend = normalizeBooleanParam(raw.promptExtend);
+  result.watermark = normalizeBooleanParam(raw.watermark);
+  result.audio = normalizeBooleanParam(raw.audio);
 
   return result;
+}
+
+function normalizeBooleanParam(value: unknown): boolean | { default: boolean } | undefined {
+  if (typeof value === 'boolean') return value;
+  if (value && typeof value === 'object' && typeof (value as { default?: unknown }).default === 'boolean') {
+    return { default: (value as { default: boolean }).default };
+  }
+  return undefined;
+}
+
+function normalizeSeedParam(value: unknown): boolean | { min: number; max: number } | undefined {
+  if (typeof value === 'boolean') return value;
+  if (
+    value
+    && typeof value === 'object'
+    && typeof (value as { min?: unknown }).min === 'number'
+    && typeof (value as { max?: unknown }).max === 'number'
+  ) {
+    return {
+      min: (value as { min: number }).min,
+      max: (value as { max: number }).max,
+    };
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +286,8 @@ function toOption(model: CatalogModel): PlaygroundModelOption {
     duration: normalizeDuration(model.duration),
     params: normalizeParams(model.params),
     maxReferenceImages: model.inputs?.reference_images?.max ?? 0,
+    referenceImageMimeTypes: model.inputs?.reference_images?.mime_types,
+    maxReferenceImageBytes: model.inputs?.reference_images?.max_bytes,
   };
 }
 
@@ -236,8 +306,9 @@ function toOption(model: CatalogModel): PlaygroundModelOption {
  */
 export function getModelsForMode(mode: PlaygroundMode): PlaygroundModelOption[] {
   return allModels
-    .filter(([, model]) => {
+    .filter(([modelId, model]) => {
       if (model.status === 'deprecated' || model.status === 'planned') return false;
+      if (getDashscopeGateway(modelId, model) === 'dashscope_workspace' && !allowsPlaygroundWorkspaceGateway(modelId)) return false;
       if (!model.capabilities.includes(mode)) return false;
       return true;
     })
@@ -264,6 +335,15 @@ export function getModelsForMode(mode: PlaygroundMode): PlaygroundModelOption[] 
 }
 
 /**
+ * Return the normalized catalog option for a model ID, or null when unknown.
+ */
+export function getModelOption(modelId: string): PlaygroundModelOption | null {
+  const model = catalog.models[resolvePlaygroundCatalogModelId(modelId)];
+  if (!model) return null;
+  return toOption(model);
+}
+
+/**
  * Return the default (recommended or first) model ID for a mode.
  */
 export function getDefaultModelForMode(mode: PlaygroundMode): string {
@@ -279,7 +359,7 @@ export function getDefaultModelForMode(mode: PlaygroundMode): string {
 export function getModelDisplayInfo(
   modelId: string,
 ): { displayName: string; family: string } | null {
-  const model = catalog.models[modelId];
+  const model = catalog.models[resolvePlaygroundCatalogModelId(modelId)];
   if (!model) return null;
   return { displayName: model.display_name, family: model.family };
 }
@@ -290,7 +370,7 @@ export function getModelDisplayInfo(
 export function getModelParams(
   modelId: string,
 ): PlaygroundModelOption['params'] | null {
-  const model = catalog.models[modelId];
+  const model = catalog.models[resolvePlaygroundCatalogModelId(modelId)];
   if (!model) return null;
   return normalizeParams(model.params);
 }
@@ -301,8 +381,30 @@ export function getModelParams(
  */
 export function getModelDuration(
   modelId: string,
+  resolution?: string,
 ): PlaygroundModelOption['duration'] {
-  const model = catalog.models[modelId];
+  const model = catalog.models[resolvePlaygroundCatalogModelId(modelId)];
   if (!model) return null;
-  return normalizeDuration(model.duration);
+  const duration = normalizeDuration(model.duration);
+  if (duration?.type !== 'buttons' || !resolution) return duration;
+  const options = duration.options_by_resolution?.[resolution];
+  if (!options?.length) return duration;
+  return {
+    ...duration,
+    options,
+    default: options.includes(duration.default) ? duration.default : options[0],
+  };
+}
+
+const IMAGE_EXTENSION_BY_MIME: Record<string, RegExp> = {
+  'image/jpeg': /\.jpe?g$/i,
+  'image/png': /\.png$/i,
+  'image/webp': /\.webp$/i,
+};
+
+/** Picker eligibility only; Core still validates the actual image bytes. */
+export function isReferenceImagePathAllowed(path: string, allowedTypes?: readonly string[]): boolean {
+  if (!allowedTypes?.length) return true;
+  const name = path.split(/[?#]/, 1)[0];
+  return allowedTypes.some((type) => IMAGE_EXTENSION_BY_MIME[type]?.test(name));
 }

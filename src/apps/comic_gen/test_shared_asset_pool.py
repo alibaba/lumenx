@@ -93,6 +93,8 @@ def _bare_pipeline(library: GlobalAssetLibrary = None, series_store=None,
     """A ComicGenPipeline with *only* the attributes the resolver/save
     seams read — no heavy __init__, no real-file I/O."""
     p = object.__new__(ComicGenPipeline)
+    p._closed = False
+    p._storage_failed = None
     p.library_store = library if library is not None else GlobalAssetLibrary()
     p.series_store = series_store if series_store is not None else {}
     p._save_lock = threading.RLock()
@@ -102,6 +104,15 @@ def _bare_pipeline(library: GlobalAssetLibrary = None, series_store=None,
     # observable in tests rather than silently hitting real output/.
     p.data_file = "output/__should_not_write_projects.json"
     p.series_data_file = "output/__should_not_write_series.json"
+    p.scripts = {}
+    from pathlib import Path
+    from src.utils.json_transactions import JsonFileTransaction
+    from src.utils.json_storage import DirectoryWriterLock
+    p._writer_lock = DirectoryWriterLock(Path(p.library_data_file).parent)
+    p._storage = JsonFileTransaction(Path(p.library_data_file).parent, (
+        "projects.json", "series.json", "library_assets.json",
+    ))
+    p._committed = p._storage_payloads(("projects.json", "series.json", "library_assets.json"))
     return p
 
 
@@ -276,40 +287,48 @@ def test_empty_library_is_byte_for_byte_noop():
 # --------------------------------------------------------------------------
 # integration: GET /projects/{id} tags global-only assets source="global"
 # --------------------------------------------------------------------------
-def test_get_project_merges_global_source():
-    try:
-        from fastapi.testclient import TestClient
-        from src.apps.comic_gen import api
-    except Exception as exc:  # pragma: no cover - environment-dependent
-        pytest.skip(f"cannot import api/TestClient in this env: {exc!r}")
+def test_get_project_merges_global_source(tmp_path):
+    from fastapi.testclient import TestClient
+    from src.apps.comic_gen import api
 
-    pipeline = api.pipeline
+    pipeline = _bare_pipeline(library_data_file=str(tmp_path / "library_assets.json"))
+    pipeline.data_dir = tmp_path
     import uuid
     sid = "ep-" + uuid.uuid4().hex[:8]
     script = _script(sid=sid, characters=[_char("epc", "ep-char")])
 
-    # Inject in-memory only; get_project performs no disk writes. Snapshot
-    # and restore the singleton's state so other tests are unaffected.
+    # Prepare candidates, then commit them before exercising the public view.
     pipeline.scripts[sid] = script
-    prev_library = pipeline.library_store
     pipeline.library_store = GlobalAssetLibrary(
         characters=[_char("gc", "glob-char")],
         scenes=[_scene("gs", "glob-scene")],
         props=[_prop("gp", "glob-prop")],
     )
-    try:
-        client = TestClient(api.app)
-        resp = client.get(f"/projects/{sid}")
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
+    test_app = api.create_app(
+        data_dir=tmp_path,
+        load_config=False,
+        pipeline_instance=pipeline,
+        recover_orphan_tasks=False,
+        warmup_demucs=False,
+    )
+    with pipeline._writer_lock:
+        pipeline._commit_storage("projects.json", "library_assets.json")
+        saved_files = {
+            name: (tmp_path / name).read_bytes()
+            for name in ("projects.json", "library_assets.json")
+        }
+        with TestClient(test_app) as client:
+            resp = client.get(f"/projects/{sid}")
+        # Source labels are presentation-only and must not alter either file.
+        for name, contents in saved_files.items():
+            assert (tmp_path / name).read_bytes() == contents
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
 
-        chars = {c["id"]: c for c in body["characters"]}
-        assert chars["epc"]["source"] == "episode"   # episode-local
-        assert chars["gc"]["source"] == "global"      # folded from library
-        scenes = {s["id"]: s for s in body["scenes"]}
-        assert scenes["gs"]["source"] == "global"
-        props = {pr["id"]: pr for pr in body["props"]}
-        assert props["gp"]["source"] == "global"
-    finally:
-        pipeline.library_store = prev_library
-        pipeline.scripts.pop(sid, None)
+    chars = {c["id"]: c for c in body["characters"]}
+    assert chars["epc"]["source"] == "episode"   # episode-local
+    assert chars["gc"]["source"] == "global"      # folded from library
+    scenes = {s["id"]: s for s in body["scenes"]}
+    assert scenes["gs"]["source"] == "global"
+    props = {pr["id"]: pr for pr in body["props"]}
+    assert props["gp"]["source"] == "global"

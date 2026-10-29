@@ -19,8 +19,9 @@ class TestWan26ImageLocalReferenceFallback:
         captured_payload = {}
 
         class FakeUploader:
-            def __init__(self):
+            def __init__(self, *args, **kwargs):
                 self.is_configured = False
+                self.base_path = "lumenx"
 
         class FakeCreateResponse:
             status_code = 200
@@ -59,12 +60,18 @@ class TestWan26ImageLocalReferenceFallback:
             return FakePollResponse()
 
         monkeypatch.setattr("src.models.image.OSSImageUploader", FakeUploader)
-        monkeypatch.setattr("src.models.image.get_provider_base_url", lambda _: "https://dashscope.test")
+        monkeypatch.setattr(
+            "src.models.image.get_provider_base_url",
+            lambda _, **kwargs: "https://dashscope.test",
+        )
         monkeypatch.setattr(requests, "post", fake_post)
         monkeypatch.setattr(requests, "get", fake_get)
         monkeypatch.setattr("time.sleep", lambda _: None)
 
-        model = WanxImageModel({"params": {"i2i_model_name": "wan2.6-image"}})
+        model = WanxImageModel(
+            {"params": {"i2i_model_name": "wan2.6-image"}},
+            env={"DASHSCOPE_API_KEY": "test-dashscope-key"},
+        )
 
         image_url = model._generate_wan26_image_http(
             prompt="keep the same character",

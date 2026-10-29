@@ -32,6 +32,11 @@ function formatTime(dateStr: string): string {
 }
 
 const VIDEO_MODES = new Set(['t2v', 'i2v', 'r2v', 'v2v']);
+const TERMINAL_ISSUE_STATUSES = new Set(['failed', 'needs_confirmation', 'cancelled']);
+
+function isTerminalIssue(status: PlaygroundGeneration['status']): boolean {
+  return TERMINAL_ISSUE_STATUSES.has(status);
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -103,6 +108,17 @@ export default function GalleryView({
   const isVideo =
     output?.media_type === 'video' || VIDEO_MODES.has(current.mode);
   const mediaUrl = output?.media_path ? getMediaUrl(output.media_path) : null;
+  const terminalIssue = isTerminalIssue(current.status);
+  const failedAttempts = current.attempts?.filter((attempt) => isTerminalIssue(attempt.status)).length ?? 0;
+  const issueLabel = current.status === 'needs_confirmation'
+    ? t('card.needsConfirmation')
+    : current.status === 'cancelled'
+      ? t('card.cancelled')
+      : failedAttempts > 0
+        ? t('card.partialAttempts', { count: failedAttempts })
+        : t('card.failed');
+  const errorText = current.error ?? current.attempts?.map((attempt) => attempt.error).filter(Boolean).join('\n');
+  const canRenderMedia = Boolean(mediaUrl) && (current.status === 'completed' || terminalIssue);
 
   return (
     <div className="flex flex-col h-full">
@@ -111,29 +127,29 @@ export default function GalleryView({
         className="flex-1 min-h-0 overflow-hidden flex items-center justify-center p-6 bg-background"
         onClick={handleClick}
       >
-        {current.status === 'completed' && mediaUrl ? (
+        {canRenderMedia ? (
           isVideo ? (
             <video
               key={current.id}
-              src={mediaUrl}
+              src={mediaUrl ?? undefined}
               controls
               className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all duration-200"
             />
           ) : (
             <img
               key={current.id}
-              src={mediaUrl}
+              src={mediaUrl ?? undefined}
               alt={current.prompt}
               className="max-w-full max-h-full object-contain rounded-lg cursor-pointer hover:scale-[1.01] hover:ring-2 hover:ring-primary/30 transition-all duration-200"
             />
           )
-        ) : current.status === 'failed' ? (
+        ) : terminalIssue ? (
           <div className="flex flex-col items-center gap-3 text-status-failed-fg">
             <AlertCircle className="w-10 h-10" />
-            <p className="font-mono text-xs">Generation failed</p>
-            {current.error && (
+            <p className="font-mono text-xs">{issueLabel}</p>
+            {errorText && (
               <p className="text-[0.625rem] text-text-muted max-w-xs text-center line-clamp-3">
-                {current.error}
+                {errorText}
               </p>
             )}
             {onRetry && (
@@ -141,7 +157,7 @@ export default function GalleryView({
                 onClick={() => onRetry(current)}
                 className="mt-2 px-3 py-1.5 rounded text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 transition-colors"
               >
-                Retry
+                {t('card.retry')}
               </button>
             )}
           </div>
@@ -164,12 +180,17 @@ export default function GalleryView({
           <span className="font-mono text-[0.5625rem] bg-elevated text-text-muted rounded px-[6px] py-[2px]">
             {current.model_id || current.mode}
           </span>
-          {current.parameters.size && (
+          {terminalIssue && (
+            <span className="font-mono text-[0.5625rem] bg-status-failed-bg text-status-failed-fg border border-status-failed-border rounded px-[6px] py-[2px]">
+              {issueLabel}
+            </span>
+          )}
+          {typeof current.parameters.size === 'string' && current.parameters.size && (
             <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
               {(current.parameters.size as string).replace(/[*x]/g, '×')}
             </span>
           )}
-          {current.parameters.resolution && !current.parameters.size && (
+          {typeof current.parameters.resolution === 'string' && current.parameters.resolution && !current.parameters.size && (
             <span className="font-mono text-[0.5625rem] bg-glass text-text-muted rounded px-[6px] py-[2px]">
               {current.parameters.resolution as string}
             </span>
@@ -194,13 +215,14 @@ export default function GalleryView({
               ? getMediaUrl(genOutput.media_path)
               : null;
             const isSelected = idx === selectedIndex;
-            const isFailed = gen.status === 'failed';
+            const genTerminalIssue = isTerminalIssue(gen.status);
+            const isFailed = genTerminalIssue && !genMediaUrl;
 
             return (
               <button
                 key={gen.id}
                 onClick={() => setSelectedIndex(idx)}
-                className={`w-14 h-14 rounded-md overflow-hidden border-2 cursor-pointer shrink-0 transition-colors ${
+                className={`relative w-14 h-14 rounded-md overflow-hidden border-2 cursor-pointer shrink-0 transition-colors ${
                   isSelected
                     ? 'border-primary'
                     : 'border-transparent hover:border-foreground/30'
@@ -224,6 +246,11 @@ export default function GalleryView({
                   <div className="w-full h-full bg-glass flex items-center justify-center">
                     <div className="w-3 h-3 border border-glass-border border-t-primary rounded-full animate-spin" />
                   </div>
+                )}
+                {genTerminalIssue && genMediaUrl && (
+                  <span className="absolute right-0.5 top-0.5 rounded-full bg-status-failed-bg p-0.5 text-status-failed-fg">
+                    <AlertCircle className="w-3 h-3" />
+                  </span>
                 )}
               </button>
             );

@@ -1,0 +1,49 @@
+[
+  {
+    "name": "explicit empty buckets retain clear intent",
+    "target_id": "target",
+    "nodes": [
+      {"id": "target", "type": "video", "data": {"reference_image_urls": [], "reference_video_urls": []}}
+    ],
+    "expected": {"reference_image_urls": [], "reference_video_urls": [], "reference_node_ids": []}
+  },
+  {
+    "name": "media aliases prove kind while unknown filename does not",
+    "target_id": "target",
+    "nodes": [
+      {"id": "target", "type": "video", "data": {"reference_node_ids": ["v", "a", "v", "missing"], "reference_image_urls": ["video/old.mp4", "unknown.mp4", "audio/source.wav"]}},
+      {"id": "v", "type": "video", "data": {"candidates": [{"status": "completed", "media_url": "video/current.mp4", "video_url": "video/old.mp4"}]}},
+      {"id": "a", "type": "audio", "media_urls": ["audio/source.wav"]},
+      {"id": "unrelated", "type": "video", "media_urls": ["unknown.mp4"]}
+    ],
+    "expected": {"reference_node_ids": ["v", "a"], "reference_image_urls": ["unknown.mp4"], "reference_video_urls": ["video/old.mp4"], "reference_audio_urls": ["audio/source.wav"]}
+  },
+  {
+    "name": "self and cross-project sources are not valid identity evidence",
+    "target_id": "target",
+    "nodes": [
+      {"id": "target", "type": "image", "data": {"reference_node_ids": ["foreign", "target", "image"], "reference_image_urls": ["uploads/legacy.png"]}},
+      {"id": "foreign", "project_id": "other", "type": "image", "media_urls": ["uploads/legacy.png"]},
+      {"id": "image", "type": "image"}
+    ],
+    "expected": {"reference_node_ids": ["image"], "reference_image_urls": ["uploads/legacy.png"]}
+  },
+  {
+    "name": "parent hint records association without inventing url buckets",
+    "target_id": "target",
+    "nodes": [
+      {"id": "target", "type": "video"},
+      {"id": "image", "type": "image", "data": {"parent_node_id": "target"}}
+    ],
+    "expected": {"reference_node_ids": ["image"]}
+  },
+  {
+    "name": "opaque malformed candidate containers preserve independent urls",
+    "target_id": "target",
+    "nodes": [
+      {"id": "target", "type": "video", "data": {"reference_node_ids": ["video"], "reference_image_urls": ["uploads/independent.png"]}},
+      {"id": "video", "type": "video", "data": {"candidates": 7, "deleted_candidates": true}}
+    ],
+    "expected": {"reference_node_ids": ["video"], "reference_image_urls": ["uploads/independent.png"]}
+  }
+]

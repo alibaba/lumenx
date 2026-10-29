@@ -12,22 +12,91 @@ import { useOnline } from "@/lib/useOnline";
 import { rovingKeyDown } from "@/lib/a11y";
 import ProjectCard, { deriveStatus, deriveCover, type DerivedStatus } from "@/components/project/ProjectCard";
 import CreateProjectDialog from "@/components/project/CreateProjectDialog";
-import EnvConfigDialog from "@/components/project/EnvConfigDialog";
 import CreativeCanvas from "@/components/canvas/CreativeCanvas";
 import AppShell from "@/components/layout/AppShell";
 import type { GlobalTab } from "@/components/layout/GlobalSidebar";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
+import { requireActiveRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import { useTranslations } from "next-intl";
 import TauriMenuListener from "@/components/layout/TauriMenuListener";
 
 const ProjectClient = dynamic(() => import("@/components/project/ProjectClient"), { ssr: false });
 const SeriesDetailPage = dynamic(() => import("@/components/series/SeriesDetailPage"), { ssr: false });
 const ImportFileDialog = dynamic(() => import("@/components/series/ImportFileDialog"), { ssr: false });
+const ProjectPackageImportDialog = dynamic(() => import("@/components/project/ProjectPackageImportDialog"), { ssr: false });
 const SettingsPage = dynamic(() => import("@/components/settings/SettingsPage"), { ssr: false });
 const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibraryPage"), { ssr: false });
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
 const ScriptEditorShell = dynamic(() => import("@/components/modules/ScriptEditor/ScriptEditorShell"), { ssr: false });
+const AtelierShell = dynamic(() => import("@/components/atelier/v3/AtelierShell"), { ssr: false });
+
+type CreatedSeriesReceipt = { id: string; revision: number; title: string };
+
+const seriesCreateRuntime = {
+  inFlight: false,
+  receipt: null as CreatedSeriesReceipt | null,
+  operation: 0,
+  listeners: new Set<() => void>(),
+};
+
+function emitSeriesCreateRuntime() {
+  seriesCreateRuntime.listeners.forEach(listener => listener());
+}
+
+function subscribeSeriesCreateRuntime(listener: () => void) {
+  seriesCreateRuntime.listeners.add(listener);
+  return () => {
+    seriesCreateRuntime.listeners.delete(listener);
+  };
+}
+
+function beginSeriesCreateOperation() {
+  seriesCreateRuntime.operation += 1;
+  seriesCreateRuntime.inFlight = true;
+  emitSeriesCreateRuntime();
+  return seriesCreateRuntime.operation;
+}
+
+function finishSeriesCreateOperation(operation: number) {
+  if (seriesCreateRuntime.operation !== operation) return;
+  seriesCreateRuntime.inFlight = false;
+  emitSeriesCreateRuntime();
+}
+
+function setSeriesCreateReceipt(receipt: CreatedSeriesReceipt | null) {
+  seriesCreateRuntime.receipt = receipt;
+  emitSeriesCreateRuntime();
+}
+
+function observeCreatedSeriesReceipt(receipt: CreatedSeriesReceipt) {
+  const environment = requireActiveRuntimeEnvironment().key;
+  useProjectStore.setState(state => {
+    const previous = state.readWatermarks[environment];
+    const previousSeries = previous?.series ?? {};
+    const seriesRevision = Math.max(previousSeries[receipt.id] ?? 0, receipt.revision);
+    return {
+      readWatermarks: {
+        ...state.readWatermarks,
+        [environment]: {
+          library: previous?.library,
+          project: previous?.project,
+          series: { ...previousSeries, [receipt.id]: seriesRevision },
+        },
+      },
+    };
+  });
+}
+
+function parseCreatedSeriesReceipt(value: unknown): CreatedSeriesReceipt {
+  const raw = value as Partial<CreatedSeriesReceipt> | null;
+  if (!raw || typeof raw.id !== "string" || !raw.id.trim()
+    || typeof raw.title !== "string"
+    || typeof raw.revision !== "number" || !Number.isSafeInteger(raw.revision) || raw.revision < 0) {
+    throw new Error("Invalid created series acknowledgement");
+  }
+  return { id: raw.id, revision: raw.revision, title: raw.title };
+}
 
 // ── Create Series Dialog ──
 function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -39,6 +108,9 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
   // PR-3e — default per-shot generation mode (r2v=节奏优先 / i2v=画面优先)
   const [defaultGenerationMode, setDefaultGenerationMode] = useState<"r2v" | "i2v">("r2v");
   const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [runtimeVersion, setRuntimeVersion] = useState(0);
+  const fetchSeriesList = useProjectStore((state) => state.fetchSeriesList);
   const t = useTranslations("workspace");
   const tc = useTranslations("common");
   const tp = useTranslations("project");
@@ -47,7 +119,92 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
+  const sessionRef = useRef(0);
+  const openRef = useRef(isOpen);
+  const mountedRef = useRef(false);
   onCloseRef.current = onClose;
+  openRef.current = isOpen;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      sessionRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    sessionRef.current += 1;
+    setIsCreating(false);
+    setCreateError(isOpen && seriesCreateRuntime.receipt && !seriesCreateRuntime.inFlight ? t("toastProjectsSyncFailed") : null);
+  }, [isOpen, t]);
+
+  useEffect(() => {
+    if (isOpen && seriesCreateRuntime.receipt && !seriesCreateRuntime.inFlight) {
+      setCreateError(t("toastProjectsSyncFailed"));
+    }
+  }, [isOpen, runtimeVersion, t]);
+
+  useEffect(() => subscribeSeriesCreateRuntime(() => setRuntimeVersion(version => version + 1)), []);
+
+  const isActiveSession = (token: number) => mountedRef.current && openRef.current && sessionRef.current === token;
+
+  const confirmSeriesReceipt = async (receipt: CreatedSeriesReceipt) => {
+    const ok = await fetchSeriesList();
+    const confirmed = useProjectStore.getState().seriesList.find(series => series.id === receipt.id);
+    if (!ok || !confirmed || confirmed.revision < receipt.revision) {
+      throw new Error("Created series readback was not confirmed");
+    }
+  };
+
+  const resetForm = () => {
+    setTitle("");
+    setDescription("");
+    setWorkflowMode("r2v");
+    setContentMode("scripted");
+    setDefaultGenerationMode("r2v");
+    setCreateError(null);
+  };
+
+  const acceptReceipt = (receipt: CreatedSeriesReceipt) => {
+    resetForm();
+    onCloseRef.current();
+    window.location.hash = `#/series/${receipt.id}`;
+  };
+
+  const failCreateReadback = (message: string) => {
+    setCreateError(message);
+    toast.error(message);
+  };
+
+  const handleClose = () => {
+    sessionRef.current += 1;
+    setIsCreating(false);
+    setCreateError(null);
+    onCloseRef.current();
+  };
+
+  const retrySeriesReadback = async () => {
+    const receipt = seriesCreateRuntime.receipt;
+    if (!receipt || seriesCreateRuntime.inFlight) return;
+    const session = sessionRef.current;
+    const operation = beginSeriesCreateOperation();
+    setIsCreating(true);
+    setCreateError(null);
+    try {
+      await confirmSeriesReceipt(receipt);
+      setSeriesCreateReceipt(null);
+      if (!isActiveSession(session)) return;
+      acceptReceipt(receipt);
+    } catch (error) {
+      if (!isActiveSession(session)) return;
+      console.error("Failed to confirm created series:", error);
+      failCreateReadback(t("toastProjectsSyncFailed"));
+    } finally {
+      finishSeriesCreateOperation(operation);
+      if (isActiveSession(session)) setIsCreating(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -62,7 +219,7 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onCloseRef.current();
+        handleClose();
         return;
       }
       if (e.key !== "Tab" || !dialogRef.current) return;
@@ -96,33 +253,38 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
   if (!isOpen) return null;
 
   const handleCreate = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || seriesCreateRuntime.inFlight || seriesCreateRuntime.receipt) return;
+    const session = sessionRef.current;
+    const operation = beginSeriesCreateOperation();
     setIsCreating(true);
+    setCreateError(null);
     try {
       // Use the v2 createSeriesV2 API directly so we can pass content_mode
       const { api } = await import("@/lib/api");
-      const series = await api.createSeriesV2(title.trim(), {
+      const receipt = parseCreatedSeriesReceipt(await api.createSeriesV2(title.trim(), {
         description: description.trim() || undefined,
         workflow_mode: workflowMode,
         content_mode: contentMode,
         default_generation_mode: defaultGenerationMode,
-      });
-      setTitle("");
-      setDescription("");
-      setWorkflowMode("r2v");
-      setContentMode("scripted");
-      setDefaultGenerationMode("r2v");
-      onClose();
-      window.location.hash = `#/series/${series.id}`;
+      }));
+      observeCreatedSeriesReceipt(receipt);
+      setSeriesCreateReceipt(receipt);
+      await confirmSeriesReceipt(receipt);
+      setSeriesCreateReceipt(null);
+      if (!isActiveSession(session)) return;
+      acceptReceipt(receipt);
     } catch (error) {
+      if (!isActiveSession(session)) return;
       console.error("Failed to create series:", error);
+      failCreateReadback(t("toastProjectsSyncFailed"));
     } finally {
-      setIsCreating(false);
+      finishSeriesCreateOperation(operation);
+      if (isActiveSession(session)) setIsCreating(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm" onClick={handleClose}>
       <motion.div
         ref={dialogRef}
         role="dialog"
@@ -135,7 +297,7 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
       >
         <div className="flex items-center justify-between mb-6">
           <h2 id={titleId} className="text-2xl font-display font-bold text-foreground">{t("newSeries")}</h2>
-          <button onClick={onClose} aria-label={tc("close")} className="p-2 rounded-lg hover:bg-hover-bg transition-colors">
+          <button onClick={handleClose} aria-label={tc("close")} className="p-2 rounded-lg hover:bg-hover-bg transition-colors">
             <X size={20} className="text-text-secondary" />
           </button>
         </div>
@@ -290,16 +452,32 @@ function CreateSeriesDialog({ isOpen, onClose }: { isOpen: boolean; onClose: () 
           </div>
         </div>
 
+        {createError && (
+          <div role="alert" className="mt-5 rounded-lg border border-status-failed-border bg-status-failed-bg px-4 py-3 text-sm text-status-failed-fg">
+            <p>{createError}</p>
+            {seriesCreateRuntime.receipt && (
+              <button
+                type="button"
+                onClick={retrySeriesReadback}
+                disabled={isCreating}
+                className="mt-3 glass-button text-xs disabled:opacity-50"
+              >
+                {tc("sync")}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-3 pt-6">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="flex-1 glass-button"
           >
             {tc("cancel")}
           </button>
           <button
             onClick={handleCreate}
-            disabled={!title.trim() || isCreating}
+            disabled={!title.trim() || isCreating || seriesCreateRuntime.inFlight || !!seriesCreateRuntime.receipt}
             className="flex-1 bg-primary hover:bg-primary/90 text-foreground px-6 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isCreating ? t("creating") : t("createSeries")}
@@ -460,23 +638,25 @@ export default function Home() {
   const [dialogSeries, setDialogSeries] = useState<{ id: string; title: string } | null>(null);
   const [isSeriesDialogOpen, setIsSeriesDialogOpen] = useState(false);
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isPackageImportOpen, setIsPackageImportOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'atelier' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
   const [wsStatus, setWsStatus] = useState<DerivedStatus | "all">("all");
   const [viewMode, setViewMode] = useState<"gallery" | "list">("gallery");
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectStep, setProjectStep] = useState("script");
   const [seriesId, setSeriesId] = useState<string | null>(null);
   const [episodeId, setEpisodeId] = useState<string | null>(null);
   const [seriesEpisodes, setSeriesEpisodes] = useState<Record<string, Project[]>>({});
-  const [, setEpisodesLoading] = useState(false);
   const projects = useProjectStore((state) => state.projects);
   const seriesList = useProjectStore((state) => state.seriesList);
   const deleteProject = useProjectStore((state) => state.deleteProject);
-  const setProjects = useProjectStore((state) => state.setProjects);
+  const captureProjectListSync = useProjectStore((state) => state.captureProjectListSync);
+  const syncProjectList = useProjectStore((state) => state.syncProjectList);
   const fetchSeriesList = useProjectStore((state) => state.fetchSeriesList);
   const t = useTranslations("workspace");
   const tc = useTranslations("common");
@@ -484,7 +664,7 @@ export default function Home() {
   // Sync projects and series from backend on mount
   useEffect(() => {
     syncProjects();
-    fetchSeriesList();
+    void syncSeries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -499,44 +679,44 @@ export default function Home() {
     }
   }, []);
 
-  // Load episodes for all series when seriesList changes
+  // Each effect owns its reads. A newer list or unmount retires all old results.
   useEffect(() => {
-    if (seriesList.length === 0) return;
-    loadAllSeriesEpisodes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seriesList]);
-
-  const loadAllSeriesEpisodes = async () => {
-    setEpisodesLoading(true);
-    try {
-      const results = await Promise.all(
-        seriesList.map(async (s) => {
-          const eps = await api.getSeriesEpisodes(s.id);
-          return [s.id, eps] as const;
-        })
-      );
-      const map: Record<string, Project[]> = {};
-      for (const [id, eps] of results) {
-        map[id] = eps;
-      }
-      setSeriesEpisodes(map);
-    } catch (error) {
-      console.error("Failed to load series episodes:", error);
-      toast.error(t("toastEpisodesLoadFailed"), {
-        body: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setEpisodesLoading(false);
+    let current = true;
+    if (seriesList.length === 0) {
+      setSeriesEpisodes({});
+      return;
     }
+    const load = async () => {
+      try {
+        const results = await Promise.all(seriesList.map(async (series) => {
+          const episodes = await api.getSeriesEpisodes(series.id);
+          if (!Array.isArray(episodes)) throw new Error("Invalid episode list response");
+          return [series.id, episodes] as const;
+        }));
+        if (current) setSeriesEpisodes(Object.fromEntries(results));
+      } catch (error) {
+        if (!current) return;
+        console.error("Failed to load series episodes:", error);
+        toast.error(t("toastEpisodesLoadFailed"), {
+          body: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
+    void load();
+    return () => { current = false; };
+  }, [seriesList, t]);
+
+  const syncSeries = async () => {
+    if (!await fetchSeriesList()) toast.error(t("toastProjectsSyncFailed"));
   };
 
   const syncProjects = async () => {
     setIsSyncing(true);
+    const capture = captureProjectListSync();
     try {
       const backendProjects = await api.getProjects();
-      if (backendProjects && backendProjects.length > 0) {
-        setProjects(backendProjects);
-      }
+      if (!Array.isArray(backendProjects)) throw new Error("Invalid project list response");
+      syncProjectList(backendProjects, capture);
     } catch (error) {
       console.error("Failed to sync projects from backend:", error);
       toast.error(t("toastProjectsSyncFailed"), {
@@ -548,7 +728,7 @@ export default function Home() {
   };
 
   const syncAll = async () => {
-    await Promise.all([syncProjects(), fetchSeriesList()]);
+    await Promise.all([syncProjects(), syncSeries()]);
   };
 
   // Close dropdown when clicking outside
@@ -563,6 +743,14 @@ export default function Home() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
+      if (hash === '#/atelier') {
+        setCurrentView('atelier');
+        setActiveTab('atelier');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       // Match #/series/{id}/episode/{eid} first (more specific)
       const seriesEpisodeMatch = hash.match(/^#\/series\/([^/]+)\/episode\/([^/]+)$/);
       if (seriesEpisodeMatch) {
@@ -598,9 +786,10 @@ export default function Home() {
         setCurrentView('project-editor');
         return;
       }
-      if (hash.startsWith('#/project/')) {
-        const id = hash.replace('#/project/', '');
-        setProjectId(id);
+      const projectMatch = hash.match(/^#\/project\/([^/#]+)(?:#([^#]*))?$/);
+      if (projectMatch) {
+        setProjectId(projectMatch[1]);
+        setProjectStep(projectMatch[2] || 'script');
         setSeriesId(null);
         setEpisodeId(null);
         setCurrentView('project');
@@ -655,9 +844,13 @@ export default function Home() {
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  if (currentView === 'atelier') {
+    return <AtelierShell />;
+  }
+
   // 项目详情页 — 全屏，无 GlobalSidebar
   if (currentView === 'project' && projectId) {
-    return <ProjectClient id={projectId} />;
+    return <ProjectClient id={projectId} initialStep={projectStep} />;
   }
 
   // 系列集数编辑 — 全屏，BreadcrumbBar 内嵌在 ProjectClient
@@ -768,6 +961,15 @@ export default function Home() {
             >
               <FileUp size={14} />
               {t("importFile")}
+            </button>
+            <button
+              onClick={() => setIsPackageImportOpen(true)}
+              disabled={!online}
+              title={!online ? tc("offlineTooltip") : undefined}
+              className="glass-button flex items-center gap-2 text-[0.8125rem] font-semibold disabled:opacity-50"
+            >
+              <FileUp size={14} />
+              {t("importProjectPackage")}
             </button>
             <div className="relative">
               <button
@@ -1093,18 +1295,16 @@ export default function Home() {
         onClose={() => setIsSeriesDialogOpen(false)}
       />
 
-      {/* Environment Configuration Dialog (kept for EnvConfigChecker) */}
-      <EnvConfigDialog
-        isOpen={false}
-        onClose={() => {}}
-        isRequired={false}
-      />
-
       {/* Import File Dialog */}
       <ImportFileDialog
         isOpen={isImportDialogOpen}
         onClose={() => setIsImportDialogOpen(false)}
-        onSuccess={() => fetchSeriesList()}
+        onSuccess={() => void syncSeries()}
+      />
+
+      <ProjectPackageImportDialog
+        isOpen={isPackageImportOpen}
+        onClose={() => setIsPackageImportOpen(false)}
       />
 
       {/* Tauri native menu event listener */}

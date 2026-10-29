@@ -11,8 +11,6 @@ import {
     ImageIcon,
     AtSign,
     Maximize2,
-    PanelBottomOpen,
-    PanelBottomClose,
     Sparkles,
     Loader2,
     Code2,
@@ -21,6 +19,7 @@ import {
     PinOff,
     Play,
     Star,
+    AlertCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import AssetChipBar from "./AssetChipBar";
@@ -31,8 +30,13 @@ import { buildAssembledPrompt } from "./buildAssembledPrompt";
 import { PendingTaskAffordance } from "@/components/shared/PendingTaskAffordance";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
-import { useProjectStore } from "@/store/projectStore";
+import { useProjectStore, type Character } from "@/store/projectStore";
 import { selectedVariantUrl } from "@/lib/characterImage";
+
+type AssetChipReference = {
+    id: string;
+    name: string;
+};
 
 export interface ShotNode {
     id: string;
@@ -61,7 +65,7 @@ export interface ShotNode {
     // video_tasks list which is persisted server-side).
     videoUrl?: string;
     videoTaskId?: string;
-    videoStatus?: "pending" | "processing" | "completed" | "failed";
+    videoStatus?: "pending" | "processing" | "completed" | "failed" | "needs_confirmation";
     /** Issue 16 — final take selection (Z plan). Set in Assembly stage; read
      *  by Storyboard's ShotCard top preview as the canonical "this is the
      *  shipped output". Falls back to latest starred / latest completed /
@@ -75,6 +79,8 @@ export interface ShotNode {
         direct_r2v?: string[];
     };
     imageUrl?: string;
+    /** Optional persisted closing frame for Wan3 first/last-frame I2V. */
+    lastFrameUrl?: string;
 
     // ─── Storyboard Schema v2 fields ────────────────────────────────
     duration?: number | null;
@@ -107,12 +113,13 @@ export interface ShotNode {
 export const T2I_HISTORY_LIMIT = 10;
 
 interface ShotCardProps {
+    structureDisabled?: boolean;
     shot: ShotNode;
     index: number;
     totalShots: number;
-    characters: any[];
-    scenes: any[];
-    props: any[];
+    characters: Character[];
+    scenes: AssetChipReference[];
+    props: AssetChipReference[];
     onUpdatePrompt: (prompt: string) => void;
     onUpdateField: (field: string, value: string | number | null) => void;
     onGenerateT2I: () => void;
@@ -147,6 +154,10 @@ interface ShotCardProps {
     canGenerate?: boolean;
     onSetGenerateCount?: (count: number) => void;
     onGenerateBatch?: (count: number) => void;
+    /** Generation is blocked by pending/failed frame edits; caller supplies the user-facing reason. */
+    generationBlockedMessage?: string;
+    /** Pending saves are busy; failed saves are blocked but should not look like work is still running. */
+    generationBlockedBusy?: boolean;
     /** Active in-flight count for label flip (生成 ×N → 生成中 · N). */
     inFlightCount?: number;
     onRefineFrame?: () => void;
@@ -158,6 +169,7 @@ interface ShotCardProps {
 }
 
 export default function ShotCard({
+    structureDisabled = false,
     shot,
     index,
     totalShots,
@@ -174,7 +186,6 @@ export default function ShotCard({
     onDuplicate,
     onSetTabMode,
     onOpenDrawer,
-    onInsertAsset: _onInsertAsset,
     durationEditorConfig,
     onCancelVideo,
     expanded,
@@ -184,6 +195,8 @@ export default function ShotCard({
     canGenerate = true,
     onSetGenerateCount,
     onGenerateBatch,
+    generationBlockedMessage,
+    generationBlockedBusy = false,
     inFlightCount = 0,
     onRefineFrame,
     onUnpinVideo,
@@ -216,7 +229,7 @@ export default function ShotCard({
             const slotN = parseInt(match[1], 10);
             if (bySlot.has(slotN)) continue;
             const name = match[2];
-            const char = characters.find((c: any) => c.name === name);
+            const char = characters.find((c) => c.name === name);
             bySlot.set(slotN, char?.description ? `${name}: ${char.description}` : name);
         }
         return Array.from(bySlot.entries())
@@ -230,6 +243,9 @@ export default function ShotCard({
     //     Storyboard render). No frame yet → empty → text-only polish.
     //   • r2v: each referenced character's avatar/headshot/full body
     //     image, dedup'd by id. No references → empty → text-only.
+    const generationBlocked = !!generationBlockedMessage;
+    const generationActionable = canGenerate && inFlightCount === 0 && !generationBlocked;
+
     const polishImageUrls = useCallback((): string[] => {
         if (shot.tabMode === "direct_r2v") {
             const out: string[] = [];
@@ -238,7 +254,7 @@ export default function ShotCard({
             let m;
             while ((m = tagPattern.exec(shot.prompt)) !== null) {
                 const [, name] = m;
-                const char = characters.find((c: any) => c.name === name);
+                const char = characters.find((c) => c.name === name);
                 if (!char || seen.has(char.id)) continue;
                 seen.add(char.id);
                 const url = char.headshot_image_url || char.image_url || char.full_body_image_url
@@ -266,7 +282,7 @@ export default function ShotCard({
         let match;
         while ((match = tagPattern.exec(shot.prompt)) !== null) {
             const [, name] = match;
-            const char = characters.find((c: any) => c.name === name);
+            const char = characters.find((c) => c.name === name);
             if (!char || seen.has(char.id)) continue;
             seen.add(char.id);
             const avatarUrl =
@@ -302,9 +318,31 @@ export default function ShotCard({
         el.style.setProperty("--spotlight-y", `${e.clientY - rect.top}px`);
     }, []);
 
+    const renderNeedsConfirmation = () => (
+        <div className="w-full aspect-video relative flex flex-col items-center justify-center gap-2.5 border border-amber-500/25 bg-amber-500/10 px-5 text-center">
+            {shot.videoUrl ? (
+                <PreviewVideo
+                    src={shot.videoUrl}
+                    alt={t("historicalUnconfirmedVideo") || "Historical unconfirmed video"}
+                    className="pointer-events-none absolute inset-0 h-full w-full opacity-45"
+                    noLightbox
+                    hoverPlay={false}
+                />
+            ) : null}
+            <div className="relative z-10 flex flex-col items-center gap-2 rounded-xl border border-amber-500/25 bg-black/55 px-4 py-3 backdrop-blur-sm">
+                <AlertCircle size={18} className="text-amber-300" aria-hidden="true" />
+                <span className="text-[0.75rem] font-semibold text-amber-100">{t("needsConfirmation")}</span>
+                <span className="max-w-[260px] text-[0.6875rem] leading-snug text-amber-100/75">{t("needsConfirmationDetail")}</span>
+                {shot.videoTaskId ? (
+                    <code className="rounded bg-black/45 px-1.5 py-0.5 font-mono text-[0.625rem] text-amber-100/70">{shot.videoTaskId}</code>
+                ) : null}
+            </div>
+        </div>
+    );
+
     const renderPreview = () => {
         if (shot.tabMode === "t2i_i2v") {
-            if (shot.videoUrl) {
+            if (shot.videoUrl && shot.videoStatus !== "needs_confirmation") {
                 return (
                     <PreviewVideo
                         src={shot.videoUrl}
@@ -312,6 +350,9 @@ export default function ShotCard({
                         className="w-full aspect-video"
                     />
                 );
+            }
+            if (shot.videoStatus === "needs_confirmation") {
+                return renderNeedsConfirmation();
             }
             if (shot.videoStatus === "processing" || shot.videoStatus === "pending") {
                 return (
@@ -396,7 +437,7 @@ export default function ShotCard({
         }
 
         // Direct R2V mode
-        if (shot.videoUrl) {
+        if (shot.videoUrl && shot.videoStatus !== "needs_confirmation") {
             return (
                 <PreviewVideo
                     src={shot.videoUrl}
@@ -404,6 +445,9 @@ export default function ShotCard({
                     className="w-full aspect-video"
                 />
             );
+        }
+        if (shot.videoStatus === "needs_confirmation") {
+            return renderNeedsConfirmation();
         }
         if (shot.videoStatus === "processing" || shot.videoStatus === "pending") {
             return (
@@ -449,10 +493,19 @@ export default function ShotCard({
     // retry buttons inside renderPreview when a take fails.
 
     function ShotStatusBadge({ shot, t }: { shot: ShotNode; t: (key: string, values?: Record<string, number | string>) => string }) {
-        const isProcessing = shot.videoStatus === "processing" || shot.t2iStatus === "processing";
-        const isPending = !isProcessing && (shot.videoStatus === "pending" || shot.t2iStatus === "pending");
-        const isFailed = !isProcessing && !isPending && (shot.videoStatus === "failed" || shot.t2iStatus === "failed");
-        const isStarred = shot.isVideoPinned || shot.finalTakeId;
+        const isNeedsConfirmation = shot.videoStatus === "needs_confirmation";
+        const isProcessing = !isNeedsConfirmation && (shot.videoStatus === "processing" || shot.t2iStatus === "processing");
+        const isPending = !isNeedsConfirmation && !isProcessing && (shot.videoStatus === "pending" || shot.t2iStatus === "pending");
+        const isFailed = !isProcessing && !isPending && !isNeedsConfirmation && (shot.videoStatus === "failed" || shot.t2iStatus === "failed");
+        const isStarred = !isNeedsConfirmation && (shot.isVideoPinned || shot.finalTakeId);
+        if (isNeedsConfirmation) {
+            return (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/35 bg-amber-500/12 px-2.5 py-1 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-amber-200">
+                    <span className="h-[5px] w-[5px] rounded-full bg-amber-300" />
+                    {t("statusNeedsConfirmation")}
+                </span>
+            );
+        }
         if (isStarred) {
             return (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-status-starred-border bg-status-starred-bg px-2.5 py-1 font-mono text-[0.625rem] font-semibold uppercase tracking-[0.1em] text-status-starred-fg">
@@ -618,14 +671,14 @@ export default function ShotCard({
                     <div className="group/preview relative w-72 shrink-0 bg-surface-inset flex flex-col items-center justify-center overflow-hidden rounded-[14px] border border-glass-border shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]">
                         {renderPreview()}
                         {/* Selected-take amber halation */}
-                        {(shot.isVideoPinned || shot.finalTakeId) && shot.videoUrl ? (
+                        {(shot.isVideoPinned || shot.finalTakeId) && shot.videoStatus !== "needs_confirmation" && shot.videoUrl ? (
                             <div
                                 className="pointer-events-none absolute inset-0 rounded-[14px]"
                                 style={{ boxShadow: "inset 0 0 42px -8px rgba(255,169,77,0.28)" }}
                             />
                         ) : null}
                         {/* Hover play overlay — only on completed video */}
-                        {shot.videoUrl ? (
+                        {shot.videoUrl && shot.videoStatus !== "needs_confirmation" ? (
                             <div className="absolute inset-0 grid place-items-center bg-overlay/20 opacity-0 transition-opacity duration-base group-hover/preview:opacity-100 pointer-events-none">
                                 <div className="grid h-11 w-11 place-items-center rounded-full bg-foreground/90 text-on-accent">
                                     <Play size={17} fill="currentColor" className="ml-0.5" />
@@ -633,7 +686,7 @@ export default function ShotCard({
                             </div>
                         ) : null}
                         {/* Top-left selected chip */}
-                        {(shot.isVideoPinned || shot.finalTakeId) && shot.videoUrl ? (
+                        {(shot.isVideoPinned || shot.finalTakeId) && shot.videoStatus !== "needs_confirmation" && shot.videoUrl ? (
                             <div className="absolute top-2.5 left-2.5 z-10 flex items-center gap-1 rounded-full border border-status-starred-border bg-status-starred-bg/90 px-2 py-[3px] backdrop-blur-sm font-mono text-[0.5625rem] font-semibold uppercase tracking-[0.08em] text-status-starred-fg">
                                 <Star size={10} fill="currentColor" aria-hidden="true" />
                                 {t("selectedTake")}
@@ -651,7 +704,7 @@ export default function ShotCard({
                             calm in the resting state. Only shown when a
                             video is actually rendered (no point pinning a
                             "no video" placeholder). */}
-                        {shot.isVideoPinned && shot.videoUrl && onUnpinVideo ? (
+                        {shot.isVideoPinned && shot.videoStatus !== "needs_confirmation" && shot.videoUrl && onUnpinVideo ? (
                             <div className="group/pin absolute top-2.5 right-2.5 z-20 flex items-center gap-1">
                                 <span
                                     className="inline-flex items-center gap-1 rounded-full border border-primary/55 bg-primary/20 backdrop-blur-sm px-2 py-[2px] font-mono text-[0.59375rem] uppercase tracking-[0.14em] text-primary shadow-[var(--glow-primary)]"
@@ -902,9 +955,10 @@ export default function ShotCard({
                                     whileHover={{ scale: 1.06 }}
                                     whileTap={{ scale: 0.94 }}
                                     onClick={onMoveUp}
-                                    disabled={index === 0}
+                                    disabled={structureDisabled || index === 0}
                                     className="ico-btn flex h-8 w-8 items-center justify-center rounded-[14px] text-text-muted transition-colors duration-fast ease-out-quart hover:bg-hover-bg hover:text-foreground disabled:opacity-25 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                                     title={t("moveUp")}
+                                    aria-label={t("moveUp")}
                                 >
                                     <ChevronUp size={15} strokeWidth={1.8} />
                                 </motion.button>
@@ -912,9 +966,10 @@ export default function ShotCard({
                                     whileHover={{ scale: 1.06 }}
                                     whileTap={{ scale: 0.94 }}
                                     onClick={onMoveDown}
-                                    disabled={index === totalShots - 1}
+                                    disabled={structureDisabled || index === totalShots - 1}
                                     className="ico-btn flex h-8 w-8 items-center justify-center rounded-[14px] text-text-muted transition-colors duration-fast ease-out-quart hover:bg-hover-bg hover:text-foreground disabled:opacity-25 disabled:hover:bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                                     title={t("moveDown")}
+                                    aria-label={t("moveDown")}
                                 >
                                     <ChevronDown size={15} strokeWidth={1.8} />
                                 </motion.button>
@@ -922,8 +977,10 @@ export default function ShotCard({
                                     whileHover={{ scale: 1.06 }}
                                     whileTap={{ scale: 0.94 }}
                                     onClick={onDuplicate}
+                                    disabled={structureDisabled}
                                     className="ico-btn flex h-8 w-8 items-center justify-center rounded-[14px] text-text-muted transition-colors duration-fast ease-out-quart hover:bg-hover-bg hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                                     title={t("duplicateShot")}
+                                    aria-label={t("duplicateShot")}
                                 >
                                     <Copy size={15} strokeWidth={1.8} />
                                 </motion.button>
@@ -942,8 +999,10 @@ export default function ShotCard({
                                     whileHover={{ scale: 1.06 }}
                                     whileTap={{ scale: 0.94 }}
                                     onClick={onDelete}
+                                    disabled={structureDisabled}
                                     className="ico-btn flex h-8 w-8 items-center justify-center rounded-[14px] text-text-muted transition-colors duration-fast ease-out-quart hover:bg-hover-bg hover:text-status-failed-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55"
                                     title={t("deleteShot")}
+                                    aria-label={t("deleteShot")}
                                 >
                                     <Trash2 size={15} strokeWidth={1.8} />
                                 </motion.button>
@@ -982,19 +1041,24 @@ export default function ShotCard({
                                     })}
                                 </div>
                                 <motion.button
-                                    whileHover={canGenerate && inFlightCount === 0 ? { scale: 1.02 } : undefined}
-                                    whileTap={canGenerate && inFlightCount === 0 ? { scale: 0.98 } : undefined}
+                                    whileHover={generationActionable ? { scale: 1.02 } : undefined}
+                                    whileTap={generationActionable ? { scale: 0.98 } : undefined}
                                     type="button"
-                                    onClick={() => onGenerateBatch?.(generateCount)}
-                                    disabled={!canGenerate || inFlightCount > 0}
-                                    title={!canGenerate
+                                    onClick={() => { if (generationActionable) onGenerateBatch?.(generateCount); }}
+                                    disabled={!generationActionable}
+                                    title={generationBlockedMessage ?? (!canGenerate
                                         ? (shot.tabMode === "t2i_i2v"
                                             ? t("needFirstFrameTooltip")
                                             : t("needPromptInputTooltip"))
-                                        : t("genVideoCandidatesTooltip", { count: generateCount })}
+                                        : t("genVideoCandidatesTooltip", { count: generateCount }))}
                                     className="inline-flex items-center justify-center gap-1.5 rounded-full px-[13px] py-[7px] font-sans text-[0.75rem] font-semibold tracking-tight transition-all duration-fast ease-out-quart focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/55 disabled:cursor-not-allowed disabled:opacity-40 bg-primary text-on-accent shadow-[var(--btn-pri-glow),inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover hover:-translate-y-px disabled:hover:translate-y-0"
                                 >
-                                    {inFlightCount > 0 ? (
+                                    {generationBlockedMessage ? (
+                                        <>
+                                            {generationBlockedBusy ? <Loader2 size={14} className="animate-spin" strokeWidth={2} /> : null}
+                                            <span>{generationBlockedMessage}</span>
+                                        </>
+                                    ) : inFlightCount > 0 ? (
                                         <>
                                             <Loader2 size={14} className="animate-spin" strokeWidth={2} />
                                             <span>{t("genClusterInFlight", { count: inFlightCount })}</span>

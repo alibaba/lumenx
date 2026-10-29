@@ -1,5 +1,5 @@
 import "./globals.css";
-import EnvConfigChecker from "@/components/EnvConfigChecker";
+import AppAccessGate from "@/components/AppAccessGate";
 import { Providers } from "@/components/Providers";
 import TauriDragBar from "@/components/layout/TauriDragBar";
 
@@ -30,8 +30,9 @@ export default function RootLayout({
       <body className="font-sans bg-background text-foreground antialiased">
         <Providers>
           <TauriDragBar />
-          <EnvConfigChecker />
-          {children}
+          <AppAccessGate>
+            {children}
+          </AppAccessGate>
         </Providers>
       </body>
     </html>

@@ -2,6 +2,7 @@ family: wan
 display_name: "Wan (通义万相)"
 provider: aliyun
 routing_prefixes:
+  - wan3.0-
   - wan2.7-
   - wan2.6-
   - wan2.5-
@@ -18,6 +19,7 @@ supported_modalities:
   - i2v
   - r2v
   - v2v
+  - t2v
 transport:
   image_input_mode:
     dashscope: dashscope_multimodal_message
@@ -28,6 +30,7 @@ transport:
 docs:
   official_snapshot_ids:
     - aliyun/wan/2026-04-25
+    - aliyun/wan3-shared-execution/2026-10-12
 models:
   # ── Wan 2.7 Image (T2I + I2I merged) ──────────────────────────────
   - id: wan2.7-image-pro
@@ -49,8 +52,9 @@ models:
       badges: [latest]
     params:
       size:
-        options: ["1024*1024", "1280*1280", "1440*1440", "2048*2048", "1280*720", "720*1280", "1024*576", "576*1024"]
+        options: ["1024*1024", "1280*1280", "1440*1440", "2048*2048", "1280*720", "720*1280", "1024*576", "576*1024", "768*1024", "1024*768"]
         default: "1280*1280"
+        allow_custom_modes: [i2i]
       negativePrompt: true
       seed: true
       promptExtend: true
@@ -76,8 +80,9 @@ models:
       order: 110
     params:
       size:
-        options: ["1024*1024", "1280*1280", "1440*1440", "2048*2048", "1280*720", "720*1280", "1024*576", "576*1024"]
+        options: ["1024*1024", "1280*1280", "1440*1440", "2048*2048", "1280*720", "720*1280", "1024*576", "576*1024", "768*1024", "1024*768"]
         default: "1280*1280"
+        allow_custom_modes: [i2i]
       negativePrompt: true
       seed: true
       promptExtend: true
@@ -85,6 +90,98 @@ models:
     inputs:
       reference_images:
         max: 9
+
+  # ── Wan 3.0 Video (workspace all-in-one foundation; product gated by surface) ───
+  - id: wan3.0-video
+    model_line_id: wan/wan3.0-video
+    mode: video
+    display_name: Wan 3.0 Video
+    description: Wan 3.0 all-in-one workspace video foundation for ordered media generation
+    status: active
+    release_stage: preview
+    capabilities: [t2v, i2v, r2v, v2v]
+    docs:
+      context_hub_doc_ids: []
+      repo_local_snapshot_paths:
+        - docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md
+    runtime:
+      dashscope:
+        gateway: dashscope_workspace
+        api_model_id: wan3.0-video
+    ui:
+      selection_group: video
+      visible_in: [video_sidebar]
+      order: 95
+    duration:
+      type: slider
+      min: 2
+      max: 30
+      step: 1
+      default: 5
+      supports_auto: true
+    params:
+      resolution:
+        options: [480P, 720P, 1080P]
+        default: 1080P
+      ratio:
+        options: [adaptive, "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+        default: adaptive
+      seed: true
+      promptExtend:
+        default: true
+      watermark:
+        default: false
+      audio:
+        default: true
+    inputs:
+      media:
+        ordered: true
+        roles: [first_frame, last_frame, reference_image, reference_video, reference_audio]
+  - id: wan3.0-video-prime
+    model_line_id: wan/wan3.0-video-prime
+    mode: video
+    display_name: Wan 3.0 Video Prime
+    description: Wan 3.0 Prime all-in-one workspace video foundation for ordered media generation
+    status: active
+    release_stage: preview
+    capabilities: [t2v, i2v, r2v, v2v]
+    docs:
+      context_hub_doc_ids: []
+      repo_local_snapshot_paths:
+        - docs/1-api-reference/aliyun-wan3-shared-execution-2026-10-12.md
+    runtime:
+      dashscope:
+        gateway: dashscope_workspace
+        api_model_id: wan3.0-video-prime
+    ui:
+      selection_group: video
+      visible_in: [video_sidebar]
+      order: 96
+    duration:
+      type: slider
+      min: 2
+      max: 30
+      step: 1
+      default: 5
+      supports_auto: true
+    params:
+      resolution:
+        options: [480P, 720P, 1080P]
+        default: 1080P
+      ratio:
+        options: [adaptive, "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+        default: adaptive
+      seed: true
+      promptExtend:
+        default: true
+      watermark:
+        default: false
+      audio:
+        default: true
+    inputs:
+      media:
+        ordered: true
+        roles: [first_frame, last_frame, reference_image, reference_video, reference_audio]
 
   # ── Wan 2.7 Video (I2V / R2V / T2V / VideoEdit) ──────────────────
   - id: wan/wan2.7-video
@@ -101,7 +198,7 @@ models:
       i2v:
         legacy_id: wan2.7-i2v
         display_name: Wan 2.7 I2V
-        description: Image-to-video with first/last frame, driving audio, and first clip support
+        description: First-frame image-to-video; last-frame, driving audio, and clip continuation are not exposed in LumenX
         capabilities: [i2v]
         ui:
           selection_group: i2v
@@ -118,9 +215,6 @@ models:
           resolution:
             options: [720p, 1080p]
             default: 1080p
-          ratio:
-            options: ["16:9", "9:16", "1:1", "4:3", "3:4"]
-            default: "16:9"
           seed: true
           negativePrompt: true
           promptExtend: true
@@ -140,18 +234,23 @@ models:
           order: 80
         duration:
           type: slider
-          min: 3
+          min: 2
           max: 15
           step: 1
           default: 5
         params:
           resolution:
-            options: [720p, 1080p]
-            default: 1080p
+            options: [720P, 1080P]
+            default: 1080P
+          ratio:
+            options: ["16:9", "9:16", "1:1", "4:3", "3:4"]
+            default: "16:9"
           seed: true
-          negativePrompt: false
-          promptExtend: false
-          watermark: true
+          negativePrompt: true
+          promptExtend:
+            default: true
+          watermark:
+            default: false
         inputs:
           reference_images:
             max: 5
@@ -166,16 +265,62 @@ models:
           selection_group: i2v
           visible_in: []
           order: 5
-      videoedit:
+        duration:
+          type: slider
+          min: 2
+          max: 15
+          step: 1
+          default: 5
+        params:
+          resolution:
+            options: [720P, 1080P]
+            default: 1080P
+          ratio:
+            options: ["16:9", "9:16", "1:1", "4:3", "3:4"]
+            default: "16:9"
+          seed: true
+          negativePrompt: true
+          promptExtend:
+            default: true
+          watermark:
+            default: false
+        inputs:
+          media:
+            max: 0
+      v2v:
         legacy_id: wan2.7-videoedit
         display_name: Wan 2.7 VideoEdit
-        description: Video editing with reference images
+        description: Source-video editing from one managed MP4/MOV input; optional reference images are not exposed in Playground yet
         status: hidden
         capabilities: [v2v]
         ui:
           selection_group: i2v
           visible_in: []
           order: 2
+        duration:
+          type: buttons
+          options: [0, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+          default: 0
+        params:
+          resolution:
+            options: [720P, 1080P]
+            default: 1080P
+          ratio:
+            options: ["16:9", "9:16", "1:1", "4:3", "3:4"]
+            default: "16:9"
+          seed: true
+          negativePrompt: true
+          promptExtend:
+            default: true
+          watermark:
+            default: false
+          audioSetting:
+            options: [auto, origin]
+            default: auto
+        inputs:
+          reference_videos:
+            max: 1
+            reference_type: video
 
   # ── Wan 2.6 Video (deprecated — replaced by 2.7) ──────────────────
   - id: wan/wan2.6-video

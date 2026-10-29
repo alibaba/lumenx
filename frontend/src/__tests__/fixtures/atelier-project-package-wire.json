@@ -1,0 +1,382 @@
+{
+  "id_map": {
+    "audio_tracks": {
+      "track-old": "fixture-audio-track"
+    },
+    "candidates": {
+      "video-old:candidate-old": "fixture-candidate"
+    },
+    "exports": {
+      "export-old": "fixture-export"
+    },
+    "nodes": {
+      "audio-old": "fixture-node-2",
+      "image-old": "fixture-node-1",
+      "region-old": "fixture-node",
+      "video-old": "fixture-node-3"
+    },
+    "projects": {
+      "source-project": "fixture-project"
+    },
+    "sequence": {
+      "clip-old": "fixture-clip"
+    }
+  },
+  "manifest": {
+    "agent_history": [
+      {
+        "assistant_response": "I prepared the selected take.",
+        "completed_at": 13.0,
+        "created_at": 12.0,
+        "messages": [
+          {
+            "content": "Use https://example.test/mood as a visual reference",
+            "role": "user"
+          },
+          {
+            "content": "I will use video-old as context, not authority.",
+            "role": "assistant"
+          },
+          {
+            "content": "Read node video-old (status: completed; error: none)",
+            "error_code": "none",
+            "name": "canvas.readProject",
+            "role": "tool",
+            "status": "completed"
+          }
+        ],
+        "schema_version": 1,
+        "source_refs": {
+          "video-old": "video-old"
+        },
+        "source_turn_id": "turn-old",
+        "status": "completed",
+        "target_refs": {},
+        "user_message": "Make this more cinematic"
+      }
+    ],
+    "kind": "lumenx.atelier.project",
+    "media": [
+      {
+        "logical_ref": "audio/music.mp3",
+        "package_path": "media/audio/music.mp3",
+        "sha256": "80f189984e5ca70287d13342f6daa0db45cba3c131c4e46dc81360f3a4c4f690",
+        "size_bytes": 5
+      },
+      {
+        "logical_ref": "uploads/ref.png",
+        "package_path": "media/uploads/ref.png",
+        "sha256": "3ff6c05723bb069d19953340320fa9512f0be584742703e60226ded28bb43861",
+        "size_bytes": 3
+      },
+      {
+        "logical_ref": "video/atelier_seq_job-old.mp4",
+        "package_path": "media/video/atelier_seq_job-old.mp4",
+        "sha256": "a4c3ed04a95a3da14a9d235c83d868bed7c0f45cf7f3faa751ee8f50598d2211",
+        "size_bytes": 4
+      },
+      {
+        "logical_ref": "video/take.mp4",
+        "package_path": "media/video/take.mp4",
+        "sha256": "d1905cf90af29a5ac3f99e105830eecc5b3b415b24e2d166a7ce4cf72b2f32e6",
+        "size_bytes": 4
+      }
+    ],
+    "schema_version": 1,
+    "source": {
+      "project_id": "source-project",
+      "project_revision": 0,
+      "storage_id": "source-store",
+      "title": "Source canvas"
+    }
+  },
+  "media_map": {
+    "audio/music.mp3": "audio/imported/fixture-project/music.mp3",
+    "uploads/ref.png": "uploads/imported/fixture-project/ref.png",
+    "video/atelier_seq_job-old.mp4": "video/imported/fixture-project/atelier_seq_job-old.mp4",
+    "video/take.mp4": "video/imported/fixture-project/take.mp4"
+  },
+  "prepared_project": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 10.0
+    },
+    "agent_turns": [],
+    "audio_tracks": [
+      {
+        "gain": 1.0,
+        "id": "fixture-audio-track",
+        "loop": false,
+        "node_id": "fixture-node-2",
+        "start": 0.25,
+        "trim_end": null,
+        "trim_start": null
+      }
+    ],
+    "compacted_through_turn_id": null,
+    "created_at": 99.0,
+    "description": "Creative state",
+    "exports": [
+      {
+        "clip_count": 1,
+        "created_at": 15.0,
+        "deletion": null,
+        "filename": "atelier_seq_job-old.mp4",
+        "id": "fixture-export",
+        "imported_proof": {
+          "export_id": "fixture-export",
+          "imported_at": 99.0,
+          "project_id": "fixture-project",
+          "relative_path": "video/imported/fixture-project/atelier_seq_job-old.mp4",
+          "schema_version": 1,
+          "sha256": "a4c3ed04a95a3da14a9d235c83d868bed7c0f45cf7f3faa751ee8f50598d2211",
+          "size_bytes": 4,
+          "source_export_id": "export-old",
+          "source_project_id": "source-project",
+          "source_storage_id": "source-store"
+        },
+        "job_id": null,
+        "project_id": "fixture-project",
+        "publication_proof": null,
+        "size_mb": 1.0,
+        "snapshot_digest": null,
+        "source_entries": [
+          {
+            "candidateId": "fixture-candidate",
+            "gain": 1.0,
+            "id": "fixture-clip",
+            "parentId": "fixture-node-3",
+            "transition": {
+              "duration": 0.0,
+              "kind": "cut"
+            },
+            "trimEnd": null,
+            "trimStart": null
+          }
+        ],
+        "timeline_snapshot": {
+          "audio_tracks": [
+            {
+              "id": "fixture-audio-track",
+              "media_version": {
+                "relative_path": "audio/imported/fixture-project/music.mp3",
+                "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+              },
+              "node_id": "fixture-node-2",
+              "source_url": "audio/imported/fixture-project/music.mp3"
+            }
+          ],
+          "clips": [
+            {
+              "candidateId": "fixture-candidate",
+              "clip_id": "fixture-clip",
+              "label": "literal ids video-old/candidate-old stay prose",
+              "media_version": {
+                "relative_path": "video/imported/fixture-project/take.mp4",
+                "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "parentId": "fixture-node-3",
+              "source_url": "video/imported/fixture-project/take.mp4"
+            }
+          ],
+          "schema_version": "atelier.timeline.v1"
+        },
+        "video_url": "video/imported/fixture-project/atelier_seq_job-old.mp4"
+      }
+    ],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "fixture-project",
+    "import_provenance": {
+      "agent_history": [
+        {
+          "assistant_response": "I prepared the selected take.",
+          "completed_at": 13.0,
+          "created_at": 12.0,
+          "messages": [
+            {
+              "content": "Use https://example.test/mood as a visual reference",
+              "role": "user"
+            },
+            {
+              "content": "I will use video-old as context, not authority.",
+              "role": "assistant"
+            },
+            {
+              "content": "Read node video-old (status: completed; error: none)",
+              "error_code": "none",
+              "name": "canvas.readProject",
+              "role": "tool",
+              "status": "completed"
+            }
+          ],
+          "schema_version": 1,
+          "source_refs": {
+            "video-old": "video-old"
+          },
+          "source_turn_id": "turn-old",
+          "status": "completed",
+          "target_refs": {
+            "video-old": "fixture-node-3"
+          },
+          "user_message": "Make this more cinematic"
+        }
+      ],
+      "imported_at": 99.0,
+      "schema_version": 1,
+      "source_project_id": "source-project",
+      "source_storage_id": "source-store"
+    },
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 99.0,
+        "created_by": "user",
+        "data": {
+          "color": "#646cff"
+        },
+        "frame_id": null,
+        "height": 180.0,
+        "id": "fixture-node",
+        "media_urls": [],
+        "project_id": "fixture-project",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Region",
+        "type": "region",
+        "updated_at": 99.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      {
+        "asset_id": null,
+        "created_at": 99.0,
+        "created_by": "user",
+        "data": {
+          "parent_node_id": "fixture-node-3",
+          "reference_role": "video_reference_image",
+          "region_id": "fixture-node"
+        },
+        "frame_id": null,
+        "height": 180.0,
+        "id": "fixture-node-1",
+        "media_urls": [
+          "uploads/imported/fixture-project/ref.png"
+        ],
+        "project_id": "fixture-project",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Reference",
+        "type": "image",
+        "updated_at": 99.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      {
+        "asset_id": null,
+        "created_at": 99.0,
+        "created_by": "user",
+        "data": {
+          "parent_node_id": "fixture-node-3",
+          "reference_role": "video_reference_audio"
+        },
+        "frame_id": null,
+        "height": 180.0,
+        "id": "fixture-node-2",
+        "media_urls": [
+          "audio/imported/fixture-project/music.mp3"
+        ],
+        "project_id": "fixture-project",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Music",
+        "type": "audio",
+        "updated_at": 99.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      {
+        "asset_id": null,
+        "created_at": 99.0,
+        "created_by": "user",
+        "data": {
+          "candidates": [
+            {
+              "id": "fixture-candidate",
+              "prompt": "A neon alley take",
+              "status": "completed",
+              "updated_at": 12.0,
+              "video_url": "video/imported/fixture-project/take.mp4"
+            }
+          ],
+          "creative_notes": "Keep literal source URL https://example.test/mood and source id video-old as prose.",
+          "reference_audio_urls": [
+            "audio/imported/fixture-project/music.mp3"
+          ],
+          "reference_image_urls": [
+            "uploads/imported/fixture-project/ref.png"
+          ],
+          "reference_node_ids": [
+            "fixture-node-1",
+            "fixture-node-2"
+          ],
+          "region_id": "fixture-node",
+          "selected_candidate_id": "fixture-candidate"
+        },
+        "frame_id": null,
+        "height": 180.0,
+        "id": "fixture-node-3",
+        "media_urls": [
+          "video/imported/fixture-project/take.mp4"
+        ],
+        "project_id": "fixture-project",
+        "prompt": "A neon alley inspired by https://example.test/mood",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Shot",
+        "type": "video",
+        "updated_at": 99.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 0,
+    "sequence": [
+      {
+        "candidateId": "fixture-candidate",
+        "gain": 1.0,
+        "id": "fixture-clip",
+        "parentId": "fixture-node-3",
+        "transition": {
+          "duration": 0.0,
+          "kind": "cut"
+        },
+        "trimEnd": null,
+        "trimStart": null
+      }
+    ],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Source canvas",
+    "updated_at": 99.0
+  }
+}

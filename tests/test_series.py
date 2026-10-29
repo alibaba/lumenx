@@ -28,9 +28,7 @@ def pipeline(tmp_path):
          patch("src.apps.comic_gen.pipeline.VideoGenerator"), \
          patch("src.apps.comic_gen.pipeline.AudioGenerator"), \
          patch("src.apps.comic_gen.pipeline.ExportManager"):
-        p = ComicGenPipeline()
-    p.data_file = str(tmp_path / "projects.json")
-    p.series_data_file = str(tmp_path / "series.json")
+        p = ComicGenPipeline(data_dir=tmp_path / "output")
     p.scripts = {}
     p.series_store = {}
     return p
@@ -107,7 +105,8 @@ class TestSeriesCRUD:
 
     def test_get_series_exists(self, pipeline):
         s = pipeline.create_series("X")
-        assert pipeline.get_series(s.id) is s
+        assert pipeline.get_series(s.id).model_dump(mode="json") == s.model_dump(mode="json")
+        assert pipeline.get_series(s.id) is pipeline.series_store[s.id]
 
     def test_get_series_not_found(self, pipeline):
         assert pipeline.get_series("nonexistent") is None
@@ -130,9 +129,9 @@ class TestSeriesCRUD:
 
     def test_update_series_episode_ids_not_overwritten(self, pipeline):
         s = pipeline.create_series("X")
-        s.episode_ids = ["ep1"]
+        pipeline.series_store[s.id].episode_ids = ["ep1"]
         pipeline.update_series(s.id, {"episode_ids": ["should_not_change"]})
-        assert s.episode_ids == ["ep1"]
+        assert pipeline.series_store[s.id].episode_ids == ["ep1"]
 
     def test_update_series_not_found(self, pipeline):
         with pytest.raises(ValueError, match="Series not found"):
@@ -177,11 +176,11 @@ class TestEpisodeAssociation:
         pipeline.scripts[ep.id] = ep
 
         pipeline.add_episode_to_series(s1.id, ep.id)
-        assert ep.id in s1.episode_ids
+        assert ep.id in pipeline.series_store[s1.id].episode_ids
 
         pipeline.add_episode_to_series(s2.id, ep.id)
-        assert ep.id not in s1.episode_ids
-        assert ep.id in s2.episode_ids
+        assert ep.id not in pipeline.series_store[s1.id].episode_ids
+        assert ep.id in pipeline.series_store[s2.id].episode_ids
         assert ep.series_id == s2.id
 
     def test_remove_episode_from_series(self, pipeline):
@@ -191,7 +190,7 @@ class TestEpisodeAssociation:
         pipeline.add_episode_to_series(s.id, ep.id)
 
         pipeline.remove_episode_from_series(s.id, ep.id)
-        assert ep.id not in s.episode_ids
+        assert ep.id not in pipeline.series_store[s.id].episode_ids
         assert ep.series_id is None
         assert ep.episode_number is None
 
@@ -247,7 +246,7 @@ class TestResolveEpisodeAssets:
     def test_auto_lookup_series_via_episode_series_id(self, pipeline):
         s = pipeline.create_series("S")
         series_prop = _make_prop(name="Series Sword")
-        s.props = [series_prop]
+        pipeline.series_store[s.id].props = [series_prop]
 
         ep = _make_script(series_id=s.id)
         pipeline.scripts[ep.id] = ep
@@ -353,7 +352,7 @@ class TestImportAssetsFromSeries:
     def test_deep_copy_with_new_id(self, pipeline):
         source = pipeline.create_series("Source")
         char = _make_character(name="Hero")
-        source.characters = [char]
+        pipeline.series_store[source.id].characters = [char]
         original_id = char.id
 
         target = pipeline.create_series("Target")
@@ -369,7 +368,7 @@ class TestImportAssetsFromSeries:
 
     def test_skip_nonexistent_asset_id(self, pipeline):
         source = pipeline.create_series("Source")
-        source.characters = [_make_character(name="Hero")]
+        pipeline.series_store[source.id].characters = [_make_character(name="Hero")]
         target = pipeline.create_series("Target")
 
         result, imported_ids, skipped_ids = pipeline.import_assets_from_series(target.id, source.id, ["nonexistent-id"])
@@ -383,9 +382,9 @@ class TestImportAssetsFromSeries:
         char = _make_character(name="C")
         scene = _make_scene(name="S")
         prop = _make_prop(name="P")
-        source.characters = [char]
-        source.scenes = [scene]
-        source.props = [prop]
+        pipeline.series_store[source.id].characters = [char]
+        pipeline.series_store[source.id].scenes = [scene]
+        pipeline.series_store[source.id].props = [prop]
 
         target = pipeline.create_series("Target")
         result, imported_ids, skipped_ids = pipeline.import_assets_from_series(

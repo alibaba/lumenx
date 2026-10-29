@@ -37,12 +37,12 @@ models:
         - aliyun/happyhorse-video
     runtime:
       dashscope:
-        gateway: dashscope
+        gateway: dashscope_workspace
     modes:
       i2v:
         legacy_id: happyhorse-1.1-i2v
         display_name: HappyHorse I2V
-        description: Image-to-video with reference character support
+        description: Image-to-video with one first frame
         capabilities: [i2v]
         ui:
           selection_group: i2v
@@ -57,15 +57,15 @@ models:
           default: 5
         params:
           resolution:
-            options: [720p, 1080p]
-            default: 1080p
+            options: [480P, 720P, 1080P]
+            default: 1080P
           seed: true
-          negativePrompt: true
-          promptExtend: true
-          watermark: true
+          watermark:
+            default: true
         inputs:
           reference_images:
-            max: 9
+            max: 1
+            reference_type: image
       r2v:
         legacy_id: happyhorse-1.1-r2v
         display_name: HappyHorse R2V
@@ -84,56 +84,95 @@ models:
           default: 5
         params:
           resolution:
-            options: [720p, 1080p]
-            default: 1080p
+            options: [480P, 720P, 1080P]
+            default: 1080P
+          ratio:
+            options: ["16:9", "9:16", "1:1", "4:3", "3:4", "9:21", "21:9", "4:5", "5:4"]
+            default: "16:9"
           seed: true
-          negativePrompt: true
-          promptExtend: true
-          watermark: true
+          watermark:
+            default: true
         inputs:
           reference_images:
             max: 9
-  # Standalone: T2V (hidden) — upgraded to 1.1
-  - id: happyhorse-1.1-t2v
-    display_name: HappyHorse T2V
+            reference_type: image
+  # Separate 1.1 T2V line keeps the provider flat ID distinct from I2V/R2V.
+  - id: happyhorse/happyhorse-1.1-t2v
+    display_name: HappyHorse 1.1 T2V
     description: Text-to-video generation (hidden)
     status: hidden
     release_stage: stable
-    capabilities: [t2v]
     docs:
       context_hub_doc_ids:
         - aliyun/happyhorse-video
-    ui:
-      selection_group: i2v
-      visible_in: []
-      recommended: true
-    params:
-      resolution:
-        options: [720p, 1080p]
-        default: 1080p
-      seed: true
-      negativePrompt: true
-      promptExtend: true
-      watermark: true
+    runtime:
+      dashscope:
+        gateway: dashscope_workspace
+    modes:
+      t2v:
+        legacy_id: happyhorse-1.1-t2v
+        display_name: HappyHorse T2V
+        description: Text-to-video generation (hidden)
+        status: hidden
+        capabilities: [t2v]
+        ui:
+          selection_group: i2v
+          visible_in: []
+          order: 120
+          recommended: true
+        duration:
+          type: slider
+          min: 3
+          max: 15
+          step: 1
+          default: 5
+        params:
+          resolution:
+            options: [480P, 720P, 1080P]
+            default: 1080P
+          ratio:
+            options: ["16:9", "9:16", "1:1", "4:3", "3:4", "9:21", "21:9", "4:5", "5:4"]
+            default: "16:9"
+          seed: true
+          watermark:
+            default: true
+        inputs:
+          media:
+            max: 0
   # Standalone: V2V (hidden) — stays on 1.0 (no 1.1 video-edit yet)
-  - id: happyhorse-1.0-video-edit
-    display_name: HappyHorse V2V
-    description: Video editing with reference images (hidden, still 1.0)
+  - id: happyhorse/happyhorse-1.0-video-edit
+    display_name: HappyHorse 1.0 VideoEdit
+    description: Video editing from one source video (hidden, still 1.0)
     status: hidden
     release_stage: stable
-    capabilities: [v2v]
     docs:
       context_hub_doc_ids:
         - aliyun/happyhorse-video
-    ui:
-      selection_group: i2v
-      visible_in: []
-      recommended: true
-    params:
-      resolution:
-        options: [720p, 1080p]
-        default: 1080p
-      seed: true
-      negativePrompt: true
-      promptExtend: true
-      watermark: true
+    runtime:
+      dashscope:
+        gateway: dashscope_workspace
+    modes:
+      v2v:
+        legacy_id: happyhorse-1.0-video-edit
+        display_name: HappyHorse VideoEdit
+        description: Video editing from one managed source video
+        status: hidden
+        capabilities: [v2v]
+        ui:
+          selection_group: i2v
+          visible_in: []
+          recommended: true
+        params:
+          resolution:
+            options: [720P, 1080P]
+            default: 1080P
+          seed: true
+          watermark:
+            default: true
+          audioSetting:
+            options: [auto, origin]
+            default: auto
+        inputs:
+          media:
+            max: 1
+            reference_type: video

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Image, Film, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { API_URL, playgroundApi } from '@/lib/api';
+import { isReferenceImagePathAllowed } from './playgroundModels';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -15,6 +16,7 @@ interface AssetPickerModalProps {
   onClose: () => void;
   onSelect: (path: string) => void;
   accept: 'image' | 'video' | 'all';
+  allowedImageMimeTypes?: readonly string[];
 }
 
 interface AssetItem {
@@ -71,12 +73,14 @@ export default function AssetPickerModal({
   onClose,
   onSelect,
   accept,
+  allowedImageMimeTypes,
 }: AssetPickerModalProps) {
   const t = useTranslations('playground');
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const fetchRunRef = useRef(0);
   const [activeTab, setActiveTab] = useState<FilterTab>(
     accept === 'all' ? 'all' : accept
   );
@@ -86,10 +90,13 @@ export default function AssetPickerModal({
   // -------------------------------------------------------------------------
 
   const fetchAssets = useCallback(async () => {
+    const runId = fetchRunRef.current + 1;
+    fetchRunRef.current = runId;
     setLoading(true);
     setError(null);
     try {
       const history = await playgroundApi.getHistory(100, 0);
+      if (fetchRunRef.current !== runId) return;
       const items: AssetItem[] = [];
       const seen = new Set<string>();
 
@@ -126,20 +133,27 @@ export default function AssetPickerModal({
         }
       }
 
+      if (fetchRunRef.current !== runId) return;
       setAssets(items);
     } catch (err) {
+      if (fetchRunRef.current !== runId) return;
       console.error('[AssetPickerModal] fetch failed:', err);
       setError('Failed to load assets');
     } finally {
-      setLoading(false);
+      if (fetchRunRef.current === runId) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) {
+      fetchRunRef.current += 1;
+      setAssets([]);
       setSelected(null);
-      fetchAssets();
+      setLoading(false);
+      return;
     }
+    setSelected(null);
+    fetchAssets();
   }, [isOpen, fetchAssets]);
 
   // Reset active tab when accept changes
@@ -153,7 +167,7 @@ export default function AssetPickerModal({
 
   const filteredAssets = useMemo(() => {
     // First filter by what the caller accepts
-    let pool = assets;
+    let pool = assets.filter((asset) => asset.type !== 'image' || isReferenceImagePathAllowed(asset.path, allowedImageMimeTypes));
     if (accept !== 'all') {
       pool = pool.filter((a) => a.type === accept);
     }
@@ -162,14 +176,15 @@ export default function AssetPickerModal({
       pool = pool.filter((a) => a.type === activeTab);
     }
     return pool;
-  }, [assets, accept, activeTab]);
+  }, [assets, accept, activeTab, allowedImageMimeTypes]);
+  const canSelect = selected !== null && filteredAssets.some((asset) => asset.path === selected);
 
   // -------------------------------------------------------------------------
   // Handlers
   // -------------------------------------------------------------------------
 
   const handleSelect = () => {
-    if (selected) {
+    if (selected && canSelect) {
       onSelect(selected);
       onClose();
     }
@@ -413,10 +428,10 @@ export default function AssetPickerModal({
               <button
                 type="button"
                 onClick={handleSelect}
-                disabled={!selected}
+                disabled={!canSelect}
                 className={[
                   "inline-flex items-center gap-[7px] px-4 py-2 rounded-full text-xs font-medium transition-all",
-                  selected
+                  canSelect
                     ? "bg-primary text-on-accent shadow-[var(--glow-primary)] hover:bg-primary-hover hover:-translate-y-px"
                     : "bg-elevated text-text-muted cursor-not-allowed",
                 ].join(" ")}

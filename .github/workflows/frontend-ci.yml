@@ -1,0 +1,71 @@
+name: Frontend CI
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  frontend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: frontend
+    env:
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare result directory
+        run: mkdir -p "$RUNNER_TEMP/lumenx-frontend-reports"
+
+      - name: Set up supported Node version
+        uses: actions/setup-node@v4
+        with:
+          # Node 20 is EOL; use the same fixed release as candidate verification.
+          node-version: "22.23.4"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked dependencies
+        run: |
+          npm ci
+          node --version > "$RUNNER_TEMP/lumenx-frontend-reports/node-version.txt"
+          npm --version > "$RUNNER_TEMP/lumenx-frontend-reports/npm-version.txt"
+
+      - name: Test lint gate failure paths
+        run: node --test scripts/check-lint-baseline.test.mjs 2>&1 | tee "$RUNNER_TEMP/lumenx-frontend-reports/lint-gate-tests.log"
+
+      - name: Check TypeScript
+        run: npm run typecheck 2>&1 | tee "$RUNNER_TEMP/lumenx-frontend-reports/typecheck.log"
+
+      - name: Test production logic
+        run: npm run test -- --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/lumenx-frontend-reports/unit.json" 2>&1 | tee "$RUNNER_TEMP/lumenx-frontend-reports/unit.log"
+
+      - name: Test product components
+        run: npm run test:ui -- --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/lumenx-frontend-reports/ui.json" 2>&1 | tee "$RUNNER_TEMP/lumenx-frontend-reports/ui.log"
+
+      - name: Build static application
+        run: npm run build 2>&1 | tee "$RUNNER_TEMP/lumenx-frontend-reports/build.log"
+
+      - name: Reject new lint diagnostics
+        if: always()
+        run: node scripts/check-lint-baseline.mjs --output-directory "$RUNNER_TEMP/lumenx-frontend-reports"
+
+      - name: Retain frontend verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-verification-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lumenx-frontend-reports/
+          retention-days: 14
+          if-no-files-found: warn

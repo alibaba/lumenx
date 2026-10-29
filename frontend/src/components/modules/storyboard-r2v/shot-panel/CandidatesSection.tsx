@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 import { Star, Film, Clock, ArrowDown, ArrowUp, RotateCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { VideoTask } from "@/lib/api";
+import { selectVerifiedAppliedDubUrlForTask, type DubSourceProof, type MediaRefsLike } from "@/lib/dubSource";
 import SectionShell from "./SectionShell";
 import { usePanelSectionState } from "./usePanelSectionState";
 import CandidateThumb from "./CandidateThumb";
@@ -34,9 +35,12 @@ interface CandidatesSectionProps {
      *  candidates from the other tab don't leak in. */
     activeModel?: string;
     compareSelectedIds: Set<string>;
-    /** Dub info: if a task was dubbed, show dubbed version in its thumb. */
+    /** Legacy dub info. Display only when matching source proof is also supplied. */
     dubbedVideoUrl?: string;
     dubbedVideoTaskId?: string;
+    frameAudioUrl?: string | null;
+    frameMediaRefs?: MediaRefsLike | null;
+    dubAppliedSource?: DubSourceProof | null;
     onClickThumb: (task: VideoTask, modifiers: { shift: boolean; meta: boolean }) => void;
     onToggleStar: (task: VideoTask, next: boolean) => Promise<void> | void;
     onSetLabel: (task: VideoTask, next: string | null) => Promise<void> | void;
@@ -114,6 +118,9 @@ export default function CandidatesSection({
     compareSelectedIds,
     dubbedVideoUrl,
     dubbedVideoTaskId,
+    frameAudioUrl,
+    frameMediaRefs,
+    dubAppliedSource,
     onClickThumb,
     onToggleStar,
     onSetLabel,
@@ -130,9 +137,11 @@ export default function CandidatesSection({
     const [filter, setFilter] = useState<FilterMode>("all");
     const [sort, setSort] = useState<SortMode>("time");
 
+    const isActionableCandidate = (task: VideoTask) => task.status !== "needs_confirmation";
+
     const filteredTasks = useMemo(() => {
         return tasks.filter((t) => {
-            if (filter === "starred" && !t.is_starred) return false;
+            if (filter === "starred" && (!isActionableCandidate(t) || !t.is_starred)) return false;
             if (filter === "this-model" && activeModel && t.model !== activeModel) return false;
             return true;
         });
@@ -151,8 +160,9 @@ export default function CandidatesSection({
     }, [filteredTasks, sort]);
 
     const totalCount = tasks.length;
-    const starredCount = tasks.filter((t) => t.is_starred).length;
-    const compareCount = compareSelectedIds.size;
+    const actionableTaskIds = useMemo(() => new Set(tasks.filter(isActionableCandidate).map((task) => task.id)), [tasks]);
+    const starredCount = tasks.filter((t) => isActionableCandidate(t) && t.is_starred).length;
+    const compareCount = Array.from(compareSelectedIds).filter((id) => actionableTaskIds.has(id)).length;
 
     return (
         <SectionShell
@@ -242,12 +252,16 @@ export default function CandidatesSection({
                     {batches.map((batch, batchIdx) => (
                         <BatchBlock
                             key={batch.id}
+                            shotId={shotId}
                             batch={batch}
                             defaultOpen={batchIdx === 0}
                             compareSelectedIds={compareSelectedIds}
                             activeTaskId={activeTaskId}
                             dubbedVideoUrl={dubbedVideoUrl}
                             dubbedVideoTaskId={dubbedVideoTaskId}
+                            frameAudioUrl={frameAudioUrl}
+                            frameMediaRefs={frameMediaRefs}
+                            dubAppliedSource={dubAppliedSource}
                             resolveUrl={resolveUrl}
                             onClickThumb={onClickThumb}
                             onToggleStar={onToggleStar}
@@ -293,12 +307,16 @@ function FilterChip({
 }
 
 function BatchBlock({
+    shotId,
     batch,
     defaultOpen,
     compareSelectedIds,
     activeTaskId,
     dubbedVideoUrl,
     dubbedVideoTaskId,
+    frameAudioUrl,
+    frameMediaRefs,
+    dubAppliedSource,
     resolveUrl,
     onClickThumb,
     onToggleStar,
@@ -308,12 +326,16 @@ function BatchBlock({
     onRetry,
     onReuseBatchParams,
 }: {
+    shotId: string;
     batch: BatchSummary;
     defaultOpen: boolean;
     compareSelectedIds: Set<string>;
     activeTaskId?: string | null;
     dubbedVideoUrl?: string;
     dubbedVideoTaskId?: string;
+    frameAudioUrl?: string | null;
+    frameMediaRefs?: MediaRefsLike | null;
+    dubAppliedSource?: DubSourceProof | null;
     resolveUrl?: (url: string) => string;
     onClickThumb: CandidatesSectionProps["onClickThumb"];
     onToggleStar: CandidatesSectionProps["onToggleStar"];
@@ -404,22 +426,34 @@ function BatchBlock({
             </div>
             {open ? (
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(152px,1fr))] gap-2.5 border-t border-glass-border p-2.5">
-                    {batch.tasks.map((task) => (
+                    {batch.tasks.map((task) => {
+                        const verifiedDubbedUrl = task.id === dubbedVideoTaskId
+                            ? selectVerifiedAppliedDubUrlForTask({
+                                id: shotId,
+                                audio_url: frameAudioUrl ?? undefined,
+                                media_refs: frameMediaRefs ?? undefined,
+                                dubbed_video_url: dubbedVideoUrl,
+                                dub_applied_source: dubAppliedSource ?? undefined,
+                            }, task)
+                            : undefined;
+                        return (
                         <CandidateThumb
                             key={task.id}
                             task={task}
-                            isCompareSelected={compareSelectedIds.has(task.id)}
-                            isActive={!!activeTaskId && task.id === activeTaskId}
+                            isCompareSelected={task.status !== "needs_confirmation" && compareSelectedIds.has(task.id)}
+                            isActive={task.status !== "needs_confirmation" && !!activeTaskId && task.id === activeTaskId}
                             dubbedVideoUrl={task.id === dubbedVideoTaskId ? dubbedVideoUrl : undefined}
+                            displayVideoUrl={verifiedDubbedUrl}
                             resolveUrl={resolveUrl}
-                            onClick={onClickThumb}
-                            onToggleStar={onToggleStar}
+                            onClick={task.status === "needs_confirmation" ? () => undefined : onClickThumb}
+                            onToggleStar={task.status === "needs_confirmation" ? () => undefined : onToggleStar}
                             onSetLabel={onSetLabel}
-                            onSetActive={onSetActive}
+                            onSetActive={task.status === "needs_confirmation" ? undefined : onSetActive}
                             onCancel={onCancel}
                             onRetry={onRetry}
                         />
-                    ))}
+                        );
+                    })}
                 </div>
             ) : null}
         </div>

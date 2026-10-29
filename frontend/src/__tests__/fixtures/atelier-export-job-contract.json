@@ -1,0 +1,177 @@
+{
+  "id": "atelier-export-contract-1",
+  "title": "Export contract fixture",
+  "description": "",
+  "source_project_id": null,
+  "nodes": [],
+  "agent_policy": {
+    "approval_mode": "untrusted",
+    "allowed_tools": [],
+    "max_nodes_per_action": 8,
+    "max_tokens_per_turn": 2048,
+    "enable_reviewer": false,
+    "max_generation_cost_per_turn": 5.0,
+    "updated_at": 10.0
+  },
+  "agent_turns": [],
+  "sequence": [
+    {
+      "parentId": "video-node-1",
+      "candidateId": null,
+      "id": "clip-1",
+      "trimStart": 0.0,
+      "trimEnd": 4.0,
+      "gain": 1.0,
+      "transition": {
+        "kind": "cut",
+        "duration": 0.0
+      }
+    }
+  ],
+  "audio_tracks": [
+    {
+      "id": "audio-track-1",
+      "node_id": "audio-node-1",
+      "start": 0.0,
+      "trim_start": 0.0,
+      "trim_end": 4.0,
+      "gain": 1.0,
+      "loop": false
+    }
+  ],
+  "exports": [
+    {
+      "id": "export-job-1",
+      "project_id": "atelier-export-contract-1",
+      "created_at": 13.0,
+      "clip_count": 1,
+      "size_mb": 0.0009765625,
+      "video_url": "video/atelier_seq_job_1.mp4",
+      "filename": "atelier_seq_job_1.mp4",
+      "source_entries": [
+        {
+          "parentId": "video-node-1",
+          "candidateId": null,
+          "id": "clip-1",
+          "trimStart": 0.0,
+          "trimEnd": 4.0,
+          "gain": 1.0,
+          "transition": {
+            "kind": "cut",
+            "duration": 0.0
+          }
+        }
+      ],
+      "timeline_snapshot": {
+        "schema_version": "atelier.sequence.snapshot.v1",
+        "clips": [
+          {
+            "clip_id": "clip-1",
+            "url": "video/atelier/source-a.mp4",
+            "duration": 4.0
+          }
+        ],
+        "audio_tracks": []
+      },
+      "publication_proof": {
+        "schema_version": 1,
+        "job_id": "job_1",
+        "project_id": "atelier-export-contract-1",
+        "relative_path": "video/atelier_seq_job_1.mp4",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "size_bytes": 1024,
+        "duration": 4.0,
+        "width": 1920,
+        "height": 1080,
+        "fps": 25,
+        "snapshot_digest": "43dcef0a3aca0ce60ebb9b185ac0827f2fa8537d19711aa2cb0ba4f8d0e627d7",
+        "prepared_at": 12.5
+      },
+      "job_id": "job_1",
+      "snapshot_digest": "43dcef0a3aca0ce60ebb9b185ac0827f2fa8537d19711aa2cb0ba4f8d0e627d7"
+    }
+  ],
+  "node_delete_receipts": [],
+  "node_upload_receipts": [],
+  "sequence_export_jobs": [
+    {
+      "schema_version": 1,
+      "job_id": "job_1",
+      "project_id": "atelier-export-contract-1",
+      "status": "completed",
+      "request_contract_version": "atelier-sequence-export-v1",
+      "client_request_id": "client-request-1",
+      "source_export_id": null,
+      "request_fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "base_revision": 2,
+      "job_revision": 3,
+      "created_at": 11.0,
+      "updated_at": 13.0,
+      "started_at": 11.5,
+      "finished_at": 13.0,
+      "snapshot_digest": "43dcef0a3aca0ce60ebb9b185ac0827f2fa8537d19711aa2cb0ba4f8d0e627d7",
+      "snapshot": {
+        "schema_version": "atelier.sequence.snapshot.v1",
+        "clips": [
+          {
+            "clip_id": "clip-1",
+            "url": "video/atelier/source-a.mp4",
+            "duration": 4.0
+          }
+        ],
+        "audio_tracks": []
+      },
+      "source_entries": [
+        {
+          "parentId": "video-node-1",
+          "candidateId": null,
+          "id": "clip-1",
+          "trimStart": 0.0,
+          "trimEnd": 4.0,
+          "gain": 1.0,
+          "transition": {
+            "kind": "cut",
+            "duration": 0.0
+          }
+        }
+      ],
+      "source_audio_tracks": [
+        {
+          "id": "audio-track-1",
+          "node_id": "audio-node-1",
+          "start": 0.0,
+          "trim_start": 0.0,
+          "trim_end": 4.0,
+          "gain": 1.0,
+          "loop": false
+        }
+      ],
+      "output_ref": "video/atelier_seq_job_1.mp4",
+      "prepared_proof": {
+        "schema_version": 1,
+        "job_id": "job_1",
+        "project_id": "atelier-export-contract-1",
+        "relative_path": "video/atelier_seq_job_1.mp4",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "size_bytes": 1024,
+        "duration": 4.0,
+        "width": 1920,
+        "height": 1080,
+        "fps": 25,
+        "snapshot_digest": "43dcef0a3aca0ce60ebb9b185ac0827f2fa8537d19711aa2cb0ba4f8d0e627d7",
+        "prepared_at": 12.5
+      },
+      "export_id": "export-job-1",
+      "error_code": null,
+      "error_message": null,
+      "cancelled_at": null
+    }
+  ],
+  "agent_compaction_summary": null,
+  "compacted_through_turn_id": null,
+  "revision": 3,
+  "created_at": 10.0,
+  "updated_at": 13.0,
+  "generation_attempts": [],
+  "generation_request_receipts": []
+}

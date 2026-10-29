@@ -4,6 +4,7 @@ import { Image as ImageIcon, Share2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { Character, Scene, Prop } from "@/store/projectStore";
 import { characterImageUrl } from "@/lib/characterImage";
+import { getAssetUrl } from "@/lib/utils";
 
 type AssetTab = "characters" | "scenes" | "props";
 
@@ -57,7 +58,7 @@ export default function AssetCard({ asset, type }: AssetCardProps) {
       ) : null}
       <div className="aspect-square bg-elevated/50 flex items-center justify-center overflow-hidden">
         {imageUrl ? (
-          <img src={imageUrl} alt={asset.name} className="w-full h-full object-cover" />
+          <img src={/^(?:data:|blob:)/i.test(imageUrl) ? imageUrl : getAssetUrl(imageUrl)} alt={asset.name} className="w-full h-full object-cover" />
         ) : (
           <ImageIcon size={32} className="text-text-muted" />
         )}

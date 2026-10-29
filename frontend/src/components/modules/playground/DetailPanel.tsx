@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -15,8 +15,10 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { API_URL, playgroundApi } from '@/lib/api';
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from '@/lib/runtimeEnvironment';
 import { useTranslations } from 'next-intl';
 import { usePlaygroundStore, type PlaygroundGeneration } from './usePlaygroundStore';
+import { imageDraftValueText } from './playgroundImageContract';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -78,18 +80,44 @@ export default function DetailPanel({
   const [copied, setCopied] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const updateGeneration = usePlaygroundStore((s) => s.updateGeneration);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const patchGenerationOutput = usePlaygroundStore((s) => s.patchGenerationOutput);
+  const removeGeneration = usePlaygroundStore((s) => s.removeGeneration);
   const history = usePlaygroundStore((s) => s.history);
   const featuredByGen = usePlaygroundStore((s) => s.featuredByGen);
   const toggleFeatured = usePlaygroundStore((s) => s.toggleFeatured);
+  const activationRef = useRef(0);
+  const currentGenerationIdRef = useRef(generationProp.id);
+
+  useEffect(() => {
+    activationRef.current += 1;
+    const activation = activationRef.current;
+    const unsubscribe = subscribeRuntimeEnvironment(() => {
+      activationRef.current += 1;
+      setSaving(false);
+      setDeleting(false);
+      setActionError(null);
+    });
+    return () => {
+      unsubscribe();
+      if (activationRef.current === activation) activationRef.current += 1;
+    };
+  }, []);
 
   // Always read the latest generation from store (so saved_to_library stays in sync)
   const generation = history.find((g) => g.id === generationProp.id) ?? generationProp;
-  const saved = generation.outputs[0]?.saved_to_library ?? false;
+  currentGenerationIdRef.current = generation.id;
+
+  useEffect(() => {
+    setSaving(false);
+    setDeleting(false);
+    setActionError(null);
+  }, [generation.id, focusOutputId]);
 
   // Determine media — focus the clicked output of a batch, else the first.
   const output =
     generation.outputs.find((o) => o.id === focusOutputId) ?? generation.outputs[0];
+  const saved = output?.saved_to_library ?? false;
   const featured = output ? featuredByGen[generation.id] === output.id : false;
   const isVideo =
     output?.media_type === 'video' ||
@@ -147,48 +175,69 @@ export default function DetailPanel({
   };
 
   const handleSaveToLibrary = async () => {
-    if (!output || saving) return;
+    if (!output || saving || saved) return;
+    const capturedRuntime = getRuntimeEnvironment();
+    const activation = activationRef.current;
+    const targetGenerationId = generation.id;
+    const targetOutputId = output.id;
     setSaving(true);
+    setActionError(null);
     try {
-      const newSaved = !saved;
-      if (newSaved) {
-        await playgroundApi.saveToLibrary(generation.id, output.id);
-      }
-      const updatedOutputs = generation.outputs.map((o) =>
-        o.id === output.id ? { ...o, saved_to_library: newSaved } : o
-      );
-      updateGeneration({ ...generation, outputs: updatedOutputs });
+      await playgroundApi.saveToLibrary(targetGenerationId, targetOutputId);
+      if (activationRef.current !== activation || (capturedRuntime && !isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) return;
+      patchGenerationOutput(targetGenerationId, targetOutputId, { saved_to_library: true });
     } catch (err) {
       console.error('[DetailPanel] Save to library failed:', err);
+      if (activationRef.current === activation && currentGenerationIdRef.current === targetGenerationId
+        && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+        setActionError(t('detail.saveFailed'));
+      }
     } finally {
-      setSaving(false);
+      if (activationRef.current === activation && currentGenerationIdRef.current === targetGenerationId
+        && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+        setSaving(false);
+      }
     }
   };
 
   const handleDelete = async () => {
     if (deleting) return;
+    const capturedRuntime = getRuntimeEnvironment();
+    const activation = activationRef.current;
+    const targetGenerationId = generation.id;
     setDeleting(true);
+    setActionError(null);
     try {
-      await playgroundApi.deleteGeneration(generation.id);
-      onClose();
+      await playgroundApi.deleteGeneration(targetGenerationId);
+      if (activationRef.current !== activation || (capturedRuntime && !isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) return;
+      removeGeneration(targetGenerationId);
+      if (currentGenerationIdRef.current === targetGenerationId) onClose();
     } catch (err) {
       console.error('[DetailPanel] Delete failed:', err);
+      if (activationRef.current === activation && currentGenerationIdRef.current === targetGenerationId
+        && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+        setActionError(t('detail.deleteFailed'));
+      }
     } finally {
-      setDeleting(false);
+      if (activationRef.current === activation && currentGenerationIdRef.current === targetGenerationId
+        && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+        setDeleting(false);
+      }
     }
   };
 
   // Build parameter entries
   const paramEntries: [string, string][] = [];
   const params = generation.parameters || {};
-  if (params.size) paramEntries.push(['Size', params.size]);
-  if (params.resolution) paramEntries.push(['Resolution', params.resolution]);
-  if (params.aspect_ratio) paramEntries.push(['Aspect Ratio', params.aspect_ratio]);
-  if (params.duration) paramEntries.push(['Duration', `${params.duration}s`]);
+  const parameterText = (value: unknown) => typeof value === 'string' ? value : imageDraftValueText(value);
+  if (params.size) paramEntries.push(['Size', parameterText(params.size)]);
+  if (params.resolution) paramEntries.push(['Resolution', parameterText(params.resolution)]);
+  if (params.aspect_ratio) paramEntries.push(['Aspect Ratio', parameterText(params.aspect_ratio)]);
+  if (params.duration) paramEntries.push(['Duration', `${parameterText(params.duration)}s`]);
   if (generation.batch_size > 1)
     paramEntries.push(['Batch Size', String(generation.batch_size)]);
   if (params.seed !== undefined && params.seed !== null)
-    paramEntries.push(['Seed', String(params.seed)]);
+    paramEntries.push(['Seed', parameterText(params.seed)]);
   // Add remaining params
   const skipKeys = new Set([
     'size',
@@ -199,7 +248,7 @@ export default function DetailPanel({
   ]);
   Object.entries(params).forEach(([key, value]) => {
     if (!skipKeys.has(key) && value !== undefined && value !== null && value !== '') {
-      paramEntries.push([key, String(value)]);
+      paramEntries.push([key, parameterText(value)]);
     }
   });
 
@@ -410,6 +459,12 @@ export default function DetailPanel({
             {output && (
               <p className="text-[0.625rem] leading-relaxed text-text-muted">
                 {t('detail.markHint')}
+              </p>
+            )}
+
+            {actionError && (
+              <p className="rounded-[12px] border border-status-failed-border bg-status-failed-bg px-3 py-2 text-[0.6875rem] text-status-failed-fg">
+                {actionError}
               </p>
             )}
 

@@ -1,0 +1,210 @@
+{
+  "id": "atelier-old-1",
+  "title": "Neon alley exploration",
+  "description": "legacy persisted canvas",
+  "source_project_id": "studio-seed-1",
+  "nodes": [
+    {
+      "id": "node-draft-1",
+      "project_id": "atelier-old-1",
+      "type": "draft",
+      "title": "Rain chase draft",
+      "prompt": "A quiet neon alley chase",
+      "status": "completed",
+      "x": 10.5,
+      "y": -20.25,
+      "width": 360.0,
+      "height": 220.0,
+      "source_project_id": "studio-seed-1",
+      "frame_id": "frame-7",
+      "asset_id": "asset-hero",
+      "video_task_id": "task-v-1",
+      "media_urls": [
+        "video/atelier/take-a.mp4"
+      ],
+      "data": {
+        "candidates": [
+          {
+            "id": "cand-a",
+            "url": "video/atelier/take-a.mp4",
+            "score": 0.82,
+            "metadata": {
+              "provider": "wan3",
+              "seed": 123
+            }
+          }
+        ],
+        "generation": {
+          "model": "wan3-omni-video",
+          "params": {
+            "ratio": "16:9",
+            "duration": 5,
+            "audio": true
+          }
+        },
+        "selected_candidate_id": "cand-a",
+        "human_selected_candidate_id": "cand-a",
+        "human_rejected_candidate_ids": [
+          "cand-b"
+        ],
+        "reference_image_urls": [
+          "uploads/ref.png"
+        ]
+      },
+      "created_by": "agent",
+      "created_at": 1000.0,
+      "updated_at": 1001.0
+    }
+  ],
+  "agent_policy": {
+    "approval_mode": "on_request",
+    "allowed_tools": [
+      "canvas.readProject",
+      "generation.createVideoCandidates"
+    ],
+    "max_nodes_per_action": 6,
+    "max_tokens_per_turn": 4096,
+    "enable_reviewer": true,
+    "max_generation_cost_per_turn": 3.5,
+    "updated_at": 1002.0
+  },
+  "agent_turns": [
+    {
+      "id": "turn-1",
+      "project_id": "atelier-old-1",
+      "user_message": "make it more cinematic",
+      "preview": false,
+      "session_id": "session-a",
+      "status": "completed",
+      "tool_calls": [
+        {
+          "call_id": "call-1",
+          "tool_name": "generation.createVideoCandidates",
+          "arguments": {
+            "node_id": "node-draft-1",
+            "candidate_count": 2
+          },
+          "status": "completed",
+          "approval_required": true,
+          "approval_granted": true,
+          "error": null,
+          "result_snapshot": {
+            "created_candidate_ids": [
+              "cand-a",
+              "cand-b"
+            ]
+          },
+          "created_at": 1003.0,
+          "completed_at": 1004.0
+        }
+      ],
+      "node_reservations": {
+        "generation.createVideoCandidates": 1
+      },
+      "completion_tokens_used": 380,
+      "completion_tokens_reserved": 512,
+      "generation_cost_quotes": {
+        "call-1": 1.25
+      },
+      "created_at": 1003.0,
+      "completed_at": 1005.0,
+      "response": "Created two candidates.",
+      "iteration_count": 1,
+      "messages_history": [
+        {
+          "role": "user",
+          "content": "make it more cinematic"
+        },
+        {
+          "role": "assistant",
+          "content": "I will create candidates."
+        }
+      ],
+      "max_iterations": 4,
+      "pending_tool_calls": [],
+      "skill_name": "cinematic_variants",
+      "iterations": [
+        {
+          "idx": 1,
+          "provider": "dashscope",
+          "model_id": "qwen-plus",
+          "prompt_tokens": 1240,
+          "completion_tokens": 380,
+          "total_tokens": 1620,
+          "latency_ms": 1400.5,
+          "tool_call_ids": [
+            "call-1"
+          ],
+          "started_at": 1003.0,
+          "completed_at": 1004.0,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "sequence": [
+    {
+      "parentId": "node-draft-1",
+      "candidateId": "cand-a",
+      "id": "clip-1",
+      "trimStart": 0.5,
+      "trimEnd": 4.5,
+      "gain": 0.8,
+      "transition": {
+        "kind": "fade",
+        "duration": 0.4
+      }
+    }
+  ],
+  "audio_tracks": [
+    {
+      "id": "audio-track-1",
+      "node_id": "audio-node-1",
+      "start": 1.0,
+      "trim_start": 0.25,
+      "trim_end": 8.0,
+      "gain": 1.2,
+      "loop": true
+    }
+  ],
+  "exports": [
+    {
+      "id": "export-1",
+      "project_id": "atelier-old-1",
+      "created_at": 1006.0,
+      "clip_count": 1,
+      "size_mb": 12.5,
+      "video_url": "videos/atelier_seq_1.mp4",
+      "filename": "atelier_seq_1.mp4",
+      "source_entries": [
+        {
+          "parentId": "node-draft-1",
+          "candidateId": "cand-a",
+          "id": "clip-1",
+          "trimStart": 0.5,
+          "trimEnd": 4.5,
+          "gain": 0.8,
+          "transition": {
+            "kind": "fade",
+            "duration": 0.4
+          }
+        }
+      ],
+      "timeline_snapshot": {
+        "schema_version": "atelier.timeline.v1",
+        "clips": [
+          {
+            "url": "video/atelier/take-a.mp4",
+            "duration": 4.0
+          }
+        ]
+      }
+    }
+  ],
+  "agent_compaction_summary": "Earlier turns explored lighting and pacing.",
+  "compacted_through_turn_id": "turn-0",
+  "created_at": 999.0,
+  "updated_at": 1007.0,
+  "revision": 0,
+  "node_delete_receipts": []
+}

@@ -1,0 +1,3296 @@
+{
+  "admitted": {
+    "members": [
+      {
+        "attempt": {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "attempt_revision": 0,
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "1845340c970642e299a6f246d66c10e0",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+            "phase": "accepted",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "pending",
+          "updated_at": 1792441299.208392
+        },
+        "candidate": {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+          "id": "a86c3838f0cd4c20973f999d5e533996",
+          "media_kind": "image",
+          "media_url": null,
+          "schema_version": 2,
+          "status": "pending"
+        }
+      },
+      {
+        "attempt": {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "attempt_revision": 0,
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+            "phase": "accepted",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "pending",
+          "updated_at": 1792441299.208392
+        },
+        "candidate": {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+          "id": "586fe20c9e2f48888f36661dac88f224",
+          "media_kind": "image",
+          "media_url": null,
+          "schema_version": 2,
+          "status": "pending"
+        }
+      }
+    ],
+    "new_candidate_ids": [
+      "a86c3838f0cd4c20973f999d5e533996",
+      "586fe20c9e2f48888f36661dac88f224"
+    ],
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 1792441298.875319
+      },
+      "agent_turns": [],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 1.0,
+      "description": "",
+      "exports": [],
+      "generation_attempts": [
+        {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "attempt_revision": 0,
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "1845340c970642e299a6f246d66c10e0",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+            "phase": "accepted",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "pending",
+          "updated_at": 1792441299.208392
+        },
+        {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "attempt_revision": 0,
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+            "phase": "accepted",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "pending",
+          "updated_at": 1792441299.208392
+        }
+      ],
+      "generation_request_receipts": [
+        {
+          "base_revision": 1,
+          "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+          "committed_revision": 2,
+          "created_at": 1792441299.208392,
+          "entrypoint": "atelier.provider_image.v1",
+          "members": [
+            {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+              "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58"
+            },
+            {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+              "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708"
+            }
+          ],
+          "node_id": "image",
+          "project_id": "p",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+          "schema_version": 2
+        }
+      ],
+      "id": "p",
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 1792441298.875305,
+          "created_by": "user",
+          "data": {
+            "candidates": [
+              {
+                "attempt_id": "1845340c970642e299a6f246d66c10e0",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+                "id": "a86c3838f0cd4c20973f999d5e533996",
+                "media_kind": "image",
+                "media_url": null,
+                "schema_version": 2,
+                "status": "pending"
+              },
+              {
+                "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+                "id": "586fe20c9e2f48888f36661dac88f224",
+                "media_kind": "image",
+                "media_url": null,
+                "schema_version": 2,
+                "status": "pending"
+              }
+            ],
+            "generation_draft": {
+              "batch_size": 2,
+              "media": [],
+              "media_kind": "image",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "schema_version": 3
+            }
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [],
+          "project_id": "p",
+          "prompt": "A glass moon",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "image",
+          "updated_at": 1792441299.208392,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 2,
+      "sequence": [],
+      "sequence_export_jobs": [],
+      "source_project_id": null,
+      "title": "Qwen image",
+      "updated_at": 1792441299.208392
+    },
+    "reason": null,
+    "receipt": {
+      "base_revision": 1,
+      "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+      "committed_revision": 2,
+      "created_at": 1792441299.208392,
+      "entrypoint": "atelier.provider_image.v1",
+      "members": [
+        {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58"
+        },
+        {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708"
+        }
+      ],
+      "node_id": "image",
+      "project_id": "p",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+      "schema_version": 2
+    },
+    "replayed": false
+  },
+  "completed": {
+    "members": [
+      {
+        "attempt": {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "attempt_revision": 3,
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "1845340c970642e299a6f246d66c10e0",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.563943
+        },
+        "candidate": {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+          "id": "a86c3838f0cd4c20973f999d5e533996",
+          "media_kind": "image",
+          "media_url": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+          "schema_version": 2,
+          "status": "completed"
+        }
+      },
+      {
+        "attempt": {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "attempt_revision": 3,
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.905249
+        },
+        "candidate": {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+          "id": "586fe20c9e2f48888f36661dac88f224",
+          "media_kind": "image",
+          "media_url": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+          "schema_version": 2,
+          "status": "completed"
+        }
+      }
+    ],
+    "new_candidate_ids": [],
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 1792441298.875319
+      },
+      "agent_turns": [],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 1.0,
+      "description": "",
+      "exports": [],
+      "generation_attempts": [
+        {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "attempt_revision": 3,
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "1845340c970642e299a6f246d66c10e0",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.563943
+        },
+        {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "attempt_revision": 3,
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.905249
+        }
+      ],
+      "generation_request_receipts": [
+        {
+          "base_revision": 1,
+          "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+          "committed_revision": 2,
+          "created_at": 1792441299.208392,
+          "entrypoint": "atelier.provider_image.v1",
+          "members": [
+            {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+              "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58"
+            },
+            {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+              "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708"
+            }
+          ],
+          "node_id": "image",
+          "project_id": "p",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+          "schema_version": 2
+        }
+      ],
+      "id": "p",
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 1792441298.875305,
+          "created_by": "user",
+          "data": {
+            "candidates": [
+              {
+                "attempt_id": "1845340c970642e299a6f246d66c10e0",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+                "id": "a86c3838f0cd4c20973f999d5e533996",
+                "media_kind": "image",
+                "media_url": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+                "schema_version": 2,
+                "status": "completed"
+              },
+              {
+                "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+                "id": "586fe20c9e2f48888f36661dac88f224",
+                "media_kind": "image",
+                "media_url": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+                "schema_version": 2,
+                "status": "completed"
+              }
+            ],
+            "generation_draft": {
+              "batch_size": 2,
+              "media": [],
+              "media_kind": "image",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "schema_version": 3
+            }
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [],
+          "project_id": "p",
+          "prompt": "A glass moon",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "image",
+          "updated_at": 1792441299.208392,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 2,
+      "sequence": [],
+      "sequence_export_jobs": [],
+      "source_project_id": null,
+      "title": "Qwen image",
+      "updated_at": 1792441299.208392
+    },
+    "reason": null,
+    "receipt": {
+      "base_revision": 1,
+      "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+      "committed_revision": 2,
+      "created_at": 1792441299.208392,
+      "entrypoint": "atelier.provider_image.v1",
+      "members": [
+        {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58"
+        },
+        {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708"
+        }
+      ],
+      "node_id": "image",
+      "project_id": "p",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+      "schema_version": 2
+    },
+    "replayed": true
+  },
+  "draft_ack": {
+    "node_ids": [
+      "image"
+    ],
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 1792441298.875319
+      },
+      "agent_turns": [],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 1.0,
+      "description": "",
+      "exports": [],
+      "generation_attempts": [],
+      "generation_request_receipts": [],
+      "id": "p",
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 1792441298.875305,
+          "created_by": "user",
+          "data": {
+            "generation_draft": {
+              "batch_size": 2,
+              "media": [],
+              "media_kind": "image",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "schema_version": 3
+            }
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [],
+          "project_id": "p",
+          "prompt": "A glass moon",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "image",
+          "updated_at": 1792441299.199014,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 1,
+      "sequence": [],
+      "sequence_export_jobs": [],
+      "source_project_id": null,
+      "title": "Qwen image",
+      "updated_at": 1792441299.199014
+    }
+  },
+  "draft_request": {
+    "batch_size": 2,
+    "expected_revision": 0,
+    "media": [],
+    "media_kind": "image",
+    "mode": "t2i",
+    "model_id": "qwen/qwen-image-2.0-pro#image",
+    "params": {
+      "negative_prompt": "",
+      "prompt_extend": false,
+      "seed": 0,
+      "size": "1280*1280",
+      "watermark": false
+    },
+    "prompt": "A glass moon"
+  },
+  "initial_project": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1792441298.875319
+    },
+    "agent_turns": [],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 1.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "p",
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 1792441298.875305,
+        "created_by": "user",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "image",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "",
+        "type": "image",
+        "updated_at": 1792441298.875306,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 0,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Qwen image",
+    "updated_at": 1.0
+  },
+  "partial": {
+    "members": [
+      {
+        "attempt": {
+          "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+          "attempt_revision": 3,
+          "candidate_id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+          "created_at": 1792441299.9201841,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+              "relative_path": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+              "relative_path": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441300.273985
+        },
+        "candidate": {
+          "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc",
+          "id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+          "media_kind": "image",
+          "media_url": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+          "schema_version": 2,
+          "status": "completed"
+        }
+      },
+      {
+        "attempt": {
+          "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+          "attempt_revision": 2,
+          "candidate_id": "21399e54dad74f919ad3d55ce23445c2",
+          "created_at": 1792441299.9201841,
+          "error_code": "provider_sync_execution_unknown",
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/21399e54dad74f919ad3d55ce23445c2-3846b919b6ee43aab1cf8fa1d6284e2d.png",
+            "phase": "submitting",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "needs_confirmation",
+          "updated_at": 1792441300.2908359
+        },
+        "candidate": {
+          "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+          "authority": "provider",
+          "error_code": "provider_sync_execution_unknown",
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8",
+          "id": "21399e54dad74f919ad3d55ce23445c2",
+          "media_kind": "image",
+          "media_url": null,
+          "schema_version": 2,
+          "status": "needs_confirmation"
+        }
+      }
+    ],
+    "new_candidate_ids": [],
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 1792441298.875319
+      },
+      "agent_turns": [],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 1.0,
+      "description": "",
+      "exports": [],
+      "generation_attempts": [
+        {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "attempt_revision": 3,
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "1845340c970642e299a6f246d66c10e0",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.563943
+        },
+        {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "attempt_revision": 3,
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.905249
+        },
+        {
+          "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+          "attempt_revision": 3,
+          "candidate_id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+          "created_at": 1792441299.9201841,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+              "relative_path": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+              "relative_path": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441300.273985
+        },
+        {
+          "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+          "attempt_revision": 2,
+          "candidate_id": "21399e54dad74f919ad3d55ce23445c2",
+          "created_at": 1792441299.9201841,
+          "error_code": "provider_sync_execution_unknown",
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/21399e54dad74f919ad3d55ce23445c2-3846b919b6ee43aab1cf8fa1d6284e2d.png",
+            "phase": "submitting",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "needs_confirmation",
+          "updated_at": 1792441300.2908359
+        }
+      ],
+      "generation_request_receipts": [
+        {
+          "base_revision": 1,
+          "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+          "committed_revision": 2,
+          "created_at": 1792441299.208392,
+          "entrypoint": "atelier.provider_image.v1",
+          "members": [
+            {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+              "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58"
+            },
+            {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+              "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708"
+            }
+          ],
+          "node_id": "image",
+          "project_id": "p",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+          "schema_version": 2
+        },
+        {
+          "base_revision": 2,
+          "client_request_id": "generation-22222222-2222-4222-8222-222222222222",
+          "committed_revision": 3,
+          "created_at": 1792441299.9201841,
+          "entrypoint": "atelier.provider_image.v1",
+          "members": [
+            {
+              "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+              "candidate_id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+              "execution_fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc"
+            },
+            {
+              "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+              "candidate_id": "21399e54dad74f919ad3d55ce23445c2",
+              "execution_fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8"
+            }
+          ],
+          "node_id": "image",
+          "project_id": "p",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+          "schema_version": 2
+        }
+      ],
+      "id": "p",
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 1792441298.875305,
+          "created_by": "user",
+          "data": {
+            "candidates": [
+              {
+                "attempt_id": "1845340c970642e299a6f246d66c10e0",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+                "id": "a86c3838f0cd4c20973f999d5e533996",
+                "media_kind": "image",
+                "media_url": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+                "schema_version": 2,
+                "status": "completed"
+              },
+              {
+                "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+                "id": "586fe20c9e2f48888f36661dac88f224",
+                "media_kind": "image",
+                "media_url": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+                "schema_version": 2,
+                "status": "completed"
+              },
+              {
+                "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc",
+                "id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+                "media_kind": "image",
+                "media_url": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+                "schema_version": 2,
+                "status": "completed"
+              },
+              {
+                "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+                "authority": "provider",
+                "error_code": "provider_sync_execution_unknown",
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8",
+                "id": "21399e54dad74f919ad3d55ce23445c2",
+                "media_kind": "image",
+                "media_url": null,
+                "schema_version": 2,
+                "status": "needs_confirmation"
+              }
+            ],
+            "generation_draft": {
+              "batch_size": 2,
+              "media": [],
+              "media_kind": "image",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "schema_version": 3
+            }
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [],
+          "project_id": "p",
+          "prompt": "A glass moon",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "image",
+          "updated_at": 1792441299.9201841,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 3,
+      "sequence": [],
+      "sequence_export_jobs": [],
+      "source_project_id": null,
+      "title": "Qwen image",
+      "updated_at": 1792441299.9201841
+    },
+    "reason": null,
+    "receipt": {
+      "base_revision": 2,
+      "client_request_id": "generation-22222222-2222-4222-8222-222222222222",
+      "committed_revision": 3,
+      "created_at": 1792441299.9201841,
+      "entrypoint": "atelier.provider_image.v1",
+      "members": [
+        {
+          "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+          "candidate_id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+          "execution_fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc"
+        },
+        {
+          "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+          "candidate_id": "21399e54dad74f919ad3d55ce23445c2",
+          "execution_fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8"
+        }
+      ],
+      "node_id": "image",
+      "project_id": "p",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+      "schema_version": 2
+    },
+    "replayed": true
+  },
+  "partial_admitted": {
+    "members": [
+      {
+        "attempt": {
+          "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+          "attempt_revision": 0,
+          "candidate_id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+          "created_at": 1792441299.9201841,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+            "phase": "accepted",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "pending",
+          "updated_at": 1792441299.9201841
+        },
+        "candidate": {
+          "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc",
+          "id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+          "media_kind": "image",
+          "media_url": null,
+          "schema_version": 2,
+          "status": "pending"
+        }
+      },
+      {
+        "attempt": {
+          "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+          "attempt_revision": 0,
+          "candidate_id": "21399e54dad74f919ad3d55ce23445c2",
+          "created_at": 1792441299.9201841,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/21399e54dad74f919ad3d55ce23445c2-3846b919b6ee43aab1cf8fa1d6284e2d.png",
+            "phase": "accepted",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "pending",
+          "updated_at": 1792441299.9201841
+        },
+        "candidate": {
+          "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8",
+          "id": "21399e54dad74f919ad3d55ce23445c2",
+          "media_kind": "image",
+          "media_url": null,
+          "schema_version": 2,
+          "status": "pending"
+        }
+      }
+    ],
+    "new_candidate_ids": [
+      "7f8dfcd7c57b4f2185ee5bd49067ea80",
+      "21399e54dad74f919ad3d55ce23445c2"
+    ],
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 1792441298.875319
+      },
+      "agent_turns": [],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 1.0,
+      "description": "",
+      "exports": [],
+      "generation_attempts": [
+        {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "attempt_revision": 3,
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "1845340c970642e299a6f246d66c10e0",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.563943
+        },
+        {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "attempt_revision": 3,
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.905249
+        },
+        {
+          "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+          "attempt_revision": 0,
+          "candidate_id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+          "created_at": 1792441299.9201841,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/7f8dfcd7c57b4f2185ee5bd49067ea80-b1ac6f805f5c4be795b69cfe35c52486.png",
+            "phase": "accepted",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "pending",
+          "updated_at": 1792441299.9201841
+        },
+        {
+          "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+          "attempt_revision": 0,
+          "candidate_id": "21399e54dad74f919ad3d55ce23445c2",
+          "created_at": 1792441299.9201841,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": null,
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": null,
+            "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/21399e54dad74f919ad3d55ce23445c2-3846b919b6ee43aab1cf8fa1d6284e2d.png",
+            "phase": "accepted",
+            "prepared_artifact": null,
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "pending",
+          "updated_at": 1792441299.9201841
+        }
+      ],
+      "generation_request_receipts": [
+        {
+          "base_revision": 1,
+          "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+          "committed_revision": 2,
+          "created_at": 1792441299.208392,
+          "entrypoint": "atelier.provider_image.v1",
+          "members": [
+            {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+              "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58"
+            },
+            {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+              "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708"
+            }
+          ],
+          "node_id": "image",
+          "project_id": "p",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+          "schema_version": 2
+        },
+        {
+          "base_revision": 2,
+          "client_request_id": "generation-22222222-2222-4222-8222-222222222222",
+          "committed_revision": 3,
+          "created_at": 1792441299.9201841,
+          "entrypoint": "atelier.provider_image.v1",
+          "members": [
+            {
+              "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+              "candidate_id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+              "execution_fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc"
+            },
+            {
+              "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+              "candidate_id": "21399e54dad74f919ad3d55ce23445c2",
+              "execution_fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8"
+            }
+          ],
+          "node_id": "image",
+          "project_id": "p",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+          "schema_version": 2
+        }
+      ],
+      "id": "p",
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 1792441298.875305,
+          "created_by": "user",
+          "data": {
+            "candidates": [
+              {
+                "attempt_id": "1845340c970642e299a6f246d66c10e0",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+                "id": "a86c3838f0cd4c20973f999d5e533996",
+                "media_kind": "image",
+                "media_url": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+                "schema_version": 2,
+                "status": "completed"
+              },
+              {
+                "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+                "id": "586fe20c9e2f48888f36661dac88f224",
+                "media_kind": "image",
+                "media_url": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+                "schema_version": 2,
+                "status": "completed"
+              },
+              {
+                "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc",
+                "id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+                "media_kind": "image",
+                "media_url": null,
+                "schema_version": 2,
+                "status": "pending"
+              },
+              {
+                "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8",
+                "id": "21399e54dad74f919ad3d55ce23445c2",
+                "media_kind": "image",
+                "media_url": null,
+                "schema_version": 2,
+                "status": "pending"
+              }
+            ],
+            "generation_draft": {
+              "batch_size": 2,
+              "media": [],
+              "media_kind": "image",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "schema_version": 3
+            }
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [],
+          "project_id": "p",
+          "prompt": "A glass moon",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "image",
+          "updated_at": 1792441299.9201841,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 3,
+      "sequence": [],
+      "sequence_export_jobs": [],
+      "source_project_id": null,
+      "title": "Qwen image",
+      "updated_at": 1792441299.9201841
+    },
+    "reason": null,
+    "receipt": {
+      "base_revision": 2,
+      "client_request_id": "generation-22222222-2222-4222-8222-222222222222",
+      "committed_revision": 3,
+      "created_at": 1792441299.9201841,
+      "entrypoint": "atelier.provider_image.v1",
+      "members": [
+        {
+          "attempt_id": "b1ac6f805f5c4be795b69cfe35c52486",
+          "candidate_id": "7f8dfcd7c57b4f2185ee5bd49067ea80",
+          "execution_fingerprint": "6cca157b5718e3de362ae503e6a7b35545ade8a2eb224a7b3a8345a51adbe9bc"
+        },
+        {
+          "attempt_id": "3846b919b6ee43aab1cf8fa1d6284e2d",
+          "candidate_id": "21399e54dad74f919ad3d55ce23445c2",
+          "execution_fingerprint": "a724883daeaff315a0db24982fad44d0c0a80447b2b17f54e1c8a4f55ec09bf8"
+        }
+      ],
+      "node_id": "image",
+      "project_id": "p",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+      "schema_version": 2
+    },
+    "replayed": false
+  },
+  "partial_request": {
+    "batch_size": 2,
+    "client_request_id": "generation-22222222-2222-4222-8222-222222222222",
+    "expected_revision": 2,
+    "media": [],
+    "mode": "t2i",
+    "model_id": "qwen/qwen-image-2.0-pro#image",
+    "params": {
+      "negative_prompt": "",
+      "prompt_extend": false,
+      "seed": 0,
+      "size": "1280*1280",
+      "watermark": false
+    },
+    "prompt": "A glass moon"
+  },
+  "replayed": {
+    "members": [
+      {
+        "attempt": {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "attempt_revision": 3,
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "1845340c970642e299a6f246d66c10e0",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.563943
+        },
+        "candidate": {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+          "id": "a86c3838f0cd4c20973f999d5e533996",
+          "media_kind": "image",
+          "media_url": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+          "schema_version": 2,
+          "status": "completed"
+        }
+      },
+      {
+        "attempt": {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "attempt_revision": 3,
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.905249
+        },
+        "candidate": {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "authority": "provider",
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+          "id": "586fe20c9e2f48888f36661dac88f224",
+          "media_kind": "image",
+          "media_url": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+          "schema_version": 2,
+          "status": "completed"
+        }
+      }
+    ],
+    "new_candidate_ids": [],
+    "project": {
+      "agent_compaction_summary": null,
+      "agent_policy": {
+        "allowed_tools": [],
+        "approval_mode": "untrusted",
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "updated_at": 1792441298.875319
+      },
+      "agent_turns": [],
+      "audio_tracks": [],
+      "compacted_through_turn_id": null,
+      "created_at": 1.0,
+      "description": "",
+      "exports": [],
+      "generation_attempts": [
+        {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "attempt_revision": 3,
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "1845340c970642e299a6f246d66c10e0",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "relative_path": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.563943
+        },
+        {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "attempt_revision": 3,
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "created_at": 1792441299.208392,
+          "error_code": null,
+          "execution_contract": "atelier-provider-media-v2",
+          "media_kind": "image",
+          "node_id": "image",
+          "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+          "project_id": "p",
+          "provider_execution": {
+            "artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+            "credential_ref": "77d68490-10e5-4c69-8cd8-7efd7fc6d4b3",
+            "execution_kind": "sync_artifact",
+            "fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+            "handle": null,
+            "intent": {
+              "catalog_mode": "image",
+              "intent_contract_version": "provider-qwen20-t2i-bound-http-v1",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "preset_id": "atelier.qwen20.t2i",
+              "preset_version": "1",
+              "prompt": "A glass moon",
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.seed",
+                "params.size",
+                "params.watermark",
+                "prompt"
+              ],
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "sources": {
+                "mode": "request",
+                "model_id": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.seed": "request",
+                "params.size": "request",
+                "params.watermark": "request",
+                "prompt": "request"
+              }
+            },
+            "media": [],
+            "media_kind": "image",
+            "observation": null,
+            "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+            "phase": "completed",
+            "prepared_artifact": {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "contract_version": "provider-sync-artifact-v1",
+              "media_kind": "image",
+              "output_ref": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "relative_path": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+              "schema_version": 2,
+              "sha256": "1c680ff955c9e71e904190e39daafc21bc3f075e5aecb679b7028b444af148ac",
+              "size_bytes": 89
+            },
+            "provider_model_id": "qwen-image-2.0-pro",
+            "schema_version": 2,
+            "scope": {
+              "account_identity": null,
+              "backend": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "gateway": "dashscope",
+              "provider": "dashscope",
+              "region": "cn-beijing",
+              "workspace_id": "atelier-qwen-original"
+            }
+          },
+          "schema_version": 1,
+          "status": "completed",
+          "updated_at": 1792441299.905249
+        }
+      ],
+      "generation_request_receipts": [
+        {
+          "base_revision": 1,
+          "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+          "committed_revision": 2,
+          "created_at": 1792441299.208392,
+          "entrypoint": "atelier.provider_image.v1",
+          "members": [
+            {
+              "attempt_id": "1845340c970642e299a6f246d66c10e0",
+              "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+              "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58"
+            },
+            {
+              "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+              "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+              "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708"
+            }
+          ],
+          "node_id": "image",
+          "project_id": "p",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+          "schema_version": 2
+        }
+      ],
+      "id": "p",
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "nodes": [
+        {
+          "asset_id": null,
+          "created_at": 1792441298.875305,
+          "created_by": "user",
+          "data": {
+            "candidates": [
+              {
+                "attempt_id": "1845340c970642e299a6f246d66c10e0",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58",
+                "id": "a86c3838f0cd4c20973f999d5e533996",
+                "media_kind": "image",
+                "media_url": "assets/atelier/a86c3838f0cd4c20973f999d5e533996-1845340c970642e299a6f246d66c10e0.png",
+                "schema_version": 2,
+                "status": "completed"
+              },
+              {
+                "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+                "authority": "provider",
+                "error_code": null,
+                "execution_contract": "atelier-provider-media-v2",
+                "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708",
+                "id": "586fe20c9e2f48888f36661dac88f224",
+                "media_kind": "image",
+                "media_url": "assets/atelier/586fe20c9e2f48888f36661dac88f224-96f9c8a24441428fbdaf815188a13ae8.png",
+                "schema_version": 2,
+                "status": "completed"
+              }
+            ],
+            "generation_draft": {
+              "batch_size": 2,
+              "media": [],
+              "media_kind": "image",
+              "mode": "t2i",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "params": {
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "seed": 0,
+                "size": "1280*1280",
+                "watermark": false
+              },
+              "schema_version": 3
+            }
+          },
+          "frame_id": null,
+          "height": 180.0,
+          "id": "image",
+          "media_urls": [],
+          "project_id": "p",
+          "prompt": "A glass moon",
+          "source_project_id": null,
+          "status": "draft",
+          "title": "",
+          "type": "image",
+          "updated_at": 1792441299.208392,
+          "video_task_id": null,
+          "width": 320.0,
+          "x": 0.0,
+          "y": 0.0
+        }
+      ],
+      "revision": 2,
+      "sequence": [],
+      "sequence_export_jobs": [],
+      "source_project_id": null,
+      "title": "Qwen image",
+      "updated_at": 1792441299.208392
+    },
+    "reason": null,
+    "receipt": {
+      "base_revision": 1,
+      "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+      "committed_revision": 2,
+      "created_at": 1792441299.208392,
+      "entrypoint": "atelier.provider_image.v1",
+      "members": [
+        {
+          "attempt_id": "1845340c970642e299a6f246d66c10e0",
+          "candidate_id": "a86c3838f0cd4c20973f999d5e533996",
+          "execution_fingerprint": "c3e15646f5c144f7173a1334440ef50aa99a1a8e8c1597714d834551e7478f58"
+        },
+        {
+          "attempt_id": "96f9c8a24441428fbdaf815188a13ae8",
+          "candidate_id": "586fe20c9e2f48888f36661dac88f224",
+          "execution_fingerprint": "e209278828c7105e35334965526514bbc0ff55774fdc4feff521dbde5f66a708"
+        }
+      ],
+      "node_id": "image",
+      "project_id": "p",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "a704ab04455e02d8f2efc8a80236486d4fa52d7ecf307aef0535f163687f93eb",
+      "schema_version": 2
+    },
+    "replayed": true
+  },
+  "request": {
+    "batch_size": 2,
+    "client_request_id": "generation-11111111-1111-4111-8111-111111111111",
+    "expected_revision": 1,
+    "media": [],
+    "mode": "t2i",
+    "model_id": "qwen/qwen-image-2.0-pro#image",
+    "params": {
+      "negative_prompt": "",
+      "prompt_extend": false,
+      "seed": 0,
+      "size": "1280*1280",
+      "watermark": false
+    },
+    "prompt": "A glass moon"
+  }
+}

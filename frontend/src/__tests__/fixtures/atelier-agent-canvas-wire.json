@@ -1,0 +1,348 @@
+{
+  "create_approved_applied": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1791701174.3924868
+    },
+    "agent_turns": [
+      {
+        "completed_at": 20.0,
+        "completion_tokens_reserved": 0,
+        "completion_tokens_used": 0,
+        "created_at": 1791701174.394122,
+        "generation_cost_quotes": {},
+        "id": "turn-1",
+        "iteration_count": 0,
+        "iterations": [],
+        "max_iterations": 3,
+        "messages_history": [
+          {
+            "content": {
+              "changed_fields": [
+                "nodes"
+              ],
+              "committed_revision": 3,
+              "node_ids": [
+                "video-2"
+              ],
+              "tool_name": "canvas.createVideoNode"
+            },
+            "name": "canvas.createVideoNode",
+            "role": "tool",
+            "tool_call_id": "call-1"
+          }
+        ],
+        "node_reservations": {},
+        "pending_tool_calls": [],
+        "preview": false,
+        "project_id": "p",
+        "response": null,
+        "session_id": null,
+        "skill_name": null,
+        "status": "completed",
+        "tool_calls": [
+          {
+            "approval_granted": true,
+            "approval_required": true,
+            "arguments": {
+              "height": 360.0,
+              "prompt": "Rain",
+              "title": "Take",
+              "width": 640.0,
+              "x": 12.0,
+              "y": 24.0
+            },
+            "call_id": "call-1",
+            "canvas_approval_binding": {
+              "canvas_authorization_ref": {
+                "approval_id": "approval-1",
+                "arguments_fingerprint": "4c07f3c4423b51dcdd4966ff7f8e38fcace329ba53561d30d4f8171f4b5dfcf6",
+                "authorization_hash": "2f9e6d64853ce56b556330459ffad0d0fcbefb36af0d1ae675b9b2ea72b4732d",
+                "call_id": "call-1",
+                "policy_snapshot_hash": "14dfee509443bbeb7948f0a9d1d3488614a9aca80ad961c23c639e089e7bfb61",
+                "project_id": "p",
+                "schema_version": 1,
+                "server_storage_identity": "storage-a",
+                "target_fingerprint": "69de8d9c9cd4368e4e14f0d45d6ea24c282919a8cd9668c98556b438bcc64dfc",
+                "tool_name": "canvas.createVideoNode",
+                "tool_schema_version": "atelier.canvas.tools.v1",
+                "turn_id": "turn-1"
+              },
+              "created_at": 10.0,
+              "normalized_arguments": {
+                "height": 360.0,
+                "prompt": "Rain",
+                "title": "Take",
+                "type": "video",
+                "width": 640.0,
+                "x": 12.0,
+                "y": 24.0
+              },
+              "schema_version": 1,
+              "target_state": {
+                "kind": "project",
+                "node_count": 1,
+                "node_ids": [
+                  "video-1"
+                ],
+                "project_id": "p"
+              }
+            },
+            "canvas_approval_record": {
+              "approval_id": "approval-1",
+              "authorization_hash": "2f9e6d64853ce56b556330459ffad0d0fcbefb36af0d1ae675b9b2ea72b4732d",
+              "decided_at": 11.0,
+              "decision": "approved",
+              "schema_version": 1
+            },
+            "completed_at": 20.0,
+            "created_at": 1791701174.394119,
+            "error": null,
+            "result_snapshot": {
+              "changed_fields": [
+                "nodes"
+              ],
+              "committed_revision": 3,
+              "node_ids": [
+                "video-2"
+              ],
+              "tool_name": "canvas.createVideoNode"
+            },
+            "status": "completed",
+            "tool_name": "canvas.createVideoNode"
+          }
+        ],
+        "user_message": ""
+      }
+    ],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 1.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "p",
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 1791701174.392471,
+        "created_by": "user",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "video-1",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "old",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Old",
+        "type": "video",
+        "updated_at": 1.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      {
+        "asset_id": null,
+        "created_at": 20.0,
+        "created_by": "agent",
+        "data": {},
+        "frame_id": null,
+        "height": 360.0,
+        "id": "video-2",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "Rain",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Take",
+        "type": "video",
+        "updated_at": 20.0,
+        "video_task_id": null,
+        "width": 640.0,
+        "x": 12.0,
+        "y": 24.0
+      }
+    ],
+    "revision": 3,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Canvas",
+    "updated_at": 20.0
+  },
+  "schema_version": 1,
+  "update_approved_applied": {
+    "agent_compaction_summary": null,
+    "agent_policy": {
+      "allowed_tools": [],
+      "approval_mode": "untrusted",
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "updated_at": 1791701174.403135
+    },
+    "agent_turns": [
+      {
+        "completed_at": 20.0,
+        "completion_tokens_reserved": 0,
+        "completion_tokens_used": 0,
+        "created_at": 1791701174.404413,
+        "generation_cost_quotes": {},
+        "id": "turn-1",
+        "iteration_count": 0,
+        "iterations": [],
+        "max_iterations": 3,
+        "messages_history": [
+          {
+            "content": {
+              "changed_fields": [
+                "title",
+                "prompt"
+              ],
+              "committed_revision": 3,
+              "node_ids": [
+                "video-1"
+              ],
+              "tool_name": "canvas.updateNodePrompt"
+            },
+            "name": "canvas.updateNodePrompt",
+            "role": "tool",
+            "tool_call_id": "call-1"
+          }
+        ],
+        "node_reservations": {},
+        "pending_tool_calls": [],
+        "preview": false,
+        "project_id": "p",
+        "response": null,
+        "session_id": null,
+        "skill_name": null,
+        "status": "completed",
+        "tool_calls": [
+          {
+            "approval_granted": true,
+            "approval_required": true,
+            "arguments": {
+              "node_id": "video-1",
+              "prompt": "new prompt",
+              "title": "Revised"
+            },
+            "call_id": "call-1",
+            "canvas_approval_binding": {
+              "canvas_authorization_ref": {
+                "approval_id": "approval-1",
+                "arguments_fingerprint": "41baca2b11ec7b6ba50f65f39e7cd0faa11081e4698b7ee6e0114163045a0ef1",
+                "authorization_hash": "6a3fc571c23f33644f1206a51705bf9b7c584217a3777868a0692337746155e9",
+                "call_id": "call-1",
+                "policy_snapshot_hash": "14dfee509443bbeb7948f0a9d1d3488614a9aca80ad961c23c639e089e7bfb61",
+                "project_id": "p",
+                "schema_version": 1,
+                "server_storage_identity": "storage-a",
+                "target_fingerprint": "29feb99319711fc46f557c56f759e6244e55bb9db8aaf5877c5bcb612d69cf88",
+                "tool_name": "canvas.updateNodePrompt",
+                "tool_schema_version": "atelier.canvas.tools.v1",
+                "turn_id": "turn-1"
+              },
+              "created_at": 10.0,
+              "normalized_arguments": {
+                "node_id": "video-1",
+                "prompt": "new prompt",
+                "title": "Revised"
+              },
+              "schema_version": 1,
+              "target_state": {
+                "kind": "node",
+                "node": {
+                  "id": "video-1",
+                  "project_id": "p",
+                  "prompt": "old",
+                  "status": "draft",
+                  "title": "Old",
+                  "type": "video",
+                  "updated_at": 1.0
+                },
+                "project_id": "p"
+              }
+            },
+            "canvas_approval_record": {
+              "approval_id": "approval-1",
+              "authorization_hash": "6a3fc571c23f33644f1206a51705bf9b7c584217a3777868a0692337746155e9",
+              "decided_at": 11.0,
+              "decision": "approved",
+              "schema_version": 1
+            },
+            "completed_at": 20.0,
+            "created_at": 1791701174.4044108,
+            "error": null,
+            "result_snapshot": {
+              "changed_fields": [
+                "title",
+                "prompt"
+              ],
+              "committed_revision": 3,
+              "node_ids": [
+                "video-1"
+              ],
+              "tool_name": "canvas.updateNodePrompt"
+            },
+            "status": "completed",
+            "tool_name": "canvas.updateNodePrompt"
+          }
+        ],
+        "user_message": ""
+      }
+    ],
+    "audio_tracks": [],
+    "compacted_through_turn_id": null,
+    "created_at": 1.0,
+    "description": "",
+    "exports": [],
+    "generation_attempts": [],
+    "generation_request_receipts": [],
+    "id": "p",
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "nodes": [
+      {
+        "asset_id": null,
+        "created_at": 1791701174.403132,
+        "created_by": "user",
+        "data": {},
+        "frame_id": null,
+        "height": 180.0,
+        "id": "video-1",
+        "media_urls": [],
+        "project_id": "p",
+        "prompt": "new prompt",
+        "source_project_id": null,
+        "status": "draft",
+        "title": "Revised",
+        "type": "video",
+        "updated_at": 20.0,
+        "video_task_id": null,
+        "width": 320.0,
+        "x": 0.0,
+        "y": 0.0
+      }
+    ],
+    "revision": 3,
+    "sequence": [],
+    "sequence_export_jobs": [],
+    "source_project_id": null,
+    "title": "Canvas",
+    "updated_at": 20.0
+  }
+}

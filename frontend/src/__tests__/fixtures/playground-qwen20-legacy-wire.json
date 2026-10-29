@@ -1,0 +1,95 @@
+{
+  "source_commit": "5e4e99183850824d77ccad90625ee1d55f62a570",
+  "source_fixture": "tests/fixtures/playground_qwen20_legacy_5e4e9918.json",
+  "source_fixture_sha256": "7f452445ee7c5fa1a0fda789956533c281b74f67a5ef5036ea8cecf4318d97df",
+  "receipt": {
+    "schema_version": 1,
+    "replayed": false,
+    "request_status": "accepted",
+    "generation": {
+      "record_type": "generation",
+      "schema_version": 1,
+      "id": "dba93e72-ee07-44d7-882e-e3579193b7d0",
+      "client_request_id": "qwen-legacy-invalid",
+      "request_contract_version": "request-json-v1",
+      "request_fingerprint": "af917d869f5630044a614c86d1ae2e562fdda8f3ce48fa575aeb1eca8958b32e",
+      "mode": "t2i",
+      "model_id": "qwen-image-2.0-pro",
+      "prompt": "paint a glass moon",
+      "negative_prompt": "旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧",
+      "input_media": [],
+      "parameters": {
+        "seed": -1
+      },
+      "batch_size": 1,
+      "outputs": [],
+      "attempts": [
+        {
+          "attempt_id": "qwen-legacy-invalid-0",
+          "ordinal": 0,
+          "status": "pending",
+          "error": null,
+          "provider_execution": {
+            "schema_version": 2,
+            "execution_kind": "sync_artifact",
+            "media_kind": "image",
+            "output_ref": "playground/images/t2i-dba93e72-ee07-44d7-882e-e3579193b7d0-0.png",
+            "attempt_id": "qwen-legacy-invalid-0",
+            "phase": "accepted",
+            "provider_model_id": "qwen-image-2.0-pro",
+            "intent": {
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "model_id": "qwen/qwen-image-2.0-pro#image",
+              "catalog_mode": "image",
+              "mode": "t2i",
+              "prompt": "paint a glass moon",
+              "params": {
+                "negative_prompt": "旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧旧",
+                "seed": -1,
+                "size": "1280*1280"
+              },
+              "sources": {
+                "model_id": "request",
+                "mode": "request",
+                "prompt": "request",
+                "params.negative_prompt": "request",
+                "params.seed": "request",
+                "params.size": "catalog"
+              },
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.negative_prompt",
+                "params.seed",
+                "prompt"
+              ],
+              "preset_id": null,
+              "preset_version": null
+            },
+            "media": [],
+            "scope": {
+              "provider": "dashscope",
+              "backend": "dashscope",
+              "gateway": "dashscope",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "region": "cn-beijing",
+              "workspace_id": null,
+              "account_identity": null
+            },
+            "credential_ref": "8f1bef61-0713-4a64-9388-d4c1710f2c52",
+            "fingerprint": "f1ad5da2c9477c20e59fdf6d9904ea2ea7137d3bac2b256b52bebef65d8cecb3",
+            "handle": null,
+            "observation": null,
+            "prepared_artifact": null,
+            "artifact": null
+          }
+        }
+      ],
+      "status": "pending",
+      "error": null,
+      "created_at": "2026-10-19T20:11:22.798417+00:00"
+    },
+    "tombstone": null
+  }
+}

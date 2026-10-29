@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, FileText, RotateCcw, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useProjectStore } from '@/store/projectStore';
 import { api } from '@/lib/api';
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment } from '@/lib/runtimeEnvironment';
+import { ProjectReadbackError, readProjectOnce } from '@/lib/projectReadback';
 
 interface PromptConfigModalProps {
     isOpen: boolean;
@@ -38,9 +40,9 @@ const SECTIONS = [
 
 export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModalProps) {
     const currentProject = useProjectStore((state) => state.currentProject);
-    const updateProject = useProjectStore((state) => state.updateProject);
     const t = useTranslations("project");
     const tc = useTranslations("common");
+    const tf = useTranslations("frameCommands");
 
     const [config, setConfig] = useState({ storyboard_polish: '', video_polish: '', r2v_polish: '', polish_model: '' });
     const [defaults, setDefaults] = useState<PromptDefaults | null>(null);
@@ -48,37 +50,126 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const sessionRef = useRef(0);
+    const savingRef = useRef(false);
+    const pendingReadRevisionRef = useRef<number | undefined>(undefined);
+    const initialRuntime = getRuntimeEnvironment();
+    const latestRef = useRef({
+        isOpen,
+        projectId: currentProject?.id,
+        environment: currentProject?.readEnvironment,
+        generation: initialRuntime && initialRuntime.key === currentProject?.readEnvironment ? initialRuntime.generation : undefined,
+    });
 
     useEffect(() => {
+        const runtime = getRuntimeEnvironment();
+        latestRef.current = {
+            isOpen,
+            projectId: currentProject?.id,
+            environment: currentProject?.readEnvironment,
+            generation: runtime && runtime.key === currentProject?.readEnvironment ? runtime.generation : undefined,
+        };
+    });
+
+    const isCurrentSession = (token: number, projectId: string) => (
+        sessionRef.current === token
+        && latestRef.current.isOpen
+        && latestRef.current.projectId === projectId
+        && !!latestRef.current.environment
+        && isCurrentRuntimeEnvironment(latestRef.current.environment, latestRef.current.generation)
+    );
+
+    const readAckRevision = (value: unknown) => {
+        const revision = (value as { revision?: unknown } | null)?.revision;
+        if (typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) {
+            throw new Error('Prompt config response did not include a committed revision');
+        }
+        return revision;
+    };
+
+    useEffect(() => {
+        sessionRef.current += 1;
+        savingRef.current = false;
+        setIsSaving(false);
+        setSaveError(null);
+        pendingReadRevisionRef.current = undefined;
         if (isOpen && currentProject) {
+            const projectId = currentProject.id;
+            const token = sessionRef.current;
             setIsLoading(true);
             setLoadError(null);
             setExpandedDefault(null);
-            api.getPromptConfig(currentProject.id)
+            api.getPromptConfig(projectId)
                 .then((data) => {
+                    if (!isCurrentSession(token, projectId)) return;
+                    const revision = readAckRevision(data);
+                    const confirmed = useProjectStore.getState().currentProject;
+                    if (revision < (confirmed?.revision ?? 0)) throw new Error('Prompt config read is older than the confirmed project');
                     setConfig(data.prompt_config);
                     setDefaults(data.defaults);
                 })
                 .catch((err) => {
                     console.error("Failed to load prompt config:", err);
-                    setLoadError(t("promptLoadFailed"));
+                    if (isCurrentSession(token, projectId)) setLoadError(t("promptLoadFailed"));
                 })
-                .finally(() => setIsLoading(false));
+                .finally(() => {
+                    if (isCurrentSession(token, projectId)) setIsLoading(false);
+                });
         }
-    }, [isOpen, currentProject?.id]);
+        return () => {
+            sessionRef.current += 1;
+            savingRef.current = false;
+        };
+    }, [isOpen, currentProject?.id, currentProject?.readEnvironment]);
+
+    const handleReadAgain = async () => {
+        if (!currentProject || savingRef.current) return;
+        savingRef.current = true;
+        setIsSaving(true);
+        const projectId = currentProject.id;
+        const token = sessionRef.current;
+        setSaveError(null);
+        try {
+            await readProjectOnce(projectId, pendingReadRevisionRef.current, { isCurrent: () => isCurrentSession(token, projectId) });
+            if (isCurrentSession(token, projectId)) {
+                pendingReadRevisionRef.current = undefined;
+                onClose();
+            }
+        } catch {
+            if (isCurrentSession(token, projectId)) setSaveError(tf("savedReadFailed"));
+        } finally {
+            if (isCurrentSession(token, projectId)) setIsSaving(false);
+            if (sessionRef.current === token) savingRef.current = false;
+        }
+    };
 
     const handleSave = async () => {
-        if (!currentProject) return;
+        if (!currentProject || savingRef.current || pendingReadRevisionRef.current !== undefined) return;
+        const projectId = currentProject.id;
+        const token = sessionRef.current;
+        savingRef.current = true;
         setIsSaving(true);
+        setSaveError(null);
         try {
-            const result = await api.updatePromptConfig(currentProject.id, config);
-            updateProject(currentProject.id, { prompt_config: result.prompt_config });
-            onClose();
+            const result = await api.updatePromptConfig(projectId, config);
+            if (!isCurrentSession(token, projectId)) return;
+            const revision = readAckRevision(result);
+            pendingReadRevisionRef.current = revision;
+            if (!isCurrentSession(token, projectId)) return;
+            await readProjectOnce(projectId, revision, { isCurrent: () => isCurrentSession(token, projectId) });
+            if (isCurrentSession(token, projectId)) {
+                pendingReadRevisionRef.current = undefined;
+                onClose();
+            }
         } catch (error) {
             console.error("Failed to save prompt config:", error);
-            alert(t("promptSaveFailed"));
+            if (isCurrentSession(token, projectId)) {
+                setSaveError(error instanceof ProjectReadbackError ? tf("savedReadFailed") : t("promptSaveFailed"));
+            }
         } finally {
-            setIsSaving(false);
+            if (isCurrentSession(token, projectId)) setIsSaving(false);
+            if (sessionRef.current === token) savingRef.current = false;
         }
     };
 
@@ -209,6 +300,16 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                     </div>
 
                     {/* Footer */}
+                    {saveError && (
+                        <div role="alert" className="mx-6 mb-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-300 flex items-center justify-between gap-3">
+                            <span>{saveError}</span>
+                            {saveError === tf("savedReadFailed") && (
+                                <button type="button" onClick={handleReadAgain} className="text-xs text-red-100 underline whitespace-nowrap">
+                                    {t("readAgain")}
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <div className="p-6 border-t border-glass-border flex justify-end gap-3">
                         <button
                             onClick={onClose}
@@ -218,7 +319,7 @@ export default function PromptConfigModal({ isOpen, onClose }: PromptConfigModal
                         </button>
                         <button
                             onClick={handleSave}
-                            disabled={isSaving || isLoading || !!loadError}
+                            disabled={isSaving || isLoading || !!loadError || pendingReadRevisionRef.current !== undefined}
                             className="px-6 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-500 text-foreground rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
                         >
                             {isSaving && <Loader2 size={14} className="animate-spin" />}

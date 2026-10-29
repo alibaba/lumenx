@@ -33,7 +33,7 @@ disallow_untyped_defs = false
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "src/apps/comic_gen/test_shared_asset_pool.py", "src/apps/comic_gen/test_shared_asset_channels.py"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

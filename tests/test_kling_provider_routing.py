@@ -1,8 +1,10 @@
 import base64
+import threading
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
-from src.apps.comic_gen.models import VideoTask
+from src.apps.comic_gen.models import GlobalAssetLibrary, Script, VideoTask
 from src.apps.comic_gen.pipeline import ComicGenPipeline
 from src.models.kling import KlingModel
 
@@ -30,19 +32,49 @@ class _FakeResponse:
 
 def _build_pipeline(task: VideoTask, wanx_model) -> ComicGenPipeline:
     pipeline = ComicGenPipeline.__new__(ComicGenPipeline)
-    script = SimpleNamespace(
+    pipeline._closed = False
+    pipeline._storage_failed = None
+    pipeline._save_lock = threading.RLock()
+    pipeline._video_task_runs = {}
+    pipeline.data_dir = Path("output").resolve()
+    script = Script(
         id=task.project_id,
+        title="Provider routing",
+        original_text="demo",
         video_tasks=[task],
-        characters=[],
-        scenes=[],
-        props=[],
+        created_at=0,
         updated_at=0,
     )
     pipeline.scripts = {task.project_id: script}
-    pipeline._save_data = lambda: None
+    pipeline.series_store = {}
+    pipeline.library_store = GlobalAssetLibrary()
+    pipeline._committed = {
+        "projects.json": {script.id: script.model_dump(mode="json")},
+        "series.json": {},
+        "library_assets.json": pipeline.library_store.model_dump(mode="json"),
+    }
+
+    def commit(*names):
+        for name in names:
+            if name == "projects.json":
+                pipeline._committed[name] = {
+                    key: value.model_dump(mode="json") for key, value in pipeline.scripts.items()
+                }
+            elif name == "series.json":
+                pipeline._committed[name] = {}
+            elif name == "library_assets.json":
+                pipeline._committed[name] = pipeline.library_store.model_dump(mode="json")
+
+    pipeline._commit_storage = commit
+    pipeline._save_data = lambda: commit("projects.json")
+    pipeline.assert_storage_available = lambda: None
+    pipeline.read_committed_script = lambda script_id: Script.model_validate(
+        deepcopy(pipeline._committed["projects.json"][script_id])
+    )
     pipeline._download_temp_image = lambda _: "/tmp/downloaded-kling.png"
     pipeline._kling_model = None
     pipeline._vidu_model = None
+    pipeline._mulerouter_video_model = None
     pipeline.video_generator = SimpleNamespace(model=wanx_model)
     pipeline.get_script = lambda script_id: pipeline.scripts.get(script_id)
     return pipeline
@@ -74,6 +106,7 @@ def test_pipeline_routes_kling_vendor_mode_to_vendor_adapter(monkeypatch):
 
         def generate(self, **kwargs):
             calls["vendor_kwargs"] = kwargs
+            Path(kwargs["output_path"]).write_bytes(b"video")
             return kwargs["output_path"], 0.0
 
     class FakeWanxModel:
@@ -90,7 +123,8 @@ def test_pipeline_routes_kling_vendor_mode_to_vendor_adapter(monkeypatch):
     assert "wanx_kwargs" not in calls
     assert calls["vendor_kwargs"]["model"] == "kling-v1"
     assert calls["vendor_kwargs"]["img_path"] == "/tmp/downloaded-kling.png"
-    assert task.status == "completed"
+    saved = pipeline.read_committed_script("script-1")
+    assert saved.video_tasks[0].status == "completed"
 
 
 def test_pipeline_routes_kling_dashscope_mode_to_wanx_without_vendor_credentials(monkeypatch):
@@ -119,6 +153,7 @@ def test_pipeline_routes_kling_dashscope_mode_to_wanx_without_vendor_credentials
     class FakeWanxModel:
         def generate(self, **kwargs):
             calls["wanx_kwargs"] = kwargs
+            Path(kwargs["output_path"]).write_bytes(b"video")
             return kwargs["output_path"], 0.0
 
     monkeypatch.setattr("src.models.kling.KlingModel", FakeKlingModel)
@@ -130,7 +165,8 @@ def test_pipeline_routes_kling_dashscope_mode_to_wanx_without_vendor_credentials
     assert "vendor_kwargs" not in calls
     assert calls["wanx_kwargs"]["model"] == "kling-v1"
     assert calls["wanx_kwargs"]["img_path"] == "/tmp/downloaded-kling.png"
-    assert task.status == "completed"
+    saved = pipeline.read_committed_script("script-1")
+    assert saved.video_tasks[0].status == "completed"
 
 
 def test_vendor_kling_local_image_uses_base64_payload(monkeypatch, tmp_path):

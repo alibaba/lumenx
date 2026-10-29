@@ -23,9 +23,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Loader2, Check, RefreshCw, Wand2, Palette, Star } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
+import { isAssetGenerationActive, trackAssetGeneration } from "@/lib/assetGenerationOwnership";
+import { useStudioAssetImageRequests, usesStudioImageCore, usesStudioQwenImageCore, usesStudioGptReferenceSheet } from "@/lib/useStudioAssetImageRequests";
+import AssetRecoveryNotice from "@/components/shared/AssetRecoveryNotice";
+import { requireActiveRuntimeEnvironment, getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import { confirmProjectAck, confirmRawProjectAck, ProjectReadbackError, readProjectOnce } from "@/lib/projectReadback";
+import { sameReadVersion } from "@/lib/frameCommandSnapshot";
+import { isStudioGptImageModel } from "@/lib/studioAssetImageRequest";
 import { useProjectStore, IMAGE_MODELS } from "@/store/projectStore";
 import { toast } from "@/store/toastStore";
 import { getAssetUrl } from "@/lib/utils";
+import { publicAssetPath } from "@/lib/publicAsset";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 
@@ -34,53 +42,65 @@ export type CastKind = "character" | "scene" | "prop";
 // Module-level poll registry — survives modal close/reopen.
 export const activePolls = new Map<string, ReturnType<typeof setInterval>>();
 
+
 function startAssetPoll(
-    entityId: string,
-    taskId: string,
-    projectId: string,
-    kind: CastKind,
-    generationType: string,
+    entityId: string, taskId: string, projectId: string, kind: CastKind, generationType: string,
     t: ReturnType<typeof useTranslations<"castWorkbench">>,
-    getStore: () => {
-        updateProject: (id: string, data: any) => void;
-        removeGeneratingTask: (assetId: string, generationType: string) => void;
-    },
+    recovery: ReturnType<typeof useTranslations<"assetRecovery">>,
+    isCurrent: () => boolean,
+    ownerMatches: (snapshot: Awaited<ReturnType<typeof readProjectOnce>>) => boolean,
+    release: () => void,
     progressToastId?: string,
 ) {
-    if (activePolls.has(entityId)) return;
+    const environment = requireActiveRuntimeEnvironment();
+    const key = JSON.stringify([environment.key, environment.generation, projectId, kind, entityId, generationType, taskId]);
+    if (activePolls.has(key)) return;
+    let reading = false;
+    const finish = () => {
+        release();
+        clearInterval(interval);
+        if (activePolls.get(key) === interval) activePolls.delete(key);
+        if (progressToastId) toast.dismiss(progressToastId);
+        if (isCurrent()) useProjectStore.getState().removeGeneratingTask(entityId, generationType);
+    };
     const interval = setInterval(async () => {
+        if (!isCurrent()) { finish(); return; }
+        if (reading) return;
+        reading = true;
         try {
-            const status = await api.getTaskStatus(taskId);
-            if (status?.status === "completed") {
-                clearInterval(interval);
-                activePolls.delete(entityId);
-                if (progressToastId) toast.dismiss(progressToastId);
-                const fresh = await api.getProject(projectId);
-                const { updateProject, removeGeneratingTask } = getStore();
-                updateProject(projectId, fresh);
-                removeGeneratingTask(entityId, generationType);
-                const entityPool = (kind === "character" ? fresh.characters : kind === "scene" ? fresh.scenes : fresh.props) || [];
-                const updatedEntity = entityPool.find((e: any) => e.id === entityId);
-                const count = updatedEntity ? readVariants(updatedEntity, kind).length : 0;
-                toast.success(t("toastVariantDone"), { body: t("toastVariantDoneBody", { count }) });
-            } else if (status?.status === "failed") {
-                clearInterval(interval);
-                activePolls.delete(entityId);
-                if (progressToastId) toast.dismiss(progressToastId);
-                const { removeGeneratingTask } = getStore();
-                removeGeneratingTask(entityId, generationType);
-                toast.error(t("toastGenErr"), { body: status?.error || t("toastGenErrUnknown") });
+            let status;
+            try { status = await api.getTaskStatus(taskId); }
+            catch {
+                if (!isCurrent()) return;
+                try {
+                    const fresh = await readProjectOnce(projectId, undefined, { isCurrent: snapshot => isCurrent() && ownerMatches(snapshot) });
+                    if (!isCurrent()) return;
+                    const pool = kind === 'character' ? fresh.characters : kind === 'scene' ? fresh.scenes : fresh.props;
+                    if (pool.find(item => item.id === entityId)?.status !== 'needs_confirmation') {
+                        toast.error(recovery('readFailed'), { projectId });
+                    }
+                } catch { if (isCurrent()) toast.error(recovery('readFailed'), { projectId }); }
+                finish();
+                return;
             }
+            if (!isCurrent()) return;
+            if (status?.status === 'pending' || status?.status === 'processing') return;
+            if (status?.status === 'completed') {
+                const fresh = await readProjectOnce(projectId, undefined, { isCurrent: snapshot => isCurrent() && ownerMatches(snapshot) });
+                if (!isCurrent()) return;
+                const pool = kind === 'character' ? fresh.characters : kind === 'scene' ? fresh.scenes : fresh.props;
+                const updated = pool.find(item => item.id === entityId);
+                if (updated?.status !== 'needs_confirmation') toast.success(t('toastVariantDone'), { projectId, body: t('toastVariantDoneBody', { count: readVariants(updated, kind).length }) });
+            } else if (status?.status === 'failed') {
+                toast.error(t('toastGenErr'), { projectId, body: status.error || t('toastGenErrUnknown') });
+            } else toast.error(recovery('readFailed'), { projectId });
+            finish();
         } catch (err) {
-            clearInterval(interval);
-            activePolls.delete(entityId);
-            if (progressToastId) toast.dismiss(progressToastId);
-            const { removeGeneratingTask } = getStore();
-            removeGeneratingTask(entityId, generationType);
-            toast.error(t("toastPollErr"), { body: t("toastPollErrBody") });
-        }
+            if (isCurrent()) toast.error(t(err instanceof ProjectReadbackError ? 'toastReadbackFailed' : 'toastPollErr'), { projectId });
+            finish();
+        } finally { reading = false; }
     }, 2500);
-    activePolls.set(entityId, interval);
+    activePolls.set(key, interval);
 }
 
 interface CastWorkbenchModalProps {
@@ -184,10 +204,10 @@ function readSelectedId(entity: any, kind: CastKind): string | null {
 
 export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: CastWorkbenchModalProps) {
     const t = useTranslations("castWorkbench");
+    const recovery = useTranslations("assetRecovery");
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentSeries = useProjectStore((state) => state.currentSeries);
     const allProjects = useProjectStore((state) => state.projects);
-    const updateProject = useProjectStore((state) => state.updateProject);
     const generatingTasks = useProjectStore((state) => state.generatingTasks);
     const addGeneratingTask = useProjectStore((state) => state.addGeneratingTask);
     const removeGeneratingTask = useProjectStore((state) => state.removeGeneratingTask);
@@ -216,30 +236,50 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
     const [finalPreviewExpanded, setFinalPreviewExpanded] = useState(true);
     const [applyStyle, setApplyStyle] = useState(true);
     const [galleryFilter, setGalleryFilter] = useState<"all" | "favorited">("all");
-    const generating = generatingTasks.some((t) => t.assetId === entityId);
+    const legacyGenerating = generatingTasks.some(task => task.assetId === entityId && isAssetGenerationActive(task));
     // Effective t2i model — drives the "design_sheet" template gating: that
     // template only works with gpt-image-2, so it stays locked unless the
     // user has selected gpt-image-2 (override or project default).
     const selectedModelId = modelOverride || currentProject?.model_settings?.t2i_model || "wan2.1-t2i";
-    const isGptImage2 = selectedModelId === "gpt-image-2";
+    const isGptImage2 = usesStudioGptReferenceSheet(kind, selectedModelId, 'reference_sheet');
     const [selectedTemplate, setSelectedTemplate] = useState<CharacterTemplate>("simple");
     const [pendingTemplate, setPendingTemplate] = useState<CharacterTemplate | null>(null);
     const [promptDirty, setPromptDirty] = useState(false);
-    const lastSeededEntityId = useRef<string | null>(null);
+    const lastSeededIdentity = useRef<string | null>(null);
     const overlayMouseDown = useRef(false);
+    const viewEpoch = useRef(0);
+    const generationDraftEpoch = useRef(0);
+    const strictGeneration = useRef<{ epoch: number; environment: ReturnType<typeof getRuntimeEnvironment> } | null>(null);
+    const [readingAsset, setReadingAsset] = useState(false);
+    const [assetReadFailed, setAssetReadFailed] = useState(false);
+    useEffect(() => { viewEpoch.current += 1; setReadingAsset(false); setAssetReadFailed(false); return () => { viewEpoch.current += 1; }; }, [isOpen, currentProject?.id, entityId, kind, entity?.source, currentProject?.series_id]);
+    useEffect(() => subscribeRuntimeEnvironment(() => {
+        viewEpoch.current += 1; setReadingAsset(false); setAssetReadFailed(false);
+    }), []);
 
-    // Reset prompt to template ONLY when the entity changes (not on every
+    const studioRequests = useStudioAssetImageRequests({ kind, open: isOpen && !!entity,
+        projectId: currentProject?.id, assetId: entityId, source: entity?.source, seriesId: currentProject?.series_id });
+    const strictImages = usesStudioImageCore(kind, selectedModelId, kind === 'character' ? 'reference_sheet' : 'image');
+    const qwenImages = usesStudioQwenImageCore(kind, selectedModelId, kind === 'character' ? 'reference_sheet' : 'image');
+    const gptImages = strictImages && isStudioGptImageModel(selectedModelId);
+    const freshImages = qwenImages || gptImages;
+    const environment = getRuntimeEnvironment();
+    const draftIdentity = JSON.stringify([currentProject?.id, kind, entityId, entity?.source,
+        entity?.source === 'series' ? currentProject?.series_id : null, environment?.key, environment?.generation]);
+    const generating = legacyGenerating || studioRequests.busy;
+
+    // Reset the prompt only when its entity/owner/environment session changes (not on every
     // open) so the user's in-flight edits aren't clobbered if they happen
     // to flip the modal closed and back. Clearing happens via the reset
     // button or kind/entity switch.
     useEffect(() => {
         if (!isOpen || !entity || !kind) return;
-        if (lastSeededEntityId.current !== entity.id) {
+        if (lastSeededIdentity.current !== draftIdentity) {
             setPrompt(buildTemplate(kind, entity, selectedTemplate));
             setPromptDirty(false);
-            lastSeededEntityId.current = entity.id;
+            lastSeededIdentity.current = draftIdentity;
         }
-    }, [isOpen, entity, kind, selectedTemplate]);
+    }, [isOpen, entity, kind, selectedTemplate, draftIdentity]);
 
     const [presets, setPresets] = useState<any[]>([]);
     useEffect(() => {
@@ -248,10 +288,18 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
     if (!isOpen || !kind || !entity || !currentProject) return null;
 
-    const resolvedArtDirection = currentProject.art_direction ?? currentSeries?.art_direction;
+    const inheritedArtDirection = !freshImages || currentSeries?.id === currentProject.series_id
+        && currentSeries?.revision === currentProject.read_versions?.series?.revision && !currentProject.sharedAssetsNeedRefresh
+        ? currentSeries?.art_direction : null;
+    const resolvedArtDirection = currentProject.art_direction ?? inheritedArtDirection;
     const styleConfig = resolvedArtDirection?.style_config;
     const styleName = styleConfig?.name || "";
     const styleNegative = styleConfig?.negative_prompt || "";
+    const templateNegative = getTemplateNegative(kind, selectedTemplate);
+    const negativeError = (negative: string) => qwenImages
+        ? (Array.from([templateNegative, applyStyle ? negative : ''].filter(Boolean).join(', ')).length > 500 ? 'negativeTooLong' : null)
+        : strictImages && !gptImages && applyStyle && negative ? 'negativeUnsupported' : null;
+    const negativeProblem = negativeError(styleNegative);
     // Resolve positive_prompt with preset fallback (series data often omits it)
     let stylePositive = styleConfig?.positive_prompt || "";
     if (!stylePositive && styleConfig?.id && presets.length > 0) {
@@ -266,8 +314,12 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             ? (ms?.scene_aspect_ratio || "16:9")
             : (ms?.prop_aspect_ratio || "1:1");
     const effectiveAspectRatio = aspectRatioOverride || defaultAspectRatio;
+    // Invalidate a paid preflight synchronously, including changes batched A→B→A.
+    const editGenerationDraft = () => { generationDraftEpoch.current += 1; };
+    const close = () => { viewEpoch.current += 1; onClose(); };
 
     const handleResetTemplate = () => {
+        editGenerationDraft();
         setPrompt(buildTemplate(kind, entity, selectedTemplate));
         setPromptDirty(false);
     };
@@ -280,6 +332,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         if (promptDirty) {
             setPendingTemplate(tpl);
         } else {
+            editGenerationDraft();
             setSelectedTemplate(tpl);
             setPrompt(buildTemplate(kind, entity, tpl));
             setPromptDirty(false);
@@ -288,6 +341,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
     const confirmTemplateSwitch = () => {
         if (!pendingTemplate) return;
+        editGenerationDraft();
         setSelectedTemplate(pendingTemplate);
         setPrompt(buildTemplate(kind, entity, pendingTemplate));
         setPromptDirty(false);
@@ -298,7 +352,28 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
         setPendingTemplate(null);
     };
 
-    const handleGenerate = async () => {
+    const readAssetAgain = async () => {
+        const epoch = viewEpoch.current;
+        const environment = getRuntimeEnvironment();
+        if (!environment) { setAssetReadFailed(true); return; }
+        const live = () => epoch === viewEpoch.current && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+        setReadingAsset(true); setAssetReadFailed(false);
+        try { await readProjectOnce(currentProject.id, undefined, { isCurrent: snapshot => live() && (entity.source !== 'series' || snapshot.series_id === currentProject.series_id) && (kind === 'character' ? snapshot.characters : kind === 'scene' ? snapshot.scenes : snapshot.props).some(item => item.id === entity.id && item.source === entity.source) }); }
+        catch { if (live()) setAssetReadFailed(true); }
+        finally { if (live()) setReadingAsset(false); }
+    };
+
+    const generate = async () => {
+        const environment = requireActiveRuntimeEnvironment();
+        const epoch = viewEpoch.current;
+        const draftEpoch = generationDraftEpoch.current;
+        const live = () => epoch === viewEpoch.current && (!freshImages || draftEpoch === generationDraftEpoch.current)
+            && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+        const ownerMatches = (snapshot: Awaited<ReturnType<typeof readProjectOnce>>) => (entity.source !== 'series' && !freshImages || snapshot.series_id === currentProject.series_id)
+            && (!freshImages || (modelOverride || snapshot.model_settings?.t2i_model || 'wan2.1-t2i') === selectedModelId
+                && (aspectRatioOverride || (kind === 'character' ? snapshot.model_settings?.character_aspect_ratio || '9:16'
+                    : kind === 'scene' ? snapshot.model_settings?.scene_aspect_ratio || '16:9' : snapshot.model_settings?.prop_aspect_ratio || '1:1')) === effectiveAspectRatio)
+            && (kind === 'character' ? snapshot.characters : kind === 'scene' ? snapshot.scenes : snapshot.props).some(item => item.id === entity.id && item.source === entity.source);
         if (!prompt.trim()) {
             toast.warning(t("toastPromptEmpty"), {
                 projectId: currentProject.id,
@@ -306,31 +381,88 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             });
             return;
         }
+        if (negativeProblem) {
+            toast.warning(t(negativeProblem), { projectId: currentProject.id });
+            return;
+        }
+        let freshStylePositive = stylePositive;
+        let freshStylePreset = currentProject.style_preset || 'realistic';
+        let submissionCurrent: (() => boolean) | undefined;
         // Refresh project + validate the entity still exists backend-side
         // before submitting. The store can hold a stale character that was
         // deleted server-side, which makes generateAsset 404 with
         // "Character {id} not found". Syncing here both prevents the 404
         // and self-heals the store so the stale card disappears.
         try {
-            const fresh = await api.getProject(currentProject.id);
+            const fresh = await readProjectOnce(currentProject.id, undefined, { isCurrent: snapshot => live() && ownerMatches(snapshot) });
+            if (!live()) return;
+            if (freshImages) {
+                if (applyStyle && !fresh.art_direction && fresh.series_id) {
+                    const series = await api.getSeries(fresh.series_id);
+                    if (!live()) return;
+                    if (!useProjectStore.getState().applySeriesReadSnapshot(fresh.id, fresh.series_id, series)) {
+                        throw new ProjectReadbackError('Series style is not current');
+                    }
+                }
+                const styleAtSubmission = () => {
+                    const state = useProjectStore.getState(), root = state.currentProject, series = state.currentSeries;
+                    if (!root || root.id !== fresh.id) return null;
+                    return root.art_direction ?? (series?.id === root.series_id ? series?.art_direction : null);
+                };
+                const capturedStyle = JSON.stringify(applyStyle ? styleAtSubmission() : null);
+                const freshStyle = styleAtSubmission()?.style_config;
+                const problem = negativeError(freshStyle?.negative_prompt || '');
+                if (problem) { toast.warning(t(problem), { projectId: currentProject.id }); return; }
+                freshStylePositive = freshStyle?.positive_prompt || '';
+                freshStylePreset = fresh.style_preset || 'realistic';
+                submissionCurrent = () => {
+                    const state = useProjectStore.getState(), root = state.currentProject, series = state.currentSeries;
+                    if (!live() || !root || root.id !== fresh.id
+                        || (gptImages ? !sameReadVersion(root, fresh) : root.revision !== fresh.revision) || !ownerMatches(root)
+                        || root.sharedAssetsNeedRefresh || root.readEnvironment !== environment.key) return false;
+                    if (applyStyle && !root.art_direction && root.series_id
+                        && (!series || series.id !== root.series_id || series.revision !== root.read_versions?.series?.revision)) return false;
+                    return capturedStyle === JSON.stringify(applyStyle ? styleAtSubmission() : null);
+                };
+                if (!submissionCurrent()) return;
+            } else if (strictImages && applyStyle && (fresh.art_direction ?? currentSeries?.art_direction)?.style_config?.negative_prompt) {
+                toast.warning(t('negativeUnsupported'), { projectId: currentProject.id }); return;
+            }
             const pool = kind === "character" ? fresh.characters : kind === "scene" ? fresh.scenes : fresh.props;
-            if (!Array.isArray(pool) || !pool.some((e: any) => e.id === entity.id)) {
+            if (!Array.isArray(pool) || !pool.some(e => e.id === entity.id)) {
                 toast.error(t("toastEntityGone"), {
                     projectId: currentProject.id,
                     projectTitle: currentProject.title,
                 });
-                updateProject(currentProject.id, fresh);
-                onClose();
+                close();
                 return;
             }
-            updateProject(currentProject.id, fresh);
         } catch {
-            // Refresh failed — proceed with cached data; backend will reject
-            // if the entity truly is stale and the poll surfaces the error.
+            if (!live()) return;
+            toast.error(t("toastRefreshFailed"), { projectId: currentProject.id });
+            return;
         }
+        if (useProjectStore.getState().generatingTasks.some(task => task.assetId === entity.id && isAssetGenerationActive(task))) return;
         const effectiveBatchSize = Math.max(1, Math.min(4, batchSize));
+        if (strictImages) {
+            await studioRequests.submit({ asset_id: entity.id,
+                ...(kind === 'character' ? { asset_type: kind, generation_type: 'reference_sheet' as const }
+                    : { asset_type: kind, generation_type: 'all' as const }),
+                style_preset: freshStylePreset, style_prompt: applyStyle ? freshStylePositive : '',
+                prompt: prompt.trim(), apply_style: applyStyle, batch_size: effectiveBatchSize, model_name: selectedModelId,
+                ...(qwenImages ? { negative_prompt: templateNegative } : {}),
+                ...(aspectRatioOverride ? { aspect_ratio: aspectRatioOverride } : {}) }, submissionCurrent);
+            return;
+        }
         addGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all", effectiveBatchSize);
 
+        const marker = useProjectStore.getState().generatingTasks.at(-1);
+        const ownsTask = () => {
+            const store = useProjectStore.getState();
+            const owner = store.currentProject?.id === currentProject.id ? store.currentProject : store.projects.find(project => project.id === currentProject.id);
+            return isCurrentRuntimeEnvironment(environment.key, environment.generation) && store.generatingTasks.includes(marker!) && !!owner && ownerMatches(owner);
+        };
+        const release = trackAssetGeneration(marker!, ownsTask);
         const progressId = toast.progress(t("toastGenStart", { kind: t(`kind.${kind}`) }), {
             projectId: currentProject.id,
             projectTitle: currentProject.title,
@@ -353,27 +485,43 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 aspectRatioOverride || undefined,
             );
 
+            if (!ownsTask()) { release(); return; }
             const taskId = (resp as any)?._task_id;
             if (taskId) {
                 const capturedEntityId = entity.id;
                 const capturedKind = kind;
                 const capturedProjectId = currentProject.id;
-                startAssetPoll(capturedEntityId, taskId, capturedProjectId, capturedKind, kind === "character" ? "reference_sheet" : "all", t, () => ({
-                    updateProject: useProjectStore.getState().updateProject,
-                    removeGeneratingTask: useProjectStore.getState().removeGeneratingTask,
-                }), progressId);
+                startAssetPoll(capturedEntityId, taskId, capturedProjectId, capturedKind, kind === "character" ? "reference_sheet" : "all", t, recovery, ownsTask, ownerMatches, release, progressId);
             } else if (resp) {
                 toast.dismiss(progressId);
-                updateProject(currentProject.id, resp);
+                // This endpoint returns an unmerged Script, not an enriched read.
+                await confirmRawProjectAck(currentProject.id, resp, { isCurrent: snapshot => ownsTask() && ownerMatches(snapshot) });
+                release();
+                if (!ownsTask()) return;
                 removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all");
                 toast.success(t("toastGenDone", { kind: t(`kind.${kind}`) }));
             }
         } catch (err: any) {
+            release();
+            if (!ownsTask()) return;
             toast.dismiss(progressId);
             removeGeneratingTask(entity.id, kind === "character" ? "reference_sheet" : "all");
             const detail = err?.response?.data?.detail || err?.message || t("toastGenErrUnknown");
-            toast.error(t("toastGenErr"), { body: String(detail) });
+            toast.error(t(err instanceof ProjectReadbackError ? "toastReadbackFailed" : "toastGenErr"), {
+                body: err instanceof ProjectReadbackError ? t("toastReadbackFailedBody") : String(detail),
+            });
         }
+    };
+
+    const handleGenerate = async () => {
+        const environment = getRuntimeEnvironment();
+        const epoch = viewEpoch.current;
+        if (strictGeneration.current?.epoch === epoch && strictGeneration.current.environment === environment) return;
+        if (!strictImages) return generate();
+        const guard = { epoch, environment };
+        strictGeneration.current = guard;
+        try { await generate(); }
+        finally { if (strictGeneration.current === guard) strictGeneration.current = null; }
     };
 
     const handleSelectVariant = async (variantId: string) => {
@@ -384,7 +532,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 kind,
                 variantId,
             );
-            updateProject(currentProject.id, updated);
+            await confirmProjectAck(currentProject.id, updated);
             toast.success(t("toastSelected"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
@@ -392,10 +540,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
             });
         } catch (err: any) {
             const detail = err?.response?.data?.detail || err?.message || "select failed";
-            toast.error(t("toastSelectErr"), {
+            toast.error(t(err instanceof ProjectReadbackError ? "toastReadbackFailed" : "toastSelectErr"), {
                 projectId: currentProject.id,
                 projectTitle: currentProject.title,
-                body: String(detail),
+                body: err instanceof ProjectReadbackError ? t("toastReadbackFailedBody") : String(detail),
             });
         }
     };
@@ -409,8 +557,13 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 variantId,
                 !currentFav,
             );
-            updateProject(currentProject.id, updated);
-        } catch { /* silent — non-critical */ }
+            await confirmProjectAck(currentProject.id, updated);
+        } catch (error) {
+            toast.error(t(error instanceof ProjectReadbackError ? "toastReadbackFailed" : "toastSelectErr"), {
+                projectId: currentProject.id,
+                body: error instanceof ProjectReadbackError ? t("toastReadbackFailedBody") : undefined,
+            });
+        }
     };
 
     const filteredVariants = galleryFilter === "favorited"
@@ -449,7 +602,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                 exit={{ opacity: 0 }}
                 className="fixed inset-0 z-[100] bg-overlay backdrop-blur-sm grid place-items-center p-4"
                 onMouseDown={(e) => { overlayMouseDown.current = e.target === e.currentTarget; }}
-                onMouseUp={(e) => { if (overlayMouseDown.current && e.target === e.currentTarget) onClose(); overlayMouseDown.current = false; }}
+                onMouseUp={(e) => { if (overlayMouseDown.current && e.target === e.currentTarget) close(); overlayMouseDown.current = false; }}
             >
                 <motion.div
                     initial={{ scale: 0.96, opacity: 0 }}
@@ -472,11 +625,12 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 <h2 className="text-display font-medium text-foreground truncate">{entity.name}</h2>
                             </div>
                         </div>
-                        <button onClick={onClose} aria-label={t("close")} className="p-1.5 rounded-lg hover:bg-hover-bg text-text-muted hover:text-foreground transition-colors">
+                        <button onClick={close} aria-label={t("close")} className="p-1.5 rounded-lg hover:bg-hover-bg text-text-muted hover:text-foreground transition-colors">
                             <X size={15} />
                         </button>
                     </header>
 
+                    {entity.status === 'needs_confirmation' && <AssetRecoveryNotice onRead={readAssetAgain} reading={readingAsset} readFailed={assetReadFailed} />}
                     {/* Body: context (left) + prompt editor (center) + variants gallery (right) */}
                     <div className="flex-1 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.2fr)] divide-x divide-glass-border min-h-0">
                         {/* LEFT — entity context + style baseline + current reference */}
@@ -528,9 +682,10 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <p className="flex items-center gap-1.5 font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">
                                         <Palette size={10} /> {t("styleAppliedFrom")}
                                     </p>
-                                    {styleName && (
+                                    {(styleName || styleNegative || stylePositive) && (
                                         <button
-                                            onClick={() => setApplyStyle(!applyStyle)}
+                                            aria-label={t("styleAppliedFrom")}
+                                            onClick={() => { editGenerationDraft(); setApplyStyle(!applyStyle); }}
                                             className={`relative w-7 h-4 rounded-full transition-colors ${applyStyle ? "bg-primary/60" : "bg-elevated"}`}
                                         >
                                             <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-transform ${applyStyle ? "left-3.5" : "left-0.5"}`} />
@@ -563,7 +718,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 {/* Negative prompt */}
                                 {applyStyle && styleNegative && (
                                     <div className="mt-2 rounded-md bg-red-500/5 border border-red-500/10 px-2.5 py-2">
-                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-red-400/70 mb-1">{t("negativeLabel")}</p>
+                                        <p className="font-mono text-[0.5625rem] uppercase tracking-[0.14em] text-red-400/70 mb-1">{t(gptImages ? "gptNegativeNotApplied" : "negativeLabel")}</p>
                                         <p className={`text-[0.6875rem] leading-relaxed text-text-secondary ${!negativeExpanded ? "line-clamp-3" : ""}`}>
                                             {styleNegative}
                                         </p>
@@ -609,7 +764,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                                     {/* Example thumbnail area — 4:3 ratio */}
                                                     <div className="aspect-[4/3] bg-black/30 flex items-center justify-center overflow-hidden">
                                                         {tpl.exampleImage ? (
-                                                            <img src={tpl.exampleImage} alt="" className="w-full h-full object-cover" />
+                                                            <img src={publicAssetPath(tpl.exampleImage)} alt="" className="w-full h-full object-cover" />
                                                         ) : (
                                                             <span className="text-[1.25rem] text-text-muted/40">
                                                                 {isLocked ? "🔒" : "📐"}
@@ -676,7 +831,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                             </div>
                             <textarea
                                 value={prompt}
-                                onChange={(e) => { setPrompt(e.target.value); setPromptDirty(true); }}
+                                onChange={(e) => { editGenerationDraft(); setPrompt(e.target.value); setPromptDirty(true); }}
                                 disabled={generating}
                                 className="w-full min-h-[260px] max-h-[400px] rounded-md border border-glass-border bg-black/30 px-3.5 py-2.5 text-[0.875rem] text-foreground placeholder:text-text-muted focus:outline-none focus:border-primary/40 disabled:opacity-60 resize-y leading-relaxed"
                             />
@@ -691,7 +846,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                 ).map((tag) => (
                                     <button
                                         key={tag}
-                                        onClick={() => setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag)}
+                                        onClick={() => { editGenerationDraft(); setPrompt((p) => p.trimEnd() + (p.endsWith(",") || p.endsWith("，") || !p.trim() ? " " : ", ") + tag); }}
                                         disabled={generating}
                                         className="px-2.5 py-1 rounded border border-glass-border bg-glass text-[0.6875rem] text-text-muted hover:text-text-secondary hover:border-foreground/30 hover:bg-hover-bg transition-colors disabled:opacity-30"
                                     >
@@ -738,7 +893,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         {[1, 2, 4].map((n) => (
                                             <button
                                                 key={n}
-                                                onClick={() => setBatchSize(n)}
+                                                onClick={() => { editGenerationDraft(); setBatchSize(n); }}
                                                 disabled={generating}
                                                 className={`px-3 py-1.5 rounded-md border font-mono text-[0.75rem] transition-colors ${
                                                     batchSize === n
@@ -761,7 +916,7 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                         {["9:16", "3:4", "1:1", "4:3", "16:9"].map((ratio) => (
                                             <button
                                                 key={ratio}
-                                                onClick={() => setAspectRatioOverride(ratio === defaultAspectRatio ? null : ratio)}
+                                                onClick={() => { editGenerationDraft(); setAspectRatioOverride(ratio === defaultAspectRatio ? null : ratio); }}
                                                 disabled={generating}
                                                 className={`px-3 py-1.5 rounded-md border font-mono text-[0.75rem] transition-colors ${
                                                     effectiveAspectRatio === ratio
@@ -783,21 +938,26 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
                                     <GroupedModelGrid
                                         models={IMAGE_MODELS}
                                         selectedId={modelOverride || currentProject.model_settings?.t2i_model || "wan2.1-t2i"}
-                                        onSelect={(id) => setModelOverride(id === (currentProject.model_settings?.t2i_model || "wan2.1-t2i") ? null : id)}
+                                        onSelect={(id) => { editGenerationDraft(); setModelOverride(id === (currentProject.model_settings?.t2i_model || "wan2.1-t2i") ? null : id); }}
                                     />
                                 </div>
                             </div>
 
+                            {gptImages && <p role="status" className="mt-3 text-xs leading-relaxed text-text-secondary">{t('gptReferenceUnsupported')}</p>}
+                            {negativeProblem && <div className="mt-3 space-y-2 text-xs text-amber-300">
+                                <p role="status">{t(negativeProblem)}</p>
+                                <button onClick={() => { editGenerationDraft(); setApplyStyle(false); }} className="text-primary underline underline-offset-2">{t('disableStyleForRequest')}</button>
+                            </div>}
                             {/* Generate CTA */}
                             <button
                                 onClick={handleGenerate}
-                                disabled={generating || !prompt.trim()}
+                                disabled={generating || !prompt.trim() || !!negativeProblem}
                                 className="mt-5 self-center inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-md bg-primary text-white border border-[rgba(100,108,255,0.65)] shadow-[inset_0_1.5px_0_rgba(255,255,255,0.14)] hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-[0.875rem] font-semibold"
                             >
                                 {generating ? <Loader2 size={15} className="animate-spin" /> : <Wand2 size={15} />}
                                 {generating
                                     ? t("generating")
-                                    : variants.length === 0
+                                    : entity.status === "needs_confirmation" || studioRequests.unknown ? recovery("newGenerate") : variants.length === 0
                                         ? t("generateFirst")
                                         : t("generateMore", { count: batchSize })}
                             </button>
@@ -805,6 +965,23 @@ export default function CastWorkbenchModal({ isOpen, kind, entityId, onClose }: 
 
                         {/* RIGHT — variants gallery */}
                         <div className="flex flex-col p-5 overflow-y-auto custom-scrollbar bg-surface">
+                            {(studioRequests.results.length > 0 || studioRequests.readFailed || studioRequests.submitFailed) && <section aria-label={t('requestResults')} className="mb-4 rounded-lg border border-glass-border bg-glass p-3 text-xs space-y-2">
+                                <div className="flex justify-between items-center gap-2">
+                                    <span>{t('requestResults')}</span>
+                                    <button onClick={() => { void studioRequests.refresh(); }} disabled={studioRequests.reading} className="text-primary disabled:opacity-40">{t('requestRead')}</button>
+                                </div>
+                                {studioRequests.results.map(result => <div key={result.journal.request.client_request_id} className="space-y-1">
+                                    {['root', 'owner', 'target', 'inputs', 'projection'].some(part => result.receipt?.reason === `studio_image_request_${part}_changed`) && <p className="text-text-muted">{t('requestAssociationChanged')}</p>}
+                                    {(result.receipt?.request.members ?? Array.from({ length: result.journal.request.batch_size ?? 1 }, (_, index) => ({ attempt_id: `${result.journal.request.client_request_id}-${index}`, status: 'needs_confirmation' as const, output_ref: undefined }))).map((member, index) => <div key={member.attempt_id} data-testid="studio-image-member" className="flex items-center gap-2">
+                                        {member.status === 'completed' && member.output_ref && <PreviewImage src={member.output_ref} alt={t('requestMember', { index: index + 1 })} className="h-12 w-12 rounded" clickToLightbox />}
+                                        <span>{t('requestMember', { index: index + 1 })}</span><span>{t(member.status === 'cancelled' && result.receipt?.request.channel === 'image' ? 'requestNotGenerated' : `requestStatus.${member.status}`)}</span>
+                                    </div>)}
+                                </div>)}
+                                {studioRequests.unknown && <p className="text-text-muted">{recovery('newRequest')}</p>}
+                                {studioRequests.readFailed && <p role="status">{recovery('readFailed')}</p>}
+                                {studioRequests.submitFailed && <p role="status">{t('requestNotSubmitted')}</p>}
+                                {studioRequests.readbackFailed && <p role="status">{t('requestReadbackFailed')}</p>}
+                            </section>}
                             {/* Gallery header with filter tabs */}
                             <div className="flex items-center justify-between mb-3">
                                 <h3 className="font-mono text-[0.625rem] uppercase tracking-[0.18em] text-text-muted">

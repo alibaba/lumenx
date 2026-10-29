@@ -10,16 +10,18 @@ PNG_1X1_BASE64 = (
 
 
 class FakeUploaderConfigured:
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self.is_configured = True
+        self.base_path = "lumenx"
 
     def sign_url_for_api(self, object_key: str):
         return f"https://oss.example/{object_key}"
 
 
 class FakeUploaderNoOss:
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self.is_configured = False
+        self.base_path = "lumenx"
 
 
 class TestImageProviderMediaResolverIntegration:

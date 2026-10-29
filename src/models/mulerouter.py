@@ -8,19 +8,43 @@ Priority: MULERUN_TOKEN / CLI available → CLI mode; else → HTTP API mode.
 """
 
 import base64
+from contextlib import nullcontext
 import json
 import logging
 import mimetypes
 import os
 import shutil
 import subprocess
+import tempfile
+from pathlib import Path
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from types import MappingProxyType
+from typing import Any, Dict, List, Mapping, Optional, Tuple
+from urllib.parse import urlsplit
 
 import requests
 
 from .base import VideoGenModel
+from . import provider_tasks as _image_tasks
+from .bound_image_http import (
+    ImageReceiptWriter, request_json_envelope, validate_receipt_writer, write_submitted_handle,
+)
 from .image import ImageGenModel
+from .provider_binding import ResolvedMuleRunProfileCredential, ResolvedMuleRunTokenCredential
+from .gpt_image2_edit_contract import (
+    GPT_IMAGE2_EDIT_CONTRACT_VERSIONS, gpt_image2_edit_payload,
+    validate_gpt_image2_edit_parameters, validate_gpt_image2_edit_scope,
+)
+from ..utils.media_refs import resolve_local_media_path
+from ..utils.mulerun_profile import (
+    MuleRunLoginSession,
+    MuleRunProfileError,
+    build_mulerun_profile_env,
+    fingerprint_owned_mulerun_profile,
+    mulerun_global_flags,
+    mulerun_profile_home,
+    snapshot_mulerun_profile_to_temp_home,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,18 +98,20 @@ MULEROUTER_ONLY_MODELS = ("openai/gpt-image-2",)
 # Site resolution: mulerouter vs mulerun
 # ---------------------------------------------------------------------------
 
-def _get_site() -> str:
+def _get_site(env: Mapping[str, str] | None = None) -> str:
     """Get the configured site. Default: mulerouter (more models available)."""
-    return (os.getenv("MULEROUTER_SITE") or "mulerouter").strip().lower()
+    environment = os.environ if env is None else env
+    return (environment.get("MULEROUTER_SITE") or "mulerouter").strip().lower()
 
 
-def _get_base_url_for_model(model_prefix: str) -> str:
+def _get_base_url_for_model(model_prefix: str, env: Mapping[str, str] | None = None) -> str:
     """Route to the correct site based on model availability."""
     for prefix in MULEROUTER_ONLY_MODELS:
         if model_prefix.startswith(prefix):
             return SITE_BASE_URLS["mulerouter"]
-    site = _get_site()
-    custom = os.getenv("MULEROUTER_BASE_URL")
+    environment = os.environ if env is None else env
+    site = _get_site(env)
+    custom = environment.get("MULEROUTER_BASE_URL")
     if custom:
         return custom.rstrip("/")
     return SITE_BASE_URLS.get(site, SITE_BASE_URLS["mulerouter"])
@@ -95,32 +121,45 @@ def _get_base_url_for_model(model_prefix: str) -> str:
 # Backend detection: MuleRun CLI vs MuleRouter HTTP API
 # ---------------------------------------------------------------------------
 
-def _is_mulerun_cli_available() -> bool:
-    """Check if MuleRun CLI is usable (installed + authenticated)."""
-    if shutil.which("mulerun") is not None:
-        try:
-            result = subprocess.run(
-                ["mulerun", "login", "status"],
-                capture_output=True, text=True, timeout=10
-            )
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+def _is_mulerun_cli_available(env: Mapping[str, str] | None = None) -> bool:
+    """Check if MuleRun CLI is usable without falling back to ambient profiles."""
+    if shutil.which("mulerun") is None:
+        return False
+    if env is not None:
+        if env.get("MULERUN_TOKEN"):
+            return True
+        profile_home = mulerun_profile_home(env)
+        if profile_home is None:
             return False
-    return False
+        return MuleRunLoginSession(profile_home, env).status()
+    try:
+        result = subprocess.run(
+            ["mulerun", "login", "status"],
+            capture_output=True, text=True, timeout=10
+        )
+        return result.returncode == 0
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
 
 
 _cli_available_cache: Optional[bool] = None
 
 
-def _use_cli_backend() -> bool:
+def _use_cli_backend(env: Mapping[str, str] | None = None) -> bool:
     """Determine whether to use CLI or HTTP API backend.
 
     Priority: MULEROUTER_API_KEY (HTTP) > CLI fallback.
     CLI is used only when no API key is configured and mulerun is logged in.
     """
-    global _cli_available_cache
-    if os.getenv("MULEROUTER_API_KEY"):
+    environment = os.environ if env is None else env
+    if environment.get("MULEROUTER_API_KEY"):
         return False
+    if env is not None:
+        if not environment.get("MULERUN_TOKEN") and mulerun_profile_home(environment) is None:
+            return False
+        return _is_mulerun_cli_available(env)
+
+    global _cli_available_cache
     if _cli_available_cache is None:
         _cli_available_cache = _is_mulerun_cli_available()
     return _cli_available_cache
@@ -130,26 +169,172 @@ def _use_cli_backend() -> bool:
 # MuleRun CLI execution layer
 # ---------------------------------------------------------------------------
 
-def _run_mulerun_studio(endpoint: str, args: List[str], timeout: int = MAX_WAIT) -> Dict[str, Any]:
-    """Execute `mulerun studio run <endpoint> --json` and parse result."""
-    cmd = ["mulerun", "studio", "run", endpoint, "--json"] + args
+_SUBPROCESS_ENV_ALLOWLIST = (
+    "PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SHELL", "USER", "LOGNAME",
+    "LANG", "LC_ALL", "SSL_CERT_FILE", "REQUESTS_CA_BUNDLE",
+)
 
-    env = os.environ.copy()
-    token = os.getenv("MULERUN_TOKEN")
-    if token:
-        env["MULERUN_TOKEN"] = token
 
-    logger.info(f"[MuleRun CLI] {' '.join(cmd[:6])}...")
+def _build_mulerun_subprocess_env(
+    env: Mapping[str, str] | None = None,
+    *,
+    profile_root: str | os.PathLike[str] | None = None,
+    create_dirs: bool = True,
+) -> Dict[str, str]:
+    if env is None:
+        child_env = os.environ.copy()
+        child_env["MULERUN_DISABLE_AUTO_UPGRADE"] = "1"
+        child_env["MULERUN_SKIP_AUTO_UPGRADE"] = "1"
+        child_env["NO_UPDATE_NOTIFIER"] = "1"
+        token = os.getenv("MULERUN_TOKEN")
+        if token:
+            child_env["MULERUN_TOKEN"] = token
+        return child_env
 
+    if profile_root is None:
+        raise RuntimeError("An app-owned MuleRun CLI HOME is required")
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout + 60, env=env
+        return build_mulerun_profile_env(
+            env,
+            profile_home=profile_root,
+            token_required=bool(env.get("MULERUN_TOKEN")),
+            include_token=bool(env.get("MULERUN_TOKEN")),
+            create_dirs=create_dirs,
         )
-    except subprocess.TimeoutExpired:
-        raise RuntimeError(f"MuleRun CLI timed out after {timeout + 60}s")
+    except MuleRunProfileError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+def _mulerun_control_flags(
+    env: Mapping[str, str] | None = None,
+    *,
+    authority: ResolvedMuleRunTokenCredential | ResolvedMuleRunProfileCredential | None = None,
+) -> Tuple[List[str], List[str]]:
+    if authority is not None:
+        routes = authority.routes
+        global_flags: List[str] = []
+        if isinstance(authority, ResolvedMuleRunTokenCredential):
+            global_flags += ["--token", authority.secret]
+        global_flags += ["--base-url", routes.login_base_url, "--site", routes.login_site]
+        studio_flags = ["--base-url", routes.studio_base_url, "--site", routes.studio_site]
+        return global_flags, studio_flags
+
+    if env is None:
+        return [], []
+
+    global_flags = mulerun_global_flags(env)
+    studio_flags: List[str] = []
+    router_base = env.get("MULEROUTER_BASE_URL") or _get_base_url_for_model("", env)
+    studio_flags += ["--base-url", router_base]
+    studio_flags += ["--site", _get_site(env)]
+
+    return global_flags, studio_flags
+
+
+def _sensitive_cli_values(
+    env: Mapping[str, str] | None = None,
+    *,
+    authority: ResolvedMuleRunTokenCredential | ResolvedMuleRunProfileCredential | None = None,
+) -> List[str]:
+    values = [
+        value for key in ("MULERUN_TOKEN", "MULEROUTER_API_KEY")
+        if env is not None and (value := env.get(key))
+    ]
+    if isinstance(authority, ResolvedMuleRunTokenCredential):
+        values.append(authority.secret)
+    return values
+
+
+def _redact_command_for_log(cmd: List[str]) -> List[str]:
+    redacted = list(cmd)
+    for index, value in enumerate(redacted[:-1]):
+        if value in {"--token", "--api-key"}:
+            redacted[index + 1] = "<redacted>"
+    return redacted
+
+
+def _redact_text(
+    value: str,
+    *,
+    env: Mapping[str, str] | None = None,
+    authority: ResolvedMuleRunTokenCredential | ResolvedMuleRunProfileCredential | None = None,
+) -> str:
+    redacted = value
+    for secret in _sensitive_cli_values(env, authority=authority):
+        redacted = redacted.replace(secret, "<redacted>")
+    return redacted
+
+
+def _require_bound_mulerun_profile_snapshot(authority: ResolvedMuleRunProfileCredential) -> None:
+    profile = authority.profile_home / ".mulerun"
+    try:
+        if not profile.is_dir():
+            raise MuleRunProfileError("Bound MuleRun profile snapshot is unavailable")
+        if not any(path.is_file() for path in profile.rglob("*")):
+            raise MuleRunProfileError("Bound MuleRun profile snapshot is empty")
+        actual = fingerprint_owned_mulerun_profile(authority.profile_home)
+    except (OSError, MuleRunProfileError) as exc:
+        raise RuntimeError("Bound MuleRun profile snapshot is unavailable") from exc
+    if actual != authority.profile_fingerprint:
+        raise RuntimeError("Bound MuleRun profile snapshot is unavailable")
+
+
+def _run_mulerun_studio(
+    endpoint: str,
+    args: List[str],
+    timeout: int = MAX_WAIT,
+    *,
+    env: Mapping[str, str] | None = None,
+    authority: ResolvedMuleRunTokenCredential | ResolvedMuleRunProfileCredential | None = None,
+) -> Dict[str, Any]:
+    """Execute `mulerun studio run <endpoint> --json` and parse result."""
+    global_flags, studio_flags = _mulerun_control_flags(env, authority=authority)
+    cmd = ["mulerun"] + global_flags + ["studio", "run", endpoint, "--json"] + studio_flags + args
+
+    if authority is None:
+        if env is None:
+            context = nullcontext(None)
+        elif env.get("MULERUN_TOKEN"):
+            context = tempfile.TemporaryDirectory(prefix="lumenx-mulerun-token-")
+        else:
+            profile_home = mulerun_profile_home(env)
+            if profile_home is None:
+                raise RuntimeError("App-owned MuleRun login profile is required for CLI generation")
+            context = snapshot_mulerun_profile_to_temp_home(profile_home)
+    elif isinstance(authority, ResolvedMuleRunTokenCredential):
+        context = tempfile.TemporaryDirectory(prefix="lumenx-mulerun-bound-token-")
+    elif isinstance(authority, ResolvedMuleRunProfileCredential):
+        context = nullcontext(authority.profile_home)
+    else:
+        raise RuntimeError("Unsupported MuleRun CLI authority")
+
+    with context as profile_root:
+        if authority is None:
+            if env is not None and env.get("MULERUN_TOKEN"):
+                assert profile_root is not None
+                profile_root = Path(profile_root) / "home"
+            child_env = _build_mulerun_subprocess_env(env, profile_root=profile_root)
+        elif isinstance(authority, ResolvedMuleRunTokenCredential):
+            assert profile_root is not None
+            profile_root = Path(profile_root) / "home"
+            child_env = _build_mulerun_subprocess_env(
+                {"MULERUN_TOKEN": authority.secret}, profile_root=profile_root
+            )
+        else:
+            _require_bound_mulerun_profile_snapshot(authority)
+            child_env = _build_mulerun_subprocess_env({}, profile_root=profile_root, create_dirs=False)
+
+        logger.info("[MuleRun CLI] %s", " ".join(_redact_command_for_log(cmd)))
+
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout + 60, env=child_env
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"MuleRun CLI timed out after {timeout + 60}s")
 
     if result.returncode != 0:
-        stderr = result.stderr.strip()
+        stderr = _redact_text(result.stderr.strip(), env=env, authority=authority)
         raise RuntimeError(f"MuleRun CLI failed (exit {result.returncode}): {stderr[:500]}")
 
     stdout = result.stdout.strip()
@@ -168,13 +353,30 @@ def _run_mulerun_studio(endpoint: str, args: List[str], timeout: int = MAX_WAIT)
                 except json.JSONDecodeError:
                     continue
         else:
-            raise RuntimeError(f"MuleRun CLI returned non-JSON output: {stdout[:300]}")
+            redacted_stdout = _redact_text(stdout, env=env, authority=authority)
+            raise RuntimeError(f"MuleRun CLI returned non-JSON output: {redacted_stdout[:300]}")
 
     return data
 
 
-def _resolve_local_image_path(img_url: Optional[str] = None, img_path: Optional[str] = None) -> Optional[str]:
+def _resolve_local_image_path(
+    img_url: Optional[str] = None,
+    img_path: Optional[str] = None,
+    *,
+    output_root: Optional[str] = None,
+) -> Optional[str]:
     """Resolve image to a local file path for CLI --image flag."""
+    if output_root:
+        ref = img_path or img_url
+        if isinstance(ref, str) and ref.startswith(("http://", "https://")):
+            return ref
+        if isinstance(ref, str):
+            local_path = resolve_local_media_path(ref, output_root=output_root)
+            if local_path is None or not os.path.isfile(local_path):
+                raise ValueError("Image reference is outside this runtime or does not exist")
+            return local_path
+        return None
+
     if img_path and os.path.exists(img_path):
         return os.path.abspath(img_path)
     if img_url:
@@ -192,16 +394,22 @@ def _resolve_local_image_path(img_url: Optional[str] = None, img_path: Optional[
 # MuleRouter HTTP API layer (original)
 # ---------------------------------------------------------------------------
 
-def _get_api_key() -> str:
-    key = os.getenv("MULEROUTER_API_KEY", "")
+def _get_api_key(env: Mapping[str, str] | None = None) -> str:
+    environment = os.environ if env is None else env
+    key = environment.get("MULEROUTER_API_KEY", "")
+    return key
+
+
+def _require_api_key(env: Mapping[str, str] | None = None) -> str:
+    key = _get_api_key(env)
     if not key:
         raise RuntimeError("MULEROUTER_API_KEY not set in environment")
     return key
 
 
-def _auth_headers() -> Dict[str, str]:
+def _auth_headers(env: Mapping[str, str] | None = None) -> Dict[str, str]:
     return {
-        "Authorization": f"Bearer {_get_api_key()}",
+        "Authorization": f"Bearer {_require_api_key(env)}",
         "Content-Type": "application/json",
     }
 
@@ -215,8 +423,24 @@ def _encode_file_to_data_uri(file_path: str) -> str:
     return f"data:{mime};base64,{data}"
 
 
-def _resolve_image_input(img_url: Optional[str] = None, img_path: Optional[str] = None) -> Optional[str]:
+def _resolve_image_input(
+    img_url: Optional[str] = None,
+    img_path: Optional[str] = None,
+    *,
+    output_root: Optional[str] = None,
+) -> Optional[str]:
     """Resolve image to a URL or base64 data URI for MuleRouter."""
+    if output_root:
+        ref = img_path or img_url
+        if isinstance(ref, str) and ref.startswith(("http://", "https://", "data:")):
+            return ref
+        if isinstance(ref, str):
+            local_path = resolve_local_media_path(ref, output_root=output_root)
+            if local_path and os.path.isfile(local_path):
+                return _encode_file_to_data_uri(local_path)
+            raise ValueError("Image reference is outside this runtime or does not exist")
+        return None
+
     if img_path and os.path.exists(img_path):
         return _encode_file_to_data_uri(img_path)
     if img_url:
@@ -230,11 +454,19 @@ def _resolve_image_input(img_url: Optional[str] = None, img_path: Optional[str] 
     return None
 
 
-def _submit_task(base_url: str, api_path: str, body: Dict[str, Any]) -> str:
+def _submit_task(
+    base_url: str,
+    api_path: str,
+    body: Dict[str, Any],
+    *,
+    env: Mapping[str, str] | None = None,
+    retry_uncertain: bool = True,
+) -> str:
     """Submit a generation task and return the task ID."""
     url = f"{base_url}{api_path}"
     logger.info(f"[MuleRouter] POST {api_path}")
-    resp = _request_with_retry("POST", url, headers=_auth_headers(), json=body, timeout=60)
+    resp = _request_with_retry("POST", url, max_retries=3 if retry_uncertain else 1,
+                               headers=_auth_headers(env), json=body, timeout=60)
     data = resp.json()
 
     task_info = data.get("task_info") or data
@@ -268,7 +500,13 @@ def _request_with_retry(method: str, url: str, max_retries: int = 3, **kwargs) -
     raise RuntimeError("MuleRouter: max retries exceeded")
 
 
-def _poll_task(base_url: str, api_path: str, task_id: str) -> Dict[str, Any]:
+def _poll_task(
+    base_url: str,
+    api_path: str,
+    task_id: str,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> Dict[str, Any]:
     """Poll a task until completion with retry on transient errors."""
     poll_url = f"{base_url}{api_path}/{task_id}"
     elapsed = 0
@@ -277,7 +515,7 @@ def _poll_task(base_url: str, api_path: str, task_id: str) -> Dict[str, Any]:
         time.sleep(POLL_INTERVAL)
         elapsed += POLL_INTERVAL
 
-        resp = _request_with_retry("GET", poll_url, headers=_auth_headers(), timeout=30)
+        resp = _request_with_retry("GET", poll_url, headers=_auth_headers(env), timeout=30)
         data = resp.json()
 
         task_info = data.get("task_info") or data
@@ -306,13 +544,43 @@ def _download_file(url: str, output_path: str) -> str:
 class MuleRouterVideoModel(VideoGenModel):
     """Seedance 2.0 video generation via MuleRun CLI or MuleRouter HTTP API."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, env: Mapping[str, str] | None = None):
         super().__init__(config)
-        self.use_fast = config.get("params", {}).get("fast", False)
+        self._env = os.environ if env is None else MappingProxyType(dict(env))
+        self.use_fast = self.config.get("params", {}).get("fast", False)
+
+    def _get_api_key(self) -> str:
+        return _get_api_key(self._env)
+
+    def _get_site(self) -> str:
+        return _get_site(self._env)
+
+    def _get_base_url_for_model(self, model_prefix: str) -> str:
+        return _get_base_url_for_model(model_prefix, self._env)
+
+    def _use_cli_backend(self) -> bool:
+        return _use_cli_backend(self._env)
+
+    def _auth_headers(self) -> Dict[str, str]:
+        return _auth_headers(self._env)
+
+    def _resolve_local_image_path(
+        self,
+        img_url: Optional[str] = None,
+        img_path: Optional[str] = None,
+    ) -> Optional[str]:
+        return _resolve_local_image_path(img_url, img_path, output_root=self.output_root)
+
+    def _resolve_image_input(
+        self,
+        img_url: Optional[str] = None,
+        img_path: Optional[str] = None,
+    ) -> Optional[str]:
+        return _resolve_image_input(img_url, img_path, output_root=self.output_root)
 
     def generate(self, prompt: str, output_path: str, img_url: Optional[str] = None,
                  img_path: Optional[str] = None, **kwargs) -> Tuple[str, float]:
-        if _use_cli_backend():
+        if self._use_cli_backend():
             return self._generate_via_cli(prompt, output_path, img_url, img_path, **kwargs)
         return self._generate_via_http(prompt, output_path, img_url, img_path, **kwargs)
 
@@ -351,20 +619,22 @@ class MuleRouterVideoModel(VideoGenModel):
             args += ["--extra", "watermark=false"]
 
         if is_i2v:
-            image_path = _resolve_local_image_path(img_url, img_path)
+            image_path = self._resolve_local_image_path(img_url, img_path)
             if image_path:
                 args += ["--image", image_path]
         elif is_r2v:
-            primary = _resolve_local_image_path(img_url, img_path)
+            primary = self._resolve_local_image_path(img_url, img_path)
             if primary:
                 args += ["--image", primary]
-            for ref_url in ref_image_urls:
-                ref_path = _resolve_local_image_path(ref_url)
+            for index, ref_url in enumerate(ref_image_urls):
+                ref_path = self._resolve_local_image_path(ref_url)
                 if ref_path:
+                    if index == 0 and primary and ref_path == primary:
+                        continue
                     args += ["--extra", f"reference_image={ref_path}"]
 
         args += ["--max-wait", "1800"]
-        result = _run_mulerun_studio(endpoint, args, timeout=1800)
+        result = _run_mulerun_studio(endpoint, args, timeout=1800, env=self._env)
         video_url = self._extract_video_url(result)
         _download_file(video_url, output_path)
 
@@ -376,7 +646,7 @@ class MuleRouterVideoModel(VideoGenModel):
                            img_path: Optional[str] = None, **kwargs) -> Tuple[str, float]:
         """Generate video via MuleRouter HTTP API (original path)."""
         start_time = time.time()
-        base_url = _get_base_url_for_model("bytedance/seedance")
+        base_url = self._get_base_url_for_model("bytedance/seedance")
 
         duration = kwargs.get("duration", 5)
         seed = kwargs.get("seed")
@@ -404,8 +674,8 @@ class MuleRouterVideoModel(VideoGenModel):
             api_path = SEEDANCE_API_PATHS[f"t2v{suffix}"]
             body = self._build_t2v_body(prompt, duration, resolution, aspect_ratio, seed, watermark)
 
-        task_id = _submit_task(base_url, api_path, body)
-        result = _poll_task(base_url, api_path, task_id)
+        task_id = _submit_task(base_url, api_path, body, env=self._env)
+        result = _poll_task(base_url, api_path, task_id, env=self._env)
 
         video_url = self._extract_video_url(result)
         _download_file(video_url, output_path)
@@ -431,7 +701,7 @@ class MuleRouterVideoModel(VideoGenModel):
     def _build_i2v_body(self, prompt: str, img_url: Optional[str], img_path: Optional[str],
                         duration: int, resolution: str, aspect_ratio: str,
                         seed: Optional[int], watermark: bool) -> Dict[str, Any]:
-        image = _resolve_image_input(img_url, img_path)
+        image = self._resolve_image_input(img_url, img_path)
         if not image:
             raise ValueError("Seedance I2V requires an input image")
         body: Dict[str, Any] = {
@@ -451,12 +721,14 @@ class MuleRouterVideoModel(VideoGenModel):
                         ref_image_urls: List[str], duration: int, resolution: str,
                         aspect_ratio: str, seed: Optional[int], watermark: bool) -> Dict[str, Any]:
         images: List[str] = []
-        primary = _resolve_image_input(img_url, img_path)
+        primary = self._resolve_image_input(img_url, img_path)
         if primary:
             images.append(primary)
-        for ref_url in ref_image_urls:
-            resolved = _resolve_image_input(ref_url)
+        for index, ref_url in enumerate(ref_image_urls):
+            resolved = self._resolve_image_input(ref_url)
             if resolved:
+                if index == 0 and primary and resolved == primary:
+                    continue
                 images.append(resolved)
         if not images:
             raise ValueError("Seedance R2V requires at least one reference image")
@@ -499,23 +771,231 @@ class MuleRouterVideoModel(VideoGenModel):
 class MuleRouterImageModel(ImageGenModel):
     """GPT-Image-2 image generation and editing via MuleRun CLI or MuleRouter HTTP API."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, env: Mapping[str, str] | None = None):
         super().__init__(config)
+        self._env = os.environ if env is None else MappingProxyType(dict(env))
+
+    def _get_base_url_for_model(self, model_prefix: str) -> str:
+        return _get_base_url_for_model(model_prefix, self._env)
+
+    def _use_cli_backend(self) -> bool:
+        return _use_cli_backend(self._env)
+
+    def _resolve_local_image_path(self, path: str) -> Optional[str]:
+        return _resolve_local_image_path(img_path=path, img_url=path, output_root=self.output_root)
+
+    def _resolve_image_input(self, path: str) -> Optional[str]:
+        return _resolve_image_input(path, output_root=self.output_root)
 
     def generate(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
-        if _use_cli_backend():
+        if self._use_cli_backend():
             return self._generate_via_cli(prompt, output_path, **kwargs)
         return self._generate_via_http(prompt, output_path, **kwargs)
 
-    def _generate_via_cli(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
+    def generate_with_bound_cli(
+        self,
+        prompt: str,
+        output_path: str,
+        credential: ResolvedMuleRunTokenCredential | ResolvedMuleRunProfileCredential,
+        **kwargs,
+    ) -> Tuple[str, float]:
+        """Generate image through an already bound MuleRun CLI authority."""
+        if not isinstance(credential, (ResolvedMuleRunTokenCredential, ResolvedMuleRunProfileCredential)):
+            raise RuntimeError("Unsupported MuleRun CLI credential")
+        if "image_contract_version" in kwargs:
+            validate_gpt_image2_edit_scope(credential.scope)
+        return self._generate_via_cli(prompt, output_path, authority=credential, **kwargs)
+
+    def generate_with_bound_http(
+        self, prompt: str, output_path: str, credential, **kwargs,
+    ) -> Tuple[str, float]:
+        """Generate image through an already bound MuleRouter HTTP authority."""
+        from .provider_tasks import ResolvedCredential
+
+        if not isinstance(credential, ResolvedCredential):
+            raise RuntimeError("Unsupported MuleRouter HTTP credential")
+        scope = credential.scope
+        if (
+            scope.provider != "mulerouter"
+            or scope.backend != "mulerouter"
+            or scope.gateway != "mulerouter_http"
+        ):
+            raise RuntimeError("Unsupported MuleRouter HTTP scope")
+        if "image_contract_version" in kwargs:
+            validate_gpt_image2_edit_scope(scope)
+        return self._generate_via_http(
+            prompt, output_path,
+            env={"MULEROUTER_API_KEY": credential.secret, "MULEROUTER_BASE_URL": scope.base_url},
+            base_url=scope.base_url,
+            _bound_http=True,
+            **kwargs,
+        )
+
+    def submit_with_bound_http(
+        self, prompt: str, credential: _image_tasks.ResolvedCredential, *,
+        on_submitted: ImageReceiptWriter, **kwargs,
+    ) -> _image_tasks.ProviderHandle:
+        """One opt-in image POST followed by synchronous handle persistence only."""
+        validate_receipt_writer(on_submitted)
+        if not isinstance(credential, _image_tasks.ResolvedCredential):
+            raise _image_tasks.ProviderBindingError("Explicit GPT HTTP credential required")
+        contract = (
+            _image_tasks.ProviderImageQueryContract.GPT_IMAGE2_EDIT if "image_contract_version" in kwargs
+            else _image_tasks.ProviderImageQueryContract.GPT_IMAGE2_GENERATION
+        )
+        _image_tasks.validate_image_query_contract(contract, "gpt-image-2", credential.scope)
+        if contract is _image_tasks.ProviderImageQueryContract.GPT_IMAGE2_EDIT:
+            size, references = self._bound_edit_reference(prompt, kwargs)
+            body = gpt_image2_edit_payload(
+                prompt, size, [_encode_file_to_data_uri(references[0])],
+                contract_version=kwargs["image_contract_version"],
+            )
+            api_path = GPT_IMAGE_API_PATHS["edit"]
+        else:
+            if (
+                not isinstance(prompt, str) or not prompt.strip()
+                or set(kwargs) - {"size", "quality"} or "size" not in kwargs
+                or type(kwargs["size"]) is not str or kwargs["size"] not in GPT_IMAGE_VALID_SIZES
+                or type(kwargs.get("quality", "high")) is not str
+                or kwargs.get("quality", "high") not in {"high", "medium", "low", "auto"}
+            ):
+                raise _image_tasks.ProviderBindingError("Unsupported explicit GPT generation arguments")
+            try:
+                prompt.encode("utf-8")
+            except UnicodeEncodeError:
+                raise _image_tasks.ProviderBindingError("Invalid GPT image prompt encoding") from None
+            body = self._build_generation_body(
+                prompt=prompt, size=kwargs["size"], quality=kwargs.get("quality", "high"), n=1,
+            )
+            api_path = GPT_IMAGE_API_PATHS["generation"]
+        submitted_at = time.time()
+        status_code, result = request_json_envelope(
+            "POST", credential.scope.base_url + api_path,
+            {"Authorization": f"Bearer {credential.secret}", "Content-Type": "application/json"}, body,
+        )
+        info = result.get("task_info")
+        task_id = info.get("id") if isinstance(info, dict) else None
+        if not isinstance(task_id, str):
+            raise _image_tasks.ProviderSubmitError("missing_receipt", status_code=status_code)
+        try:
+            handle = _image_tasks.ProviderHandle(
+                schema_version=2, provider_model_id="gpt-image-2", task_id=task_id,
+                scope=credential.scope, credential_ref=credential.credential_ref,
+                query_capability=_image_tasks.QueryCapability.BY_TASK_ID,
+                query_contract=contract, submitted_at=submitted_at,
+            )
+        except _image_tasks.ProviderBindingError:
+            raise _image_tasks.ProviderSubmitError("missing_receipt", status_code=status_code) from None
+        # 202 is documented. A usable ID on another status is preserved only as
+        # defensive receipt retention, never as proof of generation success.
+        write_submitted_handle(handle, on_submitted)
+        return handle
+
+    @staticmethod
+    def query_with_bound_http(
+        handle: _image_tasks.ProviderHandle, *, credential: _image_tasks.ResolvedCredential,
+    ) -> _image_tasks.ProviderObservation:
+        """One GET of the original generation/edit path, with mandatory UUID echo."""
+        if not isinstance(handle, _image_tasks.ProviderHandle):
+            raise _image_tasks.ProviderBindingError("Explicit image handle required")
+        handle = _image_tasks.ProviderHandle.from_dict(handle.to_dict())
+        scope = _image_tasks.validate_query_binding(handle, credential, media_kind="image")
+        if handle.query_contract not in {
+            _image_tasks.ProviderImageQueryContract.GPT_IMAGE2_GENERATION,
+            _image_tasks.ProviderImageQueryContract.GPT_IMAGE2_EDIT,
+        }:
+            raise _image_tasks.ProviderBindingError("GPT image query requires its original contract")
+        status_code, result = request_json_envelope(
+            "GET", scope.base_url + _image_tasks.image_query_path(handle),
+            {"Authorization": f"Bearer {credential.secret}"},
+        )
+        if status_code not in {200, 400}:
+            raise _image_tasks.ProviderQueryError("http", status_code=status_code)
+        info = result.get("task_info")
+        if not isinstance(info, dict) or info.get("id") != handle.task_id:
+            raise _image_tasks.ProviderQueryError("protocol")
+        raw_status = info.get("status")
+        if not isinstance(raw_status, str):
+            raise _image_tasks.ProviderQueryError("protocol")
+        try:
+            status = _image_tasks.image_status_from_raw(handle, raw_status)
+            if status_code == 400 and (
+                status is not _image_tasks.ProviderTaskStatus.FAILED or not isinstance(info.get("error"), dict)
+            ):
+                raise _image_tasks.ProviderQueryError("protocol")
+            codes = []
+            for owner, key in ((info, "code"), (result, "error_code")):
+                if "error" not in owner:
+                    continue
+                error = owner["error"]
+                if not isinstance(error, dict) or status is not _image_tasks.ProviderTaskStatus.FAILED:
+                    raise _image_tasks.ProviderQueryError("protocol")
+                if any(name in error and not isinstance(error[name], str) for name in ("title", "detail")):
+                    raise _image_tasks.ProviderQueryError("protocol")
+                if key in error:
+                    code = error[key]
+                    if type(code) is not int or not 0 <= code <= 2147483647:
+                        raise _image_tasks.ProviderQueryError("protocol")
+                    codes.append(str(code))
+            if len(set(codes)) > 1:
+                raise _image_tasks.ProviderQueryError("protocol")
+            image_url = None
+            if status is _image_tasks.ProviderTaskStatus.SUCCEEDED:
+                images = result.get("images")
+                if not isinstance(images, list) or len(images) != 1:
+                    raise _image_tasks.ProviderQueryError("protocol")
+                image_url = images[0]
+                _image_tasks.validate_result_url(image_url)
+                if urlsplit(image_url).scheme != "https":
+                    raise _image_tasks.ProviderQueryError("protocol")
+            elif result.get("images") not in (None, []):
+                raise _image_tasks.ProviderQueryError("protocol")
+            return _image_tasks.ProviderObservation(
+                task_id=info["id"], status=status, raw_status=raw_status,
+                source_handle=handle, image_url=image_url, error_code=codes[0] if codes else None,
+            )
+        except _image_tasks.ProviderBindingError:
+            raise _image_tasks.ProviderQueryError("protocol") from None
+
+    def _bound_edit_reference(self, prompt: str, kwargs: Mapping[str, Any]) -> Tuple[str, List[str]]:
+        """A marked Edit must never coerce fields or fall back to generation."""
+        if (
+            kwargs.get("image_contract_version") not in GPT_IMAGE2_EDIT_CONTRACT_VERSIONS
+            or set(kwargs) != {"image_contract_version", "size", "ref_image_paths"}
+        ):
+            raise ValueError("Unsupported bound GPT Edit arguments")
+        size = kwargs["size"]
+        validate_gpt_image2_edit_parameters(prompt, {"size": size}, contract_version=kwargs["image_contract_version"])
+        refs = kwargs["ref_image_paths"]
+        if not isinstance(refs, (tuple, list)) or len(refs) != 1 or not isinstance(refs[0], str):
+            raise ValueError("Bound GPT Edit requires one local reference")
+        local = self._resolve_local_image_path(refs[0])
+        if local is None or not os.path.isfile(local):
+            raise ValueError("Bound GPT Edit reference is unavailable")
+        return size, [local]
+
+    def _generate_via_cli(
+        self,
+        prompt: str,
+        output_path: str,
+        *,
+        authority: ResolvedMuleRunTokenCredential | ResolvedMuleRunProfileCredential | None = None,
+        **kwargs,
+    ) -> Tuple[str, float]:
         """Generate image via mulerun studio run CLI."""
         start_time = time.time()
-        size = _normalize_gpt_image_size(kwargs.get("size", "1024x1024"))
-
-        ref_image_path = kwargs.get("ref_image_path")
-        ref_image_paths = kwargs.get("ref_image_paths") or []
-        if ref_image_path:
-            ref_image_paths = [ref_image_path] + ref_image_paths
+        if "image_contract_version" in kwargs:
+            if authority is None:
+                raise ValueError("GPT Edit contract requires a bound authority")
+            size, ref_image_paths = self._bound_edit_reference(prompt, kwargs)
+            quality = None
+        else:
+            size = _normalize_gpt_image_size(kwargs.get("size", "1024x1024"))
+            quality = kwargs.get("quality")
+            ref_image_path = kwargs.get("ref_image_path")
+            ref_image_paths = kwargs.get("ref_image_paths") or []
+            if ref_image_path:
+                ref_image_paths = [ref_image_path] + ref_image_paths
 
         if ref_image_paths:
             endpoint = "openai/gpt-image-2/edit"
@@ -523,17 +1003,27 @@ class MuleRouterImageModel(ImageGenModel):
             endpoint = "openai/gpt-image-2/generation"
 
         args = ["--prompt", prompt, "--size", size]
+        if quality is not None:
+            args += ["--quality", str(quality)]
 
         resolved_images = []
         for path in ref_image_paths:
-            resolved = _resolve_local_image_path(img_path=path, img_url=path)
+            resolved = self._resolve_local_image_path(path)
             if resolved:
                 resolved_images.append(resolved)
+        if "image_contract_version" in kwargs and len(resolved_images) != 1:
+            raise ValueError("Bound GPT Edit requires one resolved image")
         if resolved_images:
             import json as _json
             args += ["--images", _json.dumps(resolved_images)]
 
-        result = _run_mulerun_studio(endpoint, args, timeout=300)
+        result = _run_mulerun_studio(
+            endpoint,
+            args,
+            timeout=300,
+            env=None if authority is not None else self._env,
+            authority=authority,
+        )
         image_url = self._extract_image_url(result)
         _download_file(image_url, output_path)
 
@@ -541,43 +1031,46 @@ class MuleRouterImageModel(ImageGenModel):
         logger.info(f"[MuleRun/GPT-Image-2] CLI done in {generation_time:.1f}s -> {output_path}")
         return output_path, generation_time
 
-    def _generate_via_http(self, prompt: str, output_path: str, **kwargs) -> Tuple[str, float]:
+    def _generate_via_http(self, prompt: str, output_path: str, *, _bound_http: bool = False, **kwargs) -> Tuple[str, float]:
         """Generate image via MuleRouter HTTP API (original path)."""
         start_time = time.time()
-        base_url = _get_base_url_for_model("openai/gpt-image-2")
+        bound_env = kwargs.pop("env", self._env)
+        base_url = kwargs.pop("base_url", None) or self._get_base_url_for_model("openai/gpt-image-2")
 
-        size = _normalize_gpt_image_size(kwargs.get("size", "1024x1024"))
-        quality = kwargs.get("quality", "high")
-        n = kwargs.get("n", 1)
-
-        body: Dict[str, Any] = {
-            "prompt": prompt,
-            "size": size,
-            "quality": quality,
-            "n": n,
-        }
-
-        ref_image_path = kwargs.get("ref_image_path")
-        ref_image_paths = kwargs.get("ref_image_paths") or []
-        if ref_image_path:
-            ref_image_paths = [ref_image_path] + ref_image_paths
-
-        if ref_image_paths:
+        if "image_contract_version" in kwargs:
+            if not _bound_http:
+                raise ValueError("GPT Edit contract requires a bound authority")
+            size, ref_image_paths = self._bound_edit_reference(prompt, kwargs)
+            body = gpt_image2_edit_payload(
+                prompt, size, [_encode_file_to_data_uri(ref_image_paths[0])],
+                contract_version=kwargs["image_contract_version"],
+            )
             api_path = GPT_IMAGE_API_PATHS["edit"]
-            images = []
-            for path in ref_image_paths:
-                resolved = _resolve_image_input(path)
-                if resolved:
-                    images.append(resolved)
-            if images:
-                body["image"] = images[0]
-                if len(images) > 1:
-                    body["reference_images"] = images[1:]
         else:
-            api_path = GPT_IMAGE_API_PATHS["generation"]
+            size = _normalize_gpt_image_size(kwargs.get("size", "1024x1024"))
+            quality = kwargs.get("quality", "high")
+            n = kwargs.get("n", 1)
+            body = self._build_generation_body(prompt=prompt, size=size, quality=quality, n=n)
+            ref_image_path = kwargs.get("ref_image_path")
+            ref_image_paths = kwargs.get("ref_image_paths") or []
+            if ref_image_path:
+                ref_image_paths = [ref_image_path] + ref_image_paths
+            if ref_image_paths:
+                api_path = GPT_IMAGE_API_PATHS["edit"]
+                body = self._build_edit_body(
+                    prompt=prompt,
+                    ref_image_paths=ref_image_paths,
+                    size=size,
+                    quality=quality,
+                    n=n,
+                )
+            else:
+                api_path = GPT_IMAGE_API_PATHS["generation"]
 
-        task_id = _submit_task(base_url, api_path, body)
-        result = _poll_task(base_url, api_path, task_id)
+        # A bound Core attempt cannot repeat a paid POST after an uncertain response.
+        submit_options = {"retry_uncertain": False} if _bound_http else {}
+        task_id = _submit_task(base_url, api_path, body, env=bound_env, **submit_options)
+        result = _poll_task(base_url, api_path, task_id, env=bound_env)
 
         image_url = self._extract_image_url(result)
         _download_file(image_url, output_path)
@@ -585,6 +1078,35 @@ class MuleRouterImageModel(ImageGenModel):
         generation_time = time.time() - start_time
         logger.info(f"[MuleRouter/GPT-Image-2] HTTP done in {generation_time:.1f}s -> {output_path}")
         return output_path, generation_time
+
+    def _build_generation_body(self, *, prompt: str, size: str, quality: str, n: int) -> Dict[str, Any]:
+        return {
+            "prompt": prompt,
+            "size": size,
+            "quality": quality,
+            "n": n,
+        }
+
+    def _build_edit_body(
+        self,
+        *,
+        prompt: str,
+        ref_image_paths: List[str],
+        size: str,
+        quality: str,
+        n: int,
+    ) -> Dict[str, Any]:
+        body = self._build_generation_body(prompt=prompt, size=size, quality=quality, n=n)
+        images = []
+        for path in ref_image_paths:
+            resolved = self._resolve_image_input(path)
+            if resolved:
+                images.append(resolved)
+        if images:
+            body["image"] = images[0]
+            if len(images) > 1:
+                body["reference_images"] = images[1:]
+        return body
 
     def _extract_image_url(self, result: Dict[str, Any]) -> str:
         images = result.get("images") or []

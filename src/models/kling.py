@@ -8,7 +8,8 @@ Models: kling-v2-6 (default), kling-v2-5-turbo
 import logging
 import os
 import time
-from typing import Dict, Any, Tuple
+from types import MappingProxyType
+from typing import Dict, Any, Mapping, Tuple
 
 import jwt
 import requests
@@ -22,16 +23,25 @@ logger = logging.getLogger(__name__)
 
 
 class KlingModel(VideoGenModel):
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], *, env: Mapping[str, str] | None = None):
         super().__init__(config)
-        self.access_key = config.get("access_key") or os.getenv("KLING_ACCESS_KEY", "")
-        self.secret_key = config.get("secret_key") or os.getenv("KLING_SECRET_KEY", "")
-        self.model_name = config.get("params", {}).get("model_name", "kling-v3")
+        self._env = os.environ if env is None else MappingProxyType(dict(env))
+        self.access_key = self.config.get("access_key") or self._env.get("KLING_ACCESS_KEY", "")
+        self.secret_key = self.config.get("secret_key") or self._env.get("KLING_SECRET_KEY", "")
+        self.model_name = self.config.get("params", {}).get("model_name", "kling-v3")
         self._cached_token = None
         self._token_exp = 0
 
+    def _base_url(self) -> str:
+        return get_provider_base_url("KLING", env=self._env)
+
+    def _uploader(self) -> OSSImageUploader:
+        return OSSImageUploader(env=self._env, output_root=self.output_root)
+
     def _get_token(self) -> str:
         """Generate a signed JWT token, cached until near expiry."""
+        if not self.access_key or not self.secret_key:
+            raise RuntimeError("KLING_ACCESS_KEY and KLING_SECRET_KEY are required for Kling vendor generation")
         now = int(time.time())
         # Reuse cached token if still valid (with 60s buffer)
         if self._cached_token and now < self._token_exp - 60:
@@ -74,12 +84,15 @@ class KlingModel(VideoGenModel):
         if not img_path and isinstance(img_url, str) and img_url.startswith(("http://", "https://")):
             return img_url
 
+        uploader = self._uploader()
         resolved = resolve_media_input(
             image_ref,
             model_name=model_name or self.model_name,
             modality="image",
             backend="vendor",
-            uploader=OSSImageUploader(),
+            uploader=uploader,
+            output_root=self.output_root,
+            oss_base_path=getattr(uploader, "base_path", None),
         )
         return resolved.value
 
@@ -98,7 +111,7 @@ class KlingModel(VideoGenModel):
         start_time = time.time()
 
         is_i2v = bool(img_url or img_path)
-        base_url = get_provider_base_url("KLING")
+        base_url = self._base_url()
 
         if is_i2v:
             # Image-to-Video

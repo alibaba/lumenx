@@ -13,6 +13,13 @@ import {
     GRID_COLS_CLASS,
     type ModelParamSupport,
 } from '@/store/projectStore';
+import rawCatalog from '@/generated/modelCatalog.json';
+
+type RawModelCatalog = {
+    models: Record<string, { params?: ModelParamSupport }>;
+};
+
+const catalogModels = (rawCatalog as RawModelCatalog).models;
 
 // ── I2V_MODELS 配置完整性 ─────────────────────────────────────────────
 
@@ -43,7 +50,7 @@ describe('I2V_MODELS 配置', () => {
 // []), so it no longer appears in I2V_MODELS. Read its params directly from the
 // generated catalog to keep the wan2.6 contract documented and tested.
 describe('Wan 2.6 模型参数', () => {
-    const p = (rawCatalog as any).models['wan2.6-i2v']?.params as ModelParamSupport;
+    const p = catalogModels['wan2.6-i2v']?.params as ModelParamSupport;
 
     it('支持所有 Wan 系列参数', () => {
         expect(p.resolution).toBeDefined();
@@ -72,11 +79,8 @@ describe('Wan 2.6 模型参数', () => {
 
 // wan2.5-i2v-preview is now hidden in the catalog (visible_in: []), so
 // it doesn't appear in I2V_MODELS. Read its params directly from the
-// generated catalog to keep the wan2.5 contract documented and tested.
-import rawCatalog from '@/generated/modelCatalog.json';
-
 describe('Wan 2.5 模型参数', () => {
-    const wan25Params = (rawCatalog as any).models['wan2.5-i2v-preview']?.params;
+    const wan25Params = catalogModels['wan2.5-i2v-preview']?.params;
     const p = wan25Params as ModelParamSupport;
 
     it('支持 resolution, seed, negativePrompt, audio', () => {
@@ -97,7 +101,7 @@ describe('Wan 2.5 模型参数', () => {
 describe('Wan 2.2 模型参数', () => {
     // wan2.2-i2v-plus is now hidden in the catalog. Read params directly
     // from the raw catalog so the legacy contract stays documented.
-    const wan22Params = (rawCatalog as any).models['wan2.2-i2v-plus']?.params;
+    const wan22Params = catalogModels['wan2.2-i2v-plus']?.params;
     const p = wan22Params as ModelParamSupport;
 
     it('支持 resolution, seed, negativePrompt', () => {
@@ -120,23 +124,16 @@ describe('Kling v3 模型参数', () => {
     const kling = I2V_MODELS.find(m => m.id === 'kling-v3-i2v')!;
     const p = kling.params;
 
-    it('支持 negativePrompt, mode, sound, cfgScale', () => {
+    it('支持 negativePrompt, mode, audio, watermark', () => {
         expect(p.negativePrompt).toBe(true);
         expect(p.mode).toBeDefined();
-        expect(p.sound).toBe(true);
-        expect(p.cfgScale).toBeDefined();
+        expect(p.audio).toEqual({ default: false });
+        expect(p.watermark).toEqual({ default: false });
     });
 
-    it('mode 选项为 std/pro，默认 std', () => {
-        expect(p.mode!.options).toEqual(['std', 'pro']);
-        expect(p.mode!.default).toBe('std');
-    });
-
-    it('cfgScale 范围 0-1，步长 0.1', () => {
-        expect(p.cfgScale!.min).toBe(0);
-        expect(p.cfgScale!.max).toBe(1);
-        expect(p.cfgScale!.step).toBe(0.1);
-        expect(p.cfgScale!.default).toBe(0.5);
+    it('mode 选项为 std/pro/4k，默认 pro', () => {
+        expect(p.mode!.options).toEqual(['std', 'pro', '4k']);
+        expect(p.mode!.default).toBe('pro');
     });
 
     it('不支持 Wan 独有参数', () => {
@@ -147,8 +144,8 @@ describe('Kling v3 模型参数', () => {
         expect(p.seed).toBeFalsy();
         expect(p.promptExtend).toBeFalsy();
         expect(p.shotType).toBeFalsy();
-        // kling-v3-i2v exposes `sound` (asserted above), not `audio`.
-        expect(p.audio).toBeFalsy();
+        expect(p.cfgScale).toBeFalsy();
+        expect(p.sound).toBeFalsy();
     });
 
     it('不支持 Vidu 独有参数', () => {
@@ -170,20 +167,18 @@ describe('Vidu Q3 模型参数', () => {
 
     const p = viduPro.params;
 
-    it('支持 resolution, seed, viduAudio, movementAmplitude', () => {
+    it('支持 resolution, seed bounds, generic audio, and watermark defaults', () => {
         expect(p.resolution).toBeDefined();
-        expect(p.seed).toBe(true);
-        expect(p.viduAudio).toBe(true);
-        expect(p.movementAmplitude).toBeDefined();
+        expect(p.seed).toEqual({ min: 0, max: 2147483647 });
+        expect(p.audio).toEqual({ default: false });
+        expect(p.watermark).toEqual({ default: false });
+        expect(p.viduAudio).toBeUndefined();
+        expect(p.movementAmplitude).toBeUndefined();
     });
 
-    it('resolution 包含 540p/720p/1080p', () => {
-        expect(p.resolution!.options).toEqual(['540p', '720p', '1080p']);
-    });
-
-    it('movementAmplitude 选项为 auto/small/medium/large', () => {
-        expect(p.movementAmplitude!.options).toEqual(['auto', 'small', 'medium', 'large']);
-        expect(p.movementAmplitude!.default).toBe('auto');
+    it('resolution 使用官方大写枚举', () => {
+        expect(p.resolution!.options).toEqual(['540P', '720P', '1080P']);
+        expect(p.resolution!.default).toBe('720P');
     });
 
     it('不支持 Kling/Wan 独有参数', () => {
@@ -192,7 +187,6 @@ describe('Vidu Q3 模型参数', () => {
         expect(p.negativePrompt).toBeFalsy();
         expect(p.promptExtend).toBeFalsy();
         expect(p.shotType).toBeFalsy();
-        expect(p.audio).toBeFalsy();
         expect(p.mode).toBeFalsy();
         expect(p.sound).toBeFalsy();
         expect(p.cfgScale).toBeFalsy();
@@ -236,7 +230,7 @@ describe('GRID_COLS_CLASS', () => {
 
 describe('模型切换参数重置逻辑', () => {
     /** 模拟 VideoSidebar 中 updateParam("model", ...) 的重置逻辑 */
-    function simulateModelSwitch(targetModelId: string): Record<string, any> {
+    function simulateModelSwitch(targetModelId: string): Record<string, string | number | boolean> {
         const newModelConfig = I2V_MODELS.find(m => m.id === targetModelId);
         const np = newModelConfig?.params ?? {};
         return {
@@ -249,22 +243,24 @@ describe('模型切换参数重置逻辑', () => {
             mode: np.mode?.default ?? "std",
             sound: false,
             cfgScale: np.cfgScale?.default ?? 0.5,
-            viduAudio: true,
-            movementAmplitude: np.movementAmplitude?.default ?? "auto",
+            audio: typeof np.audio === "object" ? np.audio.default : !!np.audio,
+            viduAudio: !!np.viduAudio,
+            movementAmplitude: np.movementAmplitude?.default ?? "",
         };
     }
 
-    it('切换到 Kling → mode 默认 std', () => {
+    it('切换到 Kling → mode 默认 pro', () => {
         const result = simulateModelSwitch('kling-v3-i2v');
-        expect(result.mode).toBe('std');
+        expect(result.mode).toBe('pro');
         expect(result.cfgScale).toBe(0.5);
         expect(result.promptExtend).toBe(false);
     });
 
-    it('切换到 Vidu → movementAmplitude 默认 auto', () => {
+    it('切换到 Vidu → generic audio 默认 false 且不启用旧 Vidu 专属字段', () => {
         const result = simulateModelSwitch('viduq3-pro-i2v');
-        expect(result.movementAmplitude).toBe('auto');
-        expect(result.viduAudio).toBe(true);
+        expect(result.audio).toBe(false);
+        expect(result.movementAmplitude).toBe('');
+        expect(result.viduAudio).toBe(false);
     });
 
     it('切换到 Wan 2.7 → promptExtend 默认 true', () => {

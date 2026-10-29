@@ -40,7 +40,7 @@ models:
     release_stage: stable
     runtime:
       dashscope:
-        gateway: dashscope
+        gateway: dashscope_workspace
       vendor:
         gateway: kling
     docs:
@@ -56,6 +56,7 @@ models:
         runtime:
           dashscope:
             api_model_id: kling/kling-v3-video-generation
+            gateway: dashscope_workspace
         ui:
           selection_group: i2v
           visible_in: [project_settings, series_settings, video_sidebar, global_settings]
@@ -71,23 +72,18 @@ models:
           negativePrompt: true
           seed: false
           promptExtend: false
-          watermark: false
+          watermark:
+            default: false
+          audio:
+            default: false
           mode:
-            options: [std, pro]
-            default: std
-          aspectRatio:
-            options: ["16:9", "9:16", "1:1"]
-            default: "16:9"
-          sound: true
-          cfgScale:
-            min: 0
-            max: 1
-            step: 0.1
-            default: 0.5
+            options: [std, pro, 4k]
+            default: pro
         inputs:
           reference_images:
             max: 1
             reference_type: image
+            mime_types: [image/jpeg, image/png]
       r2v:
         legacy_id: kling-v3-r2v
         display_name: Kling V3 R2V
@@ -96,6 +92,7 @@ models:
         runtime:
           dashscope:
             api_model_id: kling/kling-v3-omni-video-generation
+            gateway: dashscope_workspace
         ui:
           selection_group: r2v
           visible_in: [project_settings, series_settings, video_sidebar, global_settings]
@@ -110,14 +107,18 @@ models:
           negativePrompt: true
           seed: false
           promptExtend: false
-          watermark: false
+          watermark:
+            default: false
+          audio:
+            default: false
           mode:
-            options: [std, pro]
-            default: std
+            options: [std, pro, 4k]
+            default: pro
           aspectRatio:
             options: ["16:9", "9:16", "1:1"]
             default: "16:9"
         inputs:
           reference_images:
-            max: 9
+            max: 7
             reference_type: image
+            mime_types: [image/jpeg, image/png]

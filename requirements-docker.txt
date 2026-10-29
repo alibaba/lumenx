@@ -5,10 +5,12 @@ python-multipart>=0.0.9
 
 # AI/ML Models
 dashscope>=1.20.0
+openai>=1.0.0  # Required by both DashScope and OpenAI-compatible LLM providers
 
 # Data Validation & Processing
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
+defusedxml>=0.7.1
 
 # Utilities
 python-dotenv>=1.0.0

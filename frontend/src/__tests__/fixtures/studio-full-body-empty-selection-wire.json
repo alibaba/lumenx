@@ -1,0 +1,1635 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "schema_version": 1,
+      "case": "series_empty_complete",
+      "events": [
+        {
+          "label": "before_project",
+          "method": "GET",
+          "path": "/projects/p",
+          "status_code": 200,
+          "body": {
+            "id": "p",
+            "revision": 0,
+            "title": "Full-body browser · series",
+            "original_text": "Synthetic",
+            "created_at": 1.0,
+            "updated_at": 1.0,
+            "series_id": "s",
+            "read_versions": {
+              "project": 0,
+              "series": {
+                "id": "s",
+                "revision": 0
+              },
+              "library": 0
+            },
+            "model_settings": {
+              "t2i_model": "wan2.7-image",
+              "i2i_model": "gpt-image-2",
+              "image_model": "wan2.7-image-pro",
+              "i2v_model": "happyhorse-1.1-i2v",
+              "r2v_model": "wan2.7-r2v",
+              "character_aspect_ratio": "9:16",
+              "scene_aspect_ratio": "16:9",
+              "prop_aspect_ratio": "1:1",
+              "storyboard_aspect_ratio": "16:9"
+            },
+            "art_direction": null,
+            "style_preset": "realistic",
+            "style_prompt": null,
+            "workflow_mode": "i2v_legacy",
+            "frames": [],
+            "scenes": [],
+            "props": [],
+            "video_tasks": [],
+            "characters": [
+              {
+                "id": "c",
+                "name": "Alice",
+                "description": "Synthetic full-body fixture, red coat and leather boots.",
+                "source": "series",
+                "status": "completed",
+                "base_character_id": null,
+                "voice_id": null,
+                "reference_sheet": {
+                  "selected_image_id": null,
+                  "image_variants": [],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": null,
+                  "video_prompt": null,
+                  "image_updated_at": 1792860030.897179,
+                  "video_updated_at": 0.0
+                },
+                "reference_sheet_request_id": null,
+                "image_url": "uploads/view-second.png",
+                "full_body": {
+                  "selected_image_id": null,
+                  "image_variants": [
+                    {
+                      "id": "body-old",
+                      "url": "uploads/body-old.png",
+                      "created_at": 1.0,
+                      "prompt_used": "Old body prompt without reverse prefix",
+                      "is_favorited": true,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-modern",
+                      "url": "uploads/body-modern.png",
+                      "created_at": 3.0,
+                      "prompt_used": "Keep modern body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Previous full-body author draft",
+                  "video_prompt": "Keep existing full-body motion",
+                  "image_updated_at": 1.0,
+                  "video_updated_at": 0.0
+                },
+                "full_body_asset": {
+                  "selected_id": null,
+                  "variants": [
+                    {
+                      "id": "body-old",
+                      "url": "uploads/body-old.png",
+                      "created_at": 1.0,
+                      "prompt_used": "Old body prompt without reverse prefix",
+                      "is_favorited": true,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-legacy",
+                      "url": "uploads/body-legacy.png",
+                      "created_at": 2.0,
+                      "prompt_used": "Keep legacy body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    }
+                  ]
+                },
+                "full_body_image_url": null,
+                "full_body_prompt": "Previous full-body author draft",
+                "full_body_updated_at": 1.0,
+                "full_body_request_id": null,
+                "full_body_motion_request_id": null,
+                "three_views": {
+                  "selected_image_id": "view-second",
+                  "image_variants": [
+                    {
+                      "id": "view-ordinary",
+                      "url": "uploads/view-ordinary.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "view-first",
+                      "url": "uploads/view-first.png",
+                      "created_at": 2.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    },
+                    {
+                      "id": "view-second",
+                      "url": "uploads/view-second.png",
+                      "created_at": 3.0,
+                      "prompt_used": null,
+                      "is_favorited": true,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Keep views",
+                  "video_prompt": null,
+                  "image_updated_at": 1792860030.897196,
+                  "video_updated_at": 0.0
+                },
+                "three_view_asset": {
+                  "selected_id": "view-second",
+                  "variants": [
+                    {
+                      "id": "view-ordinary",
+                      "url": "uploads/view-ordinary.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "view-first",
+                      "url": "uploads/view-first.png",
+                      "created_at": 2.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    },
+                    {
+                      "id": "view-second",
+                      "url": "uploads/view-second.png",
+                      "created_at": 3.0,
+                      "prompt_used": null,
+                      "is_favorited": true,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    }
+                  ]
+                },
+                "three_view_image_url": "uploads/view-second.png",
+                "three_view_prompt": "Keep views",
+                "three_view_updated_at": 2.0,
+                "three_view_request_id": null,
+                "head_shot": {
+                  "selected_image_id": "face-first",
+                  "image_variants": [
+                    {
+                      "id": "face-first",
+                      "url": "uploads/face-first.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "head_shot"
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Keep face",
+                  "video_prompt": null,
+                  "image_updated_at": 1792860030.8971992,
+                  "video_updated_at": 0.0
+                },
+                "headshot_asset": {
+                  "selected_id": "face-first",
+                  "variants": [
+                    {
+                      "id": "face-first",
+                      "url": "uploads/face-first.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "head_shot"
+                    }
+                  ]
+                },
+                "headshot_image_url": "uploads/face-first.png",
+                "headshot_prompt": "Keep face",
+                "headshot_updated_at": 1.0,
+                "headshot_request_id": null,
+                "avatar_url": "uploads/face-first.png",
+                "is_consistent": true
+              }
+            ]
+          },
+          "raw_response_sha256": "19544ebf40ca7029df6ee1c653c90454eaa23f236ff566ba5b4cf6ac0617fa24",
+          "projection": {
+            "rule": "Copy only present actual HTTP fields; never add defaults or rewrite values.",
+            "root_fields": [
+              "id",
+              "revision",
+              "title",
+              "original_text",
+              "created_at",
+              "updated_at",
+              "series_id",
+              "read_versions",
+              "model_settings",
+              "art_direction",
+              "style_preset",
+              "style_prompt",
+              "workflow_mode",
+              "status",
+              "frames",
+              "scenes",
+              "props",
+              "video_tasks"
+            ],
+            "asset_selector": "characters[id=c]",
+            "asset_fields": [
+              "id",
+              "name",
+              "description",
+              "source",
+              "status",
+              "base_character_id",
+              "voice_id",
+              "reference_sheet",
+              "reference_sheet_request_id",
+              "image_url",
+              "full_body",
+              "full_body_asset",
+              "full_body_image_url",
+              "full_body_prompt",
+              "full_body_updated_at",
+              "full_body_request_id",
+              "full_body_motion_request_id",
+              "three_views",
+              "three_view_asset",
+              "three_view_image_url",
+              "three_view_prompt",
+              "three_view_updated_at",
+              "three_view_request_id",
+              "head_shot",
+              "headshot_asset",
+              "headshot_image_url",
+              "headshot_prompt",
+              "headshot_updated_at",
+              "headshot_request_id",
+              "avatar_url",
+              "is_consistent",
+              "media_refs"
+            ]
+          },
+          "projected_response_sha256": "dc9e1c558f9318530b43f59836aa860a99bc03808744fe984f91ce0e360a40c0"
+        },
+        {
+          "label": "accepted_post",
+          "method": "POST",
+          "path": "/projects/p/asset_image_requests",
+          "status_code": 200,
+          "body": {
+            "schema_version": 1,
+            "contract_version": "studio-asset-image-request-v1",
+            "replayed": false,
+            "reason": null,
+            "request": {
+              "id": "54149f5d-e54d-407e-9a02-a8fd84302bd9",
+              "request_contract_version": "request-json-v1",
+              "entrypoint": "studio.asset.full_body.v1",
+              "client_request_id": "full-body-browser-empty-complete",
+              "request_fingerprint": "d715e99b6929731d321eeb63118477d272e3580f39f7114d19335f0d890453d4",
+              "request_root_kind": "project",
+              "request_root_id": "p",
+              "request_root_scope_id": "c37f0512-a2fb-4daa-af4b-ce42b2a43044",
+              "request_root_series_id": "s",
+              "owner_kind": "series",
+              "owner_id": "s",
+              "asset_type": "character",
+              "asset_id": "c",
+              "channel": "full_body",
+              "members": [
+                {
+                  "variant_id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                  "attempt_id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                  "status": "pending",
+                  "reason": null
+                },
+                {
+                  "variant_id": "da4ed8ba-4fa6-4482-8b71-6631da67df96",
+                  "attempt_id": "da4ed8ba-4fa6-4482-8b71-6631da67df96",
+                  "status": "pending",
+                  "reason": null
+                }
+              ]
+            }
+          },
+          "raw_response_sha256": "52a5145c0fc28ed8d8ddfaeace8c091e4a4abf59c21b84e699f9696ac105d954",
+          "request_body": {
+            "client_request_id": "full-body-browser-empty-complete",
+            "asset_type": "character",
+            "asset_id": "c",
+            "generation_type": "full_body",
+            "reference_variant_id": "view-first",
+            "reference_image_url": "uploads/view-first.png",
+            "apply_style": false,
+            "prompt": "Alice standing at ease, full body, keep the red coat and leather boots.",
+            "batch_size": 2
+          }
+        },
+        {
+          "label": "result_get",
+          "method": "GET",
+          "path": "/projects/p/asset_image_requests/full-body-browser-empty-complete",
+          "status_code": 200,
+          "body": {
+            "schema_version": 1,
+            "contract_version": "studio-asset-image-request-v1",
+            "replayed": true,
+            "reason": null,
+            "request": {
+              "id": "54149f5d-e54d-407e-9a02-a8fd84302bd9",
+              "request_contract_version": "request-json-v1",
+              "entrypoint": "studio.asset.full_body.v1",
+              "client_request_id": "full-body-browser-empty-complete",
+              "request_fingerprint": "d715e99b6929731d321eeb63118477d272e3580f39f7114d19335f0d890453d4",
+              "request_root_kind": "project",
+              "request_root_id": "p",
+              "request_root_scope_id": "c37f0512-a2fb-4daa-af4b-ce42b2a43044",
+              "request_root_series_id": "s",
+              "owner_kind": "series",
+              "owner_id": "s",
+              "asset_type": "character",
+              "asset_id": "c",
+              "channel": "full_body",
+              "members": [
+                {
+                  "variant_id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                  "attempt_id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                  "status": "completed",
+                  "reason": null,
+                  "output_ref": "assets/studio/d6a6dbd7-5f60-466e-913d-c54b4b648d25.png"
+                },
+                {
+                  "variant_id": "da4ed8ba-4fa6-4482-8b71-6631da67df96",
+                  "attempt_id": "da4ed8ba-4fa6-4482-8b71-6631da67df96",
+                  "status": "completed",
+                  "reason": null,
+                  "output_ref": "assets/studio/da4ed8ba-4fa6-4482-8b71-6631da67df96.png"
+                }
+              ]
+            }
+          },
+          "raw_response_sha256": "fe7cb1444449b108903dcbdcc6188bcf8259279aec0968f90538d4cec1583807"
+        },
+        {
+          "label": "after_project",
+          "method": "GET",
+          "path": "/projects/p",
+          "status_code": 200,
+          "body": {
+            "id": "p",
+            "revision": 1,
+            "title": "Full-body browser · series",
+            "original_text": "Synthetic",
+            "created_at": 1.0,
+            "updated_at": 1.0,
+            "series_id": "s",
+            "read_versions": {
+              "project": 1,
+              "series": {
+                "id": "s",
+                "revision": 7
+              },
+              "library": 0
+            },
+            "model_settings": {
+              "t2i_model": "wan2.7-image",
+              "i2i_model": "gpt-image-2",
+              "image_model": "wan2.7-image-pro",
+              "i2v_model": "happyhorse-1.1-i2v",
+              "r2v_model": "wan2.7-r2v",
+              "character_aspect_ratio": "9:16",
+              "scene_aspect_ratio": "16:9",
+              "prop_aspect_ratio": "1:1",
+              "storyboard_aspect_ratio": "16:9"
+            },
+            "art_direction": null,
+            "style_preset": "realistic",
+            "style_prompt": null,
+            "workflow_mode": "i2v_legacy",
+            "frames": [],
+            "scenes": [],
+            "props": [],
+            "video_tasks": [],
+            "characters": [
+              {
+                "id": "c",
+                "name": "Alice",
+                "description": "Synthetic full-body fixture, red coat and leather boots.",
+                "source": "series",
+                "status": "completed",
+                "base_character_id": null,
+                "voice_id": null,
+                "reference_sheet": {
+                  "selected_image_id": null,
+                  "image_variants": [],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": null,
+                  "video_prompt": null,
+                  "image_updated_at": 1792860030.897179,
+                  "video_updated_at": 0.0
+                },
+                "reference_sheet_request_id": null,
+                "image_url": "assets/studio/d6a6dbd7-5f60-466e-913d-c54b4b648d25.png",
+                "full_body": {
+                  "selected_image_id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                  "image_variants": [
+                    {
+                      "id": "body-old",
+                      "url": "uploads/body-old.png",
+                      "created_at": 1.0,
+                      "prompt_used": "Old body prompt without reverse prefix",
+                      "is_favorited": true,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-modern",
+                      "url": "uploads/body-modern.png",
+                      "created_at": 3.0,
+                      "prompt_used": "Keep modern body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                      "url": "assets/studio/d6a6dbd7-5f60-466e-913d-c54b4b648d25.png",
+                      "created_at": 1792860031.275465,
+                      "prompt_used": "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. Alice standing at ease, full body, keep the red coat and leather boots.",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-legacy",
+                      "url": "uploads/body-legacy.png",
+                      "created_at": 2.0,
+                      "prompt_used": "Keep legacy body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "da4ed8ba-4fa6-4482-8b71-6631da67df96",
+                      "url": "assets/studio/da4ed8ba-4fa6-4482-8b71-6631da67df96.png",
+                      "created_at": 1792860031.275465,
+                      "prompt_used": "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. Alice standing at ease, full body, keep the red coat and leather boots.",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Alice standing at ease, full body, keep the red coat and leather boots.",
+                  "video_prompt": "Keep existing full-body motion",
+                  "image_updated_at": 1792860032.663873,
+                  "video_updated_at": 0.0
+                },
+                "full_body_asset": {
+                  "selected_id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                  "variants": [
+                    {
+                      "id": "da4ed8ba-4fa6-4482-8b71-6631da67df96",
+                      "url": "assets/studio/da4ed8ba-4fa6-4482-8b71-6631da67df96.png",
+                      "created_at": 1792860031.275465,
+                      "prompt_used": "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. Alice standing at ease, full body, keep the red coat and leather boots.",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-old",
+                      "url": "uploads/body-old.png",
+                      "created_at": 1.0,
+                      "prompt_used": "Old body prompt without reverse prefix",
+                      "is_favorited": true,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-modern",
+                      "url": "uploads/body-modern.png",
+                      "created_at": 3.0,
+                      "prompt_used": "Keep modern body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                      "url": "assets/studio/d6a6dbd7-5f60-466e-913d-c54b4b648d25.png",
+                      "created_at": 1792860031.275465,
+                      "prompt_used": "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. Alice standing at ease, full body, keep the red coat and leather boots.",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-legacy",
+                      "url": "uploads/body-legacy.png",
+                      "created_at": 2.0,
+                      "prompt_used": "Keep legacy body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    }
+                  ]
+                },
+                "full_body_image_url": "assets/studio/d6a6dbd7-5f60-466e-913d-c54b4b648d25.png",
+                "full_body_prompt": "Alice standing at ease, full body, keep the red coat and leather boots.",
+                "full_body_updated_at": 1792860031.275465,
+                "full_body_request_id": "54149f5d-e54d-407e-9a02-a8fd84302bd9",
+                "full_body_motion_request_id": null,
+                "three_views": {
+                  "selected_image_id": "view-second",
+                  "image_variants": [
+                    {
+                      "id": "view-ordinary",
+                      "url": "uploads/view-ordinary.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "view-first",
+                      "url": "uploads/view-first.png",
+                      "created_at": 2.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    },
+                    {
+                      "id": "view-second",
+                      "url": "uploads/view-second.png",
+                      "created_at": 3.0,
+                      "prompt_used": null,
+                      "is_favorited": true,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Keep views",
+                  "video_prompt": null,
+                  "image_updated_at": 1792860030.897196,
+                  "video_updated_at": 0.0
+                },
+                "three_view_asset": {
+                  "selected_id": "view-second",
+                  "variants": [
+                    {
+                      "id": "view-ordinary",
+                      "url": "uploads/view-ordinary.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "view-first",
+                      "url": "uploads/view-first.png",
+                      "created_at": 2.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    },
+                    {
+                      "id": "view-second",
+                      "url": "uploads/view-second.png",
+                      "created_at": 3.0,
+                      "prompt_used": null,
+                      "is_favorited": true,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    }
+                  ]
+                },
+                "three_view_image_url": "uploads/view-second.png",
+                "three_view_prompt": "Keep views",
+                "three_view_updated_at": 2.0,
+                "three_view_request_id": null,
+                "head_shot": {
+                  "selected_image_id": "face-first",
+                  "image_variants": [
+                    {
+                      "id": "face-first",
+                      "url": "uploads/face-first.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "head_shot"
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Keep face",
+                  "video_prompt": null,
+                  "image_updated_at": 1792860030.8971992,
+                  "video_updated_at": 0.0
+                },
+                "headshot_asset": {
+                  "selected_id": "face-first",
+                  "variants": [
+                    {
+                      "id": "face-first",
+                      "url": "uploads/face-first.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "head_shot"
+                    }
+                  ]
+                },
+                "headshot_image_url": "uploads/face-first.png",
+                "headshot_prompt": "Keep face",
+                "headshot_updated_at": 1.0,
+                "headshot_request_id": null,
+                "avatar_url": "uploads/face-first.png",
+                "is_consistent": false
+              }
+            ]
+          },
+          "raw_response_sha256": "112a897e15a6b7050c26c462bb7a4aae0b38ebfb94d501d361c1845033264929",
+          "projection": {
+            "rule": "Copy only present actual HTTP fields; never add defaults or rewrite values.",
+            "root_fields": [
+              "id",
+              "revision",
+              "title",
+              "original_text",
+              "created_at",
+              "updated_at",
+              "series_id",
+              "read_versions",
+              "model_settings",
+              "art_direction",
+              "style_preset",
+              "style_prompt",
+              "workflow_mode",
+              "status",
+              "frames",
+              "scenes",
+              "props",
+              "video_tasks"
+            ],
+            "asset_selector": "characters[id=c]",
+            "asset_fields": [
+              "id",
+              "name",
+              "description",
+              "source",
+              "status",
+              "base_character_id",
+              "voice_id",
+              "reference_sheet",
+              "reference_sheet_request_id",
+              "image_url",
+              "full_body",
+              "full_body_asset",
+              "full_body_image_url",
+              "full_body_prompt",
+              "full_body_updated_at",
+              "full_body_request_id",
+              "full_body_motion_request_id",
+              "three_views",
+              "three_view_asset",
+              "three_view_image_url",
+              "three_view_prompt",
+              "three_view_updated_at",
+              "three_view_request_id",
+              "head_shot",
+              "headshot_asset",
+              "headshot_image_url",
+              "headshot_prompt",
+              "headshot_updated_at",
+              "headshot_request_id",
+              "avatar_url",
+              "is_consistent",
+              "media_refs"
+            ]
+          },
+          "projected_response_sha256": "fe7f327907811cd14b37a4e3a446acd9e9d190d548f2ba5f7e0116db2e43b00e"
+        },
+        {
+          "label": "original_replay",
+          "method": "POST",
+          "path": "/projects/p/asset_image_requests",
+          "status_code": 200,
+          "body": {
+            "schema_version": 1,
+            "contract_version": "studio-asset-image-request-v1",
+            "replayed": true,
+            "reason": null,
+            "request": {
+              "id": "54149f5d-e54d-407e-9a02-a8fd84302bd9",
+              "request_contract_version": "request-json-v1",
+              "entrypoint": "studio.asset.full_body.v1",
+              "client_request_id": "full-body-browser-empty-complete",
+              "request_fingerprint": "d715e99b6929731d321eeb63118477d272e3580f39f7114d19335f0d890453d4",
+              "request_root_kind": "project",
+              "request_root_id": "p",
+              "request_root_scope_id": "c37f0512-a2fb-4daa-af4b-ce42b2a43044",
+              "request_root_series_id": "s",
+              "owner_kind": "series",
+              "owner_id": "s",
+              "asset_type": "character",
+              "asset_id": "c",
+              "channel": "full_body",
+              "members": [
+                {
+                  "variant_id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                  "attempt_id": "d6a6dbd7-5f60-466e-913d-c54b4b648d25",
+                  "status": "completed",
+                  "reason": null,
+                  "output_ref": "assets/studio/d6a6dbd7-5f60-466e-913d-c54b4b648d25.png"
+                },
+                {
+                  "variant_id": "da4ed8ba-4fa6-4482-8b71-6631da67df96",
+                  "attempt_id": "da4ed8ba-4fa6-4482-8b71-6631da67df96",
+                  "status": "completed",
+                  "reason": null,
+                  "output_ref": "assets/studio/da4ed8ba-4fa6-4482-8b71-6631da67df96.png"
+                }
+              ]
+            }
+          },
+          "raw_response_sha256": "fe7cb1444449b108903dcbdcc6188bcf8259279aec0968f90538d4cec1583807",
+          "request_body": {
+            "client_request_id": "full-body-browser-empty-complete",
+            "asset_type": "character",
+            "asset_id": "c",
+            "generation_type": "full_body",
+            "reference_variant_id": "view-first",
+            "reference_image_url": "uploads/view-first.png",
+            "apply_style": false,
+            "prompt": "Alice standing at ease, full body, keep the red coat and leather boots.",
+            "batch_size": 2
+          }
+        }
+      ],
+      "source_sha256": {
+        "docs/agents/tools/lumenx_studio_full_body_browser_smoke.py": "4438c7565550f81768b43b0ca49bf5f4e7aa7b2dced23a064aca76a3b5f51910",
+        "tests/test_lumenx_studio_full_body_browser_smoke.py": "6582f004db8e739913dce8f6cb286b71f31f82f20dfd422b110f5b12bc1b9e7c",
+        "docs/agents/tools/lumenx_studio_headshot_browser_smoke.py": "37894eefe1b04b2b3a1bb513b18f6e3248c5473484d49839a1738d128474e169",
+        "docs/agents/tools/lumenx_studio_image_browser_smoke.py": "303b80e0b7780819659b38ab400e15134ce47185e0ba691b85e98baa04251712",
+        "docs/agents/tools/lumenx_studio_media_browser_smoke.py": "1462e0a2bf446383fe8052d23837983bf9a28d3b0bd664eadba9d36aa1bd073b",
+        "docs/agents/tools/lumenx_generation_browser_smoke.py": "fc9276f2928b38a12eadab37cd9b26a962c53fbb850071de1bd2e6b274d6fe0a",
+        "tests/frozen_image_fixtures.py": "ef798c2d5359606b3cc606d666b9692b7b5767597aed45c89b1fd33331eb0c22"
+      }
+    },
+    {
+      "schema_version": 1,
+      "case": "series_empty_partial",
+      "events": [
+        {
+          "label": "before_project",
+          "method": "GET",
+          "path": "/projects/p",
+          "status_code": 200,
+          "body": {
+            "id": "p",
+            "revision": 0,
+            "title": "Full-body browser · series",
+            "original_text": "Synthetic",
+            "created_at": 1.0,
+            "updated_at": 1.0,
+            "series_id": "s",
+            "read_versions": {
+              "project": 0,
+              "series": {
+                "id": "s",
+                "revision": 0
+              },
+              "library": 0
+            },
+            "model_settings": {
+              "t2i_model": "wan2.7-image",
+              "i2i_model": "gpt-image-2",
+              "image_model": "wan2.7-image-pro",
+              "i2v_model": "happyhorse-1.1-i2v",
+              "r2v_model": "wan2.7-r2v",
+              "character_aspect_ratio": "9:16",
+              "scene_aspect_ratio": "16:9",
+              "prop_aspect_ratio": "1:1",
+              "storyboard_aspect_ratio": "16:9"
+            },
+            "art_direction": null,
+            "style_preset": "realistic",
+            "style_prompt": null,
+            "workflow_mode": "i2v_legacy",
+            "frames": [],
+            "scenes": [],
+            "props": [],
+            "video_tasks": [],
+            "characters": [
+              {
+                "id": "c",
+                "name": "Alice",
+                "description": "Synthetic full-body fixture, red coat and leather boots.",
+                "source": "series",
+                "status": "completed",
+                "base_character_id": null,
+                "voice_id": null,
+                "reference_sheet": {
+                  "selected_image_id": null,
+                  "image_variants": [],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": null,
+                  "video_prompt": null,
+                  "image_updated_at": 1792860033.103265,
+                  "video_updated_at": 0.0
+                },
+                "reference_sheet_request_id": null,
+                "image_url": "uploads/view-second.png",
+                "full_body": {
+                  "selected_image_id": null,
+                  "image_variants": [
+                    {
+                      "id": "body-old",
+                      "url": "uploads/body-old.png",
+                      "created_at": 1.0,
+                      "prompt_used": "Old body prompt without reverse prefix",
+                      "is_favorited": true,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-modern",
+                      "url": "uploads/body-modern.png",
+                      "created_at": 3.0,
+                      "prompt_used": "Keep modern body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Previous full-body author draft",
+                  "video_prompt": "Keep existing full-body motion",
+                  "image_updated_at": 1.0,
+                  "video_updated_at": 0.0
+                },
+                "full_body_asset": {
+                  "selected_id": null,
+                  "variants": [
+                    {
+                      "id": "body-old",
+                      "url": "uploads/body-old.png",
+                      "created_at": 1.0,
+                      "prompt_used": "Old body prompt without reverse prefix",
+                      "is_favorited": true,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-legacy",
+                      "url": "uploads/body-legacy.png",
+                      "created_at": 2.0,
+                      "prompt_used": "Keep legacy body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    }
+                  ]
+                },
+                "full_body_image_url": null,
+                "full_body_prompt": "Previous full-body author draft",
+                "full_body_updated_at": 1.0,
+                "full_body_request_id": null,
+                "full_body_motion_request_id": null,
+                "three_views": {
+                  "selected_image_id": "view-second",
+                  "image_variants": [
+                    {
+                      "id": "view-ordinary",
+                      "url": "uploads/view-ordinary.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "view-first",
+                      "url": "uploads/view-first.png",
+                      "created_at": 2.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    },
+                    {
+                      "id": "view-second",
+                      "url": "uploads/view-second.png",
+                      "created_at": 3.0,
+                      "prompt_used": null,
+                      "is_favorited": true,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Keep views",
+                  "video_prompt": null,
+                  "image_updated_at": 1792860033.103283,
+                  "video_updated_at": 0.0
+                },
+                "three_view_asset": {
+                  "selected_id": "view-second",
+                  "variants": [
+                    {
+                      "id": "view-ordinary",
+                      "url": "uploads/view-ordinary.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "view-first",
+                      "url": "uploads/view-first.png",
+                      "created_at": 2.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    },
+                    {
+                      "id": "view-second",
+                      "url": "uploads/view-second.png",
+                      "created_at": 3.0,
+                      "prompt_used": null,
+                      "is_favorited": true,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    }
+                  ]
+                },
+                "three_view_image_url": "uploads/view-second.png",
+                "three_view_prompt": "Keep views",
+                "three_view_updated_at": 2.0,
+                "three_view_request_id": null,
+                "head_shot": {
+                  "selected_image_id": "face-first",
+                  "image_variants": [
+                    {
+                      "id": "face-first",
+                      "url": "uploads/face-first.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "head_shot"
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Keep face",
+                  "video_prompt": null,
+                  "image_updated_at": 1792860033.103285,
+                  "video_updated_at": 0.0
+                },
+                "headshot_asset": {
+                  "selected_id": "face-first",
+                  "variants": [
+                    {
+                      "id": "face-first",
+                      "url": "uploads/face-first.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "head_shot"
+                    }
+                  ]
+                },
+                "headshot_image_url": "uploads/face-first.png",
+                "headshot_prompt": "Keep face",
+                "headshot_updated_at": 1.0,
+                "headshot_request_id": null,
+                "avatar_url": "uploads/face-first.png",
+                "is_consistent": true
+              }
+            ]
+          },
+          "raw_response_sha256": "e432ced0ca58145631331efa031381b9c5d056bfba94380ea801b236657d37b9",
+          "projection": {
+            "rule": "Copy only present actual HTTP fields; never add defaults or rewrite values.",
+            "root_fields": [
+              "id",
+              "revision",
+              "title",
+              "original_text",
+              "created_at",
+              "updated_at",
+              "series_id",
+              "read_versions",
+              "model_settings",
+              "art_direction",
+              "style_preset",
+              "style_prompt",
+              "workflow_mode",
+              "status",
+              "frames",
+              "scenes",
+              "props",
+              "video_tasks"
+            ],
+            "asset_selector": "characters[id=c]",
+            "asset_fields": [
+              "id",
+              "name",
+              "description",
+              "source",
+              "status",
+              "base_character_id",
+              "voice_id",
+              "reference_sheet",
+              "reference_sheet_request_id",
+              "image_url",
+              "full_body",
+              "full_body_asset",
+              "full_body_image_url",
+              "full_body_prompt",
+              "full_body_updated_at",
+              "full_body_request_id",
+              "full_body_motion_request_id",
+              "three_views",
+              "three_view_asset",
+              "three_view_image_url",
+              "three_view_prompt",
+              "three_view_updated_at",
+              "three_view_request_id",
+              "head_shot",
+              "headshot_asset",
+              "headshot_image_url",
+              "headshot_prompt",
+              "headshot_updated_at",
+              "headshot_request_id",
+              "avatar_url",
+              "is_consistent",
+              "media_refs"
+            ]
+          },
+          "projected_response_sha256": "98839acf87421b2b41466f60fe1d7878292518b11de1aab57a331b6a997576b6"
+        },
+        {
+          "label": "accepted_post",
+          "method": "POST",
+          "path": "/projects/p/asset_image_requests",
+          "status_code": 200,
+          "body": {
+            "schema_version": 1,
+            "contract_version": "studio-asset-image-request-v1",
+            "replayed": false,
+            "reason": null,
+            "request": {
+              "id": "ab7f0df9-c31b-4e71-a46a-ab4f084934cf",
+              "request_contract_version": "request-json-v1",
+              "entrypoint": "studio.asset.full_body.v1",
+              "client_request_id": "full-body-browser-empty-partial",
+              "request_fingerprint": "a63c74006bb76e124cce47a5fefc3559804d7af66d1afd66f6eb36070051f4b6",
+              "request_root_kind": "project",
+              "request_root_id": "p",
+              "request_root_scope_id": "a87c5343-c622-4cda-b81b-a81b0bae97cd",
+              "request_root_series_id": "s",
+              "owner_kind": "series",
+              "owner_id": "s",
+              "asset_type": "character",
+              "asset_id": "c",
+              "channel": "full_body",
+              "members": [
+                {
+                  "variant_id": "61aea859-7e9d-427f-a78d-f4a4eab258a8",
+                  "attempt_id": "61aea859-7e9d-427f-a78d-f4a4eab258a8",
+                  "status": "pending",
+                  "reason": null
+                },
+                {
+                  "variant_id": "bec2ba9d-65f0-493b-bbb8-8735abc7a54d",
+                  "attempt_id": "bec2ba9d-65f0-493b-bbb8-8735abc7a54d",
+                  "status": "pending",
+                  "reason": null
+                },
+                {
+                  "variant_id": "8f986e0e-a9dd-4c9d-b3a1-4fec9caa736c",
+                  "attempt_id": "8f986e0e-a9dd-4c9d-b3a1-4fec9caa736c",
+                  "status": "pending",
+                  "reason": null
+                }
+              ]
+            }
+          },
+          "raw_response_sha256": "8425173df5056a0e973387d71e2829920008ce701c3c4d0cacc18a5a147be141",
+          "request_body": {
+            "client_request_id": "full-body-browser-empty-partial",
+            "asset_type": "character",
+            "asset_id": "c",
+            "generation_type": "full_body",
+            "reference_variant_id": "view-first",
+            "reference_image_url": "uploads/view-first.png",
+            "apply_style": false,
+            "prompt": "Alice standing at ease, full body, keep the red coat and leather boots.",
+            "batch_size": 3
+          }
+        },
+        {
+          "label": "result_get",
+          "method": "GET",
+          "path": "/projects/p/asset_image_requests/full-body-browser-empty-partial",
+          "status_code": 200,
+          "body": {
+            "schema_version": 1,
+            "contract_version": "studio-asset-image-request-v1",
+            "replayed": true,
+            "reason": null,
+            "request": {
+              "id": "ab7f0df9-c31b-4e71-a46a-ab4f084934cf",
+              "request_contract_version": "request-json-v1",
+              "entrypoint": "studio.asset.full_body.v1",
+              "client_request_id": "full-body-browser-empty-partial",
+              "request_fingerprint": "a63c74006bb76e124cce47a5fefc3559804d7af66d1afd66f6eb36070051f4b6",
+              "request_root_kind": "project",
+              "request_root_id": "p",
+              "request_root_scope_id": "a87c5343-c622-4cda-b81b-a81b0bae97cd",
+              "request_root_series_id": "s",
+              "owner_kind": "series",
+              "owner_id": "s",
+              "asset_type": "character",
+              "asset_id": "c",
+              "channel": "full_body",
+              "members": [
+                {
+                  "variant_id": "61aea859-7e9d-427f-a78d-f4a4eab258a8",
+                  "attempt_id": "61aea859-7e9d-427f-a78d-f4a4eab258a8",
+                  "status": "completed",
+                  "reason": null,
+                  "output_ref": "assets/studio/61aea859-7e9d-427f-a78d-f4a4eab258a8.png"
+                },
+                {
+                  "variant_id": "bec2ba9d-65f0-493b-bbb8-8735abc7a54d",
+                  "attempt_id": "bec2ba9d-65f0-493b-bbb8-8735abc7a54d",
+                  "status": "needs_confirmation",
+                  "reason": "provider_sync_execution_unknown"
+                },
+                {
+                  "variant_id": "8f986e0e-a9dd-4c9d-b3a1-4fec9caa736c",
+                  "attempt_id": "8f986e0e-a9dd-4c9d-b3a1-4fec9caa736c",
+                  "status": "cancelled",
+                  "reason": null
+                }
+              ]
+            }
+          },
+          "raw_response_sha256": "4db3a87e578262df1cad59026352116af07b81856f1831a5e9b489be9ffcdce1"
+        },
+        {
+          "label": "after_project",
+          "method": "GET",
+          "path": "/projects/p",
+          "status_code": 200,
+          "body": {
+            "id": "p",
+            "revision": 1,
+            "title": "Full-body browser · series",
+            "original_text": "Synthetic",
+            "created_at": 1.0,
+            "updated_at": 1.0,
+            "series_id": "s",
+            "read_versions": {
+              "project": 1,
+              "series": {
+                "id": "s",
+                "revision": 7
+              },
+              "library": 0
+            },
+            "model_settings": {
+              "t2i_model": "wan2.7-image",
+              "i2i_model": "gpt-image-2",
+              "image_model": "wan2.7-image-pro",
+              "i2v_model": "happyhorse-1.1-i2v",
+              "r2v_model": "wan2.7-r2v",
+              "character_aspect_ratio": "9:16",
+              "scene_aspect_ratio": "16:9",
+              "prop_aspect_ratio": "1:1",
+              "storyboard_aspect_ratio": "16:9"
+            },
+            "art_direction": null,
+            "style_preset": "realistic",
+            "style_prompt": null,
+            "workflow_mode": "i2v_legacy",
+            "frames": [],
+            "scenes": [],
+            "props": [],
+            "video_tasks": [],
+            "characters": [
+              {
+                "id": "c",
+                "name": "Alice",
+                "description": "Synthetic full-body fixture, red coat and leather boots.",
+                "source": "series",
+                "status": "needs_confirmation",
+                "base_character_id": null,
+                "voice_id": null,
+                "reference_sheet": {
+                  "selected_image_id": null,
+                  "image_variants": [],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": null,
+                  "video_prompt": null,
+                  "image_updated_at": 1792860033.103265,
+                  "video_updated_at": 0.0
+                },
+                "reference_sheet_request_id": null,
+                "image_url": "uploads/view-second.png",
+                "full_body": {
+                  "selected_image_id": null,
+                  "image_variants": [
+                    {
+                      "id": "body-old",
+                      "url": "uploads/body-old.png",
+                      "created_at": 1.0,
+                      "prompt_used": "Old body prompt without reverse prefix",
+                      "is_favorited": true,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-modern",
+                      "url": "uploads/body-modern.png",
+                      "created_at": 3.0,
+                      "prompt_used": "Keep modern body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "61aea859-7e9d-427f-a78d-f4a4eab258a8",
+                      "url": "assets/studio/61aea859-7e9d-427f-a78d-f4a4eab258a8.png",
+                      "created_at": 1792860033.460932,
+                      "prompt_used": "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. Alice standing at ease, full body, keep the red coat and leather boots.",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-legacy",
+                      "url": "uploads/body-legacy.png",
+                      "created_at": 2.0,
+                      "prompt_used": "Keep legacy body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Alice standing at ease, full body, keep the red coat and leather boots.",
+                  "video_prompt": "Keep existing full-body motion",
+                  "image_updated_at": 1.0,
+                  "video_updated_at": 0.0
+                },
+                "full_body_asset": {
+                  "selected_id": null,
+                  "variants": [
+                    {
+                      "id": "61aea859-7e9d-427f-a78d-f4a4eab258a8",
+                      "url": "assets/studio/61aea859-7e9d-427f-a78d-f4a4eab258a8.png",
+                      "created_at": 1792860033.460932,
+                      "prompt_used": "STRICTLY MAINTAIN the SAME character appearance, face, hairstyle, skin tone, and clothing as the reference image. Alice standing at ease, full body, keep the red coat and leather boots.",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-old",
+                      "url": "uploads/body-old.png",
+                      "created_at": 1.0,
+                      "prompt_used": "Old body prompt without reverse prefix",
+                      "is_favorited": true,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-modern",
+                      "url": "uploads/body-modern.png",
+                      "created_at": 3.0,
+                      "prompt_used": "Keep modern body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "body-legacy",
+                      "url": "uploads/body-legacy.png",
+                      "created_at": 2.0,
+                      "prompt_used": "Keep legacy body",
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    }
+                  ]
+                },
+                "full_body_image_url": null,
+                "full_body_prompt": "Alice standing at ease, full body, keep the red coat and leather boots.",
+                "full_body_updated_at": 1792860033.460932,
+                "full_body_request_id": "ab7f0df9-c31b-4e71-a46a-ab4f084934cf",
+                "full_body_motion_request_id": null,
+                "three_views": {
+                  "selected_image_id": "view-second",
+                  "image_variants": [
+                    {
+                      "id": "view-ordinary",
+                      "url": "uploads/view-ordinary.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "view-first",
+                      "url": "uploads/view-first.png",
+                      "created_at": 2.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    },
+                    {
+                      "id": "view-second",
+                      "url": "uploads/view-second.png",
+                      "created_at": 3.0,
+                      "prompt_used": null,
+                      "is_favorited": true,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Keep views",
+                  "video_prompt": null,
+                  "image_updated_at": 1792860033.103283,
+                  "video_updated_at": 0.0
+                },
+                "three_view_asset": {
+                  "selected_id": "view-second",
+                  "variants": [
+                    {
+                      "id": "view-ordinary",
+                      "url": "uploads/view-ordinary.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": false,
+                      "upload_type": null
+                    },
+                    {
+                      "id": "view-first",
+                      "url": "uploads/view-first.png",
+                      "created_at": 2.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    },
+                    {
+                      "id": "view-second",
+                      "url": "uploads/view-second.png",
+                      "created_at": 3.0,
+                      "prompt_used": null,
+                      "is_favorited": true,
+                      "is_uploaded_source": true,
+                      "upload_type": "three_views"
+                    }
+                  ]
+                },
+                "three_view_image_url": "uploads/view-second.png",
+                "three_view_prompt": "Keep views",
+                "three_view_updated_at": 2.0,
+                "three_view_request_id": null,
+                "head_shot": {
+                  "selected_image_id": "face-first",
+                  "image_variants": [
+                    {
+                      "id": "face-first",
+                      "url": "uploads/face-first.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "head_shot"
+                    }
+                  ],
+                  "selected_video_id": null,
+                  "video_variants": [],
+                  "image_prompt": "Keep face",
+                  "video_prompt": null,
+                  "image_updated_at": 1792860033.103285,
+                  "video_updated_at": 0.0
+                },
+                "headshot_asset": {
+                  "selected_id": "face-first",
+                  "variants": [
+                    {
+                      "id": "face-first",
+                      "url": "uploads/face-first.png",
+                      "created_at": 1.0,
+                      "prompt_used": null,
+                      "is_favorited": false,
+                      "is_uploaded_source": true,
+                      "upload_type": "head_shot"
+                    }
+                  ]
+                },
+                "headshot_image_url": "uploads/face-first.png",
+                "headshot_prompt": "Keep face",
+                "headshot_updated_at": 1.0,
+                "headshot_request_id": null,
+                "avatar_url": "uploads/face-first.png",
+                "is_consistent": false
+              }
+            ]
+          },
+          "raw_response_sha256": "faf090f0b45c4a56356f32219c8692bf4e1a6b733208ca1460596dae141f23de",
+          "projection": {
+            "rule": "Copy only present actual HTTP fields; never add defaults or rewrite values.",
+            "root_fields": [
+              "id",
+              "revision",
+              "title",
+              "original_text",
+              "created_at",
+              "updated_at",
+              "series_id",
+              "read_versions",
+              "model_settings",
+              "art_direction",
+              "style_preset",
+              "style_prompt",
+              "workflow_mode",
+              "status",
+              "frames",
+              "scenes",
+              "props",
+              "video_tasks"
+            ],
+            "asset_selector": "characters[id=c]",
+            "asset_fields": [
+              "id",
+              "name",
+              "description",
+              "source",
+              "status",
+              "base_character_id",
+              "voice_id",
+              "reference_sheet",
+              "reference_sheet_request_id",
+              "image_url",
+              "full_body",
+              "full_body_asset",
+              "full_body_image_url",
+              "full_body_prompt",
+              "full_body_updated_at",
+              "full_body_request_id",
+              "full_body_motion_request_id",
+              "three_views",
+              "three_view_asset",
+              "three_view_image_url",
+              "three_view_prompt",
+              "three_view_updated_at",
+              "three_view_request_id",
+              "head_shot",
+              "headshot_asset",
+              "headshot_image_url",
+              "headshot_prompt",
+              "headshot_updated_at",
+              "headshot_request_id",
+              "avatar_url",
+              "is_consistent",
+              "media_refs"
+            ]
+          },
+          "projected_response_sha256": "b844023cf843e022443232619ff433dbee8f27a7336028022d8ccd5442555945"
+        },
+        {
+          "label": "original_replay",
+          "method": "POST",
+          "path": "/projects/p/asset_image_requests",
+          "status_code": 200,
+          "body": {
+            "schema_version": 1,
+            "contract_version": "studio-asset-image-request-v1",
+            "replayed": true,
+            "reason": null,
+            "request": {
+              "id": "ab7f0df9-c31b-4e71-a46a-ab4f084934cf",
+              "request_contract_version": "request-json-v1",
+              "entrypoint": "studio.asset.full_body.v1",
+              "client_request_id": "full-body-browser-empty-partial",
+              "request_fingerprint": "a63c74006bb76e124cce47a5fefc3559804d7af66d1afd66f6eb36070051f4b6",
+              "request_root_kind": "project",
+              "request_root_id": "p",
+              "request_root_scope_id": "a87c5343-c622-4cda-b81b-a81b0bae97cd",
+              "request_root_series_id": "s",
+              "owner_kind": "series",
+              "owner_id": "s",
+              "asset_type": "character",
+              "asset_id": "c",
+              "channel": "full_body",
+              "members": [
+                {
+                  "variant_id": "61aea859-7e9d-427f-a78d-f4a4eab258a8",
+                  "attempt_id": "61aea859-7e9d-427f-a78d-f4a4eab258a8",
+                  "status": "completed",
+                  "reason": null,
+                  "output_ref": "assets/studio/61aea859-7e9d-427f-a78d-f4a4eab258a8.png"
+                },
+                {
+                  "variant_id": "bec2ba9d-65f0-493b-bbb8-8735abc7a54d",
+                  "attempt_id": "bec2ba9d-65f0-493b-bbb8-8735abc7a54d",
+                  "status": "needs_confirmation",
+                  "reason": "provider_sync_execution_unknown"
+                },
+                {
+                  "variant_id": "8f986e0e-a9dd-4c9d-b3a1-4fec9caa736c",
+                  "attempt_id": "8f986e0e-a9dd-4c9d-b3a1-4fec9caa736c",
+                  "status": "cancelled",
+                  "reason": null
+                }
+              ]
+            }
+          },
+          "raw_response_sha256": "4db3a87e578262df1cad59026352116af07b81856f1831a5e9b489be9ffcdce1",
+          "request_body": {
+            "client_request_id": "full-body-browser-empty-partial",
+            "asset_type": "character",
+            "asset_id": "c",
+            "generation_type": "full_body",
+            "reference_variant_id": "view-first",
+            "reference_image_url": "uploads/view-first.png",
+            "apply_style": false,
+            "prompt": "Alice standing at ease, full body, keep the red coat and leather boots.",
+            "batch_size": 3
+          }
+        }
+      ],
+      "source_sha256": {
+        "docs/agents/tools/lumenx_studio_full_body_browser_smoke.py": "4438c7565550f81768b43b0ca49bf5f4e7aa7b2dced23a064aca76a3b5f51910",
+        "tests/test_lumenx_studio_full_body_browser_smoke.py": "6582f004db8e739913dce8f6cb286b71f31f82f20dfd422b110f5b12bc1b9e7c",
+        "docs/agents/tools/lumenx_studio_headshot_browser_smoke.py": "37894eefe1b04b2b3a1bb513b18f6e3248c5473484d49839a1738d128474e169",
+        "docs/agents/tools/lumenx_studio_image_browser_smoke.py": "303b80e0b7780819659b38ab400e15134ce47185e0ba691b85e98baa04251712",
+        "docs/agents/tools/lumenx_studio_media_browser_smoke.py": "1462e0a2bf446383fe8052d23837983bf9a28d3b0bd664eadba9d36aa1bd073b",
+        "docs/agents/tools/lumenx_generation_browser_smoke.py": "fc9276f2928b38a12eadab37cd9b26a962c53fbb850071de1bd2e6b274d6fe0a",
+        "tests/frozen_image_fixtures.py": "ef798c2d5359606b3cc606d666b9692b7b5767597aed45c89b1fd33331eb0c22"
+      }
+    }
+  ]
+}

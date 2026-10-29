@@ -1,6 +1,16 @@
 # AGENTS.md
 
-This file provides guidance to AI coding agents (Codex CLI / Qoder) when working with code in this repository. It mirrors the project's `CLAUDE.md` so that Claude Code, Codex, and Qoder share identical project rules. When this file and `CLAUDE.md` diverge, treat `CLAUDE.md` as the source of truth and re-sync here.
+This version-controlled file is the shared development entry for Codex, Qoder, and Claude Code. `CLAUDE.md` is a short discovery bridge to this file, not a second copy of the rules.
+
+## Current product decisions and execution
+
+Before changing product behavior or architecture, read [the material index](docs/agents/context/lumenx-first-principles/README.md) and [the execution ledger](docs/agents/context/lumenx-first-principles/EXECUTION-STATUS.md). The accepted product contract and ADRs define the target; the implementation plan defines dependencies and verification gates; the public candidate ledger separates source-snapshot history from candidate verification. Historical reports describe their recorded versions, not the latest state. The full development session and raw evidence are intentionally not included in this public branch; do not recreate broken private links or claim that historical results were rerun.
+
+- Record the branch, commit, owned files, and verification evidence for each implementation slice. Read another agent's worktree without changing its branch, files, services, or data.
+- Run backend tests through the isolated runner documented in the current slice; do not import the application or collect legacy tests against personal configuration or live project data.
+- Update affected specifications, test mappings, and the ledger with the code. Do not create another competing plan or progress list.
+- Other tools or machines follow the same rules after obtaining the same Git commit. A local commit does not imply that another checkout or remote has received it.
+- The following repository reference sections describe existing and historical implementation context. If they conflict with accepted decisions, follow the material index's authority rules and correct the affected reference in the relevant slice.
 
 ## Git Commit Rules
 
@@ -74,11 +84,11 @@ LumenX 现在是一个 **产品家族**，由 Codex 主导推进了重要的架�
 ```text
 LumenX Core              # 共享后端/运行时/API capability
 ├── LumenX Studio        # Pipeline-first 漫剧/视频生产产品（原 Comic Generator）
-└── LumenX Atelier       # Graph-first 个人创作无限画布产品（代码在独立分支开发中）
+└── LumenX Atelier       # Graph-first 个人创作无限画布产品，独立领域与状态
 ```
 
-- **LumenX Studio**：保持 pipeline-first（项目 → 剧本 → 分镜 → 资产 → R2V/I2V → 合成 → 导出）。面向工作室、团队、系列号。当前 Phase 1 重点：R2V workflow 稳定化。
-- **LumenX Atelier**：全新 graph-first 创作壳，面向个人创作者。"Seed → Plan → Draft Nodes → Generation → Takes → Judgment → Branches → Sequence → Export"。Agent 可在画布上提议、生成、变体探索。Atelier 代码在独立分支开发中（如 `feat/atelier-v4-canvas-uplift`），尚未合入 main。
+- **LumenX Studio**：保持 pipeline-first（项目 → 剧本 → 分镜 → 资产 → R2V/I2V → 合成 → 导出）。支持个人及系列内容生产；多人协作按已确认产品阶段暂不实现。当前实施范围见执行台账。
+- **LumenX Atelier**：全新 graph-first 创作壳，面向个人创作者。"Seed → Plan → Draft Nodes → Generation → Takes → Judgment → Branches → Sequence → Export"。Agent 可在画布上提议、生成、变体探索。本重构分支已集成独立 Atelier 领域和 V3 壳；原独立分支属于来源历史。本地实现不代表 main、远端或其他工作区已接收。
 - **LumenX Core**：共享 model catalog、provider routing、media、generation jobs、export 等原语。Studio 与 Atelier 不共享前端状态，只共享 Core capability。
 
 技术栈：Next.js 14 前端 + FastAPI 后端，集成阿里云 DashScope/Qwen/Wanx、Kling、Vidu、PixVerse、HappyHorse、MuleRouter（Seedance/GPT-Image-2）等 provider。
@@ -100,7 +110,7 @@ LumenX Core              # 共享后端/运行时/API capability
 
 ### Core Components
 
-#### Frontend Structure（Studio，main 分支）
+#### Frontend Structure（Studio）
 ```
 frontend/
 ├── src/app/page.tsx              # 路由总入口
@@ -131,38 +141,42 @@ frontend/
 └── src/__tests__/                # 测试
 ```
 
-#### Frontend Structure（Atelier，独立分支）
+#### Frontend Structure（本重构分支的 Atelier）
 ```
-frontend/
-├── src/app/page.tsx              # hash #/atelier 切换到 Atelier shell
-├── src/components/
-│   └── atelier/                  # ★ LumenX Atelier 产品壳（独立，不允许引入 Studio 模块）
-│       ├── AtelierShell.tsx      # 全屏画布 + Agent 面板 + Sequence strip
-│       └── AgentPanelTrace.tsx   # Agent 历史/会话/规划态视图
-├── src/store/
-│   └── atelierStore.ts           # ★ Atelier 独立状态（projects/turns/pendingApproval/...）
-└── src/lib/
-    ├── api.ts                    # 包含 /atelier/* 客户端方法和类型
-    ├── atelierCanvas.ts          # 画布几何/节点关系工具
-    └── atelierAgentPlanning.ts   # Planner 包/会话校验逻辑
+frontend/src/
+├── app/page.tsx                       # #/atelier 路由挂载 V3 壳
+├── components/atelier/v3/
+│   ├── AtelierShell.tsx               # 独立画布与产品操作
+│   ├── PinnedComposer.tsx / MediaComposer.tsx
+│   ├── AgentTurnPanel.tsx
+│   └── SequenceWorkbench.tsx          # 序列保存与导出入口
+├── store/atelierStore.ts              # Atelier 独立状态
+└── lib/
+    ├── atelierApi.ts                  # 项目客户端；其余 atelier*Api.ts 按领域拆分
+    ├── atelierGenerationApi.ts / atelierMediaApi.ts
+    └── apiUrl.ts / appAccess.ts        # 中性地址与访问能力
 ```
 
-> **硬约束**：`components/atelier/` 严禁 import Studio 模块组件；反之亦然。共享的视觉/逻辑要先提升到中性层（未来 `packages/*`）。
+> **硬约束**：Studio 与 Atelier 组件、状态互不依赖。公共能力放已有中性层；先验证真实复用，再决定是否需要新的 package，不为旧规划中的目录名字重复迁移。
 
 #### Backend Structure
 ```
 src/
-├── apps/comic_gen/                 # 当前 Studio 域（Atelier 域在独立分支临时同居）
-│   ├── api.py                      # FastAPI 路由（含 /projects/*；Atelier 分支还含 /atelier/*）
-│   ├── pipeline.py                 # 业务流程编排（含 Studio 持久化；Atelier 分支含 Atelier 持久化）
-│   ├── models.py                   # Pydantic 数据模型（Atelier 分支含 AtelierProject/Node/Agent*）
-│   ├── atelier_agent.py            # ★ Atelier Agent 运行时（独立分支；Tool/Planner/Permission/Harness）
+├── apps/comic_gen/                 # Studio 域及现有应用组合根
+│   ├── api.py                      # Studio API + create_app 装配各产品 router/生命周期
+│   ├── pipeline.py                 # Studio 编排和持久化
+│   ├── models.py                   # Studio 数据模型
 │   ├── llm.py                      # LLM 交互（剧本分析、prompt polish、PolishError）
 │   ├── llm_adapter.py              # DashScope OpenAI 兼容封装
 │   ├── prompt_assembly.py          # Prompt 组装
-│   ├── assets.py / storyboard.py / video.py / audio.py / export.py
-│   └── test_pipeline.py
-├── models/                         # AI 模型 wrapper
+│   └── assets.py / storyboard.py / video.py / audio.py / export.py
+├── apps/atelier/                   # 独立 Atelier 领域
+│   ├── models.py / storage.py / service.py
+│   ├── api.py / generation_api.py / agent_api.py / agent_loop_api.py
+│   ├── generation_* / media_generation_* / agent_*
+│   └── sequence_* / export_* / project_package*
+├── core/                           # 中性工程媒体原语
+├── models/                         # AI 模型 wrapper 与共享 provider 执行原语
 │   ├── factory.py                  # 模型路由工厂（model name → adapter）
 │   ├── base.py                     # 基类
 │   ├── kling.py                    # Kling 视频模型
@@ -173,11 +187,11 @@ src/
 │   └── image.py                    # 图像生成通用逻辑
 ├── audio/
 │   └── tts.py                      # CosyVoice TTS（voice ID 自动匹配 model 版本）
-├── utils/                          # 工具（OSS 等）
+├── utils/                          # 共享媒体、存储身份、OSS 等工具
 └── config.py
 ```
 
-> **未来拆分计划**：Atelier 域将迁出到 `src/apps/atelier/`，前端 shell 迁到 `frontend/src/app/atelier/`，共享客户端到 `packages/lumenx-core-client/`。当前在同一仓库内仅作为 Atelier-domain APIs 存在，不可让 Studio 状态成为 Atelier canvas 状态的父级。
+> Atelier 已不依赖 Studio 模型或持久化。`comic_gen/api.py` 当前同时承担应用组合根，装配各领域的 router 与服务；组合依赖不能等同于领域互相依赖。边界由 `tests/test_core_dependency_boundaries.py` 和 `frontend/src/__tests__/product-boundaries.test.ts` 验证。共享媒体引用判断在 `src/utils/media_refs.py`；产品删除授权仍留在各领域。
 
 ## Development Commands
 
@@ -207,10 +221,13 @@ pip install -r requirements.txt
 # Create output directories
 mkdir -p output/uploads
 
-# Start backend server
+# Start backend server (local developer default: loopback only)
 ./start_backend.sh
 # or
-python -m uvicorn src.apps.comic_gen.api:app --reload --host 0.0.0.0 --port 17177
+python -m uvicorn src.apps.comic_gen.api:app --reload --host 127.0.0.1 --port 17177
+
+# Remote/network exposure is explicit only. Configure remote access mode and a strong token, then bind intentionally:
+LUMENX_ACCESS_MODE=remote python -m uvicorn src.apps.comic_gen.api:app --host 0.0.0.0 --port 17177
 
 # API docs available at: http://localhost:17177/docs
 ```
@@ -224,7 +241,7 @@ npm run dev
 ```
 
 ### Verification Commands
-Keep in sync with the same section in `CLAUDE.md`.
+`CLAUDE.md` 只链接本文件，不另复制命令。完整测试与证据规则见实施计划；以下命令不表示它们已在当前版本运行。
 
 Frontend verification commands:
 ```bash
@@ -238,7 +255,7 @@ npm run build
 
 Backend/catalog verification commands:
 ```bash
-pytest -q
+python -S scripts/run_tests_isolated.py -- tests src/apps/comic_gen/test_shared_asset_pool.py src/apps/comic_gen/test_shared_asset_channels.py -q
 python scripts/build_model_catalog.py
 python scripts/validate_model_catalog.py
 ```
@@ -328,43 +345,20 @@ Packaged desktop app configuration and logs are stored under `~/.lumen-x/`:
 - `POST /projects/{id}/art_direction/save` - Save art direction
 - `GET /art_direction/presets` - Get style presets
 
-### LumenX Atelier（独立分支，合入后可用）
-画布/节点 CRUD：
-- `POST /atelier/projects` / `GET /atelier/projects` / `GET|PUT|DELETE /atelier/projects/{id}`
-- `POST|PUT|DELETE /atelier/projects/{id}/nodes[/{node_id}]`
-- `POST /atelier/projects/{id}/nodes/{node_id}/video_candidates[/select|/regenerate|/{cid}/retry]`
+### LumenX Atelier API 与实现入口
 
-Agent runtime（Codex 风格 approval + 独立 planner）：
-- `PUT /atelier/projects/{id}/agent_policy` — 设置 approval_mode (`untrusted`/`on_failure`/`on_request`/`never`)、`allowed_tools`、`max_nodes_per_action`
-- `GET /atelier/projects/{id}/agent/tools` — 列出可用工具规格
-- `POST /atelier/projects/{id}/agent/planner_package` — 构建可送给规划器的只读 context 包
-- `POST /atelier/projects/{id}/agent/plan` — 规划器返回结构化 tool_calls（不执行）
-- `POST /atelier/projects/{id}/agent/turns` — 执行/预览 Agent turn；遵循 policy，触发 approval/denial/exec
+`/atelier` 下的项目、节点、引用、上传、生成、Agent、序列/导出与工程包由 `src/apps/atelier/` 的各 router 管理，并在应用组合根装配。精确请求/回执以对应 `*_commands.py`、Pydantic 模型及 API 测试为准；不要沿用来源分支旧的通用节点 PUT 或 video_candidates 调用替代当前命令。
 
 ## Atelier 关键设计与硬约束
 
-> Atelier 代码在独立分支开发中（如 `feat/atelier-v4-canvas-uplift`）。以下规格描述的是已实现或正在实现的架构，合入 main 后即在主线可用。
+当前规则以本文件开头的材料索引、[产品契约](docs/agents/context/lumenx-first-principles/PRODUCT-CONTRACT.md) 和 [已采纳 ADR](docs/agents/context/lumenx-first-principles/README.md) 为准。早期分支草稿与完整会话留在研发来源快照，未随公开候选发布；不要用不存在的 `docs/plans/` 链接充当规范或完成证明。部署和升级分别见 [服务配方](docs/operations/headless.md) 与 [迁移说明](docs/agents/deliverables/github-release-2026-10-30/MIGRATION.md)。
 
-参考文档（必读）：
-- `docs/plans/2026-05-08-lumenx-studio-atelier-core-roadmap.md` — Core/Studio/Atelier 产品家族 roadmap
-- `docs/plans/2026-05-08-atelier-v1-implementation-boundary.md` — Atelier v1 边界与任务清单
-- `docs/plans/2026-05-09-atelier-agent-runtime-implementation-plan.md` — Agent 运行时实现计划
+### 数据与 Agent 运行时
 
-### 数据模型（src/apps/comic_gen/models.py）
-- `AtelierProject` — id/title/source_project_id?/agent_policy/nodes[]/agent_turns[]
-- `AtelierNode` — type(`seed|plan|draft|image|video|audio|sequence`)/prompt/status/x,y/w,h/共享引用 (`source_project_id|frame_id|asset_id|video_task_id|media_urls[]`)/data
-- `AtelierAgentPolicy` — approval_mode + allowed_tools + max_nodes_per_action
-- `AtelierAgentTurn` / `AtelierAgentToolCall` / `AtelierAgentPlan` / `AtelierAgentPlannerPackage`
-- `AtelierApprovalMode` 枚举：`UNTRUSTED|ON_FAILURE|ON_REQUEST|NEVER`（默认 UNTRUSTED）
-
-### Agent Runtime 架构（src/apps/comic_gen/atelier_agent.py）
-- `AtelierToolRegistry` — 命名空间化工具（`canvas.*` / `generation.*`），含 schema/permission/cost
-- `AtelierPlannerRegistry` — 多规划器：`DeterministicCorePlanner`（默认/可重放）+ `ModelAdapterPlanner`（LLM-backed，约束输出）
-- `AtelierPermissionEnforcer` — 模式无关的硬规则：未知工具、未授权工具、超过 max_nodes、缺少必需引用、模型/引用不匹配 一律拒绝
-- `AtelierAgentHarness` — preview/execute 两阶段；持久化每次 tool call 与 result_snapshot
-- 默认上限：每 turn ≤ 8 个 tool 调用，≤ 1 个生成调用
-- v1 工具：`canvas.readProject` / `canvas.createVideoNode` / `canvas.updateNodePrompt` / `canvas.createReferenceImageNode` / `canvas.attachReferenceNode` / `generation.createVideoCandidates`
-- **v1 不暴露 `candidate.select`** — 候选选择属于用户审美判断
+- `src/apps/atelier/models.py`：项目、节点、候选、请求回执、Agent 回合/批准、序列与导出模型；`storage.py` 管理独立持久化。
+- `agent_tools.py` / `agent_service.py`：注册能力与只读规划上下文；`agent_loop_planner.py` / `agent_loop_model_planner.py` 处理确定性和模型多轮规划。
+- `agent_admission.py` / `agent_authorization.py` / `agent_executor.py`：接纳、批准身份与执行；`agent_api.py` / `agent_loop_api.py` 提供同步和流式入口。允许工具、成本与媒体绑定必须在实际提交前核验，旧批准不能越过变化后的权限、参数或素材。
+- 候选采纳属于用户审美判断，不能因为 Agent 提议或生成成功就自动采纳。已暴露工具/模型的有限验收范围见执行台账，不从某一路径成功外推所有 Agent 能力。
 
 ### 边界硬约束
 - Atelier 不依赖 Studio project；可以无 Studio 项目独立运行
@@ -382,20 +376,20 @@ Agent runtime（Codex 风格 approval + 独立 planner）：
 - **LLM Adapter**: `src/apps/comic_gen/llm_adapter.py` 统一封装，DashScope 和第三方 OpenAI API 都走 openai 库；DashScope 默认模型走 fallback chain `["qwen3.6-plus", "qwen-plus"]`
 - **QwenVL 也用 OpenAI 兼容接口**: `qwen3.6-plus` 同时支持文本和多模态(VL)
 - **MuleRouter**: `src/models/mulerouter.py` 是 Seedance 2.0（视频）和 GPT-Image-2（图像）的适配器，支持 MuleRun CLI 模式和 MuleRouter HTTP API 模式。`factory.py` 按 model name 路由到对应适配器
-- **CosyVoice TTS**: voice ID 必须匹配 model 版本（`_v2` → `cosyvoice-v2`，`_v3` → `cosyvoice-v3-flash`），通过 `_resolve_model_for_voice()` 自动匹配
+- **TTS 参数**: `TTSProcessor.prepare()` 统一按音色注册信息及显式 model/family override 解析实际传输参数，`execute()` 使用不可变准备结果。不要按 voice ID 字符串后缀推测能力，也不要在调用端重复选模或钳制；新增规则需核对 `TTS_RULES_VERSION` 与已保存快照的兼容性。数值调整/不支持项必须与实际提交输入分开，不能把准备结果当供应商履行或持久任务回执。
+- **对白音频契约**：用户覆盖与成功生成快照分开；省略保留、null继承、空指令明确关闭。界面核验走只读 `audio/state`，不能用有文件或旧hash代替参数一致，也不能自动把历史指令当用户选择。修改相关入口先读 [对白契约](docs/1-api-reference/lumenx-dialogue-audio-contract.md)。
 - **PolishError 契约**: `polish_*_prompt` 函数抛 `PolishError` → HTTP 502 + reason 码；默认模型 qwen3.6-plus
 
 ## Development Guidelines
 
 ### Backend Changes
-- Update Pydantic models in `src/apps/comic_gen/models.py` when modifying data structures
-- Add new endpoints to `src/apps/comic_gen/api.py` using FastAPI conventions
-- Implement business logic in appropriate modules in `pipeline.py`
-- Use background tasks for AI processing operations
+- 在所属产品领域修改模型与命令：Studio 使用 `src/apps/comic_gen/`，Atelier 使用 `src/apps/atelier/`；中性 Core 不反向导入产品领域。
+- API 路由留在所属 router；应用组合根负责装配依赖，不复制另一产品的业务规则。
+- 复用现有持久请求、执行与恢复服务；一次后台函数完成不等于已保存回执。恢复按原身份查询/修复，未知结果不能自动发起新付费任务。
 - Keep local-first media handling intact: generated/uploaded files should resolve through managed `output/` paths, with OSS as an optional mirror/signing layer rather than a hard dependency.
 
 ### Frontend Changes
-- Add new API calls to `frontend/src/lib/api.ts`
+- Studio API 保留在 `frontend/src/lib/api.ts` 及其所属客户端；Atelier 使用 `atelier*Api.ts`。公共地址、访问与目录逻辑复用中性模块，不让 Atelier 引入 Studio API/store。
 - Studio 业务模块放 `frontend/src/components/modules/`；**Atelier 业务模块放 `frontend/src/components/atelier/`**，两者互不 import
 - 跨模块共享组件放 `frontend/src/components/shared/`
 - Use Zustand stores for shared state management（Studio 用 `projectStore`，Atelier 用 `atelierStore`，**不要混用**）

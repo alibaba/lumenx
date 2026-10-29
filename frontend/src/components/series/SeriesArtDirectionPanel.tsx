@@ -3,11 +3,13 @@
  * SeriesArtDirectionPanel — series-level art_direction baseline editor.
  * Uses the v2 preset system with category tabs and thumbnail cards.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Palette, Check, Trash2, Save, X, Pencil, Image as ImageIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
+import { publicAssetPath } from "@/lib/publicAsset";
+import { persistenceFailure, type PersistenceFailure } from "@/lib/persistenceFeedback";
 import { useProjectStore } from "@/store/projectStore";
 import type { Series, StyleConfig, StylePreset, StylePresetCategory } from "@/store/projectStore";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
@@ -19,7 +21,7 @@ interface SeriesArtDirectionPanelProps {
 
 export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArtDirectionPanelProps) {
     const t = useTranslations("seriesArtDirection");
-    const setCurrentSeries = useProjectStore((s) => s.setCurrentSeries);
+    const tp = useTranslations("persistence");
 
     const [series, setSeries] = useState<Series | null>(null);
     const [presets, setPresets] = useState<StylePreset[]>([]);
@@ -28,6 +30,11 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
     const [selectedStyle, setSelectedStyle] = useState<StyleConfig | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [saveError, setSaveError] = useState<PersistenceFailure | null>(null);
+    const savingSeries = useRef(new Set<string>());
+    const view = useMemo(() => ({ seriesId }), [seriesId]);
+    const activeView = useRef<typeof view | null>(view);
+    activeView.current = view;
 
     // Modal state
     const [modalPreset, setModalPreset] = useState<StylePreset | null>(null);
@@ -37,7 +44,12 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
 
     useEffect(() => {
         let cancelled = false;
+        activeView.current = view;
         setIsLoading(true);
+        setSeries(null);
+        setSelectedStyle(null);
+        setSaveError(null);
+        setIsSaving(savingSeries.current.has(seriesId));
         Promise.all([
             api.getSeries(seriesId).catch(() => null),
             api.getStylePresets().catch(() => ({ presets: [], categories: [] })),
@@ -50,8 +62,11 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
             setSelectedStyle(sel);
             setIsLoading(false);
         });
-        return () => { cancelled = true; };
-    }, [seriesId]);
+        return () => {
+            cancelled = true;
+            if (activeView.current === view) activeView.current = null;
+        };
+    }, [seriesId, view]);
 
     const filteredPresets = useMemo(() => {
         if (activeCategory === "all") return presets;
@@ -69,6 +84,7 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
     }, [selectedStyle, currentStyleName, series?.art_direction?.style_config]);
 
     const openPresetModal = (preset: StylePreset) => {
+        if (isSaving) return;
         setModalPreset(preset);
         setModalEditing(false);
         setModalPositive(preset.positive_prompt);
@@ -81,7 +97,7 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
     };
 
     const handleModalApply = () => {
-        if (!modalPreset) return;
+        if (!modalPreset || isSaving) return;
         const isCustomized = modalEditing && (
             modalPositive !== modalPreset.positive_prompt ||
             modalNegative !== modalPreset.negative_prompt
@@ -97,43 +113,46 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
         closePresetModal();
     };
 
-    const handleSaveBaseline = async () => {
-        if (!selectedStyle) return;
+    const persistBaseline = async (artDirection: Series["art_direction"] | null) => {
+        if (isLoading || savingSeries.current.has(seriesId) || saveError === "conflict") return;
+        if (!series || !Number.isSafeInteger(series.revision) || series.revision < 0) {
+            setSaveError("missingRevision");
+            return;
+        }
+        savingSeries.current.add(seriesId);
         setIsSaving(true);
+        setSaveError(null);
         try {
-            await api.updateSeries(seriesId, {
-                art_direction: {
-                    selected_style_id: selectedStyle.id,
-                    style_config: selectedStyle as any,
-                    custom_styles: series?.art_direction?.custom_styles ?? [],
-                    ai_recommendations: series?.art_direction?.ai_recommendations ?? [],
-                },
+            const saved = await api.updateSeries(seriesId, {
+                expected_revision: series.revision,
+                art_direction: artDirection,
             });
+            if (activeView.current !== view) return;
+            setSeries(saved);
+            useProjectStore.setState(state => ({
+                currentSeries: state.currentSeries?.id === seriesId && state.currentSeries.revision > saved.revision
+                    ? state.currentSeries : saved,
+                seriesList: state.seriesList.map(current => current.id === seriesId && !(current.revision > saved.revision)
+                    ? saved : current),
+            }));
+            if (!artDirection) setSelectedStyle(null);
             onSaved();
-            const fresh = await api.getSeries(seriesId);
-            setSeries(fresh);
-            setCurrentSeries(fresh);
         } catch (err) {
-            console.error("Save series art_direction failed", err);
+            if (activeView.current === view) setSaveError(persistenceFailure(err));
         } finally {
-            setIsSaving(false);
+            savingSeries.current.delete(seriesId);
+            if (activeView.current?.seriesId === seriesId) setIsSaving(false);
         }
     };
 
-    const handleClearBaseline = async () => {
-        setIsSaving(true);
-        try {
-            await api.updateSeries(seriesId, { art_direction: null as any });
-            onSaved();
-            const fresh = await api.getSeries(seriesId);
-            setSeries(fresh);
-            setCurrentSeries(fresh);
-            setSelectedStyle(null);
-        } catch (err) {
-            console.error("Clear series art_direction failed", err);
-        } finally {
-            setIsSaving(false);
-        }
+    const handleSaveBaseline = () => {
+        if (!selectedStyle) return;
+        return persistBaseline({
+            selected_style_id: selectedStyle.id,
+            style_config: selectedStyle,
+            custom_styles: series?.art_direction?.custom_styles ?? [],
+            ai_recommendations: series?.art_direction?.ai_recommendations ?? [],
+        });
     };
 
     return (
@@ -163,8 +182,8 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
                             variant="ghost"
                             size="sm"
                             leftIcon={<Trash2 />}
-                            onClick={handleClearBaseline}
-                            disabled={isSaving}
+                            onClick={() => persistBaseline(null)}
+                            disabled={isSaving || isLoading || saveError === "conflict"}
                         >
                             {t("clear")}
                         </WorkflowActionButton>
@@ -174,12 +193,13 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
                         loading={isSaving}
                         leftIcon={<Save />}
                         onClick={handleSaveBaseline}
-                        disabled={!isDirty || !selectedStyle}
+                        disabled={!isDirty || !selectedStyle || isLoading || saveError === "conflict"}
                     >
                         {isDirty ? t("saveBaseline") : t("baselineSaved")}
                     </WorkflowActionButton>
                 </div>
             </header>
+            {saveError && <p role="alert" className="px-8 py-3 text-sm text-status-failed-fg">{tp(saveError)}</p>}
 
             {/* Body */}
             <div className="flex-1 overflow-y-auto bg-surface px-8 py-6 space-y-8 custom-scrollbar">
@@ -256,7 +276,7 @@ export default function SeriesArtDirectionPanel({ seriesId, onSaved }: SeriesArt
                                         <div className="relative aspect-[4/3] bg-elevated overflow-hidden">
                                             {preset.thumbnail ? (
                                                 <img
-                                                    src={preset.thumbnail}
+                                                    src={publicAssetPath(preset.thumbnail)}
                                                     alt={preset.name_zh}
                                                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                                     style={{ objectPosition: preset.object_position || "center" }}
@@ -371,7 +391,7 @@ function SeriesPresetModal({ preset, isSelected, editing, positivePrompt, negati
                 <div className="flex-1 min-h-0 grid grid-cols-[1fr_1fr] overflow-hidden">
                     <div className="bg-black/40 flex items-center justify-center p-4 overflow-hidden">
                         {preset.thumbnail ? (
-                            <img src={preset.thumbnail} alt={preset.name_zh} className="max-w-full max-h-full object-contain rounded-lg" />
+                            <img src={publicAssetPath(preset.thumbnail)} alt={preset.name_zh} className="max-w-full max-h-full object-contain rounded-lg" />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center">
                                 <ImageIcon size={48} className="text-text-muted/30" />
@@ -443,7 +463,7 @@ function SeriesPresetModal({ preset, isSelected, editing, positivePrompt, negati
                             {sameCategoryPresets.slice(0, 5).map(p => (
                                 <button key={p.id} onClick={() => onSwitchPreset(p)} className="shrink-0 w-24 rounded-lg overflow-hidden border border-glass-border hover:border-foreground/30 transition-colors">
                                     {p.thumbnail ? (
-                                        <img src={p.thumbnail} alt={p.name_zh} className="w-full aspect-[16/9] object-cover" style={{ objectPosition: p.object_position || "center" }} />
+                                        <img src={publicAssetPath(p.thumbnail)} alt={p.name_zh} className="w-full aspect-[16/9] object-cover" style={{ objectPosition: p.object_position || "center" }} />
                                     ) : (
                                         <div className="w-full aspect-[16/9] bg-elevated flex items-center justify-center"><ImageIcon size={12} className="text-text-muted/40" /></div>
                                     )}

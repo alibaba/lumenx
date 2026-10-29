@@ -1,24 +1,24 @@
 import rawCatalog from '@/generated/modelCatalog.json';
 
 export type DurationConfig =
-    | { type: 'slider'; min: number; max: number; step: number; default: number }
-    | { type: 'buttons'; options: number[]; default: number }
+    | { type: 'slider'; min: number; max: number; step: number; default: number; supports_auto?: boolean }
+    | { type: 'buttons'; options: number[]; default: number; options_by_resolution?: Record<string, number[]> }
     | { type: 'fixed'; value: number };
 
 export interface ModelParamSupport {
     resolution?: { options: string[]; default: string };
     ratio?: { options: string[]; default: string };
-    seed?: boolean;
+    seed?: boolean | { min: number; max: number };
     negativePrompt?: boolean;
-    promptExtend?: boolean;
+    promptExtend?: boolean | { default: boolean };
     shotType?: boolean | { options: string[]; default: string };
-    audio?: boolean;
+    audio?: boolean | { default: boolean };
     mode?: { options: string[]; default: string };
     sound?: boolean;
     cfgScale?: { min: number; max: number; step: number; default: number };
     viduAudio?: boolean;
     movementAmplitude?: { options: string[]; default: string };
-    watermark?: boolean;
+    watermark?: boolean | { default: boolean };
 }
 
 export interface I2VModelConfig {
@@ -60,7 +60,7 @@ export interface FrontendModelSettings {
     storyboard_aspect_ratio: string;
 }
 
-type SelectionGroup = 't2i' | 'i2i' | 'image' | 'i2v' | 'r2v';
+type SelectionGroup = 't2i' | 'i2i' | 'image' | 'i2v' | 'r2v' | 't2v' | 'video';
 type ModelStatus = 'active' | 'planned' | 'deprecated' | 'hidden';
 type SettingsSurface = 'project_settings' | 'series_settings' | 'global_settings';
 type VisibilitySurface = SettingsSurface | 'video_sidebar';
@@ -247,6 +247,23 @@ function getVisibleModels(group: SelectionGroup, surface: VisibilitySurface): Ca
     );
 }
 
+function getVisibleVideoSidebarModels(group: 'i2v' | 'r2v'): CatalogModel[] {
+    const seen = new Set<string>();
+    return SORTED_MODEL_ENTRIES.filter((model) => {
+        if (!isVisibleModel(model, 'video_sidebar')) return false;
+        if (model.ui.selection_group !== group && !(model.ui.selection_group === 'video' && model.capabilities.includes(group))) {
+            return false;
+        }
+        if (seen.has(model.id)) return false;
+        seen.add(model.id);
+        return true;
+    });
+}
+
+function isVisibleVideoSidebarAllInOneModel(model: CatalogModel | undefined): boolean {
+    return !!model && model.ui.selection_group === 'video' && isVisibleModel(model, 'video_sidebar');
+}
+
 function toSelectableModel(model: CatalogModel): SelectableModelOption {
     return {
         id: model.id,
@@ -389,7 +406,12 @@ export const PROJECT_I2V_MODELS = getVisibleModels('i2v', 'project_settings').ma
 export const SERIES_I2V_MODELS = getVisibleModels('i2v', 'series_settings').map(toI2VModel);
 export const GLOBAL_I2V_MODELS = getVisibleModels('i2v', 'global_settings').map(toI2VModel);
 export const GLOBAL_R2V_MODELS = getVisibleModels('r2v', 'global_settings').map(toI2VModel);
-export const VIDEO_I2V_MODELS = getVisibleModels('i2v', 'video_sidebar').map(toI2VModel);
+export const VIDEO_I2V_MODELS = getVisibleVideoSidebarModels('i2v').map(toI2VModel);
+
+export function getCatalogVideoModelConfig(modelId: string): I2VModelConfig | null {
+    const model = MODEL_CATALOG.models[modelId];
+    return model ? toI2VModel(model) : null;
+}
 
 export const T2I_MODELS = PROJECT_T2I_MODELS;
 export const I2I_MODELS = PROJECT_I2I_MODELS;
@@ -428,18 +450,20 @@ for (const model of SORTED_MODEL_ENTRIES) {
     }
 }
 
-export const VIDEO_R2V_MODELS: I2VModelConfig[] = SORTED_MODEL_ENTRIES
-    .filter((model) => model.ui.selection_group === 'r2v' && isVisibleModel(model, 'video_sidebar'))
-    .map(toI2VModel);
-export const DEFAULT_R2V_MODEL_ID = VIDEO_R2V_MODELS[0]?.id ?? R2V_SELECTION_MODEL_ID;
+export const VIDEO_R2V_MODELS: I2VModelConfig[] = getVisibleVideoSidebarModels('r2v').map(toI2VModel);
+export const DEFAULT_R2V_MODEL_ID = R2V_SELECTION_MODEL_ID;
 
 /**
  * Given the currently selected I2V model, resolve the correct R2V route model.
  * Each family has its own hidden R2V model (e.g. wan -> wan2.6-r2v, happyhorse -> happyhorse-1.0-r2v).
  */
 export function getR2vRouteModelId(selectedI2vModelId: string): string {
-    const selectedModel = MODEL_CATALOG.models[selectedI2vModelId];
+    const normalizedModelId = normalizeRequestedModelId(selectedI2vModelId) ?? selectedI2vModelId;
+    const selectedModel = MODEL_CATALOG.models[normalizedModelId];
     if (!selectedModel) return R2V_ROUTE_MODEL_ID;
+    if (isVisibleVideoSidebarAllInOneModel(selectedModel) && selectedModel.capabilities.includes('r2v')) {
+        return normalizedModelId;
+    }
     return R2V_ROUTE_MAP[selectedModel.family] ?? R2V_ROUTE_MODEL_ID;
 }
 

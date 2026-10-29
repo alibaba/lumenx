@@ -7,7 +7,31 @@
  * Kept free of React / state so unit tests can exercise the migration
  * + history bookkeeping independently of the UI layer.
  */
+import { selectFrameAssemblyVideo, type FrameDubLike, type VideoTaskLike } from "@/lib/dubSource";
 import { T2I_HISTORY_LIMIT, type ShotNode } from "./ShotCard";
+
+type FrameToShotInput = FrameDubLike & {
+    id: string;
+    t2i_image_urls?: unknown;
+    t2i_selected_index?: unknown;
+    rendered_image_url?: string | null;
+    image_url?: string | null;
+    last_frame_url?: string | null;
+    video_url?: string | null;
+    dub_offset_ms?: unknown;
+    visual_description?: string | null;
+    action_description?: string | null;
+    workbench_tab_mode?: string | null;
+    duration?: number | null;
+    assembled_prompt?: string | null;
+    dialogue_structured?: ShotNode["dialogueStructured"];
+    camera_movement_structured?: ShotNode["cameraMovementStructured"];
+    shot_size?: string | null;
+    camera_angle?: string | null;
+    transition_hint?: string | null;
+    is_video_pinned?: unknown;
+    final_take_id?: string | null;
+};
 
 /** Bring a shot from disk (localStorage draft) into the v2 shape.
  *  Idempotent — calling on an already-v2 shot returns identity. */
@@ -172,44 +196,64 @@ export function appendVideoTaskId(
  *  `defaultTabMode` lets callers override the fallback ("direct_r2v")
  *  when they have more context (e.g. project-level i2v default). */
 export function frameToShotNode(
-    frame: any,
-    videoTasks: any[],
+    frame: FrameToShotInput,
+    videoTasks: VideoTaskLike[],
     defaultTabMode: "t2i_i2v" | "direct_r2v" = "direct_r2v",
 ): ShotNode {
-    const frameTasks = (videoTasks ?? []).filter((t: any) => t.frame_id === frame.id);
-    const inFlightTask = frameTasks.find((t: any) =>
+    const frameTasks = (videoTasks ?? []).filter((t: VideoTaskLike) => t.frame_id === frame.id);
+    const inFlightTask = frameTasks.find((t: VideoTaskLike) =>
         t.status === "pending" || t.status === "processing"
     );
-    const latestCompleted = frameTasks.find((t: any) =>
+    const latestCompleted = frameTasks.find((t: VideoTaskLike) =>
         t.status === "completed" && t.video_url
     );
+    const needsConfirmationTask = frameTasks.find((t: VideoTaskLike) =>
+        t.status === "needs_confirmation"
+    );
 
-    let videoStatus: "pending" | "processing" | "completed" | "failed" | undefined;
-    let videoUrl: string | undefined = frame.dubbed_video_url || frame.video_url || undefined;
-    let videoTaskId: string | undefined;
+    let videoStatus: "pending" | "processing" | "completed" | "failed" | "needs_confirmation" | undefined;
+    const selectedSource = selectFrameAssemblyVideo(frame, videoTasks ?? []);
+    const selectedMismatch = selectedSource.kind === "none" && selectedSource.reason === "selected-mismatch";
+    let videoUrl: string | undefined =
+        selectedSource.kind === "preview" || selectedSource.kind === "applied" || selectedSource.kind === "original"
+            ? selectedSource.url
+            : selectedMismatch ? undefined : frame.video_url || undefined;
+    const hasSelectedTaskVideo =
+        selectedSource.kind === "preview" || selectedSource.kind === "applied" || selectedSource.kind === "original";
+    let videoTaskId: string | undefined = hasSelectedTaskVideo ? selectedSource.taskId : undefined;
 
     if (inFlightTask) {
-        videoStatus = inFlightTask.status;
-        videoTaskId = inFlightTask.id;
-    } else if (videoUrl || latestCompleted) {
+        videoStatus = inFlightTask.status === "pending" ? "pending" : "processing";
+        videoTaskId = inFlightTask.id || undefined;
+    } else if (!selectedMismatch && (hasSelectedTaskVideo || latestCompleted || (videoUrl && !needsConfirmationTask))) {
         videoStatus = "completed";
-        videoUrl = videoUrl || latestCompleted?.video_url;
-    } else if (frameTasks.some((t: any) => t.status === "failed")) {
+        videoUrl = videoUrl || latestCompleted?.video_url || undefined;
+        videoTaskId = videoTaskId || latestCompleted?.id || undefined;
+    } else if (needsConfirmationTask) {
+        videoStatus = "needs_confirmation";
+        videoTaskId = needsConfirmationTask.id || undefined;
+        videoUrl = needsConfirmationTask.video_url || videoUrl;
+    } else if (frameTasks.some((t: VideoTaskLike) => t.status === "failed")) {
         videoStatus = "failed";
     }
 
+    const imageHistory = Array.isArray(frame.t2i_image_urls) ? frame.t2i_image_urls : [];
+    const imageIndex = typeof frame.t2i_selected_index === 'number' ? frame.t2i_selected_index : 0;
+    const selectedImage = imageHistory[Math.max(0, Math.min(imageIndex, imageHistory.length - 1))]
+        || frame.rendered_image_url || frame.image_url || undefined;
+
     return migrateShotNode({
         id: frame.id,
-        prompt: frame.visual_description || frame.action_description || "",
+        prompt: frame.visual_description ?? frame.action_description ?? "",
         tabMode: (frame.workbench_tab_mode as "t2i_i2v" | "direct_r2v" | undefined) ?? defaultTabMode,
         videoUrl,
         videoStatus,
         videoTaskId,
         imageUrl: frame.rendered_image_url || frame.image_url || undefined,
-        t2iImageUrls: Array.isArray(frame.t2i_image_urls) ? frame.t2i_image_urls : [],
-        t2iSelectedIndex: typeof frame.t2i_selected_index === "number"
-            ? frame.t2i_selected_index
-            : 0,
+        lastFrameUrl: typeof frame.last_frame_url === "string" && frame.last_frame_url ? frame.last_frame_url : undefined,
+        t2iImageUrl: selectedImage,
+        t2iImageUrls: imageHistory,
+        t2iSelectedIndex: imageIndex,
         duration: frame.duration ?? null,
         visualDescription: frame.visual_description ?? null,
         assembledPrompt: frame.assembled_prompt ?? null,
@@ -219,6 +263,7 @@ export function frameToShotNode(
         cameraAngle: frame.camera_angle ?? null,
         transitionHint: frame.transition_hint ?? null,
         isVideoPinned: Boolean(frame.is_video_pinned),
+        finalTakeId: frame.final_take_id ?? null,
     });
 }
 

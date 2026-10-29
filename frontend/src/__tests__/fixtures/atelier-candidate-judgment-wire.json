@@ -1,0 +1,679 @@
+{
+  "before": {
+    "id": "p1",
+    "title": "Canvas",
+    "description": "",
+    "source_project_id": null,
+    "nodes": [
+      {
+        "id": "node-1",
+        "project_id": "p1",
+        "type": "video",
+        "title": "",
+        "prompt": "",
+        "status": "draft",
+        "x": 0.0,
+        "y": 0.0,
+        "width": 320.0,
+        "height": 180.0,
+        "source_project_id": null,
+        "frame_id": null,
+        "asset_id": null,
+        "video_task_id": null,
+        "media_urls": [],
+        "data": {
+          "candidates": [
+            {
+              "execution_contract": "atelier-provider-video-v1",
+              "id": "candidate-1",
+              "attempt_id": "attempt-1",
+              "media_kind": "video",
+              "status": "completed",
+              "video_url": "video/provider-attempt-1.mp4",
+              "error_code": null,
+              "created_at": 10.0,
+              "updated_at": 10.0
+            }
+          ]
+        },
+        "created_by": "user",
+        "created_at": 1.0,
+        "updated_at": 1.0
+      }
+    ],
+    "agent_policy": {
+      "approval_mode": "untrusted",
+      "allowed_tools": [],
+      "max_nodes_per_action": 8,
+      "max_tokens_per_turn": 2048,
+      "enable_reviewer": false,
+      "max_generation_cost_per_turn": 5.0,
+      "updated_at": 1.0
+    },
+    "agent_turns": [],
+    "sequence": [],
+    "audio_tracks": [],
+    "exports": [],
+    "node_delete_receipts": [],
+    "node_upload_receipts": [],
+    "sequence_export_jobs": [],
+    "generation_attempts": [
+      {
+        "schema_version": 1,
+        "project_id": "p1",
+        "node_id": "node-1",
+        "candidate_id": "candidate-1",
+        "attempt_id": "attempt-1",
+        "attempt_revision": 0,
+        "status": "completed",
+        "error_code": null,
+        "first_frame_source": {
+          "node_id": "source-1",
+          "media_url": "uploads/source.png"
+        },
+        "output_ref": "video/provider-attempt-1.mp4",
+        "provider_execution": {
+          "schema_version": 1,
+          "attempt_id": "attempt-1",
+          "phase": "completed",
+          "provider_model_id": "wan2.7-i2v",
+          "intent": {
+            "rules_version": "generation-parameters-v1",
+            "scope": "parameters-only",
+            "model_id": "wan/wan2.7-video#i2v",
+            "catalog_mode": "i2v",
+            "mode": "i2v",
+            "prompt": "A slow sunrise",
+            "params": {
+              "duration": 5,
+              "negative_prompt": "",
+              "prompt_extend": false,
+              "resolution": "720p",
+              "seed": 0,
+              "watermark": false
+            },
+            "sources": {
+              "model_id": "request",
+              "mode": "request",
+              "prompt": "request",
+              "params.duration": "request",
+              "params.negative_prompt": "request",
+              "params.prompt_extend": "request",
+              "params.resolution": "request",
+              "params.seed": "request",
+              "params.watermark": "request"
+            },
+            "request_fields": [
+              "mode",
+              "model_id",
+              "params.duration",
+              "params.negative_prompt",
+              "params.prompt_extend",
+              "params.resolution",
+              "params.seed",
+              "params.watermark",
+              "prompt"
+            ],
+            "preset_id": null,
+            "preset_version": null
+          },
+          "media": [
+            {
+              "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "size_bytes": 100,
+              "role": "first_frame",
+              "ordinal": 0,
+              "declared_media_type": "image/png",
+              "schema_version": 1
+            }
+          ],
+          "scope": {
+            "provider": "dashscope",
+            "backend": "dashscope",
+            "gateway": "dashscope_workspace",
+            "base_url": "https://dashscope.aliyuncs.com",
+            "region": "cn-beijing",
+            "workspace_id": null,
+            "account_identity": null
+          },
+          "credential_ref": "credential-ref",
+          "fingerprint": "d8a3f383c60f9157f1ca54bd2a3bc6cc9ee550a540b028ad76458dc20715323e",
+          "handle": {
+            "provider_model_id": "wan2.7-i2v",
+            "task_id": "remote-task-1",
+            "scope": {
+              "provider": "dashscope",
+              "backend": "dashscope",
+              "gateway": "dashscope_workspace",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "region": "cn-beijing",
+              "workspace_id": null,
+              "account_identity": null
+            },
+            "credential_ref": "credential-ref",
+            "request_id": "remote-request-1",
+            "query_capability": "by_task_id",
+            "schema_version": 1,
+            "submitted_at": 10.0
+          },
+          "observation": null,
+          "prepared_artifact": null,
+          "artifact": {
+            "schema_version": 1,
+            "attempt_id": "attempt-1",
+            "handle": {
+              "provider_model_id": "wan2.7-i2v",
+              "task_id": "remote-task-1",
+              "scope": {
+                "provider": "dashscope",
+                "backend": "dashscope",
+                "gateway": "dashscope_workspace",
+                "base_url": "https://dashscope.aliyuncs.com",
+                "region": "cn-beijing",
+                "workspace_id": null,
+                "account_identity": null
+              },
+              "credential_ref": "credential-ref",
+              "request_id": "remote-request-1",
+              "query_capability": "by_task_id",
+              "schema_version": 1,
+              "submitted_at": 10.0
+            },
+            "relative_path": "video/provider-attempt-1.mp4",
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "size_bytes": 12
+          }
+        },
+        "created_at": 10.0,
+        "updated_at": 10.0
+      }
+    ],
+    "generation_request_receipts": [
+      {
+        "schema_version": 1,
+        "project_id": "p1",
+        "entrypoint": "atelier.provider_video.v1",
+        "request_contract_version": "request-json-v1",
+        "client_request_id": "request-1",
+        "request_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "node_id": "node-1",
+        "candidate_id": "candidate-1",
+        "attempt_id": "attempt-1",
+        "execution_fingerprint": "d8a3f383c60f9157f1ca54bd2a3bc6cc9ee550a540b028ad76458dc20715323e",
+        "base_revision": 0,
+        "committed_revision": 1,
+        "created_at": 10.0
+      }
+    ],
+    "agent_compaction_summary": null,
+    "compacted_through_turn_id": null,
+    "revision": 1,
+    "created_at": 1.0,
+    "updated_at": 1.0
+  },
+  "request": {
+    "expected_revision": 1,
+    "verdict": "keep",
+    "reason": "Keep this performance"
+  },
+  "ack": {
+    "project": {
+      "id": "p1",
+      "title": "Canvas",
+      "description": "",
+      "source_project_id": null,
+      "nodes": [
+        {
+          "id": "node-1",
+          "project_id": "p1",
+          "type": "video",
+          "title": "",
+          "prompt": "",
+          "status": "draft",
+          "x": 0.0,
+          "y": 0.0,
+          "width": 320.0,
+          "height": 180.0,
+          "source_project_id": null,
+          "frame_id": null,
+          "asset_id": null,
+          "video_task_id": null,
+          "media_urls": [],
+          "data": {
+            "candidates": [
+              {
+                "execution_contract": "atelier-provider-video-v1",
+                "id": "candidate-1",
+                "attempt_id": "attempt-1",
+                "media_kind": "video",
+                "status": "completed",
+                "video_url": "video/provider-attempt-1.mp4",
+                "error_code": null,
+                "created_at": 10.0,
+                "updated_at": 10.0
+              }
+            ]
+          },
+          "created_by": "user",
+          "created_at": 1.0,
+          "updated_at": 1.0
+        }
+      ],
+      "agent_policy": {
+        "approval_mode": "untrusted",
+        "allowed_tools": [],
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "updated_at": 1.0
+      },
+      "agent_turns": [],
+      "sequence": [],
+      "audio_tracks": [],
+      "exports": [],
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "sequence_export_jobs": [],
+      "generation_attempts": [
+        {
+          "schema_version": 1,
+          "project_id": "p1",
+          "node_id": "node-1",
+          "candidate_id": "candidate-1",
+          "attempt_id": "attempt-1",
+          "attempt_revision": 0,
+          "status": "completed",
+          "error_code": null,
+          "first_frame_source": {
+            "node_id": "source-1",
+            "media_url": "uploads/source.png"
+          },
+          "output_ref": "video/provider-attempt-1.mp4",
+          "provider_execution": {
+            "schema_version": 1,
+            "attempt_id": "attempt-1",
+            "phase": "completed",
+            "provider_model_id": "wan2.7-i2v",
+            "intent": {
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "model_id": "wan/wan2.7-video#i2v",
+              "catalog_mode": "i2v",
+              "mode": "i2v",
+              "prompt": "A slow sunrise",
+              "params": {
+                "duration": 5,
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "resolution": "720p",
+                "seed": 0,
+                "watermark": false
+              },
+              "sources": {
+                "model_id": "request",
+                "mode": "request",
+                "prompt": "request",
+                "params.duration": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.resolution": "request",
+                "params.seed": "request",
+                "params.watermark": "request"
+              },
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.resolution",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ],
+              "preset_id": null,
+              "preset_version": null
+            },
+            "media": [
+              {
+                "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "size_bytes": 100,
+                "role": "first_frame",
+                "ordinal": 0,
+                "declared_media_type": "image/png",
+                "schema_version": 1
+              }
+            ],
+            "scope": {
+              "provider": "dashscope",
+              "backend": "dashscope",
+              "gateway": "dashscope_workspace",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "region": "cn-beijing",
+              "workspace_id": null,
+              "account_identity": null
+            },
+            "credential_ref": "credential-ref",
+            "fingerprint": "d8a3f383c60f9157f1ca54bd2a3bc6cc9ee550a540b028ad76458dc20715323e",
+            "handle": {
+              "provider_model_id": "wan2.7-i2v",
+              "task_id": "remote-task-1",
+              "scope": {
+                "provider": "dashscope",
+                "backend": "dashscope",
+                "gateway": "dashscope_workspace",
+                "base_url": "https://dashscope.aliyuncs.com",
+                "region": "cn-beijing",
+                "workspace_id": null,
+                "account_identity": null
+              },
+              "credential_ref": "credential-ref",
+              "request_id": "remote-request-1",
+              "query_capability": "by_task_id",
+              "schema_version": 1,
+              "submitted_at": 10.0
+            },
+            "observation": null,
+            "prepared_artifact": null,
+            "artifact": {
+              "schema_version": 1,
+              "attempt_id": "attempt-1",
+              "handle": {
+                "provider_model_id": "wan2.7-i2v",
+                "task_id": "remote-task-1",
+                "scope": {
+                  "provider": "dashscope",
+                  "backend": "dashscope",
+                  "gateway": "dashscope_workspace",
+                  "base_url": "https://dashscope.aliyuncs.com",
+                  "region": "cn-beijing",
+                  "workspace_id": null,
+                  "account_identity": null
+                },
+                "credential_ref": "credential-ref",
+                "request_id": "remote-request-1",
+                "query_capability": "by_task_id",
+                "schema_version": 1,
+                "submitted_at": 10.0
+              },
+              "relative_path": "video/provider-attempt-1.mp4",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "size_bytes": 12
+            }
+          },
+          "created_at": 10.0,
+          "updated_at": 10.0
+        }
+      ],
+      "generation_request_receipts": [
+        {
+          "schema_version": 1,
+          "project_id": "p1",
+          "entrypoint": "atelier.provider_video.v1",
+          "request_contract_version": "request-json-v1",
+          "client_request_id": "request-1",
+          "request_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "node_id": "node-1",
+          "candidate_id": "candidate-1",
+          "attempt_id": "attempt-1",
+          "execution_fingerprint": "d8a3f383c60f9157f1ca54bd2a3bc6cc9ee550a540b028ad76458dc20715323e",
+          "base_revision": 0,
+          "committed_revision": 1,
+          "created_at": 10.0
+        }
+      ],
+      "candidate_judgments": [
+        {
+          "schema_version": 1,
+          "id": "judgment-wire-1",
+          "project_id": "p1",
+          "node_id": "node-1",
+          "candidate_id": "candidate-1",
+          "media_kind": "video",
+          "verdict": "keep",
+          "reason": "Keep this performance",
+          "created_at": 50.0
+        }
+      ],
+      "agent_compaction_summary": null,
+      "compacted_through_turn_id": null,
+      "revision": 2,
+      "created_at": 1.0,
+      "updated_at": 50.0
+    },
+    "node_ids": [
+      "node-1"
+    ]
+  },
+  "noop_ack": {
+    "project": {
+      "id": "p1",
+      "title": "Canvas",
+      "description": "",
+      "source_project_id": null,
+      "nodes": [
+        {
+          "id": "node-1",
+          "project_id": "p1",
+          "type": "video",
+          "title": "",
+          "prompt": "",
+          "status": "draft",
+          "x": 0.0,
+          "y": 0.0,
+          "width": 320.0,
+          "height": 180.0,
+          "source_project_id": null,
+          "frame_id": null,
+          "asset_id": null,
+          "video_task_id": null,
+          "media_urls": [],
+          "data": {
+            "candidates": [
+              {
+                "execution_contract": "atelier-provider-video-v1",
+                "id": "candidate-1",
+                "attempt_id": "attempt-1",
+                "media_kind": "video",
+                "status": "completed",
+                "video_url": "video/provider-attempt-1.mp4",
+                "error_code": null,
+                "created_at": 10.0,
+                "updated_at": 10.0
+              }
+            ]
+          },
+          "created_by": "user",
+          "created_at": 1.0,
+          "updated_at": 1.0
+        }
+      ],
+      "agent_policy": {
+        "approval_mode": "untrusted",
+        "allowed_tools": [],
+        "max_nodes_per_action": 8,
+        "max_tokens_per_turn": 2048,
+        "enable_reviewer": false,
+        "max_generation_cost_per_turn": 5.0,
+        "updated_at": 1.0
+      },
+      "agent_turns": [],
+      "sequence": [],
+      "audio_tracks": [],
+      "exports": [],
+      "node_delete_receipts": [],
+      "node_upload_receipts": [],
+      "sequence_export_jobs": [],
+      "generation_attempts": [
+        {
+          "schema_version": 1,
+          "project_id": "p1",
+          "node_id": "node-1",
+          "candidate_id": "candidate-1",
+          "attempt_id": "attempt-1",
+          "attempt_revision": 0,
+          "status": "completed",
+          "error_code": null,
+          "first_frame_source": {
+            "node_id": "source-1",
+            "media_url": "uploads/source.png"
+          },
+          "output_ref": "video/provider-attempt-1.mp4",
+          "provider_execution": {
+            "schema_version": 1,
+            "attempt_id": "attempt-1",
+            "phase": "completed",
+            "provider_model_id": "wan2.7-i2v",
+            "intent": {
+              "rules_version": "generation-parameters-v1",
+              "scope": "parameters-only",
+              "model_id": "wan/wan2.7-video#i2v",
+              "catalog_mode": "i2v",
+              "mode": "i2v",
+              "prompt": "A slow sunrise",
+              "params": {
+                "duration": 5,
+                "negative_prompt": "",
+                "prompt_extend": false,
+                "resolution": "720p",
+                "seed": 0,
+                "watermark": false
+              },
+              "sources": {
+                "model_id": "request",
+                "mode": "request",
+                "prompt": "request",
+                "params.duration": "request",
+                "params.negative_prompt": "request",
+                "params.prompt_extend": "request",
+                "params.resolution": "request",
+                "params.seed": "request",
+                "params.watermark": "request"
+              },
+              "request_fields": [
+                "mode",
+                "model_id",
+                "params.duration",
+                "params.negative_prompt",
+                "params.prompt_extend",
+                "params.resolution",
+                "params.seed",
+                "params.watermark",
+                "prompt"
+              ],
+              "preset_id": null,
+              "preset_version": null
+            },
+            "media": [
+              {
+                "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "size_bytes": 100,
+                "role": "first_frame",
+                "ordinal": 0,
+                "declared_media_type": "image/png",
+                "schema_version": 1
+              }
+            ],
+            "scope": {
+              "provider": "dashscope",
+              "backend": "dashscope",
+              "gateway": "dashscope_workspace",
+              "base_url": "https://dashscope.aliyuncs.com",
+              "region": "cn-beijing",
+              "workspace_id": null,
+              "account_identity": null
+            },
+            "credential_ref": "credential-ref",
+            "fingerprint": "d8a3f383c60f9157f1ca54bd2a3bc6cc9ee550a540b028ad76458dc20715323e",
+            "handle": {
+              "provider_model_id": "wan2.7-i2v",
+              "task_id": "remote-task-1",
+              "scope": {
+                "provider": "dashscope",
+                "backend": "dashscope",
+                "gateway": "dashscope_workspace",
+                "base_url": "https://dashscope.aliyuncs.com",
+                "region": "cn-beijing",
+                "workspace_id": null,
+                "account_identity": null
+              },
+              "credential_ref": "credential-ref",
+              "request_id": "remote-request-1",
+              "query_capability": "by_task_id",
+              "schema_version": 1,
+              "submitted_at": 10.0
+            },
+            "observation": null,
+            "prepared_artifact": null,
+            "artifact": {
+              "schema_version": 1,
+              "attempt_id": "attempt-1",
+              "handle": {
+                "provider_model_id": "wan2.7-i2v",
+                "task_id": "remote-task-1",
+                "scope": {
+                  "provider": "dashscope",
+                  "backend": "dashscope",
+                  "gateway": "dashscope_workspace",
+                  "base_url": "https://dashscope.aliyuncs.com",
+                  "region": "cn-beijing",
+                  "workspace_id": null,
+                  "account_identity": null
+                },
+                "credential_ref": "credential-ref",
+                "request_id": "remote-request-1",
+                "query_capability": "by_task_id",
+                "schema_version": 1,
+                "submitted_at": 10.0
+              },
+              "relative_path": "video/provider-attempt-1.mp4",
+              "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "size_bytes": 12
+            }
+          },
+          "created_at": 10.0,
+          "updated_at": 10.0
+        }
+      ],
+      "generation_request_receipts": [
+        {
+          "schema_version": 1,
+          "project_id": "p1",
+          "entrypoint": "atelier.provider_video.v1",
+          "request_contract_version": "request-json-v1",
+          "client_request_id": "request-1",
+          "request_fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "node_id": "node-1",
+          "candidate_id": "candidate-1",
+          "attempt_id": "attempt-1",
+          "execution_fingerprint": "d8a3f383c60f9157f1ca54bd2a3bc6cc9ee550a540b028ad76458dc20715323e",
+          "base_revision": 0,
+          "committed_revision": 1,
+          "created_at": 10.0
+        }
+      ],
+      "candidate_judgments": [
+        {
+          "schema_version": 1,
+          "id": "judgment-wire-1",
+          "project_id": "p1",
+          "node_id": "node-1",
+          "candidate_id": "candidate-1",
+          "media_kind": "video",
+          "verdict": "keep",
+          "reason": "Keep this performance",
+          "created_at": 50.0
+        }
+      ],
+      "agent_compaction_summary": null,
+      "compacted_through_turn_id": null,
+      "revision": 2,
+      "created_at": 1.0,
+      "updated_at": 50.0
+    },
+    "node_ids": [
+      "node-1"
+    ]
+  }
+}

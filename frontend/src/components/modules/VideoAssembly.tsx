@@ -1,28 +1,90 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Loader2, Film, AlertTriangle, Layout, Clock, FileText, Download, Music, Sliders, Package } from "lucide-react";
 import { useProjectStore } from "@/store/projectStore";
-import { api, type BgmPreset } from "@/lib/api";
+import { API_URL, api, type BgmPreset } from "@/lib/api";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import { getAssetUrl, extractErrorDetail } from "@/lib/utils";
+import { selectFrameAssemblyVideo, selectVerifiedAppliedDubUrlForTask } from "@/lib/dubSource";
 import StepPageHeader, { StepPill } from "@/components/shared/StepPageHeader";
 import SidePanelHeader from "@/components/shared/SidePanelHeader";
+import { confirmRawProjectAck, ProjectReadbackError } from "@/lib/projectReadback";
+import { appAccessFetch } from "@/lib/appAccess";
+import { mergeVideoDisplayState, type MergeVideoDisplayState } from "@/lib/mergeFreshness";
 
 type AssemblyPhase = "takes" | "mix" | "export";
 
+const DEFAULT_MIX_SETTINGS = { dialogue: 100, bgm: 35, sfx: 60 };
+
+function currentProjectId() {
+    return useProjectStore.getState().currentProject?.id ?? null;
+}
+
+function projectReadEnvironment(project: { readEnvironment?: string } | null | undefined) {
+    return project?.readEnvironment;
+}
+
+function currentProjectEnvironment() {
+    return projectReadEnvironment(useProjectStore.getState().currentProject);
+}
+
+function isCurrentProject(projectId: string, environment: string | undefined, generation: number | undefined) {
+    const project = useProjectStore.getState().currentProject;
+    return !!environment && project?.id === projectId && projectReadEnvironment(project) === environment
+        && isCurrentRuntimeEnvironment(environment, generation);
+}
+
 export default function VideoAssembly() {
     const ta = useTranslations("assembly");
+    const tc = useTranslations("frameCommands");
     const tStep = useTranslations("stepHeader");
     const currentProject = useProjectStore((state) => state.currentProject);
-    const updateProject = useProjectStore((state) => state.updateProject);
 
     const [phase, setPhase] = useState<AssemblyPhase>("takes");
     const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
     const [isMerging, setIsMerging] = useState(false);
+    const [mergeProjectId, setMergeProjectId] = useState<string | null>(null);
     const [mergeError, setMergeError] = useState<string | null>(null);
+    const [selectingVideoKey, setSelectingVideoKey] = useState<string | null>(null);
+    const mergeRequestRef = useRef(0);
     const [isDownloading, setIsDownloading] = useState(false);
+    const sessionRef = useRef({
+        projectId: currentProject?.id ?? null,
+        environment: projectReadEnvironment(currentProject),
+        generation: getRuntimeEnvironment()?.generation,
+        token: 0,
+    });
+
+    useEffect(() => {
+        const projectId = currentProject?.id ?? null;
+        const environment = currentProject?.readEnvironment;
+        const runtime = getRuntimeEnvironment();
+        const generation = runtime && runtime.key === environment ? runtime.generation : undefined;
+        if (sessionRef.current.projectId !== projectId || sessionRef.current.environment !== environment || sessionRef.current.generation !== generation) {
+            sessionRef.current = { projectId, environment, generation, token: sessionRef.current.token + 1 };
+            setSelectingVideoKey(null);
+        }
+    }, [currentProject?.id, currentProject?.readEnvironment]);
+
+    useEffect(() => () => {
+        sessionRef.current = {
+            projectId: sessionRef.current.projectId,
+            environment: sessionRef.current.environment,
+            generation: sessionRef.current.generation,
+            token: sessionRef.current.token + 1,
+        };
+    }, []);
+
+    const isActiveSession = (projectId: string, environment: string | undefined, generation: number | undefined, token: number) => (
+        sessionRef.current.token === token
+            && sessionRef.current.projectId === projectId
+            && sessionRef.current.environment === environment
+            && sessionRef.current.generation === generation
+            && isCurrentProject(projectId, environment, generation)
+    );
 
     // Group videos by frame
     const videosByFrame = useMemo(() => {
@@ -41,36 +103,59 @@ export default function VideoAssembly() {
     }, [currentProject?.video_tasks]);
 
     const handleSelectVideo = async (frameId: string, videoId: string) => {
-        if (!currentProject) return;
+        if (!currentProject || currentProject.readEnvironment !== getRuntimeEnvironment()?.key) return;
+        const projectId = currentProject.id;
+        const sessionToken = sessionRef.current.token;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const selectionKey = `${projectId}:${frameId}:${videoId}`;
+        const isActive = () => isActiveSession(projectId, environment, generation, sessionToken);
+        setSelectingVideoKey(selectionKey);
         try {
-            const updatedProject = await api.selectVideo(currentProject.id, frameId, videoId);
-            updateProject(currentProject.id, updatedProject);
+            const response = await api.selectVideo(projectId, frameId, videoId);
+            if (!isActive()) return;
+            await confirmRawProjectAck(projectId, response, { isCurrent: () => isActive() });
         } catch (error) {
+            if (!isActive()) return;
             console.error("Failed to select video:", error);
+            alert(error instanceof ProjectReadbackError ? tc("savedReadFailed") : extractErrorDetail(error, "Failed to select video"));
+        } finally {
+            if (isActive()) setSelectingVideoKey((current) => current === selectionKey ? null : current);
         }
     };
 
     const handleMerge = async () => {
-        if (!currentProject) return;
+        if (!currentProject || currentProject.readEnvironment !== getRuntimeEnvironment()?.key) return;
+        const projectId = currentProject.id;
+        const sessionToken = sessionRef.current.token;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const requestId = mergeRequestRef.current + 1;
+        mergeRequestRef.current = requestId;
+        setMergeProjectId(projectId);
         setIsMerging(true);
         setMergeError(null);  // Clear previous errors
 
+        const isActive = () => mergeRequestRef.current === requestId && isActiveSession(projectId, environment, generation, sessionToken);
         try {
-            const updatedProject = await api.mergeVideos(currentProject.id);
-            updateProject(currentProject.id, updatedProject);
-            // Success - error will be null, merged video will show below
+            const response = await api.mergeVideos(projectId);
+            if (!isActive()) return;
+            await confirmRawProjectAck(projectId, response, { isCurrent: () => isActive() });
         } catch (error: any) {
+            if (!isActive()) return;
             console.error("Failed to merge videos:", error);
 
-            // Extract detailed error message from backend
-            const errorDetail = extractErrorDetail(error, "Unknown error occurred during video merge");
+            const errorDetail = error instanceof ProjectReadbackError
+                ? tc("savedReadFailed")
+                : extractErrorDetail(error, "Unknown error occurred during video merge");
 
             setMergeError(errorDetail);
-
-            // Also show alert for immediate feedback
-            alert(`${ta("mergeFailedAlert")}:\n\n${errorDetail}`);
+            alert(error instanceof ProjectReadbackError ? errorDetail : `${ta("mergeFailedAlert")}:\n\n${errorDetail}`);
         } finally {
-            setIsMerging(false);
+            if (mergeRequestRef.current === requestId) {
+                setIsMerging(false);
+                setMergeProjectId((current) => current === projectId ? null : current);
+            }
         }
     };
 
@@ -79,15 +164,13 @@ export default function VideoAssembly() {
         if (!currentProject?.merged_video_url) return;
         setIsDownloading(true);
         try {
-            // Build download URL - use proxy in dev to avoid CORS, direct in production
             const rawPath = currentProject.merged_video_url;
-            const cleanPath = rawPath.startsWith("/") ? rawPath.slice(1) : rawPath;
-            const isDev = process.env.NODE_ENV === "development";
-            const url = isDev
-                ? `/api-proxy/files/${cleanPath}`
-                : getAssetUrl(rawPath);
+            const cleanPath = rawPath.replace(/^output\//, "").replace(/^\/+/, "");
+            const url = rawPath.startsWith("http://") || rawPath.startsWith("https://")
+                ? getAssetUrl(rawPath)
+                : `${API_URL}/files/${cleanPath}`;
 
-            const response = await fetch(url);
+            const response = await appAccessFetch(url);
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const blob = await response.blob();
             const blobUrl = URL.createObjectURL(blob);
@@ -109,8 +192,15 @@ export default function VideoAssembly() {
     }, [currentProject?.frames, selectedFrameId]);
 
     const variants = selectedFrameId ? videosByFrame[selectedFrameId] || [] : [];
+    const mergeDisplay = useMemo(() => {
+        const runtime = getRuntimeEnvironment();
+        return mergeVideoDisplayState(currentProject, runtime?.key ?? "");
+    }, [currentProject]);
 
-    const framesReady = currentProject?.frames?.filter((f: any) => f.selected_video_id).length ?? 0;
+    const framesReady = currentProject?.frames?.filter((f: any) => {
+        const selected = selectFrameAssemblyVideo(f, currentProject.video_tasks ?? []);
+        return selected.kind !== "none";
+    }).length ?? 0;
     const framesTotal = currentProject?.frames?.length ?? 0;
 
     return (
@@ -162,8 +252,12 @@ export default function VideoAssembly() {
                         {currentProject?.frames?.map((frame: any, index: number) => {
                             const hasVideos = videosByFrame[frame.id]?.length > 0;
                             const isSelected = frame.id === selectedFrameId;
-                            const selectedVideoId = frame.selected_video_id;
-                            const selectedVideo = currentProject.video_tasks?.find((v: any) => v.id === selectedVideoId);
+                            const selectedSource = selectFrameAssemblyVideo(frame, currentProject.video_tasks ?? []);
+                            const selectedVideoId = selectedSource.kind !== "none" ? selectedSource.taskId : frame.selected_video_id;
+                            const selectedVideo = selectedSource.kind !== "none"
+                                ? currentProject.video_tasks?.find((v: any) => v.id === selectedSource.taskId)
+                                : undefined;
+                            const selectedVideoUrl = selectedSource.kind !== "none" ? selectedSource.url : undefined;
 
                             return (
                                 <motion.div
@@ -178,11 +272,7 @@ export default function VideoAssembly() {
                                     <div className="w-48 aspect-video relative flex-shrink-0 border-r border-glass-border bg-elevated">
                                         {selectedVideo ? (
                                             <video
-                                                src={getAssetUrl(
-                                                    frame.dubbed_video_task_id === selectedVideo.id && frame.dubbed_video_url
-                                                        ? frame.dubbed_video_url
-                                                        : selectedVideo.video_url
-                                                )}
+                                                src={getAssetUrl(selectedVideoUrl || selectedVideo.video_url)}
                                                 className="w-full h-full object-cover"
                                                 muted
                                                 onMouseOver={(e) => e.currentTarget.play()}
@@ -263,7 +353,6 @@ export default function VideoAssembly() {
                     <MixPhase scriptId={currentProject?.id ?? null}
                               bgmUrl={currentProject?.bgm_url ?? null}
                               mixSettings={currentProject?.mix_settings as Record<string, number> | undefined}
-                              onChange={(updated) => currentProject && updateProject(currentProject.id, updated)}
                     />
                 )}
 
@@ -271,8 +360,8 @@ export default function VideoAssembly() {
                 {phase === "export" && (
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-8 space-y-6">
                         <ExportPhase
-                            mergedVideoUrl={currentProject?.merged_video_url ?? null}
-                            isMerging={isMerging}
+                            mergeDisplay={mergeDisplay}
+                            isMerging={isMerging && mergeProjectId === currentProject?.id}
                             isDownloading={isDownloading}
                             mergeError={mergeError}
                             framesReady={framesReady}
@@ -301,6 +390,9 @@ export default function VideoAssembly() {
                                 {variants.length > 0 ? (
                                     variants.map((video: any, idx: number) => {
                                         const isSelected = selectedFrame?.selected_video_id === video.id;
+                                        const verifiedVideoUrl = selectedFrame
+                                            ? selectVerifiedAppliedDubUrlForTask(selectedFrame, video) || video.video_url
+                                            : video.video_url;
                                         return (
                                             <div
                                                 key={video.id}
@@ -309,11 +401,7 @@ export default function VideoAssembly() {
                                             >
                                                 <div className="aspect-video relative bg-black">
                                                     <video
-                                                        src={getAssetUrl(
-                                                            selectedFrame?.dubbed_video_task_id === video.id && selectedFrame?.dubbed_video_url
-                                                                ? selectedFrame.dubbed_video_url
-                                                                : video.video_url
-                                                        )}
+                                                        src={getAssetUrl(verifiedVideoUrl)}
                                                         className="w-full h-full object-contain"
                                                         controls
                                                     />
@@ -339,9 +427,10 @@ export default function VideoAssembly() {
                                                     ) : (
                                                         <button
                                                             onClick={() => handleSelectVideo(selectedFrameId, video.id)}
-                                                            className="w-full py-2 bg-hover-bg hover:bg-hover-bg rounded-lg text-xs font-medium transition-colors text-foreground"
+                                                            disabled={selectingVideoKey === `${currentProject?.id}:${selectedFrameId}:${video.id}`}
+                                                            className="w-full py-2 bg-hover-bg hover:bg-hover-bg rounded-lg text-xs font-medium transition-colors text-foreground disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
-                                                            {ta("selectThisVariant")}
+                                                            {selectingVideoKey === `${currentProject?.id}:${selectedFrameId}:${video.id}` ? <Loader2 size={12} className="mx-auto animate-spin" /> : ta("selectThisVariant")}
                                                         </button>
                                                     )}
                                                 </div>
@@ -377,18 +466,59 @@ function MixPhase({
     scriptId,
     bgmUrl,
     mixSettings,
-    onChange,
 }: {
     scriptId: string | null;
     bgmUrl: string | null;
     mixSettings: Record<string, number> | undefined;
-    onChange: (updated: { bgm_url?: string | null; mix_settings?: Record<string, number> }) => void;
 }) {
     const ta = useTranslations("assembly");
+    const tc = useTranslations("frameCommands");
     const [presets, setPresets] = useState<BgmPreset[]>([]);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
-    const mix = mixSettings ?? { dialogue: 100, bgm: 35, sfx: 60 };
+    const [draftBgmUrl, setDraftBgmUrl] = useState<string | null>(bgmUrl ?? null);
+    const [draftMix, setDraftMix] = useState<Record<string, number>>(mixSettings ?? DEFAULT_MIX_SETTINGS);
+    const [hasFailedDraft, setHasFailedDraft] = useState(false);
+    const [mixError, setMixError] = useState<string | null>(null);
+    const tCommon = useTranslations("common");
+    const retryingRef = useRef(false);
+    const audioMixQueueRef = useRef<Promise<void>>(Promise.resolve());
+    const blockedQueuedSerialRef = useRef(0);
+    const draftSerialRef = useRef(0);
+    const scriptEnvironment = currentProjectId() === scriptId ? currentProjectEnvironment() : undefined;
+    const scriptRuntime = getRuntimeEnvironment();
+    const scriptGeneration = scriptRuntime && scriptRuntime.key === scriptEnvironment ? scriptRuntime.generation : undefined;
+    const sessionRef = useRef({ projectId: scriptId, environment: scriptEnvironment, generation: scriptGeneration, token: 0 });
+    const mix = draftMix;
+
+    useEffect(() => {
+        if (sessionRef.current.projectId !== scriptId
+            || sessionRef.current.environment !== scriptEnvironment
+            || sessionRef.current.generation !== scriptGeneration) {
+            sessionRef.current = { projectId: scriptId, environment: scriptEnvironment, generation: scriptGeneration, token: sessionRef.current.token + 1 };
+            blockedQueuedSerialRef.current = draftSerialRef.current;
+            audioMixQueueRef.current = Promise.resolve();
+            retryingRef.current = false;
+            setSaving(false);
+            setDraftBgmUrl(bgmUrl ?? null);
+            setDraftMix(mixSettings ?? DEFAULT_MIX_SETTINGS);
+            setHasFailedDraft(false);
+            setMixError(null);
+        } else if (!hasFailedDraft && !saving) {
+            setDraftBgmUrl(bgmUrl ?? null);
+            setDraftMix(mixSettings ?? DEFAULT_MIX_SETTINGS);
+        }
+    }, [bgmUrl, hasFailedDraft, mixSettings, saving, scriptEnvironment, scriptGeneration, scriptId]);
+
+    useEffect(() => () => {
+        sessionRef.current = {
+            projectId: sessionRef.current.projectId,
+            environment: sessionRef.current.environment,
+            generation: sessionRef.current.generation,
+            token: sessionRef.current.token + 1,
+        };
+        blockedQueuedSerialRef.current = draftSerialRef.current;
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -400,28 +530,84 @@ function MixPhase({
         return () => { cancelled = true; };
     }, []);
 
-    const handlePick = async (preset: BgmPreset | null) => {
-        if (!scriptId) return;
+    const enqueueAudioMixPatch = (projectId: string, environment: string | undefined, generation: number | undefined, token: number, draftSerial: number, payload: {
+        bgm_url?: string | null;
+        dialogue_volume?: number;
+        bgm_volume?: number;
+        sfx_volume?: number;
+    }) => {
         setSaving(true);
-        try {
-            const updated = await api.updateAudioMix(scriptId, { bgm_url: preset ? preset.url : null });
-            onChange({ bgm_url: updated.bgm_url, mix_settings: updated.mix_settings });
-        } finally {
-            setSaving(false);
-        }
+        setMixError(null);
+        const run = async () => {
+            const isActive = () => sessionRef.current.token === token
+                && sessionRef.current.projectId === projectId
+                && sessionRef.current.environment === environment
+                && sessionRef.current.generation === generation
+                && isCurrentProject(projectId, environment, generation);
+            if (!isActive() || draftSerial <= blockedQueuedSerialRef.current) return;
+            try {
+                const response = await api.updateAudioMix(projectId, payload);
+                if (!isActive()) return;
+                await confirmRawProjectAck(projectId, response, { isCurrent: () => isActive() });
+                const snapshot = useProjectStore.getState().currentProject;
+                if (!isActive() || snapshot?.id !== projectId) return;
+                if (draftSerialRef.current === draftSerial) {
+                    setDraftBgmUrl(snapshot.bgm_url ?? null);
+                    setDraftMix(snapshot.mix_settings ?? DEFAULT_MIX_SETTINGS);
+                    setHasFailedDraft(false);
+                }
+            } catch (error) {
+                if (!isActive()) return;
+                blockedQueuedSerialRef.current = Math.max(blockedQueuedSerialRef.current, draftSerialRef.current);
+                setHasFailedDraft(true);
+                setMixError(error instanceof ProjectReadbackError ? tc("savedReadFailed") : extractErrorDetail(error, "Failed to update audio mix"));
+            }
+        };
+        const queued = audioMixQueueRef.current.catch(() => undefined).then(run);
+        audioMixQueueRef.current = queued;
+        queued.finally(() => {
+            if (audioMixQueueRef.current === queued) {
+                retryingRef.current = false;
+                setSaving(false);
+            }
+        });
     };
 
-    const handleVolume = async (track: "dialogue" | "bgm" | "sfx", value: number) => {
-        if (!scriptId) return;
-        // Optimistic update for snappy slider
-        onChange({ mix_settings: { ...mix, [track]: value } });
-        try {
-            const payload: Record<string, number> = {};
-            payload[`${track}_volume`] = value;
-            await api.updateAudioMix(scriptId, payload as any);
-        } catch (_) {
-            // Revert handled by next project refresh — keep silent for v1
-        }
+    const handlePick = (preset: BgmPreset | null) => {
+        if (!scriptId || !isCurrentProject(scriptId, scriptEnvironment, scriptGeneration)) return;
+        const projectId = scriptId;
+        const token = sessionRef.current.token;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const nextBgm = preset ? preset.url : null;
+        const draftSerial = draftSerialRef.current + 1;
+        draftSerialRef.current = draftSerial;
+        setDraftBgmUrl(nextBgm);
+        if (!hasFailedDraft) enqueueAudioMixPatch(projectId, environment, generation, token, draftSerial, { bgm_url: nextBgm });
+    };
+
+    const handleVolume = (track: "dialogue" | "bgm", value: number) => {
+        if (!scriptId || !isCurrentProject(scriptId, scriptEnvironment, scriptGeneration)) return;
+        const projectId = scriptId;
+        const token = sessionRef.current.token;
+        const environment = sessionRef.current.environment;
+        const generation = sessionRef.current.generation;
+        const draftSerial = draftSerialRef.current + 1;
+        draftSerialRef.current = draftSerial;
+        setDraftMix((current) => ({ ...current, [track]: value }));
+        if (!hasFailedDraft) enqueueAudioMixPatch(projectId, environment, generation, token, draftSerial, { [`${track}_volume`]: value });
+    };
+
+    const saveFailedDraft = () => {
+        if (!scriptId || !isCurrentProject(scriptId, scriptEnvironment, scriptGeneration) || saving || retryingRef.current) return;
+        retryingRef.current = true;
+        const serial = ++draftSerialRef.current;
+        enqueueAudioMixPatch(scriptId, sessionRef.current.environment, sessionRef.current.generation, sessionRef.current.token, serial, {
+            bgm_url: draftBgmUrl,
+            dialogue_volume: draftMix.dialogue,
+            bgm_volume: draftMix.bgm,
+            sfx_volume: draftMix.sfx,
+        });
     };
 
     return (
@@ -433,22 +619,29 @@ function MixPhase({
                     {ta("mixBgmTitle")}
                     {saving && <Loader2 size={12} className="animate-spin text-primary" />}
                 </h3>
-                {/* Preview banner — backend amix is wired (pipeline.merge_videos),
-                    but the preset audio files aren't shipped yet, so the merged
-                    output today is silent regardless of selection. We surface
-                    this honestly so users don't keep selecting BGM and wondering
-                    why the export has no music. */}
+                {/* Merge behavior note — no BGM keeps source audio; unavailable selected BGM blocks merge. */}
                 <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2">
                     <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400/85" aria-hidden="true" />
                     <p className="text-[0.71875rem] leading-relaxed text-amber-100/85">
                         {ta("mixBgmPreviewNotice")}
                     </p>
                 </div>
+                {mixError && (
+                    <div role="alert" className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-[0.75rem] text-red-200">
+                        {mixError}
+                    </div>
+                )}
+                {hasFailedDraft && (
+                    <button type="button" onClick={saveFailedDraft} disabled={saving}
+                        className="mb-3 rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-50">
+                        {tCommon("save")}
+                    </button>
+                )}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                     <button
                         onClick={() => handlePick(null)}
                         className={`rounded-lg border p-3 text-left transition-colors ${
-                            !bgmUrl
+                            !draftBgmUrl
                                 ? "border-primary bg-[rgba(100,108,255,0.10)]"
                                 : "border-glass-border bg-glass hover:border-foreground/30"
                         }`}
@@ -462,7 +655,7 @@ function MixPhase({
                         </div>
                     ) : (
                         presets.map((p) => {
-                            const selected = bgmUrl === p.url;
+                            const selected = draftBgmUrl === p.url;
                             return (
                                 <button
                                     key={p.id}
@@ -489,11 +682,12 @@ function MixPhase({
                     {ta("mixLevelsTitle")}
                 </h3>
                 <div className="space-y-3 max-w-lg">
-                    {(["dialogue", "bgm", "sfx"] as const).map((track) => (
+                    {(["dialogue", "bgm"] as const).map((track) => (
                         <div key={track} className="flex items-center gap-3">
                             <span className="w-20 font-mono text-[0.6875rem] uppercase tracking-[0.16em] text-text-muted">{ta(`mixTrack.${track}`)}</span>
                             <input
                                 type="range"
+                                aria-label={ta(`mixTrack.${track}`)}
                                 min={0}
                                 max={100}
                                 step={1}
@@ -514,7 +708,7 @@ function MixPhase({
 }
 
 function ExportPhase({
-    mergedVideoUrl,
+    mergeDisplay,
     isMerging,
     isDownloading,
     mergeError,
@@ -524,7 +718,7 @@ function ExportPhase({
     onDownload,
     onDismissError,
 }: {
-    mergedVideoUrl: string | null;
+    mergeDisplay: MergeVideoDisplayState;
     isMerging: boolean;
     isDownloading: boolean;
     mergeError: string | null;
@@ -536,6 +730,9 @@ function ExportPhase({
 }) {
     const ta = useTranslations("assembly");
     const allReady = framesTotal > 0 && framesReady === framesTotal;
+    const mergedVideoUrl = mergeDisplay.url;
+    const isCurrentMerge = mergeDisplay.kind === 'current';
+    const showHistoricalWarning = mergeDisplay.kind === 'stale' || mergeDisplay.kind === 'unknown';
     return (
         <div className="space-y-6 max-w-3xl">
             <section className="rounded-xl border border-glass-border bg-glass p-6">
@@ -597,18 +794,25 @@ function ExportPhase({
                             <div className="p-5 flex flex-col justify-center gap-3">
                                 <div>
                                     <h3 className="text-display font-medium text-foreground flex items-center gap-2">
-                                        <Check className="text-green-500" size={16} />
-                                        {ta("mergedVideoReady")}
+                                        {isCurrentMerge ? <Check className="text-green-500" size={16} /> : <AlertTriangle className="text-amber-400" size={16} />}
+                                        {isCurrentMerge ? ta("mergedVideoReady") : ta("mergedVideoHistoryTitle")}
                                     </h3>
-                                    <p className="text-body-sm text-text-secondary mt-1">{ta("mergedVideoDesc")}</p>
+                                    <p className="text-body-sm text-text-secondary mt-1">
+                                        {isCurrentMerge ? ta("mergedVideoDesc") : ta("mergedVideoHistoryDesc")}
+                                    </p>
                                 </div>
+                                {showHistoricalWarning && (
+                                    <div role="status" className="rounded-md border border-amber-500/25 bg-amber-500/[0.08] px-3 py-2 text-[0.75rem] leading-relaxed text-amber-100/90">
+                                        {mergeDisplay.kind === 'stale' ? ta("mergedVideoStale") : ta("mergedVideoUnknown")}
+                                    </div>
+                                )}
                                 <button
                                     onClick={onDownload}
                                     disabled={isDownloading}
                                     className="self-start inline-flex items-center gap-2 px-5 py-2.5 rounded-md bg-glass border border-glass-border text-foreground hover:bg-hover-bg transition-colors text-[0.8125rem] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <Download size={14} />
-                                    {isDownloading ? ta("downloading") : ta("downloadMP4")}
+                                    {isDownloading ? ta("downloading") : isCurrentMerge ? ta("downloadMP4") : ta("downloadHistoryMP4")}
                                 </button>
                             </div>
                         </div>

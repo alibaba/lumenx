@@ -1,10 +1,13 @@
 import os
+from io import BytesIO
 import oss2
-import hashlib
 import tempfile
 import time
-from typing import Optional, Tuple
+from copy import deepcopy
+from types import MappingProxyType
+from typing import Mapping, Optional
 from . import get_logger
+from .json_storage import StorageError
 from .media_refs import classify_media_ref, MEDIA_REF_LOCAL_PATH, MEDIA_REF_OBJECT_KEY
 
 logger = get_logger(__name__)
@@ -26,7 +29,7 @@ def is_oss_configured() -> bool:
     return all(required)
 
 
-def is_oss_enabled() -> bool:
+def is_oss_enabled(*, env: Mapping[str, str] | None = None) -> bool:
     """Check whether OSS upload is enabled.
 
     Controlled by the ``OSS_ENABLE`` flag (env / saved config). Defaults to True
@@ -35,23 +38,23 @@ def is_oss_enabled() -> bool:
     (local-first). This only gates uploads — signing/display of objects that
     were already uploaded is unaffected.
     """
-    value = os.getenv("OSS_ENABLE")
+    value = (os.environ if env is None else env).get("OSS_ENABLE")
     if value is None:
         return True
     return value.strip().lower() not in ("false", "0", "no", "off")
 
 
-def get_oss_base_path() -> str:
+def get_oss_base_path(*, env: Mapping[str, str] | None = None) -> str:
     """Get OSS base path from environment or use default."""
-    return os.getenv("OSS_BASE_PATH", DEFAULT_OSS_BASE_PATH).rstrip("/")
+    return (os.environ if env is None else env).get("OSS_BASE_PATH", DEFAULT_OSS_BASE_PATH).rstrip("/")
 
 
-def is_object_key(value: str) -> bool:
+def is_object_key(value: str, *, env: Mapping[str, str] | None = None) -> bool:
     """
     Check if a string value is an OSS Object Key (not a full URL or local path).
     """
     return (
-        classify_media_ref(value, oss_base_path=get_oss_base_path())
+        classify_media_ref(value, oss_base_path=get_oss_base_path(env=env))
         == MEDIA_REF_OBJECT_KEY
     )
 
@@ -75,23 +78,30 @@ class OSSImageUploader:
     
     _instance = None
     
-    def __new__(cls):
-        """Singleton pattern to reuse OSS connection."""
+    def __new__(cls, *, env: Mapping[str, str] | None = None, output_root=None):
+        """Keep the standalone singleton; explicit runtimes own their client."""
+        if env is not None or output_root is not None:
+            instance = super().__new__(cls)
+            instance._initialized = False
+            instance._url_cache = {}
+            return instance
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
             cls._instance._url_cache = {}  # (object_key, expires) -> (signed_url, timestamp)
         return cls._instance
     
-    def __init__(self):
+    def __init__(self, *, env: Mapping[str, str] | None = None, output_root=None):
         if self._initialized:
             return
             
-        self.access_key_id = os.getenv("ALIBABA_CLOUD_ACCESS_KEY_ID")
-        self.access_key_secret = os.getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
-        self.endpoint = os.getenv("OSS_ENDPOINT")
-        self.bucket_name = os.getenv("OSS_BUCKET_NAME")
-        self.base_path = get_oss_base_path()
+        self._env = os.environ if env is None else MappingProxyType(dict(env))
+        self.output_root = os.path.realpath(output_root or "output")
+        self.access_key_id = self._env.get("ALIBABA_CLOUD_ACCESS_KEY_ID")
+        self.access_key_secret = self._env.get("ALIBABA_CLOUD_ACCESS_KEY_SECRET")
+        self.endpoint = self._env.get("OSS_ENDPOINT")
+        self.bucket_name = self._env.get("OSS_BUCKET_NAME")
+        self.base_path = self._env.get("OSS_BASE_PATH", DEFAULT_OSS_BASE_PATH).rstrip("/")
         
         # Debug prints for terminal
         print(f"DEBUG: OSS init - ID={'***' if self.access_key_id else 'None'}, Secret={'***' if self.access_key_secret else 'None'}, Endpoint={self.endpoint}, Bucket={self.bucket_name}, Base={self.base_path}")
@@ -154,7 +164,7 @@ class OSSImageUploader:
         Returns:
             Object Key (e.g., "lumenx/proj_123/assets/characters/file.png") or None if failed
         """
-        if not is_oss_enabled():
+        if not is_oss_enabled(env=self._env):
             logger.info("OSS upload disabled (OSS_ENABLE=false); skipping, using local path.")
             return None
 
@@ -166,7 +176,7 @@ class OSSImageUploader:
         # directory; anything else (e.g. path traversal via a crafted media
         # ref) is rejected and callers fall back gracefully (data URI / local).
         resolved = os.path.realpath(local_path)
-        out_base = os.path.realpath("output")
+        out_base = self.output_root
         tmp_base = os.path.realpath(tempfile.gettempdir())
         if not resolved.startswith(out_base + os.sep):
             if not resolved.startswith(tmp_base + os.sep):
@@ -197,6 +207,27 @@ class OSSImageUploader:
             logger.error(f"OSS upload error: {e}")
             return None
     
+    def upload_bytes(self, payload: bytes, *, custom_filename: str, sub_path: str = "", max_bytes: int = 100 * 1024 * 1024) -> Optional[str]:
+        """Mirror already-verified immutable bytes without reopening a mutable path."""
+        if type(payload) is not bytes or type(max_bytes) is not int or not 0 < len(payload) <= max_bytes:
+            raise ValueError("OSS byte upload requires nonempty bytes within the size limit")
+        if not isinstance(custom_filename, str) or not custom_filename or not isinstance(sub_path, str):
+            raise ValueError("OSS byte upload requires a filename and text sub-path")
+        if not is_oss_enabled(env=self._env) or self.bucket is None:
+            return None
+        object_key = self._build_object_key(sub_path, custom_filename)
+        try:
+            with BytesIO(payload) as stream:
+                result = self.bucket.put_object(object_key, stream)
+            if result.status == 200:
+                return object_key
+            logger.warning("OSS byte mirror did not complete")
+        except StorageError:
+            raise
+        except Exception:
+            logger.warning("OSS byte mirror failed")
+        return None
+
     def generate_signed_url(self, object_key: str, expires: int = SIGN_URL_EXPIRES_DISPLAY) -> str:
         """
         Generate a signed URL for accessing a private OSS object.
@@ -277,6 +308,128 @@ class OSSImageUploader:
         return self.sign_url_for_display(object_key)
 
 
+_RESPONSE_MEDIA_FIELDS = frozenset({
+    "audio_url",
+    "avatar_url",
+    "bg_audio_url",
+    "bgm_url",
+    "dubbed_video_url",
+    "full_body_image_url",
+    "headshot_image_url",
+    "image_url",
+    "merged_video_url",
+    "preview_video_url",
+    "rendered_image_url",
+    "sfx_url",
+    "source_audio_url",
+    "three_view_image_url",
+    "thumbnail_url",
+    "video_url",
+})
+_RESPONSE_MEDIA_LIST_FIELDS = frozenset({
+    "image_urls",
+    "reference_image_urls",
+    "reference_video_urls",
+    "t2i_image_urls",
+})
+_RESPONSE_RAW_SNAPSHOT_FIELDS = frozenset({
+    "dialogue_audio_snapshot",
+    "dub_applied_source",
+    "dub_preview_source",
+})
+_RESPONSE_RAW_METADATA_FIELDS = frozenset({
+    "options",
+    "prepared",
+    "resolved_request",
+    "settings",
+    "sources",
+})
+_RESPONSE_MEDIA_REFS_FIELD = "media_refs"
+
+
+def _is_uploader_object_key(value: str, uploader: OSSImageUploader) -> bool:
+    # Older injected display signers only implement sign_url_for_display.
+    base_path = getattr(uploader, "base_path", None)
+    if not isinstance(base_path, str):
+        return is_object_key(value)
+    return classify_media_ref(value, oss_base_path=base_path) == MEDIA_REF_OBJECT_KEY
+
+
+def _sign_response_media_value(value, uploader: OSSImageUploader, signing_enabled: bool):
+    if not signing_enabled or not isinstance(value, str) or not _is_uploader_object_key(value, uploader):
+        return value, None
+    signed_url = uploader.sign_url_for_display(value)
+    return signed_url if signed_url else value, value
+
+
+def _is_generic_variant_media_url(container) -> bool:
+    if not isinstance(container, dict):
+        return False
+    variant_markers = ("created_at", "prompt_used", "is_favorited", "is_uploaded_source", "cached")
+    return any(key in container for key in variant_markers)
+
+
+def sign_media_refs_in_response(data, uploader: OSSImageUploader = None, *, media_fields=None):
+    """Sign declared response media fields and attach raw display refs.
+
+    This is intentionally narrower than ``sign_oss_urls_in_data``. It signs only
+    fields that are response display media and keeps provenance/snapshot objects
+    raw so clients can compare source identity without stripping signed URL
+    query parameters. The ``media_refs`` sidecar is response-only: incoming
+    sidecars on response media objects are ignored and rebuilt from raw media
+    fields when possible. Opaque source snapshots and parameter metadata are
+    preserved literally; their keys are not interpreted as response fields.
+    """
+    if uploader is None:
+        uploader = OSSImageUploader()
+
+    signing_enabled = bool(uploader.is_configured)
+    root_media_fields = frozenset(media_fields or ())
+
+    def process(value, depth=0):
+        if isinstance(value, dict):
+            processed = {}
+            media_refs = {}
+            for child_key, child_value in value.items():
+                if child_key == _RESPONSE_MEDIA_REFS_FIELD:
+                    continue
+                if child_key in _RESPONSE_RAW_SNAPSHOT_FIELDS or child_key in _RESPONSE_RAW_METADATA_FIELDS:
+                    processed[child_key] = deepcopy(child_value)
+                    continue
+                if (
+                    child_key in _RESPONSE_MEDIA_FIELDS
+                    or (depth == 0 and child_key in root_media_fields)
+                    or (child_key == "url" and _is_generic_variant_media_url(value))
+                ):
+                    signed_value, raw_ref = _sign_response_media_value(child_value, uploader, signing_enabled)
+                    processed[child_key] = signed_value
+                    if raw_ref is not None:
+                        media_refs[child_key] = raw_ref
+                    continue
+                if child_key in _RESPONSE_MEDIA_LIST_FIELDS and isinstance(child_value, list):
+                    signed_items = []
+                    raw_items = []
+                    has_ref = False
+                    for item in child_value:
+                        signed_item, raw_ref = _sign_response_media_value(item, uploader, signing_enabled)
+                        signed_items.append(signed_item)
+                        if raw_ref is not None:
+                            has_ref = True
+                        raw_items.append(raw_ref)
+                    processed[child_key] = signed_items
+                    if has_ref:
+                        media_refs[child_key] = raw_items
+                    continue
+                processed[child_key] = process(child_value, depth + 1)
+            if media_refs:
+                processed[_RESPONSE_MEDIA_REFS_FIELD] = media_refs
+            return processed
+        if isinstance(value, list):
+            return [process(item, depth + 1) for item in value]
+        return value
+
+    return process(data)
+
 def sign_oss_urls_in_data(data, uploader: OSSImageUploader = None):
     """
     Recursively traverse data structure and convert Object Keys to signed URLs.
@@ -300,7 +453,7 @@ def sign_oss_urls_in_data(data, uploader: OSSImageUploader = None):
     
     def process_value(value):
         if isinstance(value, str):
-            if is_object_key(value):
+            if _is_uploader_object_key(value, uploader):
                 signed_url = uploader.sign_url_for_display(value)
                 return signed_url if signed_url else value
             # print(f"DEBUG: sign_oss_urls_in_data - skipping string '{value[:50]}...'")

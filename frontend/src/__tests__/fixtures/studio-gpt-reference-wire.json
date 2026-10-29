@@ -1,0 +1,537 @@
+{
+  "source_commit": "f76f32a990d5714b134c695fca7c30d6c2fee67a",
+  "source_test": "tests/test_studio_gpt_reference_sheet_core.py",
+  "source_test_sha256": "378ffe19f239491e2011360d6e8f898bb9dca08359d0af84d087e2efbb2b4c50",
+  "capture_test_sha256": "011b9b4a11012b1aa513525ae18fb651f5771434e219829c328e76e2eadb6916",
+  "capture_log_sha256": "bb7ca2eae1c7d1b6d9137938ed0cdf0e8ee900e173a1cc1a210f1c09f7755f64",
+  "cases": [
+    {
+      "admission": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": false,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "bdabbfaf-99b1-4ef6-b2d2-483e1872a3fd",
+          "members": [
+            {
+              "attempt_id": "fa207182-ef18-46f0-b3e8-0605cf0f538c",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "fa207182-ef18-46f0-b3e8-0605cf0f538c"
+            },
+            {
+              "attempt_id": "f78de2f3-716c-4ab8-8d0d-a328dbd412a2",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "f78de2f3-716c-4ab8-8d0d-a328dbd412a2"
+            }
+          ],
+          "owner_id": "p",
+          "owner_kind": "script",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "9159193a065339110d6608f83bb5133896f3337706d1a411d3e4f79b3b9421c8",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "853d6d8c-de5c-4d5f-b774-2353dc812a60",
+          "request_root_series_id": null
+        },
+        "schema_version": 1
+      },
+      "body": {
+        "apply_style": false,
+        "asset_id": "c",
+        "asset_type": "character",
+        "batch_size": 2,
+        "client_request_id": "gpt-sheet-request",
+        "generation_type": "reference_sheet",
+        "model_name": "gpt-image-2",
+        "prompt": "Author prompt"
+      },
+      "model": "gpt-image-2",
+      "owner": "local",
+      "readback": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": true,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "bdabbfaf-99b1-4ef6-b2d2-483e1872a3fd",
+          "members": [
+            {
+              "attempt_id": "fa207182-ef18-46f0-b3e8-0605cf0f538c",
+              "output_ref": "assets/studio/fa207182-ef18-46f0-b3e8-0605cf0f538c.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "fa207182-ef18-46f0-b3e8-0605cf0f538c"
+            },
+            {
+              "attempt_id": "f78de2f3-716c-4ab8-8d0d-a328dbd412a2",
+              "output_ref": "assets/studio/f78de2f3-716c-4ab8-8d0d-a328dbd412a2.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "f78de2f3-716c-4ab8-8d0d-a328dbd412a2"
+            }
+          ],
+          "owner_id": "p",
+          "owner_kind": "script",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "9159193a065339110d6608f83bb5133896f3337706d1a411d3e4f79b3b9421c8",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "853d6d8c-de5c-4d5f-b774-2353dc812a60",
+          "request_root_series_id": null
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "admission": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": false,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "33efef08-25a1-441a-bdfb-3db02651b405",
+          "members": [
+            {
+              "attempt_id": "4ef39ed6-265a-48d7-b9a9-4047e606b725",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "4ef39ed6-265a-48d7-b9a9-4047e606b725"
+            },
+            {
+              "attempt_id": "c1044f41-43d7-41cc-8056-a1f23ad60fca",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "c1044f41-43d7-41cc-8056-a1f23ad60fca"
+            }
+          ],
+          "owner_id": "p",
+          "owner_kind": "script",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a0beefc5be4c3eccee7ab267f508213e308ee2107f2079185d352043829adb85",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "1a3be853-87f2-48eb-8521-c80f78703c97",
+          "request_root_series_id": null
+        },
+        "schema_version": 1
+      },
+      "body": {
+        "apply_style": false,
+        "asset_id": "c",
+        "asset_type": "character",
+        "batch_size": 2,
+        "client_request_id": "gpt-sheet-request",
+        "generation_type": "reference_sheet",
+        "model_name": "gpt-image/gpt-image-2#image",
+        "prompt": "Author prompt"
+      },
+      "model": "gpt-image/gpt-image-2#image",
+      "owner": "local",
+      "readback": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": true,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "33efef08-25a1-441a-bdfb-3db02651b405",
+          "members": [
+            {
+              "attempt_id": "4ef39ed6-265a-48d7-b9a9-4047e606b725",
+              "output_ref": "assets/studio/4ef39ed6-265a-48d7-b9a9-4047e606b725.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "4ef39ed6-265a-48d7-b9a9-4047e606b725"
+            },
+            {
+              "attempt_id": "c1044f41-43d7-41cc-8056-a1f23ad60fca",
+              "output_ref": "assets/studio/c1044f41-43d7-41cc-8056-a1f23ad60fca.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "c1044f41-43d7-41cc-8056-a1f23ad60fca"
+            }
+          ],
+          "owner_id": "p",
+          "owner_kind": "script",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a0beefc5be4c3eccee7ab267f508213e308ee2107f2079185d352043829adb85",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "1a3be853-87f2-48eb-8521-c80f78703c97",
+          "request_root_series_id": null
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "admission": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": false,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "1c3db871-e111-4277-ac20-2d424c773adb",
+          "members": [
+            {
+              "attempt_id": "75448d97-f295-4c2c-9bd0-42144fe6a68d",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "75448d97-f295-4c2c-9bd0-42144fe6a68d"
+            },
+            {
+              "attempt_id": "86aa3cfa-799e-41b8-9d5e-565d4462be6e",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "86aa3cfa-799e-41b8-9d5e-565d4462be6e"
+            }
+          ],
+          "owner_id": "s",
+          "owner_kind": "series",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "9159193a065339110d6608f83bb5133896f3337706d1a411d3e4f79b3b9421c8",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "3e292078-e7cc-4a21-963e-3faacfe9a74d",
+          "request_root_series_id": "s"
+        },
+        "schema_version": 1
+      },
+      "body": {
+        "apply_style": false,
+        "asset_id": "c",
+        "asset_type": "character",
+        "batch_size": 2,
+        "client_request_id": "gpt-sheet-request",
+        "generation_type": "reference_sheet",
+        "model_name": "gpt-image-2",
+        "prompt": "Author prompt"
+      },
+      "model": "gpt-image-2",
+      "owner": "series",
+      "readback": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": true,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "1c3db871-e111-4277-ac20-2d424c773adb",
+          "members": [
+            {
+              "attempt_id": "75448d97-f295-4c2c-9bd0-42144fe6a68d",
+              "output_ref": "assets/studio/75448d97-f295-4c2c-9bd0-42144fe6a68d.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "75448d97-f295-4c2c-9bd0-42144fe6a68d"
+            },
+            {
+              "attempt_id": "86aa3cfa-799e-41b8-9d5e-565d4462be6e",
+              "output_ref": "assets/studio/86aa3cfa-799e-41b8-9d5e-565d4462be6e.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "86aa3cfa-799e-41b8-9d5e-565d4462be6e"
+            }
+          ],
+          "owner_id": "s",
+          "owner_kind": "series",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "9159193a065339110d6608f83bb5133896f3337706d1a411d3e4f79b3b9421c8",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "3e292078-e7cc-4a21-963e-3faacfe9a74d",
+          "request_root_series_id": "s"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "admission": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": false,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "1b2f2d32-3825-44b8-bb01-a46e1361ce87",
+          "members": [
+            {
+              "attempt_id": "f8d99c89-0f4b-4d0a-a1f6-befacdd69c97",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "f8d99c89-0f4b-4d0a-a1f6-befacdd69c97"
+            },
+            {
+              "attempt_id": "8df917af-b867-4eb5-8d0e-32b89880951c",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "8df917af-b867-4eb5-8d0e-32b89880951c"
+            }
+          ],
+          "owner_id": "s",
+          "owner_kind": "series",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a0beefc5be4c3eccee7ab267f508213e308ee2107f2079185d352043829adb85",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "99fdd5af-29f1-4e16-9163-72b77a3b1f0b",
+          "request_root_series_id": "s"
+        },
+        "schema_version": 1
+      },
+      "body": {
+        "apply_style": false,
+        "asset_id": "c",
+        "asset_type": "character",
+        "batch_size": 2,
+        "client_request_id": "gpt-sheet-request",
+        "generation_type": "reference_sheet",
+        "model_name": "gpt-image/gpt-image-2#image",
+        "prompt": "Author prompt"
+      },
+      "model": "gpt-image/gpt-image-2#image",
+      "owner": "series",
+      "readback": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": true,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "1b2f2d32-3825-44b8-bb01-a46e1361ce87",
+          "members": [
+            {
+              "attempt_id": "f8d99c89-0f4b-4d0a-a1f6-befacdd69c97",
+              "output_ref": "assets/studio/f8d99c89-0f4b-4d0a-a1f6-befacdd69c97.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "f8d99c89-0f4b-4d0a-a1f6-befacdd69c97"
+            },
+            {
+              "attempt_id": "8df917af-b867-4eb5-8d0e-32b89880951c",
+              "output_ref": "assets/studio/8df917af-b867-4eb5-8d0e-32b89880951c.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "8df917af-b867-4eb5-8d0e-32b89880951c"
+            }
+          ],
+          "owner_id": "s",
+          "owner_kind": "series",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a0beefc5be4c3eccee7ab267f508213e308ee2107f2079185d352043829adb85",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "99fdd5af-29f1-4e16-9163-72b77a3b1f0b",
+          "request_root_series_id": "s"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "admission": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": false,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "62a80928-3a51-40fd-9e96-81804d8d484a",
+          "members": [
+            {
+              "attempt_id": "3ce92321-c069-4d36-95da-970ac9752fce",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "3ce92321-c069-4d36-95da-970ac9752fce"
+            },
+            {
+              "attempt_id": "9f99bdba-e204-4538-bed9-9791e0cb4f7d",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "9f99bdba-e204-4538-bed9-9791e0cb4f7d"
+            }
+          ],
+          "owner_id": "library",
+          "owner_kind": "global",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "9159193a065339110d6608f83bb5133896f3337706d1a411d3e4f79b3b9421c8",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "892811b8-e595-4968-918e-9caa5f9f3adc",
+          "request_root_series_id": null
+        },
+        "schema_version": 1
+      },
+      "body": {
+        "apply_style": false,
+        "asset_id": "c",
+        "asset_type": "character",
+        "batch_size": 2,
+        "client_request_id": "gpt-sheet-request",
+        "generation_type": "reference_sheet",
+        "model_name": "gpt-image-2",
+        "prompt": "Author prompt"
+      },
+      "model": "gpt-image-2",
+      "owner": "global",
+      "readback": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": true,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "62a80928-3a51-40fd-9e96-81804d8d484a",
+          "members": [
+            {
+              "attempt_id": "3ce92321-c069-4d36-95da-970ac9752fce",
+              "output_ref": "assets/studio/3ce92321-c069-4d36-95da-970ac9752fce.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "3ce92321-c069-4d36-95da-970ac9752fce"
+            },
+            {
+              "attempt_id": "9f99bdba-e204-4538-bed9-9791e0cb4f7d",
+              "output_ref": "assets/studio/9f99bdba-e204-4538-bed9-9791e0cb4f7d.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "9f99bdba-e204-4538-bed9-9791e0cb4f7d"
+            }
+          ],
+          "owner_id": "library",
+          "owner_kind": "global",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "9159193a065339110d6608f83bb5133896f3337706d1a411d3e4f79b3b9421c8",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "892811b8-e595-4968-918e-9caa5f9f3adc",
+          "request_root_series_id": null
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "admission": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": false,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "1bc0ed9b-b834-48e3-b26f-e18457f63055",
+          "members": [
+            {
+              "attempt_id": "c8f4c5eb-9cb2-4e11-8ef6-3a8a12655dd1",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "c8f4c5eb-9cb2-4e11-8ef6-3a8a12655dd1"
+            },
+            {
+              "attempt_id": "fc59b13a-cfd7-4015-bf8c-9fb062eb71c7",
+              "reason": null,
+              "status": "pending",
+              "variant_id": "fc59b13a-cfd7-4015-bf8c-9fb062eb71c7"
+            }
+          ],
+          "owner_id": "library",
+          "owner_kind": "global",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a0beefc5be4c3eccee7ab267f508213e308ee2107f2079185d352043829adb85",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "336de747-9744-48b9-9396-51aa737fb485",
+          "request_root_series_id": null
+        },
+        "schema_version": 1
+      },
+      "body": {
+        "apply_style": false,
+        "asset_id": "c",
+        "asset_type": "character",
+        "batch_size": 2,
+        "client_request_id": "gpt-sheet-request",
+        "generation_type": "reference_sheet",
+        "model_name": "gpt-image/gpt-image-2#image",
+        "prompt": "Author prompt"
+      },
+      "model": "gpt-image/gpt-image-2#image",
+      "owner": "global",
+      "readback": {
+        "contract_version": "studio-asset-image-request-v1",
+        "reason": null,
+        "replayed": true,
+        "request": {
+          "asset_id": "c",
+          "asset_type": "character",
+          "channel": "reference_sheet",
+          "client_request_id": "gpt-sheet-request",
+          "entrypoint": "studio.asset.reference_sheet.v1",
+          "id": "1bc0ed9b-b834-48e3-b26f-e18457f63055",
+          "members": [
+            {
+              "attempt_id": "c8f4c5eb-9cb2-4e11-8ef6-3a8a12655dd1",
+              "output_ref": "assets/studio/c8f4c5eb-9cb2-4e11-8ef6-3a8a12655dd1.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "c8f4c5eb-9cb2-4e11-8ef6-3a8a12655dd1"
+            },
+            {
+              "attempt_id": "fc59b13a-cfd7-4015-bf8c-9fb062eb71c7",
+              "output_ref": "assets/studio/fc59b13a-cfd7-4015-bf8c-9fb062eb71c7.png",
+              "reason": null,
+              "status": "completed",
+              "variant_id": "fc59b13a-cfd7-4015-bf8c-9fb062eb71c7"
+            }
+          ],
+          "owner_id": "library",
+          "owner_kind": "global",
+          "request_contract_version": "request-json-v1",
+          "request_fingerprint": "a0beefc5be4c3eccee7ab267f508213e308ee2107f2079185d352043829adb85",
+          "request_root_id": "p",
+          "request_root_kind": "project",
+          "request_root_scope_id": "336de747-9744-48b9-9396-51aa737fb485",
+          "request_root_series_id": null
+        },
+        "schema_version": 1
+      }
+    }
+  ]
+}

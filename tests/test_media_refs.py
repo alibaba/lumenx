@@ -18,7 +18,7 @@ def test_classify_local_relative_path():
 
 def test_classify_local_absolute_path_under_output():
     abs_path = str(_project_root() / "output" / "uploads" / "foo.png")
-    assert classify_media_ref(abs_path) == "local_path"
+    assert classify_media_ref(abs_path, project_root=str(_project_root())) == "local_path"
 
 
 def test_classify_oss_object_key(monkeypatch):
@@ -43,7 +43,7 @@ def test_classify_data_uri_is_not_stable_storage():
 
 
 def test_resolve_local_relative_path_to_absolute():
-    resolved = resolve_local_media_path("uploads/foo.png")
+    resolved = resolve_local_media_path("uploads/foo.png", project_root=str(_project_root()))
     expected = str((_project_root() / "output" / "uploads" / "foo.png").resolve())
     assert resolved == expected
 
@@ -51,4 +51,12 @@ def test_resolve_local_relative_path_to_absolute():
 def test_resolve_local_absolute_path_under_output():
     input_path = str(_project_root() / "output" / "video" / "clip.mp4")
     expected = str((_project_root() / "output" / "video" / "clip.mp4").resolve())
-    assert resolve_local_media_path(input_path) == expected
+    assert resolve_local_media_path(input_path, project_root=str(_project_root())) == expected
+
+
+def test_resolve_uses_explicit_output_root_when_project_root_omitted(tmp_path):
+    output_root = tmp_path / "isolated-output"
+
+    assert resolve_local_media_path("uploads/foo.png", output_root=str(output_root)) == str(
+        (output_root / "uploads" / "foo.png").resolve()
+    )

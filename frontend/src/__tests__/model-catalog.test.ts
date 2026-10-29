@@ -7,8 +7,14 @@ import {
     GLOBAL_I2V_MODELS,
     GLOBAL_IMAGE_MODELS,
     GLOBAL_T2I_MODELS,
+    PROJECT_I2V_MODELS,
+    SERIES_I2V_MODELS,
+    VIDEO_I2V_MODELS,
+    VIDEO_R2V_MODELS,
+    DEFAULT_R2V_MODEL_ID,
     R2V_ROUTE_MODEL_ID,
     R2V_SELECTION_MODEL_ID,
+    getR2vRouteModelId,
     getCanonicalDefaults,
     getCanonicalModeEntry,
     getCanonicalModeId,
@@ -67,6 +73,49 @@ describe('model catalog selectors', () => {
     it('keeps hidden and planned catalog entries out of visible selectors', () => {
         expect(GLOBAL_I2V_MODELS.some((model) => model.id === 'wan2.6-r2v')).toBe(false);
         expect(GLOBAL_I2V_MODELS.some((model) => model.id === 'pixverse-v4-i2v')).toBe(false);
+    });
+
+    it('activates Wan 3.0 omni video only for the video sidebar surfaces', () => {
+        expect(getCanonicalModeId('wan3.0-video')).toBe('wan/wan3.0-video#video');
+        expect(getCanonicalModeId('wan3.0-video-prime')).toBe('wan/wan3.0-video-prime#video');
+        expect(getCanonicalModeEntry('wan/wan3.0-video#video')).toMatchObject({
+            legacy_model_id: 'wan3.0-video',
+            mode: 'video',
+            status: 'active',
+            ui: { selection_group: 'video', visible_in: ['video_sidebar'] },
+        });
+        expect(getCanonicalModeEntry('wan/wan3.0-video#video')?.runtime.dashscope).toMatchObject({
+            gateway: 'dashscope_workspace',
+            api_model_id: 'wan3.0-video',
+        });
+        expect(getCanonicalModeEntry('wan/wan3.0-video#video')?.docs).toMatchObject({
+            context_hub_doc_ids: [],
+        });
+        expect(getCanonicalModeEntry('wan/wan3.0-video#video')?.duration).toMatchObject({
+            type: 'slider',
+            default: 5,
+            max: 30,
+            supports_auto: true,
+        });
+        expect(getCanonicalModeEntry('wan/wan3.0-video#video')?.params).toMatchObject({
+            audio: { default: true },
+            resolution: { options: ['480P', '720P', '1080P'], default: '1080P' },
+            ratio: { options: ['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'], default: 'adaptive' },
+        });
+        expect(GLOBAL_I2V_MODELS.some((model) => model.id.startsWith('wan3.0'))).toBe(false);
+        expect(PROJECT_I2V_MODELS.some((model) => model.id.startsWith('wan3.0'))).toBe(false);
+        expect(SERIES_I2V_MODELS.some((model) => model.id.startsWith('wan3.0'))).toBe(false);
+        expect(VIDEO_I2V_MODELS.filter((model) => model.id.startsWith('wan3.0')).map((model) => model.id)).toEqual([
+            'wan3.0-video-prime',
+            'wan3.0-video',
+        ]);
+        expect(VIDEO_R2V_MODELS.filter((model) => model.id.startsWith('wan3.0')).map((model) => model.id)).toEqual([
+            'wan3.0-video-prime',
+            'wan3.0-video',
+        ]);
+        expect(DEFAULT_R2V_MODEL_ID).toBe('happyhorse-1.1-r2v');
+        expect(getR2vRouteModelId('wan3.0-video')).toBe('wan3.0-video');
+        expect(getR2vRouteModelId('wan/wan3.0-video#video')).toBe('wan3.0-video');
     });
 });
 
@@ -260,5 +309,22 @@ describe('model catalog phase 2 canonical helpers', () => {
         for (const model of GLOBAL_I2I_MODELS) {
             expect(model.id).not.toContain('#');
         }
+    });
+});
+
+
+describe('Wan 2.7 Studio image size compatibility', () => {
+    it.each(['wan2.7-image', 'wan2.7-image-pro'])('projects only the two missing sizes for %s', modelId => {
+        const canonical = `wan/${modelId}#image`;
+        expect(getCanonicalModeId(modelId)).toBe(canonical);
+        const entry = getCanonicalModeEntry(canonical);
+        expect(entry?.params).toMatchObject({ size: {
+            options: ['1024*1024', '1280*1280', '1440*1440', '2048*2048',
+                '1280*720', '720*1280', '1024*576', '576*1024', '768*1024', '1024*768'],
+            default: '1280*1280',
+        } });
+        expect(entry?.runtime.dashscope).toEqual({ gateway: 'dashscope', api_model_id: modelId });
+        expect(entry?.ui.visible_in).toEqual(['project_settings', 'series_settings', 'global_settings']);
+        expect(entry?.params).toMatchObject({ negativePrompt: true, promptExtend: true, seed: true, watermark: true });
     });
 });

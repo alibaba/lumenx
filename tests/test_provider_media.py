@@ -32,6 +32,19 @@ class FakeUploader:
         return f"https://oss.example/{object_key}"
 
 
+def test_object_key_classification_uses_the_supplied_uploader_namespace(monkeypatch, tmp_path):
+    monkeypatch.setenv("OSS_BASE_PATH", "another-app")
+    uploader = FakeUploader(configured=True)
+    uploader.base_path = "this-app"
+    resolved = resolve_media_input(
+        "this-app/private/image.png", model_name="wan2.6-image",
+        backend="dashscope", modality="image", uploader=uploader,
+        output_root=str(tmp_path),
+    )
+    assert resolved.value == "https://oss.example/this-app/private/image.png"
+    assert uploader.uploaded_paths == []
+
+
 def _write_output_png(project_root: Path, rel_path: str) -> Path:
     output_root = project_root / "output"
     file_path = output_root / rel_path

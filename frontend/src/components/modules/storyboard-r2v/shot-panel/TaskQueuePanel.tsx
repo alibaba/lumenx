@@ -15,13 +15,13 @@
  */
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { X, ArrowRight, Loader2, Copy, Check, RefreshCw, ChevronDown, ChevronRight, ListChecks } from "lucide-react";
+import { X, ArrowRight, Loader2, Copy, Check, RefreshCw, ChevronDown, ChevronRight, ListChecks, Play } from "lucide-react";
 import type { VideoTask } from "@/lib/api";
 import PreviewImage from "@/components/shared/preview/PreviewImage";
 import PreviewVideo from "@/components/shared/preview/PreviewVideo";
 import SidePanelHeader from "@/components/shared/SidePanelHeader";
 
-type TabKey = "active" | "done" | "failed";
+type TabKey = "active" | "done" | "review" | "failed";
 
 interface TaskQueuePanelProps {
     open: boolean;
@@ -33,6 +33,21 @@ interface TaskQueuePanelProps {
     onJumpToShot: (frameId: string) => void;
     onCancel?: (task: VideoTask) => Promise<void> | void;
     onRetry?: (task: VideoTask) => Promise<void> | void;
+    onContinue?: (task: VideoTask) => Promise<void> | void;
+}
+
+export function canContinueProviderTask(task: VideoTask): boolean {
+    const record = task.provider_execution;
+    return task.status === "needs_confirmation"
+        && record?.phase === "accepted"
+        && typeof record.attempt_id === "string"
+        && record.attempt_id.length > 0
+        && typeof record.fingerprint === "string"
+        && /^[0-9a-f]{64}$/.test(record.fingerprint)
+        && record.handle == null
+        && record.observation == null
+        && record.prepared_artifact == null
+        && record.artifact == null;
 }
 
 export default function TaskQueuePanel({
@@ -43,6 +58,7 @@ export default function TaskQueuePanel({
     onJumpToShot,
     onCancel,
     onRetry,
+    onContinue,
 }: TaskQueuePanelProps) {
     const t = useTranslations("storyboardR2V");
     const [tab, setTab] = useState<TabKey>("active");
@@ -50,18 +66,21 @@ export default function TaskQueuePanel({
     const buckets = useMemo(() => {
         const active: VideoTask[] = [];
         const done: VideoTask[] = [];
+        const review: VideoTask[] = [];
         const failed: VideoTask[] = [];
         for (const t of tasks) {
             if (t.status === "pending" || t.status === "processing") active.push(t);
             else if (t.status === "completed") done.push(t);
+            else if (t.status === "needs_confirmation") review.push(t);
             else if (t.status === "failed") failed.push(t);
         }
         // Newest first within each bucket.
         const byTimeDesc = (a: VideoTask, b: VideoTask) => b.created_at - a.created_at;
         active.sort(byTimeDesc);
         done.sort(byTimeDesc);
+        review.sort(byTimeDesc);
         failed.sort(byTimeDesc);
-        return { active, done, failed };
+        return { active, done, review, failed };
     }, [tasks]);
 
     const visibleTasks = buckets[tab];
@@ -120,6 +139,7 @@ export default function TaskQueuePanel({
                     [
                         ["active", "queueActive", buckets.active.length, "text-status-processing-fg"],
                         ["done", "queueDone", buckets.done.length, "text-status-completed-fg"],
+                        ["review", "queueNeedsConfirmation", buckets.review.length, "text-amber-300"],
                         ["failed", "queueFailed", buckets.failed.length, "text-status-failed-fg"],
                     ] as Array<[TabKey, string, number, string]>
                 ).map(([key, labelKey, count, colorClass]) => (
@@ -150,7 +170,9 @@ export default function TaskQueuePanel({
                             ? t("queueEmptyActive")
                             : tab === "done"
                                 ? t("queueEmptyDone")
-                                : t("queueEmptyFailed")}
+                                : tab === "review"
+                                    ? t("queueEmptyNeedsConfirmation")
+                                    : t("queueEmptyFailed")}
                     </div>
                 ) : (
                     <ul className="space-y-1">
@@ -162,6 +184,7 @@ export default function TaskQueuePanel({
                                     onJumpToShot={onJumpToShot}
                                     onCancel={onCancel}
                                     onRetry={onRetry}
+                                    onContinue={onContinue}
                                 />
                             </li>
                         ))}
@@ -193,29 +216,36 @@ function TaskRow({
     onJumpToShot,
     onCancel,
     onRetry,
+    onContinue,
 }: {
     task: VideoTask;
     shotLabel: string;
     onJumpToShot: (frameId: string) => void;
     onCancel?: (task: VideoTask) => Promise<void> | void;
     onRetry?: (task: VideoTask) => Promise<void> | void;
+    onContinue?: (task: VideoTask) => Promise<void> | void;
 }) {
     const t = useTranslations("storyboardR2V");
     const [copiedField, setCopiedField] = useState<"providerId" | "providerRequest" | "diagnose" | null>(null);
     const [retrying, setRetrying] = useState(false);
+    const [continuing, setContinuing] = useState(false);
     const isFailed = task.status === "failed";
+    const isNeedsConfirmation = task.status === "needs_confirmation";
     const isCompleted = task.status === "completed";
     const isInFlight = task.status === "pending" || task.status === "processing";
+    const canContinue = canContinueProviderTask(task);
     // Failed tasks always come up expanded — user wants the diagnose
     // surface immediately. Others default collapsed; user toggles.
-    const [expanded, setExpanded] = useState<boolean>(isFailed);
+    const [expanded, setExpanded] = useState<boolean>(isFailed || isNeedsConfirmation);
 
     const dotClass =
         task.status === "completed"
             ? "bg-status-completed-fg"
             : task.status === "failed"
                 ? "bg-status-failed-fg"
-                : task.status === "processing"
+                : task.status === "needs_confirmation"
+                    ? "bg-amber-300"
+                    : task.status === "processing"
                     ? "bg-status-processing-fg animate-pulse"
                     : "bg-status-pending-fg";
 
@@ -275,6 +305,16 @@ function TaskRow({
             // Clear after a short delay even on success — the task disappears
             // from "failed" bucket once retried, so spinner becomes moot.
             window.setTimeout(() => setRetrying(false), 800);
+        }
+    };
+
+    const handleContinue = async () => {
+        if (!onContinue || continuing || !canContinue) return;
+        setContinuing(true);
+        try {
+            await onContinue(task);
+        } finally {
+            window.setTimeout(() => setContinuing(false), 800);
         }
     };
 
@@ -401,6 +441,25 @@ function TaskRow({
                         {task.generation_mode ? <span>· {task.generation_mode}</span> : null}
                     </div>
 
+                    {isNeedsConfirmation ? (
+                        <div className="space-y-0.5">
+                            <p className="font-mono text-[0.5625rem] uppercase tracking-wider text-amber-200/80">{t("statusNeedsConfirmation")}</p>
+                            <p className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 font-sans text-body-sm leading-snug text-amber-100/85">
+                                {t("needsConfirmationDetail")}
+                            </p>
+                            {task.error ? (
+                                <p className="whitespace-pre-wrap rounded border border-amber-500/30 bg-black/30 px-2 py-1.5 font-mono text-chrome-sm leading-snug text-amber-100/85">
+                                    ⚠ {task.error}
+                                </p>
+                            ) : null}
+                            {canContinue ? (
+                                <p className="rounded border border-primary/25 bg-primary/10 px-2 py-1.5 font-sans text-body-sm leading-snug text-primary/90">
+                                    {t("queueContinueOriginalHint")}
+                                </p>
+                            ) : null}
+                        </div>
+                    ) : null}
+
                     {/* Failure — full error text wrap */}
                     {isFailed && task.error ? (
                         <div className="space-y-0.5">
@@ -459,7 +518,7 @@ function TaskRow({
                     </div>
 
                     {/* Actions */}
-                    {(isFailed || isCompleted) ? (
+                    {(isFailed || isCompleted || isNeedsConfirmation) ? (
                         <div className="flex items-center justify-end gap-1 pt-0.5">
                             <button
                                 type="button"
@@ -470,6 +529,23 @@ function TaskRow({
                                 {copiedField === "diagnose" ? <Check size={10} /> : <Copy size={10} />}
                                 {copiedField === "diagnose" ? t("queueCopied") : t("queueCopyDiagnoseShort")}
                             </button>
+                            {isNeedsConfirmation && canContinue && onContinue ? (
+                                <button
+                                    type="button"
+                                    aria-label="Continue original submission"
+                                    title={t("queueContinueOriginal")}
+                                    disabled={continuing}
+                                    onClick={() => void handleContinue()}
+                                    className="inline-flex min-h-[24px] items-center gap-1 rounded border border-amber-500/35 bg-amber-500/12 px-2 py-[2px] font-mono text-chrome-sm font-medium uppercase text-amber-100 transition-colors duration-fast ease-out-quart hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-70"
+                                >
+                                    {continuing ? (
+                                        <Loader2 size={10} className="animate-spin" />
+                                    ) : (
+                                        <Play size={10} />
+                                    )}
+                                    {continuing ? t("queueContinuingOriginal") : t("queueContinueOriginal")}
+                                </button>
+                            ) : null}
                             {isFailed && onRetry ? (
                                 <button
                                     type="button"

@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Save, ChevronDown, ChevronRight, Loader2, Key } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { api, type EnvConfigPayload, type ProviderMode } from "@/lib/api";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment, type RuntimeEnvironment } from "@/lib/runtimeEnvironment";
 
 interface EnvConfigDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  isRequired?: boolean;
 }
+
+type EnvConfigOwner = { key: string; generation: number };
 
 type EnvConfig = EnvConfigPayload & {
   DASHSCOPE_API_KEY: string;
@@ -68,9 +70,6 @@ const normalizeEnvConfig = (existing: EnvConfig, data?: EnvConfigPayload): EnvCo
 const getValidationErrors = (env: EnvConfig): string[] => {
   const errors: string[] = [];
 
-  if (!env.DASHSCOPE_API_KEY?.trim()) {
-    errors.push("DashScope API Key");
-  }
   if (env.KLING_PROVIDER_MODE === "vendor") {
     if (!env.KLING_ACCESS_KEY?.trim()) {
       errors.push("Kling Access Key (vendor mode)");
@@ -86,58 +85,148 @@ const getValidationErrors = (env: EnvConfig): string[] => {
   return errors;
 };
 
-export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }: EnvConfigDialogProps) {
+export default function EnvConfigDialog({ isOpen, onClose }: EnvConfigDialogProps) {
   const [config, setConfig] = useState<EnvConfig>(DEFAULT_CONFIG);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [endpointsOpen, setEndpointsOpen] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [configOwner, setConfigOwner] = useState<EnvConfigOwner | null>(null);
+  const configOwnerRef = useRef<EnvConfigOwner | null>(null);
+  const configLoadGenerationRef = useRef(0);
+  const dialogSessionRef = useRef(0);
+  const mountedRef = useRef(false);
+  const openRef = useRef(isOpen);
+  const savingSessionRef = useRef<number | null>(null);
+  const [runtimeEnvironment, setRuntimeEnvironment] = useState(() => getRuntimeEnvironment());
   const t = useTranslations("project");
   const tc = useTranslations("common");
+  const tRef = useRef(t);
+  tRef.current = t;
 
-  useEffect(() => {
-    if (isOpen) {
-      loadConfig();
+  const setLoadedConfigOwner = useCallback((owner: EnvConfigOwner | null) => {
+    configOwnerRef.current = owner;
+    setConfigOwner(owner);
+  }, []);
+
+  const loadConfig = useCallback(async (
+    environment: RuntimeEnvironment | null = getRuntimeEnvironment(),
+    dialogSession = dialogSessionRef.current,
+  ) => {
+    const loadGeneration = configLoadGenerationRef.current + 1;
+    configLoadGenerationRef.current = loadGeneration;
+    setLoadedConfigOwner(null);
+    setConfig(DEFAULT_CONFIG);
+
+    const sessionStillCurrent = () => (
+      mountedRef.current
+      && openRef.current
+      && dialogSession === dialogSessionRef.current
+      && loadGeneration === configLoadGenerationRef.current
+    );
+
+    if (!environment) {
+      if (sessionStillCurrent()) {
+        setLoading(false);
+        setLoadError(tRef.current("configLoadFailed"));
+      }
+      return;
     }
-  }, [isOpen]);
 
-  const loadConfig = async () => {
+    const owner = { key: environment.key, generation: environment.generation };
+    const stillCurrent = () => (
+      sessionStillCurrent()
+      && isCurrentRuntimeEnvironment(owner.key, owner.generation)
+    );
+
     setLoading(true);
     setLoadError(null);
     try {
       const data = await api.getEnvConfig();
-      setConfig((prev) => normalizeEnvConfig(prev, data));
+      if (!stillCurrent()) return;
+      setConfig(normalizeEnvConfig(DEFAULT_CONFIG, data));
+      setLoadedConfigOwner(owner);
     } catch (error) {
-      console.error("Failed to load env config:", error);
-      setLoadError(t("configLoadFailed"));
+      if (stillCurrent()) {
+        console.error("Failed to load env config:", error);
+        setLoadError(tRef.current("configLoadFailed"));
+        setLoadedConfigOwner(null);
+      }
     } finally {
-      setLoading(false);
+      if (stillCurrent()) setLoading(false);
     }
-  };
+  }, [setLoadedConfigOwner]);
 
-  const validateRequiredFields = () => getValidationErrors(config).length === 0;
-  const canClose = !isRequired || validateRequiredFields();
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      openRef.current = false;
+      dialogSessionRef.current += 1;
+      configLoadGenerationRef.current += 1;
+      savingSessionRef.current = null;
+      configOwnerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => subscribeRuntimeEnvironment(() => {
+    setRuntimeEnvironment(getRuntimeEnvironment());
+  }), []);
+
+  useEffect(() => {
+    openRef.current = isOpen;
+    dialogSessionRef.current += 1;
+    configLoadGenerationRef.current += 1;
+    savingSessionRef.current = null;
+    setSaving(false);
+
+    if (isOpen) {
+      const dialogSession = dialogSessionRef.current;
+      void loadConfig(runtimeEnvironment, dialogSession);
+    } else {
+      setLoadedConfigOwner(null);
+    }
+  }, [isOpen, runtimeEnvironment, loadConfig, setLoadedConfigOwner]);
 
   const handleSave = async () => {
+    const dialogSession = dialogSessionRef.current;
+    if (savingSessionRef.current !== null) return;
+
+    const owner = configOwnerRef.current;
+    const stillCurrent = () => (
+      mountedRef.current
+      && openRef.current
+      && dialogSession === dialogSessionRef.current
+      && !!owner
+      && isCurrentRuntimeEnvironment(owner.key, owner.generation)
+    );
+
+    if (!stillCurrent()) {
+      alert(tRef.current("configSaveFailed"));
+      return;
+    }
     const errors = getValidationErrors(config);
     if (errors.length > 0) {
-      alert(t("requiredFields") + "\n- " + errors.join("\n- "));
+      alert(tRef.current("requiredFields") + "\n- " + errors.join("\n- "));
       return;
     }
 
+    savingSessionRef.current = dialogSession;
     setSaving(true);
     try {
       await api.saveEnvConfig(config);
-      alert(t("configSaved"));
+      if (!stillCurrent()) return;
+      alert(tRef.current("configSaved"));
       onClose();
-      if (isRequired) {
-        window.location.reload();
-      }
     } catch (error) {
+      if (!stillCurrent()) return;
       console.error("Failed to save env config:", error);
-      alert(t("configSaveFailed"));
+      alert(tRef.current("configSaveFailed"));
     } finally {
-      setSaving(false);
+      if (savingSessionRef.current === dialogSession) {
+        savingSessionRef.current = null;
+        if (stillCurrent()) setSaving(false);
+      }
     }
   };
 
@@ -153,9 +242,7 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
   };
 
   const requestClose = () => {
-    if (canClose) {
-      onClose();
-    }
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -192,25 +279,13 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
             </div>
             <button
               onClick={requestClose}
-              disabled={!canClose}
-              className="p-2 hover:bg-hover-bg rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-2 hover:bg-hover-bg rounded-lg transition-colors"
             >
               <X size={20} className="text-text-secondary" />
             </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {isRequired && (
-              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 text-xs text-yellow-300">
-                {t("requiredHint")}
-              </div>
-            )}
-            {isRequired && !canClose && (
-              <div className="bg-glass border border-glass-border rounded-lg p-3 text-xs text-text-secondary">
-                {t("cannotClose")}
-              </div>
-            )}
-
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 size={24} className="animate-spin text-amber-400" />
@@ -224,14 +299,14 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
               <>
                 <div>
                   <label className="flex items-center justify-between text-sm font-medium text-foreground mb-2">
-                    <span>DashScope API Key <span className="text-red-500">*</span></span>
+                    <span>DashScope API Key</span>
                     <span className="text-text-muted font-normal text-xs">e.g. sk-xxx</span>
                   </label>
                   <input
                     type="password"
                     value={config.DASHSCOPE_API_KEY}
                     onChange={(e) => handleChange("DASHSCOPE_API_KEY", e.target.value)}
-                    placeholder="Required for DashScope-first model routing"
+                    placeholder={t("dashscopeKeyUsageHint")}
                     className={inputClass}
                   />
                 </div>
@@ -513,14 +588,13 @@ export default function EnvConfigDialog({ isOpen, onClose, isRequired = false }:
           <div className="flex justify-end gap-3 p-6 border-t border-glass-border">
             <button
               onClick={requestClose}
-              disabled={!canClose}
-              className="px-4 py-2 text-sm text-text-secondary hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm text-text-secondary hover:text-foreground transition-colors"
             >
               {tc("cancel")}
             </button>
             <button
               onClick={handleSave}
-              disabled={saving || loading || !!loadError}
+              disabled={saving || loading || !!loadError || !configOwner}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-foreground text-sm font-medium rounded-lg transition-all disabled:opacity-50"
             >
               {saving ? (

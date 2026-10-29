@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings, X, Image, Video, Film, Check, Layout, User, Building, Box } from 'lucide-react';
 import { useProjectStore, IMAGE_MODELS, I2V_MODELS, ASPECT_RATIOS } from '@/store/projectStore';
 import { resolveModelSettings, VIDEO_R2V_MODELS, DEFAULT_R2V_MODEL_ID } from '@/lib/modelCatalog';
 import { api } from '@/lib/api';
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment } from '@/lib/runtimeEnvironment';
+import { ProjectReadbackError, readProjectOnce } from '@/lib/projectReadback';
+import { frameCommandSnapshot } from '@/lib/frameCommandSnapshot';
 import { useTranslations } from "next-intl";
 import GroupedModelGrid from '@/components/common/GroupedModelGrid';
 
@@ -18,7 +21,8 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
     const currentProject = useProjectStore((state) => state.currentProject);
     const t = useTranslations("models");
     const tc = useTranslations("common");
-    const updateProject = useProjectStore((state) => state.updateProject);
+    const tp = useTranslations("project");
+    const tf = useTranslations("frameCommands");
     const resolvedSettings = resolveModelSettings(currentProject?.model_settings, 'project_settings');
 
     const [t2iModel, setT2iModel] = useState(resolvedSettings.t2i_model);
@@ -34,26 +38,105 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
     const [propAspectRatio, setPropAspectRatio] = useState(resolvedSettings.prop_aspect_ratio);
     const [storyboardAspectRatio, setStoryboardAspectRatio] = useState(resolvedSettings.storyboard_aspect_ratio);
     const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const sessionRef = useRef(0);
+    const savingRef = useRef(false);
+    const draftDirtyRef = useRef(false);
+    const pendingReadRevisionRef = useRef<number | undefined>(undefined);
+    const initialRuntime = getRuntimeEnvironment();
+    const latestRef = useRef({
+        isOpen,
+        projectId: currentProject?.id,
+        environment: currentProject?.readEnvironment,
+        generation: initialRuntime && initialRuntime.key === currentProject?.readEnvironment ? initialRuntime.generation : undefined,
+        modelSettings: currentProject?.model_settings,
+    });
 
-    // Sync state when project changes
+    const hydrateSettings = useCallback((settings: typeof resolvedSettings) => {
+        setT2iModel(settings.t2i_model);
+        setI2iModel(settings.i2i_model);
+        setI2vModel(settings.i2v_model);
+        setR2vModel(settings.r2v_model || DEFAULT_R2V_MODEL_ID);
+        setCharacterAspectRatio(settings.character_aspect_ratio);
+        setSceneAspectRatio(settings.scene_aspect_ratio);
+        setPropAspectRatio(settings.prop_aspect_ratio);
+        setStoryboardAspectRatio(settings.storyboard_aspect_ratio);
+    }, []);
+
     useEffect(() => {
-        const normalizedSettings = resolveModelSettings(currentProject?.model_settings, 'project_settings');
-        setT2iModel(normalizedSettings.t2i_model);
-        setI2iModel(normalizedSettings.i2i_model);
-        setI2vModel(normalizedSettings.i2v_model);
-        setR2vModel(normalizedSettings.r2v_model || DEFAULT_R2V_MODEL_ID);
-        setCharacterAspectRatio(normalizedSettings.character_aspect_ratio);
-        setSceneAspectRatio(normalizedSettings.scene_aspect_ratio);
-        setPropAspectRatio(normalizedSettings.prop_aspect_ratio);
-        setStoryboardAspectRatio(normalizedSettings.storyboard_aspect_ratio);
-    }, [currentProject?.model_settings]);
+        const runtime = getRuntimeEnvironment();
+        latestRef.current = {
+            isOpen,
+            projectId: currentProject?.id,
+            environment: currentProject?.readEnvironment,
+            generation: runtime && runtime.key === currentProject?.readEnvironment ? runtime.generation : undefined,
+            modelSettings: currentProject?.model_settings,
+        };
+    });
+
+    const isCurrentSession = (token: number, projectId: string) => (
+        sessionRef.current === token
+        && latestRef.current.isOpen
+        && latestRef.current.projectId === projectId
+        && !!latestRef.current.environment
+        && isCurrentRuntimeEnvironment(latestRef.current.environment, latestRef.current.generation)
+    );
+
+    const markDirty = () => { draftDirtyRef.current = true; };
+
+    // A modal session is scoped to open/project/environment, not ordinary project snapshots.
+    useEffect(() => {
+        sessionRef.current += 1;
+        savingRef.current = false;
+        draftDirtyRef.current = false;
+        pendingReadRevisionRef.current = undefined;
+        setIsSaving(false);
+        setSaveError(null);
+        hydrateSettings(resolveModelSettings(latestRef.current.modelSettings, 'project_settings'));
+        return () => {
+            sessionRef.current += 1;
+            savingRef.current = false;
+        };
+    }, [isOpen, currentProject?.id, currentProject?.readEnvironment, hydrateSettings]);
+
+    // Same-project refreshes may update the form only while the user has no draft or in-flight save.
+    useEffect(() => {
+        if (!isOpen || draftDirtyRef.current || savingRef.current) return;
+        hydrateSettings(resolveModelSettings(currentProject?.model_settings, 'project_settings'));
+    }, [isOpen, currentProject?.id, currentProject?.model_settings, hydrateSettings]);
+
+    const handleReadAgain = async () => {
+        if (!currentProject || savingRef.current) return;
+        savingRef.current = true;
+        setIsSaving(true);
+        const projectId = currentProject.id;
+        const token = sessionRef.current;
+        setSaveError(null);
+        try {
+            await readProjectOnce(projectId, pendingReadRevisionRef.current, { isCurrent: () => isCurrentSession(token, projectId) });
+            if (isCurrentSession(token, projectId)) {
+                pendingReadRevisionRef.current = undefined;
+                draftDirtyRef.current = false;
+                onClose();
+            }
+        } catch {
+            if (isCurrentSession(token, projectId)) setSaveError(tf("savedReadFailed"));
+        } finally {
+            if (isCurrentSession(token, projectId)) setIsSaving(false);
+            if (sessionRef.current === token) savingRef.current = false;
+        }
+    };
 
     const handleSave = async () => {
-        if (!currentProject) return;
+        if (!currentProject || savingRef.current || pendingReadRevisionRef.current !== undefined) return;
+        const projectId = currentProject.id;
+        const token = sessionRef.current;
+        savingRef.current = true;
         setIsSaving(true);
+        setSaveError(null);
         try {
             const updated = await api.updateModelSettings(
-                currentProject.id,
+                projectId,
                 t2iModel,
                 i2iModel,
                 i2vModel,
@@ -64,13 +147,24 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                 undefined, // imageModel — managed via t2i/i2i for now
                 r2vModel,
             );
-            updateProject(currentProject.id, updated);
-            onClose();
+            if (!isCurrentSession(token, projectId)) return;
+            const ack = frameCommandSnapshot(projectId, updated);
+            pendingReadRevisionRef.current = ack.revision;
+            if (!isCurrentSession(token, projectId)) return;
+            await readProjectOnce(projectId, ack.revision, { isCurrent: () => isCurrentSession(token, projectId) });
+            if (isCurrentSession(token, projectId)) {
+                pendingReadRevisionRef.current = undefined;
+                draftDirtyRef.current = false;
+                onClose();
+            }
         } catch (error) {
             console.error("Failed to save model settings:", error);
-            alert(t("saveSettingsFailed"));
+            if (isCurrentSession(token, projectId)) {
+                setSaveError(error instanceof ProjectReadbackError ? tf("savedReadFailed") : t("saveSettingsFailed"));
+            }
         } finally {
-            setIsSaving(false);
+            if (isCurrentSession(token, projectId)) setIsSaving(false);
+            if (sessionRef.current === token) savingRef.current = false;
         }
     };
 
@@ -126,7 +220,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                                 <GroupedModelGrid
                                     models={IMAGE_MODELS}
                                     selectedId={t2iModel}
-                                    onSelect={(id) => setT2iModel(id)}
+                                    onSelect={(id) => { markDirty(); setT2iModel(id); }}
                                 />
                             </div>
 
@@ -142,7 +236,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                                         {ASPECT_RATIOS.map((ratio) => (
                                             <button
                                                 key={ratio.id}
-                                                onClick={() => setCharacterAspectRatio(ratio.id)}
+                                                onClick={() => { markDirty(); setCharacterAspectRatio(ratio.id); }}
                                                 className={`w-full flex flex-col items-center py-1.5 px-2 rounded border transition-all ${characterAspectRatio === ratio.id
                                                         ? 'border-green-500/50 bg-green-500/10'
                                                         : 'border-glass-border hover:border-glass-border bg-glass'
@@ -164,7 +258,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                                         {ASPECT_RATIOS.map((ratio) => (
                                             <button
                                                 key={ratio.id}
-                                                onClick={() => setSceneAspectRatio(ratio.id)}
+                                                onClick={() => { markDirty(); setSceneAspectRatio(ratio.id); }}
                                                 className={`w-full flex flex-col items-center py-1.5 px-2 rounded border transition-all ${sceneAspectRatio === ratio.id
                                                         ? 'border-green-500/50 bg-green-500/10'
                                                         : 'border-glass-border hover:border-glass-border bg-glass'
@@ -186,7 +280,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                                         {ASPECT_RATIOS.map((ratio) => (
                                             <button
                                                 key={ratio.id}
-                                                onClick={() => setPropAspectRatio(ratio.id)}
+                                                onClick={() => { markDirty(); setPropAspectRatio(ratio.id); }}
                                                 className={`w-full flex flex-col items-center py-1.5 px-2 rounded border transition-all ${propAspectRatio === ratio.id
                                                         ? 'border-green-500/50 bg-green-500/10'
                                                         : 'border-glass-border hover:border-glass-border bg-glass'
@@ -215,7 +309,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                                 <GroupedModelGrid
                                     models={IMAGE_MODELS}
                                     selectedId={i2iModel}
-                                    onSelect={(id) => setI2iModel(id)}
+                                    onSelect={(id) => { markDirty(); setI2iModel(id); }}
                                 />
                             </div>
 
@@ -226,7 +320,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                                     {ASPECT_RATIOS.map((ratio) => (
                                         <button
                                             key={ratio.id}
-                                            onClick={() => setStoryboardAspectRatio(ratio.id)}
+                                            onClick={() => { markDirty(); setStoryboardAspectRatio(ratio.id); }}
                                             className={`flex flex-col items-center p-3 rounded-lg border transition-all ${storyboardAspectRatio === ratio.id
                                                     ? 'border-blue-500/50 bg-blue-500/10'
                                                     : 'border-glass-border hover:border-glass-border bg-glass'
@@ -256,7 +350,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                                 <GroupedModelGrid
                                     models={I2V_MODELS}
                                     selectedId={i2vModel}
-                                    onSelect={(id) => setI2vModel(id)}
+                                    onSelect={(id) => { markDirty(); setI2vModel(id); }}
                                 />
                             </div>
                         </div>
@@ -280,13 +374,23 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                                 <GroupedModelGrid
                                     models={VIDEO_R2V_MODELS}
                                     selectedId={r2vModel}
-                                    onSelect={(id) => setR2vModel(id)}
+                                    onSelect={(id) => { markDirty(); setR2vModel(id); }}
                                 />
                             </div>
                         </div>
                     </div>
 
                     {/* Footer */}
+                    {saveError && (
+                        <div role="alert" className="mx-5 mb-3 bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-sm text-red-300 flex items-center justify-between gap-3">
+                            <span>{saveError}</span>
+                            {saveError === tf("savedReadFailed") && (
+                                <button type="button" onClick={handleReadAgain} className="text-xs text-red-100 underline whitespace-nowrap">
+                                    {tp("readAgain")}
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <div className="flex justify-end gap-3 p-5 border-t border-glass-border bg-surface">
                         <button
                             onClick={onClose}
@@ -296,7 +400,7 @@ export default function ModelSettingsModal({ isOpen, onClose }: ModelSettingsMod
                         </button>
                         <button
                             onClick={handleSave}
-                            disabled={isSaving}
+                            disabled={isSaving || pendingReadRevisionRef.current !== undefined}
                             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white text-sm font-medium rounded-lg transition-all disabled:opacity-50"
                         >
                             {isSaving ? (

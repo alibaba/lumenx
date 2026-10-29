@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { X, Plus, Copy, Trash2, Sparkles, Star, ChevronLeft } from "lucide-react";
 import { playgroundApi } from "@/lib/api";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import { usePlaygroundStore, type PlaygroundTemplate } from "./usePlaygroundStore";
 
 const CATEGORIES = [
@@ -53,6 +54,7 @@ export default function PromptTemplateModal() {
     modelId: currentModelId,
     parameters: currentParams,
     negativePrompt: currentNegativePrompt,
+    negativePromptProvided: currentNegativePromptProvided,
     toggleTemplateFavorite,
     isTemplateFavorited,
   } = usePlaygroundStore();
@@ -63,14 +65,42 @@ export default function PromptTemplateModal() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [filterCat, setFilterCat] = useState<CategoryValue | "all">("all");
   const [visible, setVisible] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const activationRef = useRef(0);
+
+  useEffect(() => {
+    activationRef.current += 1;
+    const activation = activationRef.current;
+    const unsubscribe = subscribeRuntimeEnvironment(() => {
+      activationRef.current += 1;
+      setBusy(false);
+      setDeletingId(null);
+      setActionError(null);
+
+      const state = usePlaygroundStore.getState();
+      if (!state.showTemplateModal) return;
+      if (state.prompt.trim()) {
+        setForm({ name: "", category: modeToCategory(state.mode), prompt: state.prompt });
+        setView("create");
+      } else {
+        setForm(EMPTY_FORM);
+        setView("browse");
+      }
+    });
+    return () => {
+      unsubscribe();
+      if (activationRef.current === activation) activationRef.current += 1;
+    };
+  }, []);
 
   // Animate in after mount; open straight into CREATE (prefilled) when there is a
   // current prompt to capture, otherwise BROWSE.
   useEffect(() => {
     if (showTemplateModal) {
       const raf = requestAnimationFrame(() => setVisible(true));
+      setActionError(null);
       if (currentPrompt.trim()) {
         setForm({ name: "", category: modeToCategory(currentMode), prompt: currentPrompt });
         setView("create");
@@ -133,41 +163,57 @@ export default function PromptTemplateModal() {
 
   const handleDelete = useCallback(
     async (id: string) => {
+      const capturedRuntime = getRuntimeEnvironment();
+      const activation = activationRef.current;
       setDeletingId(id);
+      setActionError(null);
       try {
         await playgroundApi.deleteTemplate(id);
+        if (activationRef.current !== activation || (capturedRuntime && !isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) return;
         removeTemplate(id);
       } catch {
-        /* silent */
+        if (activationRef.current === activation && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+          setActionError(t("template.deleteFailed"));
+        }
       } finally {
-        setDeletingId(null);
+        if (activationRef.current === activation && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+          setDeletingId(null);
+        }
       }
     },
-    [removeTemplate],
+    [removeTemplate, t],
   );
 
   const handleCreate = useCallback(async () => {
     if (!form.name.trim() || !form.prompt.trim()) return;
+    const capturedRuntime = getRuntimeEnvironment();
+    const activation = activationRef.current;
     setBusy(true);
+    setActionError(null);
     try {
       const created = await playgroundApi.createTemplate({
         name: form.name.trim(),
         category: form.category,
         prompt: form.prompt.trim(),
-        negative_prompt: currentNegativePrompt || undefined,
+        negative_prompt: currentNegativePromptProvided || currentNegativePrompt !== '' ? currentNegativePrompt : undefined,
         default_mode: currentMode,
-        default_model_id: currentModelId || undefined,
-        default_parameters: Object.keys(currentParams).length > 0 ? currentParams : undefined,
+        default_model_id: currentModelId,
+        default_parameters: currentParams,
       });
+      if (activationRef.current !== activation || (capturedRuntime && !isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) return;
       addTemplate(created as unknown as PlaygroundTemplate);
       setForm(EMPTY_FORM);
       setView("browse");
     } catch {
-      /* silent */
+      if (activationRef.current === activation && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+        setActionError(t("template.createFailed"));
+      }
     } finally {
-      setBusy(false);
+      if (activationRef.current === activation && (!capturedRuntime || isCurrentRuntimeEnvironment(capturedRuntime.key, capturedRuntime.generation))) {
+        setBusy(false);
+      }
     }
-  }, [form, addTemplate, currentMode, currentModelId, currentParams, currentNegativePrompt]);
+  }, [form, addTemplate, currentMode, currentModelId, currentParams, currentNegativePrompt, currentNegativePromptProvided, t]);
 
   // Enter CREATE — resume an in-progress draft if any, else prefill from current state.
   const openCreate = useCallback(() => {
@@ -225,6 +271,12 @@ export default function PromptTemplateModal() {
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {actionError && (
+          <div className="mx-6 mt-3 rounded-[12px] border border-status-failed-border bg-status-failed-bg px-3 py-2 text-[0.6875rem] text-status-failed-fg">
+            {actionError}
+          </div>
+        )}
 
         {view === "browse" ? (
           <>
@@ -318,6 +370,7 @@ export default function PromptTemplateModal() {
                             type="button"
                             onClick={() => handleDelete(tpl.id)}
                             disabled={deletingId === tpl.id}
+                            title={t("template.delete")}
                             className="h-7 w-7 rounded-md flex items-center justify-center text-text-muted hover:text-status-failed-fg hover:bg-status-failed-bg transition-colors disabled:opacity-30"
                           >
                             <Trash2 size={12} />

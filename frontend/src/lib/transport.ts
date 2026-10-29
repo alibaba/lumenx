@@ -6,6 +6,9 @@
  * This abstraction allows the same frontend code to run in both environments.
  */
 
+import { appAccessFetch } from "@/lib/appAccess";
+import { API_URL } from "@/lib/apiUrl";
+
 // Detect Tauri environment at runtime
 export const isTauri = (): boolean => {
     return typeof window !== 'undefined' && '__TAURI__' in window;
@@ -42,8 +45,7 @@ export async function tauriApiRequest<T = unknown>(
         };
     } else {
         // Web mode: use standard fetch
-        const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:17177';
-        const url = `${baseUrl}${path}`;
+        const url = `${API_URL}${path}`;
 
         const options: RequestInit = {
             method: method.toUpperCase(),
@@ -56,7 +58,7 @@ export async function tauriApiRequest<T = unknown>(
             options.body = JSON.stringify(body);
         }
 
-        const response = await fetch(url, options);
+        const response = await appAccessFetch(url, options);
         const data = await response.json();
 
         return {
@@ -79,8 +81,7 @@ export async function checkBackendReady(): Promise<boolean> {
         }
     } else {
         try {
-            const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:17177';
-            const response = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(2000) });
+            const response = await appAccessFetch(`${API_URL}/health`, { signal: AbortSignal.timeout(2000) });
             return response.ok;
         } catch {
             return false;

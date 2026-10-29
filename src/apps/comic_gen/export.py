@@ -7,11 +7,24 @@ from ...utils import get_logger
 
 logger = get_logger(__name__)
 
+
+def _default_output_root(output_dir: str, leaf: str) -> str:
+    normalized = os.path.normpath(os.fspath(output_dir))
+    if os.path.basename(normalized) == leaf:
+        parent = os.path.dirname(normalized)
+        if parent:
+            return parent
+    return "output"
+
 class ExportManager:
     def __init__(self, config: Dict[str, Any] = None):
         self.config = config or {}
         self.output_dir = self.config.get('output_dir', 'output/export')
+        self.output_root = self.config.get('output_root') or _default_output_root(self.output_dir, "export")
         os.makedirs(self.output_dir, exist_ok=True)
+
+    def _rel_output_path(self, path: str) -> str:
+        return os.path.relpath(path, self.output_root)
 
     def render_project(self, script: Script, options: Dict[str, Any]) -> str:
         """
@@ -44,7 +57,7 @@ class ExportManager:
                 f.write(b'dummy video content')
                 
             logger.info(f"Export completed: {output_path}")
-            return os.path.relpath(output_path, "output")
+            return self._rel_output_path(output_path)
             
         except Exception as e:
             logger.error(f"Export failed: {e}")

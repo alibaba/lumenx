@@ -162,7 +162,9 @@ def assemble_prompt(
         parts.append(f"角色：{char_desc}")
 
     if not parts:
-        return frame.action_description or ""
+        # None is an unrefined legacy frame; an explicit empty visual is a
+        # saved user edit and must not restore the retained coarse narrative.
+        return (frame.action_description or "") if frame.visual_description is None else ""
 
     assembled = "。".join(p.rstrip("。，.") for p in parts if p) + "。"
     return assembled
@@ -208,8 +210,7 @@ def enrich_prompt_with_dialogue(
 
 
 def sync_dialogue_to_tts(frame: StoryboardFrame) -> None:
-    """Sync dialogue_structured emotion/delivery into dialogue_instructions,
-    and keep legacy dialogue/speaker fields in sync."""
+    """Keep legacy text/speaker in sync; audio history is not desired input."""
     if not frame.dialogue_structured:
         return
 
@@ -217,13 +218,3 @@ def sync_dialogue_to_tts(frame: StoryboardFrame) -> None:
     # Sync legacy fields
     frame.dialogue = ds.line
     frame.speaker = ds.speaker
-
-    # Build TTS instructions from emotion + delivery
-    instr_parts = []
-    if ds.emotion:
-        instr_parts.append(f"情绪：{ds.emotion}")
-    if ds.delivery:
-        instr_parts.append(f"演绎：{ds.delivery}")
-
-    if instr_parts:
-        frame.dialogue_instructions = "；".join(instr_parts)

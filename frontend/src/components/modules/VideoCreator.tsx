@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -19,10 +19,16 @@ import {
 
 import { useProjectStore } from "@/store/projectStore";
 import { api, API_URL, VideoTask } from "@/lib/api";
+import { getRuntimeEnvironment, isCurrentRuntimeEnvironment, requireActiveRuntimeEnvironment } from "@/lib/runtimeEnvironment";
+import { ProjectReadbackError, readProjectOnce } from "@/lib/projectReadback";
+import { frameCommandSnapshot } from "@/lib/frameCommandSnapshot";
 import { R2V_SELECTION_MODEL_ID, getR2vRouteModelId, isR2vImageBased } from "@/lib/modelCatalog";
+import { isOrderedWan3VideoModelId } from "@/lib/legacyVideoSidebarModels";
 import { getAssetUrl, getAssetUrlWithTimestamp } from "@/lib/utils";
 import PromptBuilder, { PromptSegment, PromptBuilderRef } from "./PromptBuilder";
 import type { VideoParams } from "@/store/projectStore";
+
+const videoCreatorOperationKey = (projectId: string, name: string) => `video-creator:${encodeURIComponent(requireActiveRuntimeEnvironment().key)}:${encodeURIComponent(projectId)}:${name}`;
 
 interface VideoCreatorProps {
     onTaskCreated: (project: any) => void;
@@ -34,8 +40,36 @@ interface VideoCreatorProps {
 
 export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, params, onParamsChange }: VideoCreatorProps) {
     const tc = useTranslations("creator");
+    const tProject = useTranslations("project");
+    const tFrameCommand = useTranslations("frameCommands");
     const currentProject = useProjectStore((state) => state.currentProject);
-    const updateProject = useProjectStore((state) => state.updateProject);
+    const sessionMounted = useRef(true);
+    const projectSessionRef = useRef(1);
+    const submittedTaskIdsRef = useRef<string[]>([]);
+    const retryReadRef = useRef(false);
+    const submitInFlightRef = useRef<{ projectId: string; token: number } | null>(null);
+    const submitOperation = currentProject?.id ? videoCreatorOperationKey(currentProject.id, "submit") : null;
+    const submitBusy = useProjectStore((state) => submitOperation ? !!state.runningOps[submitOperation] : false);
+    useEffect(() => {
+        sessionMounted.current = true;
+        return () => { sessionMounted.current = false; };
+    }, []);
+    const isProjectSessionCurrent = useCallback((expectedProjectId: string, token: number) => {
+        const environment = getRuntimeEnvironment();
+        const current = useProjectStore.getState().currentProject;
+        return !!environment && sessionMounted.current && projectSessionRef.current === token && current?.id === expectedProjectId
+            && current.readEnvironment === environment.key && isCurrentRuntimeEnvironment(environment.key, environment.generation);
+    }, []);
+    const currentProjectReadGuard = useCallback((expectedProjectId: string, token: number) => {
+        const environment = getRuntimeEnvironment();
+        return (snapshot?: { video_tasks?: { id: string }[] }) => {
+            const current = useProjectStore.getState().currentProject;
+            return !!environment && sessionMounted.current && projectSessionRef.current === token
+                && current?.id === expectedProjectId && current.readEnvironment === environment.key
+                && isCurrentRuntimeEnvironment(environment.key, environment.generation)
+                && (!snapshot || submittedTaskIdsRef.current.every(id => snapshot.video_tasks?.some(task => task.id === id)));
+        };
+    }, []);
 
     // Helper function to generate motion description text
     const getMotionDescription = () => {
@@ -86,6 +120,11 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null); // Selected frame for R2V
     const [generationMode, setGenerationMode] = useState<"i2v" | "r2v">("i2v"); // Local mode state
     const [extractingFrameId, setExtractingFrameId] = useState<string | null>(null);
+    const [readbackMessage, setReadbackMessage] = useState<string | null>(null);
+    const [readbackFloor, setReadbackFloor] = useState<number | undefined>(undefined);
+    const [isRetryingReadback, setIsRetryingReadback] = useState(false);
+    const hasPendingUpload = selectedImages.some(img => img.startsWith("blob:") && !uploadingPaths[img]);
+
 
     // Sync from parent params
     useEffect(() => {
@@ -96,7 +135,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
 
     const handleExtractLastFrame = async (frameId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!currentProject?.frames) return;
+        if (readbackMessage || !currentProject?.frames || currentProject.readEnvironment !== getRuntimeEnvironment()?.key) return;
 
         const frameIndex = currentProject.frames.findIndex((f: any) => f.id === frameId);
         if (frameIndex <= 0) return;
@@ -109,15 +148,29 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         );
         if (!prevVideo) return;
 
+        const projectId = currentProject.id;
+        const opToken = projectSessionRef.current;
         setExtractingFrameId(frameId);
+        setReadbackMessage(null);
+        setReadbackFloor(undefined);
+        let committedRevision: number | undefined;
         try {
-            const updatedProject = await api.extractLastFrame(currentProject.id, frameId, prevVideo.id);
-            updateProject(currentProject.id, updatedProject);
+            const response = await api.extractLastFrame(projectId, frameId, prevVideo.id);
+            if (!isProjectSessionCurrent(projectId, opToken)) return;
+            const parsed = frameCommandSnapshot(projectId, response);
+            committedRevision = parsed.revision;
+            await readProjectOnce(projectId, parsed.revision, { isCurrent: currentProjectReadGuard(projectId, opToken) });
         } catch (error: any) {
             console.error("Failed to extract last frame:", error);
-            alert(error?.response?.data?.detail || "Failed to extract last frame");
+            if (!isProjectSessionCurrent(projectId, opToken)) return;
+            if (error instanceof ProjectReadbackError) {
+                setReadbackMessage(tFrameCommand("savedReadFailed"));
+                setReadbackFloor(committedRevision);
+            } else {
+                alert(error?.response?.data?.detail || tFrameCommand("unconfirmed"));
+            }
         } finally {
-            setExtractingFrameId(null);
+            if (isProjectSessionCurrent(projectId, opToken)) setExtractingFrameId(null);
         }
     };
 
@@ -151,6 +204,17 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
     // negativePrompt moved to params
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitSuccess, setSubmitSuccess] = useState(false);
+
+    useEffect(() => {
+        projectSessionRef.current += 1;
+        submitInFlightRef.current = null;
+        submittedTaskIdsRef.current = [];
+        retryReadRef.current = false;
+        setIsRetryingReadback(false);
+        setIsSubmitting(false);
+        setReadbackMessage(null);
+        setReadbackFloor(undefined);
+    }, [currentProject?.id, currentProject?.readEnvironment]);
     const [showCameraDropdown, setShowCameraDropdown] = useState(false);
     const [polishedPrompt, setPolishedPrompt] = useState<{ cn: string; en: string } | null>(null);
     const [isPolishing, setIsPolishing] = useState(false);
@@ -292,8 +356,32 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
         promptBuilderRef.current?.insertCharacter(slotIndex, slot.name, thumbnail);
     };
 
+    const handleRetryProjectRead = async () => {
+        if (!currentProject || currentProject.readEnvironment !== getRuntimeEnvironment()?.key || retryReadRef.current) return;
+        retryReadRef.current = true;
+        const projectId = currentProject.id;
+        const opToken = projectSessionRef.current;
+        setIsRetryingReadback(true);
+        try {
+            const confirmed = await readProjectOnce(projectId, readbackFloor, { isCurrent: currentProjectReadGuard(projectId, opToken) });
+            if (!isProjectSessionCurrent(projectId, opToken)) return;
+            onTaskCreated(confirmed);
+            setReadbackMessage(null);
+            setReadbackFloor(undefined);
+        } catch (error) {
+            console.error("Failed to retry project read:", error);
+            if (isProjectSessionCurrent(projectId, opToken)) setReadbackMessage(tFrameCommand("savedReadFailed"));
+        } finally {
+            if (isProjectSessionCurrent(projectId, opToken)) {
+                retryReadRef.current = false;
+                setIsRetryingReadback(false);
+            }
+        }
+    };
+
     const handleSubmit = async () => {
         // Validation based on mode
+        if (readbackMessage || submitBusy || submitInFlightRef.current || hasPendingUpload) return;
         if (generationMode === 'i2v') {
             if (selectedImages.length === 0 || !prompt || !currentProject) return;
         } else {
@@ -306,14 +394,25 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
             if (!prompt || !currentProject) return;
         }
 
+        if (isOrderedWan3VideoModelId(params.model)) {
+            alert(tc("orderedWan3RequiresStoryboard"));
+            return;
+        }
+
+        const projectId = currentProject.id;
+        const opToken = projectSessionRef.current;
+        const submitOp = videoCreatorOperationKey(projectId, "submit");
+        const store = useProjectStore.getState();
+        if (!isProjectSessionCurrent(projectId, opToken) || store.runningOps[submitOp]) return;
+        submitInFlightRef.current = { projectId, token: opToken };
+        store.setRunningOp(submitOp, true);
+        submittedTaskIdsRef.current = [];
         setIsSubmitting(true);
+        setReadbackMessage(null);
         try {
             // Add motion description to prompt
             const motionDesc = getMotionDescription();
             const finalPrompt = motionDesc ? `${prompt}, ${motionDesc}` : prompt;
-
-            // Optimistic update - add pending tasks to queue immediately
-            const optimisticTasks: VideoTask[] = [];
 
             // Determine items to process
             // In I2V: process selected images
@@ -323,145 +422,147 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                 itemsToProcess = [""]; // Dummy item to trigger one iteration
             }
 
-            itemsToProcess.forEach((img, idx) => {
-                let displayUrl = img;
-                if (img && img.startsWith("blob:")) {
-                    displayUrl = uploadingPaths[img] || img;
-                } else if (img && !img.startsWith("http")) {
-                    displayUrl = img;
-                }
-
-                // Determine model based on generation mode
-                const actualModel = generationMode === 'r2v' ? getR2vRouteModelId(params.model) : params.model;
-                const r2vImageBased = generationMode === 'r2v' && isR2vImageBased(actualModel);
-                const referenceVideos = generationMode === 'r2v' && !r2vImageBased
-                    ? castSlots.filter(s => s.url).map(s => s.url)
-                    : undefined;
-
-                // Create batch_size tasks for each image
-                for (let i = 0; i < params.batchSize; i++) {
-                    optimisticTasks.push({
-                        id: `temp-${Date.now()}-${idx}-${i}`,
-                        project_id: currentProject.id,
-                        image_url: displayUrl, // Might be empty string for R2V
-                        prompt: finalPrompt,
-                        status: "pending",
-                        video_url: undefined,
-                        duration: params.duration,
-                        seed: params.seed,
-                        resolution: params.resolution,
-                        generate_audio: params.generateAudio,
-                        audio_url: params.audioUrl,
-                        prompt_extend: params.promptExtend,
-                        negative_prompt: params.negativePrompt,
-                        model: actualModel,
-                        created_at: Date.now() / 1000,
-                        generation_mode: generationMode,
-                        reference_video_urls: referenceVideos,
-                        reference_image_urls: r2vImageBased
-                            ? castSlots.filter(s => s.url).map(s => s.url)
-                            : undefined
-                    });
-                }
-            });
-
-            // Immediately update UI with optimistic tasks
-            const optimisticProject = {
-                ...currentProject,
-                video_tasks: [...(currentProject.video_tasks || []), ...optimisticTasks]
-            };
-            onTaskCreated(optimisticProject);
-
-            // Batch submit for all images
+            // Batch submit for all images. A later readback failure must not
+            // be reported as paid submission failure or trigger a second paid call.
+            let submittedCount = 0;
+            let submitFailure: unknown = null;
             for (const img of itemsToProcess) {
-                let finalImageUrl = img;
-                if (img && img.startsWith("blob:")) {
-                    if (uploadingPaths[img]) {
-                        finalImageUrl = uploadingPaths[img];
-                    } else {
-                        console.warn("Image upload pending for", img);
-                        continue;
+                if (!isProjectSessionCurrent(projectId, opToken)) return;
+                try {
+                    let finalImageUrl = img;
+                    if (img && img.startsWith("blob:")) {
+                        if (uploadingPaths[img]) {
+                            finalImageUrl = uploadingPaths[img];
+                        } else {
+                            console.warn("Image upload pending for", img);
+                            continue;
+                        }
+                    } else if (img && img.startsWith(`${API_URL}/files/`)) {
+                        finalImageUrl = img.replace(`${API_URL}/files/`, "");
                     }
-                } else if (img && img.startsWith(`${API_URL}/files/`)) {
-                    finalImageUrl = img.replace(`${API_URL}/files/`, "");
-                }
 
-                // Find frame ID - use selectedFrameId directly for R2V mode
-                let frameId: string | undefined;
-                if (generationMode === 'r2v') {
-                    // R2V mode: use the explicitly selected frame
-                    frameId = selectedFrameId || undefined;
-                } else {
-                    // I2V mode: find frame by matching image URL (check rendered_image_url first, then image_url)
-                    const frame = currentProject?.frames?.find((f: any) =>
-                        (f.rendered_image_url || f.image_url) === img ||
-                        f.image_url === img ||
-                        `${API_URL}/files/${f.image_url}` === img
+                    // Find frame ID - use selectedFrameId directly for R2V mode
+                    let frameId: string | undefined;
+                    if (generationMode === 'r2v') {
+                        // R2V mode: use the explicitly selected frame
+                        frameId = selectedFrameId || undefined;
+                    } else {
+                        // I2V mode: find frame by matching image URL (check rendered_image_url first, then image_url)
+                        const frame = currentProject?.frames?.find((f: any) =>
+                            (f.rendered_image_url || f.image_url) === img ||
+                            f.image_url === img ||
+                            `${API_URL}/files/${f.image_url}` === img
+                        );
+                        frameId = frame ? frame.id : undefined;
+                    }
+
+                    // Determine model based on generation mode
+                    // R2V mode uses the hidden route model, I2V uses the selected visible model.
+                    const actualModel = generationMode === 'r2v' ? getR2vRouteModelId(params.model) : params.model;
+                    if (isOrderedWan3VideoModelId(actualModel)) {
+                        alert(tc("orderedWan3RequiresStoryboard"));
+                        return;
+                    }
+                    const r2vImageBased = generationMode === 'r2v' && isR2vImageBased(actualModel);
+
+                    // Get reference URLs from cast slots for R2V
+                    const referenceVideos = generationMode === 'r2v' && !r2vImageBased
+                        ? castSlots.filter(s => s.url).map(s => s.url)
+                        : [];
+                    const referenceImages = r2vImageBased
+                        ? castSlots.filter(s => s.url).map(s => s.url)
+                        : [];
+
+                    const accepted = await api.createVideoTask(
+                        projectId,
+                        finalImageUrl, // Can be empty string
+                        finalPrompt,
+                        params.duration,
+                        params.seed,
+                        params.resolution,
+                        params.generateAudio,
+                        params.audioUrl,
+                        params.promptExtend,
+                        params.negativePrompt,
+                        params.batchSize,
+                        actualModel,  // Use computed model
+                        frameId,
+                        params.shotType,
+                        generationMode,  // Use local state
+                        referenceVideos,  // Use cast slots (Wan R2V)
+                        // Kling params
+                        params.mode,
+                        params.sound,
+                        params.cfgScale,
+                        // Vidu params
+                        params.viduAudio,
+                        params.movementAmplitude,
+                        // HappyHorse params
+                        referenceImages,  // Reference images for HappyHorse R2V
+                        undefined  // ratio (use default)
                     );
-                    frameId = frame ? frame.id : undefined;
+                    if (!isProjectSessionCurrent(projectId, opToken)) return;
+                    if (!Array.isArray(accepted) || !accepted.length || accepted.some(task =>
+                        !task || typeof task.id !== 'string' || !task.id || task.project_id !== projectId)) {
+                        setReadbackMessage(tFrameCommand("unconfirmed"));
+                        return;
+                    }
+                    submittedTaskIdsRef.current.push(...accepted.map(task => task.id));
+                    submittedCount += 1;
+                } catch (error) {
+                    submitFailure = error;
+                    break;
                 }
-
-                // Determine model based on generation mode
-                // R2V mode uses the hidden route model, I2V uses the selected visible model.
-                const actualModel = generationMode === 'r2v' ? getR2vRouteModelId(params.model) : params.model;
-                const r2vImageBased = generationMode === 'r2v' && isR2vImageBased(actualModel);
-
-                // Get reference URLs from cast slots for R2V
-                const referenceVideos = generationMode === 'r2v' && !r2vImageBased
-                    ? castSlots.filter(s => s.url).map(s => s.url)
-                    : [];
-                const referenceImages = r2vImageBased
-                    ? castSlots.filter(s => s.url).map(s => s.url)
-                    : [];
-
-                await api.createVideoTask(
-                    currentProject.id,
-                    finalImageUrl, // Can be empty string
-                    finalPrompt,
-                    params.duration,
-                    params.seed,
-                    params.resolution,
-                    params.generateAudio,
-                    params.audioUrl,
-                    params.promptExtend,
-                    params.negativePrompt,
-                    params.batchSize,
-                    actualModel,  // Use computed model
-                    frameId,
-                    params.shotType,
-                    generationMode,  // Use local state
-                    referenceVideos,  // Use cast slots (Wan R2V)
-                    // Kling params
-                    params.mode,
-                    params.sound,
-                    params.cfgScale,
-                    // Vidu params
-                    params.viduAudio,
-                    params.movementAmplitude,
-                    // HappyHorse params
-                    referenceImages,  // Reference images for HappyHorse R2V
-                    undefined  // ratio (use default)
-                );
             }
 
-            // Refresh with actual data from server
-            const updatedProject = await api.getProject(currentProject.id);
-            onTaskCreated(updatedProject);
+            if (!isProjectSessionCurrent(projectId, opToken)) return;
+            if (submitFailure) {
+                if (submittedCount > 0) {
+                    try {
+                        const confirmed = await readProjectOnce(projectId, undefined, { isCurrent: currentProjectReadGuard(projectId, opToken) });
+                        if (!isProjectSessionCurrent(projectId, opToken)) return;
+                        onTaskCreated(confirmed);
+                        alert(tc("partialSubmit", { count: submittedCount, total: itemsToProcess.length }));
+                    } catch (readError) {
+                        console.error("Failed to read partially submitted video tasks:", readError);
+                        if (isProjectSessionCurrent(projectId, opToken)) { setReadbackMessage(tFrameCommand("savedReadFailed")); setReadbackFloor(undefined); }
+                    }
+                    return;
+                }
+                throw submitFailure;
+            }
 
+            try {
+                const confirmed = await readProjectOnce(projectId, undefined, { isCurrent: currentProjectReadGuard(projectId, opToken) });
+                if (!isProjectSessionCurrent(projectId, opToken)) return;
+                onTaskCreated(confirmed);
+            } catch (readError) {
+                console.error("Failed to read submitted video tasks:", readError);
+                if (readError instanceof ProjectReadbackError) {
+                    if (isProjectSessionCurrent(projectId, opToken)) { setReadbackMessage(tFrameCommand("savedReadFailed")); setReadbackFloor(undefined); }
+                    return;
+                }
+                throw readError;
+            }
+
+            if (!isProjectSessionCurrent(projectId, opToken)) return;
             // Success feedback
             setSubmitSuccess(true);
-            setTimeout(() => setSubmitSuccess(false), 1500);
+            setTimeout(() => {
+                if (isProjectSessionCurrent(projectId, opToken)) setSubmitSuccess(false);
+            }, 1500);
 
             // Clear selection after successful submit
             // setSelectedImages([]); // Keep selection for iterative generation
         } catch (error) {
             console.error("Failed to submit task:", error);
-            alert(tc("submitFailed"));
-            // Refresh to remove optimistic updates
-            const updatedProject = await api.getProject(currentProject.id);
-            onTaskCreated(updatedProject);
+            if (isProjectSessionCurrent(projectId, opToken)) alert(tc("submitFailed"));
         } finally {
-            setIsSubmitting(false);
+            if (submitInFlightRef.current?.projectId === projectId && submitInFlightRef.current.token === opToken) {
+                submitInFlightRef.current = null;
+            }
+            store.setRunningOp(submitOp, false);
+            if (isProjectSessionCurrent(projectId, opToken)) setIsSubmitting(false);
         }
     };
 
@@ -1068,6 +1169,20 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                     )}
 
 
+                    {readbackMessage ? (
+                        <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                            <span>{readbackMessage}</span>
+                            <button
+                                type="button"
+                                onClick={handleRetryProjectRead}
+                                disabled={isRetryingReadback}
+                                className="shrink-0 underline disabled:opacity-60"
+                            >
+                                {isRetryingReadback ? tc("generatingVideo") : tProject("readAgain")}
+                            </button>
+                        </div>
+                    ) : null}
+
                     {/* 2. Prompt Input */}
                     <div className="space-y-2">
                         <div className="flex justify-between items-center">
@@ -1249,7 +1364,7 @@ export default function VideoCreator({ onTaskCreated, remixData, onRemixClear, p
                 <div className="max-w-4xl mx-auto w-full">
                     <button
                         onClick={handleSubmit}
-                        disabled={(!prompt || isSubmitting) || (generationMode === 'i2v' && selectedImages.length === 0)}
+                        disabled={Boolean(readbackMessage) || submitBusy || hasPendingUpload || (!prompt || isSubmitting) || (generationMode === 'i2v' && selectedImages.length === 0)}
                         className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all transform active:scale-[0.99] ${submitSuccess
                             ? "bg-green-500 text-white"
                             : "bg-primary hover:bg-primary/90 text-white"

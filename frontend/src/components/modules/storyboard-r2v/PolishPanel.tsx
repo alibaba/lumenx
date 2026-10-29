@@ -14,18 +14,25 @@
  *
  * 视觉寄存于 Studio 现有 chrome-sm / display-sm / status colors token 体系。
  */
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Check, X, RefreshCw, Copy, CornerDownLeft, AlertCircle, AlertTriangle } from "lucide-react";
 import clsx from "clsx";
 import { useTranslations } from "next-intl";
 import { api } from "@/lib/api";
 import { debugLog } from "@/lib/debugLog";
+import { getRuntimeEnvironment, subscribeRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import BorderGlow from "@/components/shared/BorderGlow/BorderGlow";
 import WorkflowActionButton from "@/components/shared/WorkflowActionButton";
 
 interface PolishedPrompt {
     cn: string;
     en: string;
+}
+
+function readBilingualPrompt(value: { prompt_cn?: unknown; prompt_en?: unknown } | null | undefined): PolishedPrompt | null {
+    return typeof value?.prompt_cn === "string" && value.prompt_cn.trim()
+        && typeof value.prompt_en === "string" && value.prompt_en.trim()
+        ? { cn: value.prompt_cn, en: value.prompt_en } : null;
 }
 
 type PolishErrorReason =
@@ -102,6 +109,26 @@ export default function PolishPanel({
     /** 跟踪两栏的 "已复制" 闪烁状态。 */
     const [copiedCol, setCopiedCol] = useState<"cn" | "en" | "original" | null>(null);
 
+    // ShotCard recreates reference arrays on render: compare their content,
+    // not identity, while keeping a request tied to the input it actually used.
+    const inputKey = JSON.stringify([scriptId, tabMode, prompt, slots, imageUrls]);
+    const currentInput = useRef(inputKey);
+    currentInput.current = inputKey;
+    const requestVersion = useRef(0);
+    const resetPanel = useCallback(() => {
+        requestVersion.current += 1;
+        setIsPolishing(false);
+        setPolished(null);
+        setError(null);
+        setFeedback("");
+        setCopiedCol(null);
+    }, []);
+    useEffect(() => {
+        resetPanel();
+        return () => { requestVersion.current += 1; };
+    }, [inputKey, resetPanel]);
+    useEffect(() => subscribeRuntimeEnvironment(resetPanel), [resetPanel]);
+
     const runPolish = useCallback(async (feedbackText: string = "") => {
         // 迭代时：draft=上一版 EN，prev_cn=上一版 CN，让后端双语锚点。
         // 首次：draft=用户原文，prev_cn 留空。
@@ -110,6 +137,10 @@ export default function PolishPanel({
         const prevCn = isIteration ? (polished?.cn ?? "") : "";
         if (!draft.trim()) return;
 
+        const version = ++requestVersion.current;
+        const environment = getRuntimeEnvironment();
+        const isCurrent = () => requestVersion.current === version
+            && currentInput.current === inputKey && getRuntimeEnvironment() === environment;
         setIsPolishing(true);
         setError(null);
         // 不立即清 polished：若失败可保留上次结果继续 refine；
@@ -119,8 +150,10 @@ export default function PolishPanel({
             const res = tabMode === "direct_r2v"
                 ? await api.polishR2VPrompt(draft, slots, feedbackText, scriptId, prevCn, imageUrls)
                 : await api.polishVideoPrompt(draft, feedbackText, scriptId, prevCn, imageUrls);
-            if (res?.prompt_cn && res?.prompt_en) {
-                setPolished({ cn: res.prompt_cn, en: res.prompt_en });
+            if (!isCurrent()) return;
+            const result = readBilingualPrompt(res);
+            if (result) {
+                setPolished(result);
                 setFeedback("");
             } else {
                 // 200 但缺 key 走错误态
@@ -130,32 +163,32 @@ export default function PolishPanel({
                     messageEn: "Model returned incomplete bilingual result. Please retry.",
                 });
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
+            if (!isCurrent()) return;
             debugLog.error("Studio", "Polish failed:", err);
             const parsed = parsePolishError(err, t);
-            setError(parsed);
-            // model_echo 是 warning：仍把后端附带的双语 echo 展示给用户
-            // （这样他们能在 feedback 框里参照原文追加要求）
-            if (parsed.reason === "model_echo" && parsed.prompt_cn && parsed.prompt_en) {
-                setPolished({ cn: parsed.prompt_cn, en: parsed.prompt_en });
-            }
+            // The processor can return an invalid CN value even with valid EN.
+            // Never render or offer to apply a malformed bilingual result.
+            const echo = parsed.reason === "model_echo" ? readBilingualPrompt(parsed) : null;
+            setError(parsed.reason === "model_echo" && !echo
+                ? { ...parsed, reason: "missing_keys" } : parsed);
+            if (echo) setPolished(echo);
         } finally {
-            setIsPolishing(false);
+            if (isCurrent()) setIsPolishing(false);
         }
-    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls]);
+    }, [tabMode, prompt, slots, scriptId, polished?.en, polished?.cn, imageUrls, inputKey, t]);
 
     const handleApply = useCallback((text: string) => {
+        // Applying an earlier candidate also dismisses a pending refinement.
+        // The controlled prompt change acknowledges acceptance; a rejected edit
+        // must leave the candidate available. This is not a persistence ACK.
+        requestVersion.current += 1;
+        setIsPolishing(false);
         onApply(text);
-        setPolished(null);
-        setError(null);
-        setFeedback("");
-    }, [onApply]);
+        if (text === prompt) resetPanel();
+    }, [onApply, prompt, resetPanel]);
 
-    const handleDiscard = useCallback(() => {
-        setPolished(null);
-        setError(null);
-        setFeedback("");
-    }, []);
+    const handleDiscard = resetPanel;
 
     const handleCopy = useCallback(async (text: string, col: "cn" | "en" | "original") => {
         try {

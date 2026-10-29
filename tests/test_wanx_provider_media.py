@@ -20,8 +20,8 @@ class _FakeResponse:
         return self._payload
 
 
-def _write_output_file(rel_path: str, raw_bytes: bytes) -> str:
-    file_path = Path("output") / rel_path
+def _write_output_file(output_root: Path, rel_path: str, raw_bytes: bytes) -> str:
+    file_path = output_root / rel_path
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(raw_bytes)
     return str(file_path)
@@ -86,9 +86,10 @@ def _install_fake_uploader(monkeypatch, configured: bool):
 
 
 class TestWanxProviderMediaIntegration:
-    def test_i2v_local_image_without_oss_uses_temp_url_and_header(self, monkeypatch):
+    def test_i2v_local_image_without_oss_uses_temp_url_and_header(self, monkeypatch, tmp_path):
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
         _install_fake_uploader(monkeypatch, configured=False)
+        output_root = tmp_path / "output"
 
         captured = {}
         _install_fake_requests(monkeypatch, captured)
@@ -97,12 +98,12 @@ class TestWanxProviderMediaIntegration:
             lambda self, local_path, model_name: "oss://dashscope-temp/image-001",
         )
 
-        img_path = _write_output_file("uploads/wanx_i2v_local.png", base64.b64decode(PNG_1X1_BASE64))
+        img_path = _write_output_file(output_root, "uploads/wanx_i2v_local.png", base64.b64decode(PNG_1X1_BASE64))
 
-        model = WanxModel({"params": {}})
+        model = WanxModel({"output_root": str(output_root), "params": {}})
         model.generate(
             prompt="demo",
-            output_path="output/video/wanx_i2v_local.mp4",
+            output_path=str(output_root / "video" / "wanx_i2v_local.mp4"),
             img_path=img_path,
             model_name="wan2.6-i2v",
         )
@@ -110,9 +111,10 @@ class TestWanxProviderMediaIntegration:
         assert captured["create_payload"]["input"]["img_url"] == "oss://dashscope-temp/image-001"
         assert captured["create_headers"]["X-DashScope-OssResourceResolve"] == "enable"
 
-    def test_i2v_local_audio_without_oss_uses_temp_url_and_header(self, monkeypatch):
+    def test_i2v_local_audio_without_oss_uses_temp_url_and_header(self, monkeypatch, tmp_path):
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
         _install_fake_uploader(monkeypatch, configured=False)
+        output_root = tmp_path / "output"
 
         captured = {}
         _install_fake_requests(monkeypatch, captured)
@@ -121,13 +123,13 @@ class TestWanxProviderMediaIntegration:
             lambda self, local_path, model_name: "oss://dashscope-temp/audio-001",
         )
 
-        img_path = _write_output_file("uploads/wanx_i2v_audio_img.png", base64.b64decode(PNG_1X1_BASE64))
-        audio_path = _write_output_file("audio/wanx_i2v_audio.wav", b"fake-audio")
+        img_path = _write_output_file(output_root, "uploads/wanx_i2v_audio_img.png", base64.b64decode(PNG_1X1_BASE64))
+        audio_path = _write_output_file(output_root, "audio/wanx_i2v_audio.wav", b"fake-audio")
 
-        model = WanxModel({"params": {}})
+        model = WanxModel({"output_root": str(output_root), "params": {}})
         model.generate(
             prompt="demo",
-            output_path="output/video/wanx_i2v_audio.mp4",
+            output_path=str(output_root / "video" / "wanx_i2v_audio.mp4"),
             img_path=img_path,
             model_name="wan2.6-i2v",
             audio_url=audio_path,
@@ -136,9 +138,10 @@ class TestWanxProviderMediaIntegration:
         assert captured["create_payload"]["input"]["audio_url"] == "oss://dashscope-temp/audio-001"
         assert captured["create_headers"]["X-DashScope-OssResourceResolve"] == "enable"
 
-    def test_r2v_local_reference_video_without_oss_uses_temp_url_and_header(self, monkeypatch):
+    def test_r2v_local_reference_video_without_oss_uses_temp_url_and_header(self, monkeypatch, tmp_path):
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
         _install_fake_uploader(monkeypatch, configured=False)
+        output_root = tmp_path / "output"
 
         captured = {}
         _install_fake_requests(monkeypatch, captured)
@@ -147,12 +150,12 @@ class TestWanxProviderMediaIntegration:
             lambda self, local_path, model_name: "oss://dashscope-temp/ref-video-001",
         )
 
-        ref_video_path = _write_output_file("video/wanx_r2v_ref.mp4", b"fake-video")
+        ref_video_path = _write_output_file(output_root, "video/wanx_r2v_ref.mp4", b"fake-video")
 
-        model = WanxModel({"params": {}})
+        model = WanxModel({"output_root": str(output_root), "params": {}})
         model.generate(
             prompt="demo",
-            output_path="output/video/wanx_r2v.mp4",
+            output_path=str(output_root / "video" / "wanx_r2v.mp4"),
             model_name="wan2.6-r2v",
             ref_video_urls=[ref_video_path],
         )
@@ -162,17 +165,18 @@ class TestWanxProviderMediaIntegration:
         ]
         assert captured["create_headers"]["X-DashScope-OssResourceResolve"] == "enable"
 
-    def test_i2v_object_key_with_oss_configured_uses_signed_url(self, monkeypatch):
+    def test_i2v_object_key_with_oss_configured_uses_signed_url(self, monkeypatch, tmp_path):
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
         _install_fake_uploader(monkeypatch, configured=True)
 
         captured = {}
         _install_fake_requests(monkeypatch, captured)
 
-        model = WanxModel({"params": {}})
+        output_root = tmp_path / "output"
+        model = WanxModel({"output_root": str(output_root), "params": {}})
         model.generate(
             prompt="demo",
-            output_path="output/video/wanx_i2v_object_key.mp4",
+            output_path=str(output_root / "video" / "wanx_i2v_object_key.mp4"),
             img_path="lumenx/temp/i2v_input/ref.png",
             model_name="wan2.6-i2v",
         )
@@ -182,9 +186,9 @@ class TestWanxProviderMediaIntegration:
             == "https://oss.example/lumenx/temp/i2v_input/ref.png"
         )
 
-    def test_create_dashscope_temp_url_calls_policy_and_multipart_upload(self, monkeypatch):
+    def test_create_dashscope_temp_url_calls_policy_and_multipart_upload(self, monkeypatch, tmp_path):
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
-        local_path = _write_output_file("uploads/wanx_temp_upload_source.png", b"img-bytes")
+        local_path = _write_output_file(tmp_path / "output", "uploads/wanx_temp_upload_source.png", b"img-bytes")
 
         captured = {}
 
@@ -230,9 +234,10 @@ class TestWanxProviderMediaIntegration:
         assert captured["upload_file_name"] == "wanx_temp_upload_source.png"
         assert captured["upload_file_content"] == b"img-bytes"
 
-    def test_sdk_dashscope_proxy_model_local_image_uses_resolved_image_value(self, monkeypatch):
+    def test_sdk_dashscope_proxy_model_local_image_uses_resolved_image_value(self, monkeypatch, tmp_path):
         monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
         _install_fake_uploader(monkeypatch, configured=False)
+        output_root = tmp_path / "output"
 
         captured = {}
 
@@ -258,12 +263,12 @@ class TestWanxProviderMediaIntegration:
         monkeypatch.setattr("src.models.wanx.WanxModel._generate_sdk", fake_generate_sdk)
         monkeypatch.setattr("src.models.wanx.WanxModel._download_video", lambda self, *_: None)
 
-        img_path = _write_output_file("uploads/wanx_sdk_kling_local.png", base64.b64decode(PNG_1X1_BASE64))
+        img_path = _write_output_file(output_root, "uploads/wanx_sdk_kling_local.png", base64.b64decode(PNG_1X1_BASE64))
 
-        model = WanxModel({"params": {}})
+        model = WanxModel({"output_root": str(output_root), "params": {}})
         model.generate(
             prompt="demo",
-            output_path="output/video/wanx_sdk_kling_local.mp4",
+            output_path=str(output_root / "video" / "wanx_sdk_kling_local.mp4"),
             img_path=img_path,
             model_name="kling-v1",
         )

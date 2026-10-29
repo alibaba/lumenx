@@ -12,8 +12,8 @@ import {
     type DurationConfig,
     type ModelParamSupport,
     R2V_SELECTION_MODEL_ID,
-    VIDEO_I2V_MODELS,
 } from "@/lib/modelCatalog";
+import { LEGACY_VIDEO_I2V_MODELS, resolveLegacyVideoSidebarModelId } from "@/lib/legacyVideoSidebarModels";
 import GroupedModelGrid from "@/components/common/GroupedModelGrid";
 
 interface VideoSidebarProps {
@@ -31,11 +31,11 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
     const [showNegative, setShowNegative] = useState(false);
 
     const currentModelConfig =
-        VIDEO_I2V_MODELS.find(m => m.id === params.model) ??
-        VIDEO_I2V_MODELS.find(m => m.id === DEFAULT_I2V_MODEL_ID) ??
-        VIDEO_I2V_MODELS[0];
+        LEGACY_VIDEO_I2V_MODELS.find(m => m.id === resolveLegacyVideoSidebarModelId(params.model)) ??
+        LEGACY_VIDEO_I2V_MODELS.find(m => m.id === DEFAULT_I2V_MODEL_ID) ??
+        LEGACY_VIDEO_I2V_MODELS[0];
     const r2vSelectionModelName =
-        VIDEO_I2V_MODELS.find((model) => model.id === R2V_SELECTION_MODEL_ID)?.name ??
+        LEGACY_VIDEO_I2V_MODELS.find((model) => model.id === resolveLegacyVideoSidebarModelId(R2V_SELECTION_MODEL_ID))?.name ??
         tm("currentR2VModel");
     const modelParams: ModelParamSupport = currentModelConfig?.params ?? {};
 
@@ -43,7 +43,7 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
         const newParams = { ...params, [key]: value };
         // When model changes, clamp duration and reset model-specific params
         if (key === "model") {
-            const newModelConfig = VIDEO_I2V_MODELS.find(m => m.id === value);
+            const newModelConfig = LEGACY_VIDEO_I2V_MODELS.find(m => m.id === value);
             if (newModelConfig?.duration) {
                 const dc = newModelConfig.duration;
                 if (dc.type === 'fixed') {
@@ -177,8 +177,8 @@ export default function VideoSidebar({ tasks, onRemix, params, setParams }: Vide
                                         )}
                                     </label>
                                     <GroupedModelGrid
-                                        models={VIDEO_I2V_MODELS}
-                                        selectedId={params.generationMode === "r2v" ? R2V_SELECTION_MODEL_ID : params.model}
+                                        models={LEGACY_VIDEO_I2V_MODELS}
+                                        selectedId={params.generationMode === "r2v" ? resolveLegacyVideoSidebarModelId(R2V_SELECTION_MODEL_ID) : resolveLegacyVideoSidebarModelId(params.model)}
                                         onSelect={(id) => updateParam("model", id)}
                                     />
                                 </div>
