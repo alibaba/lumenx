@@ -25,6 +25,7 @@ _VIOLATIONS: list[str] = []
 _READ_ROOTS: tuple[Path, ...] = ()
 _WRITE_ROOTS: tuple[Path, ...] = ()
 _REPO_ROOT: Path | None = None
+_LINUX_OS_METADATA_FILES = frozenset({Path("/etc/os-release"), Path("/usr/lib/os-release")})
 
 _REAL_OPEN = builtins.open
 _REAL_IO_OPEN = io.open
@@ -160,6 +161,10 @@ def _check_path(path: object, *, write: bool, operation: str) -> None:
             message = f"{operation} blocked write outside isolated root: {resolved}"
             _record(message)
             raise RuntimeError(message)
+    elif sys.platform.startswith("linux") and resolved in _LINUX_OS_METADATA_FILES:
+        # SDK diagnostic headers read public distribution metadata. Match exact
+        # resolved files, never directory roots or arbitrary symlink targets.
+        return
     elif not _is_inside(resolved, _read_roots()):
         message = f"{operation} blocked read outside allowed roots: {resolved}"
         _record(message)
