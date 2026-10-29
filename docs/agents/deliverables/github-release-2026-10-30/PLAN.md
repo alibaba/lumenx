@@ -35,3 +35,13 @@ The previous snapshot has backend 9,460 passing tests and frontend 2,104 logic p
 Publication whitespace check: normalize only the ten paths reported by `git diff --check github/main...HEAD` (five public documents, two implementation files and three tests). Remove trailing whitespace and redundant final blank lines only; verify each change equals that mechanical transformation. Existing full suites protect behavior, and final Linux checks must use the resulting commit.
 
 Discarding this separate release candidate leaves the original development branch and public main intact. No live data migration, deployment, history rewrite or cleanup of another worktree is part of this task.
+
+## GitHub security findings: repair plan
+
+The first draft PR scan at `ee193c9bcbcfcb599d9ed0640334e8677a85f97a` reported four high and seven medium CodeQL findings. Preserve that result and the original candidate while repairing findings in a separate worktree.
+
+1. Trace the three frontend DOM-to-HTML sinks and the test sanitizer pattern. Add regression cases for literal markup and preserved editor behavior before changing the affected implementation; reuse existing safe DOM patterns and dependencies.
+2. Trace the seven backend exception disclosure sinks. Lock existing public error codes and useful validation feedback with regression tests, then keep internal traces in server logs while returning bounded public messages.
+3. Review inherited dependency advisories against exact locked versions and executed deployment paths. Separate narrow fixes from changes needing a framework/runtime migration; do not dismiss advisories merely because feature tests pass.
+4. Integrate verified fixes only after the original local suite finishes. Run targeted regressions, frontend checks and all exact-head GitHub checks again, including CodeQL. Keep unresolved items explicit in the draft PR and migration review.
+5. Resolve inherited dependency fixes in a temporary manifest/lock copy: align Tiptap at 3.30.5, and update compatible follow-redirects, source-map-js, fflate, Vite, js-yaml, brace-expansion 1.x, and postcss-selector-parser versions. Accept only reviewed version/peer/engine changes within parent ranges, with public registry URLs and no new dependency package names; preserve the original lock and audit before applying the text diff. Keep major upgrades and remaining advisories separate, then validate a fresh install and the complete frontend gates.
