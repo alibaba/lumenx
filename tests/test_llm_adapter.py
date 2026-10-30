@@ -71,7 +71,6 @@ def test_minimax_configuration_requires_its_api_key(monkeypatch):
     "base_url",
     [
         None,
-        "https://api.minimax.cn/v1/",
         "https://api.minimaxi.com/v1/",
         "https://custom.example/minimax/v1/",
     ],
@@ -176,9 +175,9 @@ def test_other_provider_defaults_unchanged(
 def test_minimax_documents_current_models_and_regional_protocol_endpoints():
     env_example = (Path(__file__).parents[1] / ".env.example").read_text()
     assert "https://api.minimax.io/v1" in env_example
-    assert "https://api.minimax.cn/v1" in env_example
+    assert "https://api.minimaxi.com/v1" in env_example
     assert "https://api.minimax.io/anthropic" in env_example
-    assert "https://api.minimax.cn/anthropic" in env_example
+    assert "https://api.minimaxi.com/anthropic" in env_example
     assert "MINIMAX_MODEL=MiniMax-M3.1-Flash" in env_example
     assert "Current models: MiniMax-M3.1-Flash (default), MiniMax-M3" in env_example
     assert "MiniMax-M2.7" not in env_example
