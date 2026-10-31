@@ -58,6 +58,7 @@ class TemplateIn(BaseModel): title: str; source_project_id: str; version: str = 
 class ForkIn(BaseModel): fork_project_id: str
 class ApplyIn(BaseModel): exam_id: str; artifact: ArtifactIn
 class CertReviewIn(BaseModel): approved: bool; score: float | None = None; feedback: str = ""
+class SubmissionReviewIn(BaseModel): approved: bool; score: float | None = None; award_title: str | None = None
 
 
 @router.post("/auth/register")
@@ -77,6 +78,12 @@ def logout(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), s
 @router.get("/competitions")
 def competitions(svc: PlatformService = Depends(service)): return svc.list_competitions()
 
+@router.get("/competitions/{competition_id}")
+def competition(competition_id: str, svc: PlatformService = Depends(service)): return handle(lambda: svc.competition(competition_id))
+
+@router.get("/competitions/{competition_id}/leaderboard")
+def leaderboard(competition_id: str, svc: PlatformService = Depends(service)): return svc.leaderboard(competition_id)
+
 @router.post("/competitions")
 def create_competition(body: CompetitionIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.create_competition(user, body.model_dump()))
 
@@ -88,6 +95,9 @@ def enroll(competition_id: str, invite_code: str | None = None, idempotency_key:
 
 @router.post("/competitions/{competition_id}/submit")
 def competition_submit(competition_id: str, body: ArtifactIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.submit_artifact(user, "competition", competition_id, body.model_dump()))
+
+@router.post("/competitions/submissions/{submission_id}/review")
+def review_submission(submission_id: str, body: SubmissionReviewIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.review_submission(user, submission_id, body.approved, body.score, body.award_title))
 
 @router.get("/academy/courses")
 def courses(svc: PlatformService = Depends(service)): return svc.list_courses()
@@ -106,6 +116,9 @@ def fork_template(template_id: str, body: ForkIn, user=Depends(current_user), sv
 
 @router.post("/certifications/exams")
 def create_exam(body: ExamIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.create_exam(user, body.prompt, body.version))
+
+@router.get("/certifications/exam/prompt")
+def exam_prompt(svc: PlatformService = Depends(service)): return svc.active_exam()
 
 @router.post("/certifications/apply")
 def apply_cert(body: ApplyIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.apply_certification(user, body.model_dump()))
@@ -136,3 +149,6 @@ def review(task_id: str, body: ReviewIn, user=Depends(current_user), svc: Platfo
 
 @router.get("/settlement/wallet")
 def wallet(user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.wallet(user)
+
+@router.get("/settlement/transactions")
+def transactions(user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.transactions(user)

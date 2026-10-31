@@ -12,14 +12,16 @@
 | artifact 快照提交 | `PlatformService.submit_artifact` | `tests/test_platform_service.py` | 已通过；Core resolver 接线仍待替换 |
 | 赛事白名单与报名幂等 | `PlatformService.enroll` | `tests/test_platform_service.py::test_claim_is_idempotent_and_competition_whitelist_is_enforced` | 已通过 |
 | 认证考核与创作者晋级 | `PlatformService.apply_certification` / `review_certification` | `tests/test_platform_service.py::test_certified_creator_claims_delivers_and_review_creates_simulated_ledger` | 已通过 |
+| 赛事详情、榜单与评审 | `PlatformService.competition` / `leaderboard` / `review_submission` | service coverage pending | 已实现 |
 | 课程、模板 Fork | `PlatformService.add_course` / `fork_template` | API/service smoke coverage pending | 已实现 |
 | 任务原子认领、交付、评审 | `PlatformService.claim_task` / `deliver_task` / `review_task` | `tests/test_platform_service.py::test_certified_creator_claims_delivers_and_review_creates_simulated_ledger` | 已通过 |
 | 模拟账本与余额重建 | `PlatformService.wallet` | `tests/test_platform_service.py::test_certified_creator_claims_delivers_and_review_creates_simulated_ledger` | 已通过 |
+| 截止时间释放与账单查询 | `PlatformService.release_expired_tasks` / `transactions` | service coverage pending | 已实现 |
 
 验证命令：
 
 ```bash
-.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py -q
+.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py tests/test_platform_db.py tests/test_platform_service.py -q
 python3 docs/agents/tools/check_lumenx_refactor_docs.py
 ```
 

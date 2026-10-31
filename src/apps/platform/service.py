@@ -98,6 +98,17 @@ class PlatformService:
         keys = ["id","title","slug","description","rules_markdown","whitelist_required","allocated_credits","status","enroll_deadline","submit_deadline","created_at"]
         return [dict(zip(keys, row)) for row in rows]
 
+    def competition(self, competition_id: str) -> dict[str, Any]:
+        with connect(self.path) as c:
+            row = c.execute("SELECT id,title,slug,description,rules_markdown,whitelist_required,allocated_credits,status,enroll_deadline,submit_deadline,created_at FROM competitions WHERE id=?", (competition_id,)).fetchone()
+        if not row: raise PlatformError("not_found", "competition not found", 404)
+        return dict(zip(("id","title","slug","description","rules_markdown","whitelist_required","allocated_credits","status","enroll_deadline","submit_deadline","created_at"), row))
+
+    def leaderboard(self, competition_id: str) -> list[dict[str, Any]]:
+        with connect(self.path) as c:
+            rows = c.execute("SELECT id,user_id,title,score,award_title,status FROM platform_submissions WHERE target_type='competition' AND target_id=? AND status='approved' ORDER BY score DESC, created_at ASC", (competition_id,)).fetchall()
+        return [dict(zip(("submission_id","user_id","title","score","award_title","status"), row)) for row in rows]
+
     def enroll(self, actor: dict[str, Any], competition_id: str, invite_code: str | None, idem: str) -> dict[str, Any]:
         with connect(self.path) as c:
             old = self._idem(c, actor["id"], idem)
@@ -121,10 +132,28 @@ class PlatformService:
 
     def submit_artifact(self, actor: dict[str, Any], target_type: str, target_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         if target_type not in {"competition", "certification_exam"}: raise PlatformError("invalid_target", "invalid submission target")
+        if target_type == "competition":
+            with connect(self.path) as c:
+                competition = c.execute("SELECT status,submit_deadline FROM competitions WHERE id=?", (target_id,)).fetchone()
+            if not competition: raise PlatformError("not_found", "competition not found", 404)
+            if competition[0] not in {"ongoing", "judging"}: raise PlatformError("competition_closed", "competition is not accepting submissions")
+            if competition[1] and datetime.fromisoformat(competition[1]) < datetime.now(timezone.utc): raise PlatformError("submission_closed", "submission deadline has passed")
         sid = uid(); item = {"id": sid, "target_type": target_type, "target_id": target_id, "user_id": actor["id"], **{k: payload[k] for k in ("artifact_id","artifact_version","sha256","media_type","project_id","project_title_snapshot","title")}, "description": payload.get("description", ""), "status": "submitted", "created_at": now()}
         with connect(self.path) as c:
             c.execute("INSERT INTO platform_submissions (id,target_type,target_id,user_id,artifact_id,artifact_version,sha256,media_type,project_id,project_title_snapshot,title,description,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", tuple(item.values()))
         return item
+
+    def review_submission(self, actor: dict[str, Any], submission_id: str, approved: bool, score: float | None, award_title: str | None = None) -> dict[str, Any]:
+        if actor["role"] not in {"admin", "reviewer", "client"}: raise PlatformError("forbidden", "review role required", 403)
+        status = "approved" if approved else "rejected"
+        with connect(self.path) as c:
+            row = c.execute("SELECT user_id,target_type,target_id FROM platform_submissions WHERE id=?", (submission_id,)).fetchone()
+            if not row: raise PlatformError("not_found", "submission not found", 404)
+            c.execute("UPDATE platform_submissions SET status=?,score=?,award_title=? WHERE id=?", (status,score,award_title,submission_id))
+            if approved and row[1] == "competition" and award_title:
+                c.execute("INSERT OR IGNORE INTO creator_certifications (id,user_id,status,level,source_type,submission_id,score,feedback,certified_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)", (uid(),row[0],"certified","standard","competition_award",submission_id,score,"competition award",now(),now()))
+                c.execute("UPDATE creator_certifications SET status='certified',source_type='competition_award',submission_id=?,score=?,certified_at=? WHERE user_id=?", (submission_id,score,now(),row[0]))
+            return {"submission_id": submission_id, "status": status, "score": score, "award_title": award_title}
 
     def create_task(self, actor: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         if actor["role"] not in {"admin", "client"}: raise PlatformError("forbidden", "only client or admin can publish tasks", 403)
@@ -191,6 +220,20 @@ class PlatformService:
             rows=c.execute("SELECT COALESCE(SUM(CASE WHEN direction='credit' THEN amount_cents ELSE -amount_cents END),0) FROM ledger_entries le JOIN ledger_accounts la ON la.id=le.account_id WHERE la.user_id=?",(actor["id"],)).fetchone()
         return {"user_id":actor["id"],"simulated_balance_cents":rows[0]}
 
+    def transactions(self, actor: dict[str, Any]) -> list[dict[str, Any]]:
+        with connect(self.path) as c:
+            rows = c.execute("SELECT le.id,le.transaction_id,le.amount_cents,le.direction,le.reference_type,le.reference_id,le.created_at FROM ledger_entries le JOIN ledger_accounts la ON la.id=le.account_id WHERE la.user_id=? ORDER BY le.created_at DESC", (actor["id"],)).fetchall()
+        return [dict(zip(("entry_id","transaction_id","amount_cents","direction","reference_type","reference_id","created_at"), row)) for row in rows]
+
+    def release_expired_tasks(self) -> int:
+        released = 0
+        with connect(self.path) as c:
+            rows = c.execute("SELECT id,status FROM commercial_tasks WHERE status IN ('published','claimed','in_progress') AND deadline < ?", (now(),)).fetchall()
+            for task_id, status in rows:
+                c.execute("UPDATE commercial_tasks SET status='expired',version=version+1 WHERE id=? AND status=?", (task_id,status))
+                c.execute("INSERT INTO task_history VALUES (?,?,?,?,?,?,?,?)", (uid(),task_id,status,"expired","system","deadline",uid(),now())); released += 1
+        return released
+
     def add_course(self, actor: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         if actor["role"] not in {"admin", "client"}: raise PlatformError("forbidden", "course publishing requires admin or client", 403)
         item = {"id": uid(), "title": payload["title"], "description": payload.get("description", ""), "video_url": payload.get("video_url", ""), "status": "published"}
@@ -226,6 +269,10 @@ class PlatformService:
             c.execute("UPDATE certification_exams SET is_active=0")
             c.execute("INSERT INTO certification_exams VALUES (?,?,?,?,?)", tuple(item.values()))
         return item
+
+    def active_exam(self) -> dict[str, Any] | None:
+        with connect(self.path) as c: row = c.execute("SELECT id,prompt,version,created_at FROM certification_exams WHERE is_active=1 ORDER BY created_at DESC LIMIT 1").fetchone()
+        return dict(zip(("id","prompt","version","created_at"), row)) if row else None
 
     def apply_certification(self, actor: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         with connect(self.path) as c:

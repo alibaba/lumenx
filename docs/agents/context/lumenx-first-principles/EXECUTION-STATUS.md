@@ -88,3 +88,4 @@
 - 迁移：`002_business.sql` 建立赛事、提交、学院、认证、任务、交付、状态历史、幂等和模拟账本表。
 - 验证：`.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py tests/test_platform_db.py tests/test_platform_service.py -q`（9 passed）。
 - 证据边界：支付渠道、提现、Core 实际 artifact resolver 和生产部署尚未验收；当前提交接口只保存客户端传入快照，后续必须替换为只读 resolver。
+- 补充入口：赛事详情/榜单/评审、认证命题读取、模拟账单查询、任务截止释放已加入平台 router；真实支付与提现仍跳过。
