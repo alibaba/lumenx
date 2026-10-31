@@ -30,6 +30,7 @@ const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibrary
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
 const ScriptEditorShell = dynamic(() => import("@/components/modules/ScriptEditor/ScriptEditorShell"), { ssr: false });
 const AtelierShell = dynamic(() => import("@/components/atelier/v3/AtelierShell"), { ssr: false });
+const PlatformPortal = dynamic(() => import("@/components/platform/PlatformPortal"), { ssr: false });
 
 type CreatedSeriesReceipt = { id: string; revision: number; title: string };
 
@@ -641,7 +642,7 @@ export default function Home() {
   const [isPackageImportOpen, setIsPackageImportOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'atelier' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'atelier' | 'platform' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
@@ -751,6 +752,14 @@ export default function Home() {
         setEpisodeId(null);
         return;
       }
+      if (hash === '#/platform') {
+        setCurrentView('platform');
+        setActiveTab('platform');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
       // Match #/series/{id}/episode/{eid} first (more specific)
       const seriesEpisodeMatch = hash.match(/^#\/series\/([^/]+)\/episode\/([^/]+)$/);
       if (seriesEpisodeMatch) {
@@ -846,6 +855,10 @@ export default function Home() {
 
   if (currentView === 'atelier') {
     return <AtelierShell />;
+  }
+
+  if (currentView === 'platform') {
+    return <PlatformPortal />;
   }
 
   // 项目详情页 — 全屏，无 GlobalSidebar

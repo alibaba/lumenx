@@ -24,6 +24,7 @@
 - 任务状态迁移、幂等上下文和整数分模拟账本已形成可执行 Pydantic 合同；
 - 平台路由已受 `LUMENX_PLATFORM_ENABLED` 控制；认证、赛事白名单、培训/模板、认证考核、商业任务和模拟账本业务已实现。
 - 真实支付、提现渠道和外部回调按当前要求跳过；接受任务只写入模拟不可变账本。
+- 前端平台入口已接入 `#/platform`，目录为 `frontend/src/components/platform/`，账户 API/store 分别位于 `frontend/src/lib/platformApi.ts` 与 `frontend/src/store/platformStore.ts`。
 
 对应文件：`src/apps/platform/` 与 `tests/test_platform_*.py`。
 
