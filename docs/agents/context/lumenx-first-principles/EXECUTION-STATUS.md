@@ -144,3 +144,12 @@ LLM Adapter 现在读取请求级算力计费上下文。平台积分模式在 P
 - 服务/API：新增媒体价格列表和单位估算方法，未知具体模型回退到 provider 的 `*` 默认价格；前端 `platformApi` 已提供查询客户端。
 - 验证：平台数据库/服务测试 10 项通过，前端 typecheck 通过。
 - 证据边界：图片、视频、音频后台任务仍需把 reservation id 写入持久回执，并在完成/失败/恢复路径结算或释放；真实 Provider 和价格校准尚未执行。
+
+## 2026-10-31 Product Skill 作用域解析基础切片
+
+按开发更新方案开始实现 Skill runtime 基础合同。新增 `src/apps/atelier/skill_resolution.py`，在不改变现有 Agent wire contract 的前提下，提供 system/workspace/user/project/session 作用域优先级、同级冲突拒绝、当前入口工具交集和不可变有效 Skill 视图。该切片不读取外部 Skill 路径、不执行脚本、不持久化用户覆盖，也不开放多用户 Skill API。
+
+- 责任文件：`src/apps/atelier/skill_resolution.py`、`tests/test_atelier_skill_resolution.py`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：隔离 runner 执行 `tests/test_atelier_skill_resolution.py tests/test_atelier_product_skills.py -q`（5 passed）；`python3 docs/agents/tools/check_lumenx_refactor_docs.py`（PASS）。
+- 证据边界：当前 Product Skill 仍是静态系统注册表；用户/项目覆盖的存储、API、UI、Skill sandbox、运行快照持久化和媒体计费接线尚未实现。
