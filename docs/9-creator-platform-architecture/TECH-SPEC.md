@@ -378,6 +378,16 @@ Skill 只能声明和组合已注册能力。其提示词、镜头规则、连�
 
 建议首批 Skill 包含 `storyboard-shot-planner`、`continuity-reference-lock`、`seedance-prompt-compiler`、`video-generation-admission` 和 `video-qc-audit`。外部 `SKILL.md`、脚本和引用资料只能经过人工审核与 Skill 编译器转换后进入产品注册表，运行时不得直接加载任意外部路径或执行外部脚本。
 
+### 3.11 云端运行限制与部署演进
+
+LumenX 的目标部署形态是云服务器，但当前云端能力分两级交付。单机 MVP 可以在一台云服务器上运行 headless backend、静态前端、FFmpeg、一个持久化数据根、HTTPS 反向代理和已编译 Product Skill；它面向单用户或小规模内测，不把多进程共享写入、自动扩容或多租户并发作为已实现能力。
+
+云端运行时不自动读取开发者本机的 Codex/Claude Skill 目录。`SKILL.md`、本地脚本、个人路径和未审核的外部依赖必须先经过 Skill 编译器转换为版本化 manifest，再随应用或受控 Skill registry 发布。云端 Skill 不能执行任意 Python、Shell、浏览器自动化、任意网络抓取或读取其他用户数据。
+
+正式多用户生产架构再演进为：Web/API、Skill Registry、Planner/Validator、Approval Service、Generation Queue、隔离 Worker、PostgreSQL、对象存储和 QC/Audit 服务。每个任务绑定 Skill 快照哈希、用户/项目作用域、参数、媒体版本和成本依据；worker 不共享用户数据根，任务恢复通过持久化 receipt 查询原任务，不因 worker 重启重新提交付费请求。
+
+进入多用户生产前必须补齐 PostgreSQL 迁移与恢复、Skill sandbox、队列幂等、租户隔离、对象存储、配额/积分、Provider 真实回执、媒体计费和 HTTPS/登录现场验收。单机 MVP 的成功不能外推为多用户生产就绪。
+
 ## 五、开发前验证基线 (Pre-Development Baseline)
 
 本节只记录当前仓库可复核的前置检查，不代表平台功能已实现或验收。平台开发必须在独立分支进行，并在首个实现切片提交后重新运行受影响检查。

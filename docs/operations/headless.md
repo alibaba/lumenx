@@ -9,6 +9,8 @@
 - `LUMENX_ACCESS_MODE`、`LUMENX_ACCESS_TOKEN`、`LUMENX_ACCESS_ALLOWED_ORIGINS` 沿访问合同支持进程环境配置；不要在数据根同时留下矛盾配置。
 - 静态目录不能与私有数据根重叠。Python 单服务使用默认 `/static/` 构建；`DOCKER_BUILD=true` 的根路径构建仅用于下面的 Docker 配方。
 - 浏览器与正式桌面远程模式连接同一个应用 URL。工程包导入创建独立副本，不把两端数据目录做双向同步。
+- 云端单机 MVP 只支持一个数据根、一个后端写进程和受控 Product Skill；本机 Codex/Claude Skill 目录不会自动同步到服务器。外部 Skill 必须先编译为版本化 manifest，不能在服务器直接执行任意脚本或读取开发者本机路径。
+- 多用户生产需要独立的 PostgreSQL、对象存储、队列、隔离 worker、Skill registry、租户权限和审计方案；不能把本页单机配方通过增加 workers 或共享卷直接升级为生产集群。
 
 ## 本地单服务
 
