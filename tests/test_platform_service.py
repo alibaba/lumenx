@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import base64
 
 from src.apps.platform.config import PlatformConfig
 from src.apps.platform.service import PlatformError, PlatformService
@@ -6,6 +7,10 @@ from src.apps.platform.service import PlatformError, PlatformService
 
 def service(tmp_path):
     return PlatformService(PlatformConfig(enabled=True, database_url=f"sqlite:///{tmp_path / 'platform.db'}"))
+
+
+def credential_service(tmp_path):
+    return PlatformService(PlatformConfig(enabled=True, database_url=f"sqlite:///{tmp_path / 'platform.db'}", credentials_key=base64.urlsafe_b64encode(b"k" * 32).decode()))
 
 
 def artifact(title="Demo"):
@@ -60,6 +65,33 @@ def test_credit_reservation_settlement_release_and_idempotency(tmp_path):
     assert svc.credit_balance(creator)["available_credits"] == 93
 
 
+def test_user_credentials_are_encrypted_isolated_and_rotatable(tmp_path):
+    svc = credential_service(tmp_path)
+    alice = svc.register("alice", "a" * 12)
+    bob = svc.register("bob", "b" * 12)
+    credential = svc.create_credential(alice, "dashscope", "我的通义 Key", "sk-" + "a" * 30)
+    assert credential["masked_key"] != "sk-" + "a" * 30
+    assert "…" in credential["masked_key"]
+    assert "ciphertext" not in credential and "secret" not in credential
+    assert svc.verify_credential(alice, credential["id"])["last_verified_at"]
+    try:
+        svc.resolve_credential(bob, credential["id"])
+    except PlatformError as exc:
+        assert exc.code == "credential_not_found"
+    else:
+        raise AssertionError("credential crossed user boundary")
+    resolved = svc.resolve_credential(alice, credential["id"])
+    assert resolved["secret"] == "sk-" + "a" * 30
+    rotated = svc.rotate_credential(alice, credential["id"], "sk-" + "b" * 30)
+    assert svc.resolve_credential(alice, credential["id"])["secret"] == "sk-" + "b" * 30
+    assert rotated["masked_key"] != credential["masked_key"]
+    assert svc.revoke_credential(alice, credential["id"])["status"] == "revoked"
+    try:
+        svc.resolve_credential(alice, credential["id"])
+    except PlatformError as exc:
+        assert exc.code == "credential_revoked"
+    else:
+        raise AssertionError("revoked credential remained usable")
 def test_certified_creator_claims_delivers_and_review_creates_simulated_ledger(tmp_path):
     svc = service(tmp_path)
     admin = svc.register("admin", "a" * 12, role="admin")

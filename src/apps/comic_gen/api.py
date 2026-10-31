@@ -72,6 +72,7 @@ from ...utils.app_access import (
     is_request_authenticated,
 )
 from ...core.token_usage import bind_token_usage_recorder, reset_token_usage_recorder
+from ...core.provider_credentials import bind_provider_credential, reset_provider_credential
 from ...utils.media_static import ManagedMediaStaticFiles
 from .series_import import ConfirmImportRequest, ImportPreviewUnavailable, MAX_IMPORT_TEXT_BYTES
 from .series_episode import CreateSeriesEpisodeRequest, SeriesEpisodeCreationReceipt
@@ -102,7 +103,7 @@ from ..atelier.project_package_api import router as atelier_project_package_rout
 from ..playground.api import router as playground_router
 from ..platform.api import router as platform_router
 from ..platform.config import PlatformConfig
-from ..platform.service import PlatformService
+from ..platform.service import PlatformError, PlatformService
 
 
 class OSSImageUploader:
@@ -1090,14 +1091,30 @@ def create_app(
                     actor = None
         request.state.platform_user = actor
         product = request.headers.get("x-lumenx-product", "core")
+        billing_mode = request.headers.get("x-lumenx-billing-mode", "platform_credits")
+        credential_ref = request.headers.get("x-lumenx-credential-ref")
+        if billing_mode not in {"platform_credits", "byok"}:
+            return JSONResponse({"detail": "invalid billing mode"}, status_code=400)
+        if billing_mode == "byok" and (actor is None or platform is None or not credential_ref):
+            return JSONResponse({"detail": "BYOK credential is required"}, status_code=400)
+        if billing_mode == "platform_credits" and credential_ref:
+            return JSONResponse({"detail": "credential ref is only valid in BYOK mode"}, status_code=400)
+        provider_credential = None
+        if credential_ref and actor is not None and platform is not None:
+            try:
+                provider_credential = platform.resolve_credential(actor, credential_ref)
+            except PlatformError as exc:
+                return JSONResponse({"detail": {"code": exc.code, "message": exc.message}}, status_code=exc.status)
         recorder_token = bind_token_usage_recorder(
-            (lambda event: platform.record_token_usage(actor, {**event, "product": product}))
+            (lambda event: platform.record_token_usage(actor, {**event, "product": product, "metadata": {"billing_mode": billing_mode, "credential_ref": credential_ref}}))
             if actor is not None and platform is not None else None
         )
+        credential_token = bind_provider_credential(provider_credential)
         try:
             return await call_next(request)
         finally:
             reset_token_usage_recorder(recorder_token)
+            reset_provider_credential(credential_token)
 
     @target_app.exception_handler(RequestValidationError)
     async def request_validation_response(request: Request, exc: RequestValidationError):

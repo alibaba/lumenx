@@ -18,6 +18,7 @@ class PlatformConfig:
     database_url: str = "sqlite:///output/platform.db"
     session_ttl_seconds: int = 86_400
     password_min_length: int = 12
+    credentials_key: str | None = None
 
     @classmethod
     def from_env(cls) -> "PlatformConfig":
@@ -32,6 +33,7 @@ class PlatformConfig:
             database_url=os.getenv("LUMENX_PLATFORM_DB_URL", cls.database_url),
             session_ttl_seconds=ttl,
             password_min_length=password_min_length,
+            credentials_key=os.getenv("LUMENX_PLATFORM_CREDENTIALS_KEY"),
         )
 
     def sqlite_path(self) -> Path:

@@ -63,6 +63,8 @@ class CreditEstimateIn(BaseModel): provider: str; model: str; prompt_tokens: int
 class CreditGrantIn(BaseModel): user_id: str; amount_credits: int = Field(gt=0); reason: str = Field(min_length=1, max_length=200); idempotency_key: str = Field(min_length=8, max_length=200)
 class CreditReservationIn(BaseModel): estimated_credits: int = Field(gt=0); generation_id: str = Field(min_length=1, max_length=200); pricing_version: str = Field(min_length=1, max_length=100); idempotency_key: str = Field(min_length=8, max_length=200)
 class CreditSettleIn(BaseModel): actual_credits: int = Field(ge=0)
+class CredentialIn(BaseModel): provider: str = Field(min_length=1, max_length=50); label: str = Field(min_length=1, max_length=80); api_key: str = Field(min_length=16, max_length=500)
+class CredentialRotateIn(BaseModel): api_key: str = Field(min_length=16, max_length=500)
 
 
 @router.post("/auth/register")
@@ -82,6 +84,21 @@ def logout(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), s
 @router.get("/usage/tokens")
 def token_usage(limit: int = 100, user=Depends(current_user), svc: PlatformService = Depends(service)):
     return svc.token_usage(user, limit)
+
+@router.get("/credentials")
+def credentials(user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.list_credentials(user)
+
+@router.post("/credentials")
+def create_credential(body: CredentialIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.create_credential(user, body.provider, body.label, body.api_key))
+
+@router.post("/credentials/{credential_id}/verify")
+def verify_credential(credential_id: str, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.verify_credential(user, credential_id))
+
+@router.post("/credentials/{credential_id}/rotate")
+def rotate_credential(credential_id: str, body: CredentialRotateIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.rotate_credential(user, credential_id, body.api_key))
+
+@router.post("/credentials/{credential_id}/revoke")
+def revoke_credential(credential_id: str, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.revoke_credential(user, credential_id))
 
 @router.get("/credits/pricing")
 def credit_pricing(svc: PlatformService = Depends(service)): return svc.credit_pricing()

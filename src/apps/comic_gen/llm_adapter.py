@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Any, Mapping
 
 from ...utils.endpoints import get_provider_base_url
 from ...core.token_usage import record_token_usage
+from ...core.provider_credentials import current_provider_credential
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,8 @@ class LLMAdapter:
     @property
     def is_configured(self) -> bool:
         if self.provider == "openai":
-            return bool(self._env.get("OPENAI_API_KEY"))
-        return bool(self._env.get("DASHSCOPE_API_KEY"))
+            return bool((current_provider_credential("openai") or {}).get("secret") or self._env.get("OPENAI_API_KEY"))
+        return bool((current_provider_credential("dashscope") or {}).get("secret") or self._env.get("DASHSCOPE_API_KEY"))
 
     def _get_client(self):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
@@ -67,13 +68,13 @@ class LLMAdapter:
 
             if self.provider == "openai":
                 self._client = OpenAI(
-                    api_key=self._env.get("OPENAI_API_KEY"),
+                    api_key=(current_provider_credential("openai") or {}).get("secret") or self._env.get("OPENAI_API_KEY"),
                     base_url=self._env.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
                 )
             else:
                 # DashScope uses OpenAI-compatible endpoint
                 self._client = OpenAI(
-                    api_key=self._env.get("DASHSCOPE_API_KEY"),
+                    api_key=(current_provider_credential("dashscope") or {}).get("secret") or self._env.get("DASHSCOPE_API_KEY"),
                     base_url=f"{get_provider_base_url('DASHSCOPE', env=self._env)}/compatible-mode/v1",
                 )
         return self._client

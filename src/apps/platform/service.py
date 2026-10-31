@@ -12,6 +12,8 @@ import sqlite3
 import uuid
 from typing import Any
 from math import ceil
+import base64
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from .config import PlatformConfig
 from .contracts import TaskStatus, can_transition
@@ -85,6 +87,80 @@ class PlatformService:
     def logout(self, token: str) -> None:
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         with connect(self.path) as c: c.execute("UPDATE platform_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL", (now(), token_hash))
+
+    def _credentials_cipher(self) -> AESGCM:
+        raw = self.config.credentials_key
+        if not raw:
+            raise PlatformError("credentials_key_required", "platform credential encryption is not configured", 503)
+        try:
+            key = base64.urlsafe_b64decode(raw.encode() + b"=" * (-len(raw) % 4))
+        except Exception as exc:
+            raise PlatformError("credentials_key_invalid", "platform credential encryption key is invalid", 500) from exc
+        if len(key) != 32: raise PlatformError("credentials_key_invalid", "platform credential encryption key must decode to 32 bytes", 500)
+        return AESGCM(key)
+
+    @staticmethod
+    def _credential_view(row) -> dict[str, Any]:
+        return {"id": row[0], "provider": row[1], "label": row[2], "masked_key": f"{row[4][:4]}…{row[4][-4:]}", "status": row[5], "created_at": row[6], "updated_at": row[7], "last_verified_at": row[8], "revoked_at": row[9]}
+
+    def list_credentials(self, actor: dict[str, Any]) -> list[dict[str, Any]]:
+        with connect(self.path) as c:
+            rows = c.execute("SELECT id,provider,label,ciphertext_b64,key_fingerprint,status,created_at,updated_at,last_verified_at,revoked_at FROM platform_credentials WHERE user_id=? ORDER BY created_at DESC", (actor["id"],)).fetchall()
+        return [self._credential_view(row) for row in rows]
+
+    def create_credential(self, actor: dict[str, Any], provider: str, label: str, api_key: str) -> dict[str, Any]:
+        if not api_key or len(api_key) < 16: raise PlatformError("invalid_credential", "API-Key is too short")
+        if not provider or len(provider) > 50: raise PlatformError("invalid_provider", "provider is invalid")
+        if not label or len(label) > 80: raise PlatformError("invalid_label", "credential label is invalid")
+        cipher = self._credentials_cipher(); nonce = secrets.token_bytes(12); credential_id = uid(); timestamp = now()
+        ciphertext = cipher.encrypt(nonce, api_key.encode(), f"{actor['id']}:{provider}".encode())
+        fingerprint = hashlib.sha256(api_key.encode()).hexdigest()
+        with connect(self.path) as c:
+            c.execute("INSERT INTO platform_credentials VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", (credential_id, actor["id"], provider, label, base64.urlsafe_b64encode(ciphertext).decode(), base64.urlsafe_b64encode(nonce).decode(), fingerprint, "active", timestamp, timestamp, None, None))
+            self._audit(c, actor["id"], "credential.created", "credential", credential_id, {"provider": provider, "fingerprint": fingerprint[:12]})
+            row = c.execute("SELECT id,provider,label,ciphertext_b64,key_fingerprint,status,created_at,updated_at,last_verified_at,revoked_at FROM platform_credentials WHERE id=?", (credential_id,)).fetchone()
+        return self._credential_view(row)
+
+    def verify_credential(self, actor: dict[str, Any], credential_id: str) -> dict[str, Any]:
+        cipher = self._credentials_cipher()
+        with connect(self.path) as c:
+            row = c.execute("SELECT id,provider,label,ciphertext_b64,nonce_b64,key_fingerprint,status,created_at,updated_at,last_verified_at,revoked_at FROM platform_credentials WHERE id=? AND user_id=?", (credential_id, actor["id"])).fetchone()
+            if not row: raise PlatformError("credential_not_found", "credential not found", 404)
+            if row[6] != "active": raise PlatformError("credential_revoked", "credential is revoked", 409)
+            try: cipher.decrypt(base64.urlsafe_b64decode(row[4]), base64.urlsafe_b64decode(row[3]), f"{actor['id']}:{row[1]}".encode())
+            except Exception as exc: raise PlatformError("credential_corrupt", "credential cannot be decrypted", 500) from exc
+            timestamp = now(); c.execute("UPDATE platform_credentials SET last_verified_at=?,updated_at=? WHERE id=?", (timestamp, timestamp, credential_id))
+            view = c.execute("SELECT id,provider,label,ciphertext_b64,key_fingerprint,status,created_at,updated_at,last_verified_at,revoked_at FROM platform_credentials WHERE id=?", (credential_id,)).fetchone()
+        return self._credential_view(view)
+
+    def rotate_credential(self, actor: dict[str, Any], credential_id: str, api_key: str) -> dict[str, Any]:
+        if not api_key or len(api_key) < 16: raise PlatformError("invalid_credential", "API-Key is too short")
+        cipher = self._credentials_cipher(); nonce = secrets.token_bytes(12)
+        with connect(self.path) as c:
+            row = c.execute("SELECT provider FROM platform_credentials WHERE id=? AND user_id=?", (credential_id, actor["id"])).fetchone()
+            if not row: raise PlatformError("credential_not_found", "credential not found", 404)
+            ciphertext = cipher.encrypt(nonce, api_key.encode(), f"{actor['id']}:{row[0]}".encode()); fingerprint = hashlib.sha256(api_key.encode()).hexdigest(); timestamp = now()
+            c.execute("UPDATE platform_credentials SET ciphertext_b64=?,nonce_b64=?,key_fingerprint=?,status='active',updated_at=?,last_verified_at=NULL,revoked_at=NULL WHERE id=?", (base64.urlsafe_b64encode(ciphertext).decode(), base64.urlsafe_b64encode(nonce).decode(), fingerprint, timestamp, credential_id))
+            view = c.execute("SELECT id,provider,label,ciphertext_b64,key_fingerprint,status,created_at,updated_at,last_verified_at,revoked_at FROM platform_credentials WHERE id=?", (credential_id,)).fetchone()
+            self._audit(c, actor["id"], "credential.rotated", "credential", credential_id, {"provider": row[0], "fingerprint": fingerprint[:12]})
+        return self._credential_view(view)
+
+    def revoke_credential(self, actor: dict[str, Any], credential_id: str) -> dict[str, Any]:
+        with connect(self.path) as c:
+            row = c.execute("SELECT provider FROM platform_credentials WHERE id=? AND user_id=?", (credential_id, actor["id"])).fetchone()
+            if not row: raise PlatformError("credential_not_found", "credential not found", 404)
+            timestamp = now(); c.execute("UPDATE platform_credentials SET status='revoked',revoked_at=?,updated_at=? WHERE id=?", (timestamp, timestamp, credential_id)); self._audit(c, actor["id"], "credential.revoked", "credential", credential_id, {"provider": row[0]})
+        return {"id": credential_id, "status": "revoked"}
+
+    def resolve_credential(self, actor: dict[str, Any], credential_id: str) -> dict[str, Any]:
+        cipher = self._credentials_cipher()
+        with connect(self.path) as c:
+            row = c.execute("SELECT provider,ciphertext_b64,nonce_b64,status FROM platform_credentials WHERE id=? AND user_id=?", (credential_id, actor["id"])).fetchone()
+        if not row: raise PlatformError("credential_not_found", "credential not found", 404)
+        if row[3] != "active": raise PlatformError("credential_revoked", "credential is revoked", 409)
+        try: secret = cipher.decrypt(base64.urlsafe_b64decode(row[2]), base64.urlsafe_b64decode(row[1]), f"{actor['id']}:{row[0]}".encode()).decode()
+        except Exception as exc: raise PlatformError("credential_corrupt", "credential cannot be decrypted", 500) from exc
+        return {"credential_ref": credential_id, "provider": row[0], "secret": secret, "billing_mode": "byok"}
 
     def record_token_usage(self, actor: dict[str, Any], event: dict[str, Any]) -> None:
         prompt = max(0, int(event.get("prompt_tokens") or 0))

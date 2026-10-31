@@ -49,5 +49,10 @@ export const platformApi = {
   reserveCredits: (payload: { estimated_credits: number; generation_id: string; pricing_version: string; idempotency_key: string }) => request<{ reservation_id: string; estimated_credits: number; status: string }>("/credits/reservations", { method: "POST", body: JSON.stringify(payload) }),
   settleCredits: (reservationId: string, actual_credits: number) => request(`/credits/reservations/${reservationId}/settle`, { method: "POST", body: JSON.stringify({ actual_credits }) }),
   releaseCredits: (reservationId: string) => request(`/credits/reservations/${reservationId}/release`, { method: "POST" }),
+  credentials: () => request<Array<{ id: string; provider: string; label: string; masked_key: string; status: string; last_verified_at?: string | null }>>("/credentials"),
+  createCredential: (payload: { provider: string; label: string; api_key: string }) => request("/credentials", { method: "POST", body: JSON.stringify(payload) }),
+  verifyCredential: (credentialId: string) => request(`/credentials/${credentialId}/verify`, { method: "POST" }),
+  rotateCredential: (credentialId: string, api_key: string) => request(`/credentials/${credentialId}/rotate`, { method: "POST", body: JSON.stringify({ api_key }) }),
+  revokeCredential: (credentialId: string) => request(`/credentials/${credentialId}/revoke`, { method: "POST" }),
 };
 

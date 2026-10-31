@@ -108,3 +108,13 @@
 - API：`/api/platform/credits/pricing`、`estimate`、`balance`、`ledger`、`grants`、`reservations` 及 settle/release 入口已加入；前端 `platformApi` 已提供对应客户端方法。
 - 计费边界：本切片只完成平台积分账本，不改变 Provider 调用凭证；用户 BYOK 凭证加密存储和 resolver 将在下一切片实现。
 - 验证：平台合同、数据库、服务测试 11 项通过；文档结构检查通过。
+
+## 2026-10-31 BYOK 用户凭证切片
+
+平台开始支持用户自带 Provider API-Key（BYOK）。凭证按平台用户隔离，使用 AES-GCM 加密保存，前端只接收脱敏元数据；请求通过 `credential_ref` 选择凭证，后端在请求上下文中临时解密并注入 LLM Adapter。
+
+- 迁移：`005_user_credentials.sql` 建立用户凭证表，保存密文、nonce、指纹、状态和验证时间，不保存明文 Key。
+- API：`/api/platform/credentials` 支持创建、列表、验证、轮换和撤销；验证当前是本地解密/格式检查，尚未对真实 Provider 发起验证调用。
+- 请求合同：`X-LumenX-Billing-Mode: byok` 与 `X-LumenX-Credential-Ref` 必须成对出现；平台积分模式携带凭证引用会被拒绝。
+- 加密配置：`LUMENX_PLATFORM_CREDENTIALS_KEY` 必须是可解码为 32 字节的 URL-safe Base64 密钥；未配置时 BYOK 返回 `credentials_key_required`，不会回退到平台 Key。
+- 验证：平台、AppAccess 和凭证隔离测试共 39 项通过；真实 Provider 调用和真实密钥验证仍未执行。
