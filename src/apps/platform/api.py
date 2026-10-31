@@ -75,6 +75,10 @@ def logout(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), s
     if credentials: svc.logout(credentials.credentials)
     return {"status": "logged_out"}
 
+@router.get("/usage/tokens")
+def token_usage(limit: int = 100, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return svc.token_usage(user, limit)
+
 @router.get("/competitions")
 def competitions(svc: PlatformService = Depends(service)): return svc.list_competitions()
 

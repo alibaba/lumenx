@@ -30,6 +30,18 @@ def test_auth_session_revocation_and_password_policy(tmp_path):
         raise AssertionError("revoked session remained usable")
 
 
+def test_token_usage_is_recorded_and_summarized_per_platform_user(tmp_path):
+    svc = service(tmp_path)
+    user = svc.register("alice", "a" * 12)
+    svc.record_token_usage(user, {"product": "studio", "operation": "llm.chat", "provider": "dashscope", "requested_model": "qwen3.7-plus", "prompt_tokens": 10, "completion_tokens": 7, "total_tokens": 17})
+    svc.record_token_usage(user, {"product": "atelier", "operation": "llm.chat", "provider": "dashscope", "prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5})
+    usage = svc.token_usage(user)
+    assert usage["prompt_tokens"] == 13
+    assert usage["completion_tokens"] == 9
+    assert usage["total_tokens"] == 22
+    assert {row["product"] for row in usage["records"]} == {"studio", "atelier"}
+
+
 def test_certified_creator_claims_delivers_and_review_creates_simulated_ledger(tmp_path):
     svc = service(tmp_path)
     admin = svc.register("admin", "a" * 12, role="admin")

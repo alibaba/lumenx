@@ -11,7 +11,7 @@ import os
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Callable, Iterable, Any
 from urllib.parse import urlsplit, urlunsplit
 from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse, Response
@@ -25,7 +25,7 @@ _MIN_TOKEN_BYTES = 32
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _SAFE_PUBLIC_METHODS = {"GET", "HEAD"}
 _CORS_METHODS = "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
-_CORS_HEADERS = "Authorization, Content-Type, Range, X-LumenX-Environment"
+_CORS_HEADERS = "Authorization, Content-Type, Range, X-LumenX-Environment, X-LumenX-Product"
 _EXPOSE_HEADERS = "Content-Disposition, Content-Range, Accept-Ranges"
 _MAX_LOGIN_BODY_BYTES = 4096
 
@@ -335,9 +335,10 @@ def _mark_scope(scope: Scope, *, authenticated: bool, method: str | None = None)
 
 
 class LumenXAccessMiddleware:
-    def __init__(self, app: ASGIApp, *, state: AppAccessState) -> None:
+    def __init__(self, app: ASGIApp, *, state: AppAccessState, external_bearer_authenticator: Callable[[str], Any] | None = None) -> None:
         self.app = app
         self.state = state
+        self.external_bearer_authenticator = external_bearer_authenticator
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -421,9 +422,17 @@ class LumenXAccessMiddleware:
         authorization = headers.get("authorization") or ""
         if authorization:
             scheme, _, value = authorization.partition(" ")
-            if scheme.lower() != "bearer" or not value or not _constant_time_equal(value, token):
+            if scheme.lower() != "bearer" or not value:
                 return False, None
-            return True, "bearer"
+            if _constant_time_equal(value, token):
+                return True, "bearer"
+            if self.external_bearer_authenticator is not None:
+                try:
+                    self.external_bearer_authenticator(value)
+                    return True, "external-bearer"
+                except Exception:
+                    pass
+            return False, None
         sid = _cookies(headers).get(SESSION_COOKIE_NAME)
         if self.state.validate_session(sid):
             return True, "cookie"

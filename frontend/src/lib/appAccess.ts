@@ -259,6 +259,13 @@ export async function appAccessFetch(input: RequestInfo | URL, init: RequestInit
         throw new AppAccessError("Runtime environment is not active", "runtime_environment_unavailable");
     }
     const baseInit: RequestInit = shouldAttach ? { ...init, credentials: "include" as RequestCredentials } : init;
+    if (shouldAttach && typeof window !== "undefined") {
+        const headers = new Headers(baseInit.headers);
+        const platformToken = window.localStorage.getItem("lumenx_platform_token");
+        if (platformToken && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${platformToken}`);
+        if (!headers.has("X-LumenX-Product")) headers.set("X-LumenX-Product", "studio");
+        baseInit.headers = headers;
+    }
     const response = await fetch(input, shouldAttach && !discovery && environment
         ? withRuntimeEnvironmentHeader(input, baseInit, environment)
         : baseInit);

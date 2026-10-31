@@ -71,6 +71,7 @@ from ...utils.app_access import (
     is_access_required,
     is_request_authenticated,
 )
+from ...core.token_usage import bind_token_usage_recorder, reset_token_usage_recorder
 from ...utils.media_static import ManagedMediaStaticFiles
 from .series_import import ConfirmImportRequest, ImportPreviewUnavailable, MAX_IMPORT_TEXT_BYTES
 from .series_episode import CreateSeriesEpisodeRequest, SeriesEpisodeCreationReceipt
@@ -1076,6 +1077,28 @@ def create_app(
         target_app.include_router(platform_router, prefix="/api/platform")
         target_app.state.platform_service = PlatformService(PlatformConfig.from_env())
 
+    @target_app.middleware("http")
+    async def bind_platform_identity(request: Request, call_next):
+        platform = getattr(request.app.state, "platform_service", None)
+        actor = None
+        if platform is not None:
+            authorization = request.headers.get("authorization", "")
+            if authorization.lower().startswith("bearer "):
+                try:
+                    actor = platform.authenticate(authorization[7:].strip())
+                except Exception:
+                    actor = None
+        request.state.platform_user = actor
+        product = request.headers.get("x-lumenx-product", "core")
+        recorder_token = bind_token_usage_recorder(
+            (lambda event: platform.record_token_usage(actor, {**event, "product": product}))
+            if actor is not None and platform is not None else None
+        )
+        try:
+            return await call_next(request)
+        finally:
+            reset_token_usage_recorder(recorder_token)
+
     @target_app.exception_handler(RequestValidationError)
     async def request_validation_response(request: Request, exc: RequestValidationError):
         route_path = getattr(request.scope.get("route"), "path", None)
@@ -1179,7 +1202,14 @@ def create_app(
             )
         return await call_next(request)
 
-    target_app.add_middleware(LumenXAccessMiddleware, state=access_state)
+    target_app.add_middleware(
+        LumenXAccessMiddleware,
+        state=access_state,
+        external_bearer_authenticator=(
+            getattr(target_app.state, "platform_service", None).authenticate
+            if getattr(target_app.state, "platform_service", None) is not None else None
+        ),
+    )
 
     return target_app
 

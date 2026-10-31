@@ -20,6 +20,7 @@ from types import MappingProxyType
 from typing import Dict, List, Optional, Any, Mapping
 
 from ...utils.endpoints import get_provider_base_url
+from ...core.token_usage import record_token_usage
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,15 @@ class LLMAdapter:
         provider_model = self._get_response_value(response, "model")
         if not isinstance(provider_model, str) or not provider_model.strip():
             provider_model = None
+        record_token_usage(
+            operation="llm.chat_result",
+            provider=self.provider,
+            requested_model=model,
+            provider_model=provider_model,
+            prompt_tokens=usage["prompt_tokens"],
+            completion_tokens=usage["completion_tokens"],
+            total_tokens=usage["total_tokens"],
+        )
         return LLMChatResult(
             content=content,
             requested_model=model,
@@ -262,10 +272,23 @@ class LLMAdapter:
 
         try:
             response = request_client.chat.completions.create(**kwargs)
+            self._record_usage(response, model)
             return response.choices[0].message.content
         except Exception as e:
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
             raise RuntimeError(f"{provider_label} API error: {e}") from e
+
+    def _record_usage(self, response, requested_model: str) -> None:
+        usage = self._extract_result_usage(response)
+        record_token_usage(
+            operation="llm.chat",
+            provider=self.provider,
+            requested_model=requested_model,
+            provider_model=self._get_response_value(response, "model"),
+            prompt_tokens=usage["prompt_tokens"],
+            completion_tokens=usage["completion_tokens"],
+            total_tokens=usage["total_tokens"],
+        )
 
     def _validate_chat_result_args(
         self,

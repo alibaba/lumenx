@@ -89,3 +89,12 @@
 - 验证：`.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py tests/test_platform_db.py tests/test_platform_service.py -q`（9 passed）。
 - 证据边界：支付渠道、提现、Core 实际 artifact resolver 和生产部署尚未验收；当前提交接口只保存客户端传入快照，后续必须替换为只读 resolver。
 - 补充入口：赛事详情/榜单/评审、认证命题读取、模拟账单查询、任务截止释放已加入平台 router；真实支付与提现仍跳过。
+
+## 2026-10-31 创作者平台统一身份与算力账本切片
+
+平台会话现在可作为 Studio/Atelier Core 请求的 Bearer 身份传递；远程 `AppAccess` 也接受已验证的平台 Bearer 会话。未登录进入 Studio/Atelier 时，前端回到 `#/platform` 登录入口，平台页面保持公开以便完成登录。
+
+- 算力记录：`src/core/token_usage.py` 提供请求级记录钩子；`src/apps/platform/migrations/003_token_usage.sql` 建立独立 token 使用账本，按用户、产品、操作、供应商、模型、输入/输出/总 token 记录。
+- 查询入口：`GET /api/platform/usage/tokens`；平台工作台显示当前账户累计 token，并提供进入 LumenX 工作区的入口。
+- 请求接线：`frontend/src/lib/appAccess.ts` 传递平台 Bearer token，Studio/Atelier 分别发送 `X-LumenX-Product`；`LLMAdapter` 将实际 provider usage 写入平台账本。
+- 验证：平台测试覆盖迁移、用户隔离和算力汇总；真实供应商调用仍未执行，支付和提现仍跳过。

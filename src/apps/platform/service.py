@@ -85,6 +85,34 @@ class PlatformService:
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         with connect(self.path) as c: c.execute("UPDATE platform_sessions SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL", (now(), token_hash))
 
+    def record_token_usage(self, actor: dict[str, Any], event: dict[str, Any]) -> None:
+        prompt = max(0, int(event.get("prompt_tokens") or 0))
+        completion = max(0, int(event.get("completion_tokens") or 0))
+        total = max(0, int(event.get("total_tokens") or prompt + completion))
+        product = event.get("product") if event.get("product") in {"studio", "atelier", "core"} else "core"
+        with connect(self.path) as c:
+            c.execute(
+                "INSERT INTO platform_token_usage VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (uid(), actor["id"], product, str(event.get("operation") or "llm.chat"),
+                 str(event.get("provider") or "unknown"), event.get("requested_model"),
+                 event.get("provider_model"), prompt, completion, total, event.get("request_id"),
+                 json.dumps(event.get("metadata") or {}, ensure_ascii=False), now()),
+            )
+
+    def token_usage(self, actor: dict[str, Any], limit: int = 100) -> dict[str, Any]:
+        limit = max(1, min(limit, 500))
+        with connect(self.path) as c:
+            totals = c.execute(
+                "SELECT COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0), COALESCE(SUM(total_tokens),0) FROM platform_token_usage WHERE user_id=?",
+                (actor["id"],),
+            ).fetchone()
+            rows = c.execute(
+                "SELECT id,product,operation,provider,requested_model,provider_model,prompt_tokens,completion_tokens,total_tokens,request_id,created_at FROM platform_token_usage WHERE user_id=? ORDER BY created_at DESC LIMIT ?",
+                (actor["id"], limit),
+            ).fetchall()
+        keys = ("id", "product", "operation", "provider", "requested_model", "provider_model", "prompt_tokens", "completion_tokens", "total_tokens", "request_id", "created_at")
+        return {"prompt_tokens": totals[0], "completion_tokens": totals[1], "total_tokens": totals[2], "records": [dict(zip(keys, row)) for row in rows]}
+
     def create_competition(self, actor: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         if actor["role"] not in {"admin", "client"}: raise PlatformError("forbidden", "only client or admin can publish competitions", 403)
         cid = uid(); timestamp = now()

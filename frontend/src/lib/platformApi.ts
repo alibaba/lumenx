@@ -41,5 +41,6 @@ export const platformApi = {
   courses: () => request<Array<{ id: string; title: string; description: string }>>("/academy/courses"),
   tasks: () => request<Array<{ id: string; title: string; category: string; bounty_cents: number; deadline: string }>>("/tasks/square"),
   certification: () => request<{ status: string; level: string } | null>("/certifications/status"),
+  tokenUsage: (limit = 20) => request<{ prompt_tokens: number; completion_tokens: number; total_tokens: number; records: Array<Record<string, unknown>> }>(`/usage/tokens?limit=${limit}`),
 };
 
