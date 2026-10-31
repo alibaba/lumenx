@@ -99,6 +99,9 @@ from ..atelier.agent_api import router as atelier_agent_router
 from ..atelier.agent_loop_api import router as atelier_agent_loop_router
 from ..atelier.project_package_api import router as atelier_project_package_router
 from ..playground.api import router as playground_router
+from ..platform.api import router as platform_router
+from ..platform.config import PlatformConfig
+from ..platform.service import PlatformService
 
 
 class OSSImageUploader:
@@ -1069,6 +1072,9 @@ def create_app(
     )
     target_app.state.app_access = access_state
     target_app.include_router(router)
+    if PlatformConfig.from_env().enabled:
+        target_app.include_router(platform_router, prefix="/api/platform")
+        target_app.state.platform_service = PlatformService(PlatformConfig.from_env())
 
     @target_app.exception_handler(RequestValidationError)
     async def request_validation_response(request: Request, exc: RequestValidationError):

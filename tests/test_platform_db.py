@@ -6,14 +6,14 @@ from src.apps.platform.db import MigrationError, backup_database, check_foreign_
 
 def test_migrate_creates_isolated_schema_with_sqlite_safety(tmp_path):
     db_path = tmp_path / "platform.db"
-    assert migrate(db_path) == ["001_initial.sql"]
+    assert migrate(db_path) == ["001_initial.sql", "002_business.sql"]
     assert migrate(db_path) == []
     assert check_foreign_keys(db_path) == []
     with connect(db_path) as connection:
         assert connection.execute("PRAGMA foreign_keys").fetchone() == (1,)
         assert connection.execute(
             "SELECT version FROM schema_migrations"
-        ).fetchall() == [("001_initial.sql",)]
+        ).fetchall() == [("001_initial.sql",), ("002_business.sql",)]
         tables = {row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )}

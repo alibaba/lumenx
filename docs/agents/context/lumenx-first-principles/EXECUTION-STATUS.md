@@ -80,3 +80,11 @@
 - 责任文件：`docs/9-creator-platform-architecture/adr/0001-platform-access-boundary.md`、`PLATFORM-DATA-CONTRACT.md`、`PLATFORM-TEST-MATRIX.md`、`src/apps/platform/contracts.py`、`src/apps/platform/config.py`、`src/apps/platform/db.py`、`src/apps/platform/migrations/001_initial.sql`、`tests/test_platform_contracts.py`、`tests/test_platform_db.py`。
 - 验证：`.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py tests/test_platform_db.py -q`（6 passed）；`python3 docs/agents/tools/check_lumenx_refactor_docs.py`（PASS）。
 - 证据边界：依赖安装使用隔离 `.venv`；结果覆盖无状态合同与 SQLite 迁移/备份基础，不代表认证、HTTP、artifact resolver 或商业结算已通过。
+
+## 2026-10-31 创作者平台业务闭环切片
+
+按用户要求跳过真实支付，继续实现平台业务逻辑。`src/apps/platform/service.py` 和 `api.py` 已提供账户会话、赛事白名单、作品快照提交、课程/模板 Fork、认证考核、任务认领/开工/交付/评审、模拟账本和审计；平台路由仅在 `LUMENX_PLATFORM_ENABLED=true` 时装配。
+
+- 迁移：`002_business.sql` 建立赛事、提交、学院、认证、任务、交付、状态历史、幂等和模拟账本表。
+- 验证：`.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py tests/test_platform_db.py tests/test_platform_service.py -q`（9 passed）。
+- 证据边界：支付渠道、提现、Core 实际 artifact resolver 和生产部署尚未验收；当前提交接口只保存客户端传入快照，后续必须替换为只读 resolver。

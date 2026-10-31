@@ -22,9 +22,10 @@
 - 平台默认关闭，平台会话与 `LumenXAccessMiddleware` 分离；
 - artifact 提交必须保存版本、哈希、媒体类型和项目标题快照；
 - 任务状态迁移、幂等上下文和整数分模拟账本已形成可执行 Pydantic 合同；
-- 尚未装配平台路由或开放真实支付；SQLite 迁移层、版本校验、备份和基础审计表已建立，下一切片是认证会话和撤销。
+- 平台路由已受 `LUMENX_PLATFORM_ENABLED` 控制；认证、赛事白名单、培训/模板、认证考核、商业任务和模拟账本业务已实现。
+- 真实支付、提现渠道和外部回调按当前要求跳过；接受任务只写入模拟不可变账本。
 
-对应文件：`src/apps/platform/contracts.py`、`src/apps/platform/config.py`、`src/apps/platform/db.py`、`src/apps/platform/migrations/001_initial.sql`、`tests/test_platform_contracts.py`、`tests/test_platform_db.py`。
+对应文件：`src/apps/platform/` 与 `tests/test_platform_*.py`。
 
 ## 当前开发门禁
 
