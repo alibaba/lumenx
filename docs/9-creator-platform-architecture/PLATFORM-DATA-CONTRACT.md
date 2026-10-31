@@ -87,7 +87,7 @@ skill_feedback     采纳/拒绝、QC、返修、成本和用户备注
 - 已批准或已接纳任务必须继续使用原 Skill 快照；修改 Skill 只能创建新运行或要求重新批准。
 - Skill 草稿只能在沙箱中运行；激活、回滚和删除都写入审计事件。
 
-当前持久化切片使用 `007_skill_registry.sql` 建立 Skill 版本和绑定表；它只保存经过哈希校验的 manifest JSON，不保存脚本路径、命令、凭证引用或 Provider handle。Skill API 已提供创建、列表、绑定和解析入口，前端工作台已提供账户级/项目级绑定界面。`skill_runtime.py` 负责静态沙箱检查、平台 manifest 到 Atelier snapshot 的严格转换，以及生成请求的 Skill 快照绑定；它不执行外部脚本。运行快照的跨重启持久化、Skill sandbox worker 和反馈优化仍未实现。
+当前持久化切片使用 `007_skill_registry.sql` 建立 Skill 版本和绑定表；它只保存经过哈希校验的 manifest JSON，不保存脚本路径、命令、凭证引用或 Provider handle。Skill API 已提供创建、列表、绑定和解析入口，前端工作台已提供账户级/项目级绑定界面。`skill_runtime.py` 负责静态沙箱检查、平台 manifest 到 Atelier snapshot 的严格转换，以及生成请求的 Skill 快照绑定；它不执行外部脚本。生成 attempt 现在保存 Skill binding，Agent loop 支持由组合根注入平台 manifest resolver，重启读回继续使用原绑定。隔离 worker 和反馈优化仍未实现。
 
 ## 9. 云端部署级别
 

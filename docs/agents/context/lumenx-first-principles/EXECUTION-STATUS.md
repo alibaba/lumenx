@@ -180,3 +180,12 @@ LLM Adapter 现在读取请求级算力计费上下文。平台积分模式在 P
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：Skill/runtime、generation admission、scope resolution、product Skill 测试（37 passed）。
 - 证据边界：这是静态沙箱和单次接纳绑定，不是隔离 worker；Skill snapshot 尚未单独写入 generation attempt schema，反馈优化和多用户 worker 仍未实现。
+
+## 2026-10-31 Skill 运行快照持久化与 Atelier 运行时桥接切片
+
+生成 attempt 现在保存 `SkillExecutionBinding`，candidate projection、request fingerprint 和 attempt readback 使用同一 Skill 内容哈希。`AtelierAgentLoopService` 支持注入平台 manifest resolver：有已授权平台 manifest 时先转换为 Atelier snapshot，没有时回退到系统 Product Skill registry；Skill 名称不一致会拒绝。该桥接不让 Atelier 直接依赖平台数据库。
+
+- 责任文件：`src/apps/atelier/models.py`、`src/apps/atelier/generation_admission.py`、`src/apps/atelier/agent_admission.py`、`src/apps/atelier/skill_runtime.py`、`src/apps/atelier/agent_loop.py`、相关测试。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：Atelier Skill/runtime、generation admission、agent loop storage、scope/product Skill 测试（55 passed）；平台相关 54 项测试仍保持通过；前端未改运行代码，typecheck/build 基线保持通过。
+- 证据边界：平台 manifest resolver 仍由应用组合根注入；尚未实现平台服务到 Atelier 的真实请求上下文接线、隔离 worker、队列恢复和反馈优化。

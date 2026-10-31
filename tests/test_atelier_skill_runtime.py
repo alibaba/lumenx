@@ -7,6 +7,7 @@ from src.apps.atelier.product_skills import resolve_product_skill_snapshot
 from src.apps.atelier.skill_runtime import (
     bind_skill_to_video_request,
     convert_manifest_to_snapshot,
+    resolve_runtime_skill_snapshot,
     validate_skill_manifest_sandbox,
 )
 
@@ -27,6 +28,16 @@ def test_platform_manifest_converts_to_immutable_atelier_snapshot():
     assert snapshot.name == "story-scout"
     assert snapshot.expected_tools == ("canvas.readProject",)
     assert snapshot.content_hash != platform_manifest()["content_hash"]
+
+
+def test_runtime_bridge_prefers_platform_manifest_and_falls_back_to_registry():
+    manifest = platform_manifest()
+    resolved = resolve_runtime_skill_snapshot("story-scout", platform_manifest=manifest)
+    assert resolved.title == "Story Scout"
+    fallback = resolve_runtime_skill_snapshot("story-scout")
+    assert fallback.name == "story-scout"
+    with pytest.raises(ValueError, match="name_mismatch"):
+        resolve_runtime_skill_snapshot("other", platform_manifest=manifest)
 
 
 def test_sandbox_rejects_scripts_and_unsupported_tools():

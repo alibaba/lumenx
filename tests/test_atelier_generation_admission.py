@@ -108,6 +108,7 @@ def test_admission_binds_skill_snapshot_to_request_identity_and_candidate(app):
     binding = ack.candidate["skill_binding"]
     assert binding["skill_name"] == "story-scout"
     assert binding["skill_content_hash"] == snapshot.content_hash
+    assert ack.attempt.skill_binding.skill_content_hash == snapshot.content_hash
     replay = service.admit("p", "video", request(expected_revision=0), skill_snapshot=snapshot)
     assert replay.replayed
     assert replay.receipt.request_fingerprint == ack.receipt.request_fingerprint

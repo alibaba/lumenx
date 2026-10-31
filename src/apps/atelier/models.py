@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serial
 
 from ...models.provider_execution import ProviderExecutionRecord
 from .product_skills import AtelierProductSkillSnapshot
+from .skill_runtime import SkillExecutionBinding
 
 
 class AtelierApprovalMode(str, Enum):
@@ -686,6 +687,7 @@ class AtelierGenerationAttempt(BaseModel):
     input_media: list[AtelierGenerationMediaSource] | None = None
     output_ref: str | None = Field(None, min_length=1)
     provider_execution: ProviderExecutionRecord
+    skill_binding: SkillExecutionBinding | None = None
     agent_authorization_ref: AtelierAgentAuthorizationRef | None = None
     created_at: float = Field(..., allow_inf_nan=False)
     updated_at: float = Field(..., allow_inf_nan=False)

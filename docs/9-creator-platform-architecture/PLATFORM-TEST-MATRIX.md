@@ -31,6 +31,8 @@
 | Platform manifest → Atelier snapshot converter | `src/apps/atelier/skill_runtime.py` | `tests/test_atelier_skill_runtime.py` | 当前切片通过 |
 | Skill static sandbox rejection | `src/apps/atelier/skill_runtime.py` | `tests/test_atelier_skill_runtime.py` | 当前切片通过；仅静态校验，不执行脚本 |
 | Video admission Skill snapshot binding | `src/apps/atelier/generation_admission.py`；`generation_ledger.py` | `tests/test_atelier_generation_admission.py` | 当前切片通过；绑定写入 candidate projection 和 request fingerprint |
+| Generation attempt Skill binding persistence | `src/apps/atelier/models.py`；Atelier storage readback | `tests/test_atelier_generation_admission.py`；`tests/test_atelier_agent_loop_storage.py` | 当前切片通过 |
+| Platform-to-Atelier runtime resolver | `src/apps/atelier/skill_runtime.py`；`agent_loop.py` | `tests/test_atelier_skill_runtime.py` | 当前切片通过；由组合根注入平台 manifest |
 
 验证命令：
 

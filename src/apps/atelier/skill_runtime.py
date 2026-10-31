@@ -17,6 +17,7 @@ from ...utils.request_identity import fingerprint_request
 from .product_skills import (
     CALLABLE_LOOP_TOOL_NAMES,
     AtelierProductSkillSnapshot,
+    resolve_product_skill_snapshot,
 )
 
 _FORBIDDEN_FIELDS = frozenset({
@@ -101,4 +102,25 @@ def bind_skill_to_video_request(snapshot: AtelierProductSkillSnapshot, request_p
         skill_content_hash=snapshot.content_hash,
         request_fingerprint=request_fingerprint,
     )
+
+
+def resolve_runtime_skill_snapshot(
+    name: str,
+    *,
+    platform_manifest: Mapping[str, Any] | None = None,
+    fallback_resolver=resolve_product_skill_snapshot,
+) -> AtelierProductSkillSnapshot:
+    """Resolve a platform-bound manifest, falling back to the app registry.
+
+    The caller supplies the already authorized platform manifest. This keeps
+    Atelier independent from platform storage while allowing the composition
+    root to bridge authenticated platform bindings into Agent runtime.
+    """
+
+    if platform_manifest is not None:
+        snapshot = convert_manifest_to_snapshot(platform_manifest)
+        if snapshot.name != name:
+            raise ValueError("atelier_platform_skill_name_mismatch")
+        return snapshot
+    return fallback_resolver(name)
 

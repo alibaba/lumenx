@@ -162,7 +162,8 @@ class AtelierGenerationAdmissionService:
                     project_id=project.id, node_id=node.id, candidate_id=candidate_id,
                     attempt_id=attempt_id, attempt_revision=0, status="pending",
                     **source_fields,
-                    provider_execution=record, created_at=now, updated_at=now,
+                    provider_execution=record, skill_binding=skill_binding,
+                    created_at=now, updated_at=now,
                 )
                 candidate = {
                     "execution_contract": GENERATION_CANDIDATE_CONTRACT,

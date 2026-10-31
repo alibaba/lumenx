@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from threading import Event
-from typing import Any, Literal
+from typing import Any, Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,6 +19,7 @@ from .agent_authorization import TOOL_GENERATION_CREATE_VIDEO_CANDIDATES
 from .generation_admission import GenerationAdmissionAck
 from .agent_loop_commands import SaveAgentLoopIterationCommand, StartAgentLoopCommand
 from .product_skills import CALLABLE_LOOP_TOOL_NAMES, resolve_product_skill_snapshot
+from .skill_runtime import resolve_runtime_skill_snapshot
 from .models import AtelierAgentToolCall, AtelierAgentToolStatus, AtelierAgentTurn, AtelierProject
 from .storage import AtelierStorage
 
@@ -137,6 +138,7 @@ class AtelierAgentLoopService:
         credential_provider: Callable[[], Any] | None = None,
         generation_scheduler: Callable[[str, str], Any] | None = None,
         product_skill_resolver: Callable[[str], Any] | None = None,
+        platform_skill_resolver: Callable[[str], Mapping[str, Any] | None] | None = None,
     ):
         self.storage = storage
         self._planner = planner
@@ -147,6 +149,7 @@ class AtelierAgentLoopService:
         self._credential_provider = credential_provider
         self._generation_scheduler = generation_scheduler
         self._product_skill_resolver = product_skill_resolver or resolve_product_skill_snapshot
+        self._platform_skill_resolver = platform_skill_resolver
 
     def start_loop(self, project_id: str, command: StartAgentLoopCommand) -> AgentLoopAck:
         return _drain_ack(self.iter_start_loop(project_id, command))
@@ -167,7 +170,12 @@ class AtelierAgentLoopService:
         if command.skill_name is not None:
             if command.planner != "model_adapter":
                 raise ValueError("atelier_agent_loop_skill_requires_model_adapter")
-            resolved_skill_snapshot = self._product_skill_resolver(command.skill_name)
+            platform_manifest = self._platform_skill_resolver(command.skill_name) if self._platform_skill_resolver is not None else None
+            resolved_skill_snapshot = resolve_runtime_skill_snapshot(
+                command.skill_name,
+                platform_manifest=platform_manifest,
+                fallback_resolver=self._product_skill_resolver,
+            )
             project_for_policy = self.storage.get_project(project_id)
             expected_tools = set(resolved_skill_snapshot.expected_tools)
             if expected_tools - CALLABLE_LOOP_TOOL_NAMES:
