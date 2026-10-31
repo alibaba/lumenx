@@ -98,3 +98,13 @@
 - 查询入口：`GET /api/platform/usage/tokens`；平台工作台显示当前账户累计 token，并提供进入 LumenX 工作区的入口。
 - 请求接线：`frontend/src/lib/appAccess.ts` 传递平台 Bearer token，Studio/Atelier 分别发送 `X-LumenX-Product`；`LLMAdapter` 将实际 provider usage 写入平台账本。
 - 验证：平台测试覆盖迁移、用户隔离和算力汇总；真实供应商调用仍未执行，支付和提现仍跳过。
+
+## 2026-10-31 平台积分算力账本切片
+
+在 token 使用记录之上增加平台积分价格、积分账本和生成预扣闭环。当前充值只提供管理员/客户模拟发放，真实支付仍跳过。
+
+- 迁移：`004_credit_ledger.sql` 建立 `credit_pricing`、`credit_ledger`、`credit_reservations`，并写入 DashScope Qwen 默认价格版本。
+- 服务：支持价格估算、余额查询、模拟积分发放、预扣、实际结算、差额释放、失败释放和幂等重放。
+- API：`/api/platform/credits/pricing`、`estimate`、`balance`、`ledger`、`grants`、`reservations` 及 settle/release 入口已加入；前端 `platformApi` 已提供对应客户端方法。
+- 计费边界：本切片只完成平台积分账本，不改变 Provider 调用凭证；用户 BYOK 凭证加密存储和 resolver 将在下一切片实现。
+- 验证：平台合同、数据库、服务测试 11 项通过；文档结构检查通过。

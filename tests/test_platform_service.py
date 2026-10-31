@@ -42,6 +42,24 @@ def test_token_usage_is_recorded_and_summarized_per_platform_user(tmp_path):
     assert {row["product"] for row in usage["records"]} == {"studio", "atelier"}
 
 
+def test_credit_reservation_settlement_release_and_idempotency(tmp_path):
+    svc = service(tmp_path)
+    admin = svc.register("admin", "a" * 12, role="admin")
+    creator = svc.register("creator", "b" * 12)
+    grant = svc.grant_credits(admin, creator["id"], 100, "trial", "grant-creator-1")
+    assert grant["amount_credits"] == 100
+    estimate = svc.estimate_credits("dashscope", "qwen3.7-plus", 1200, 800)
+    assert estimate["estimated_credits"] == 6
+    reservation = svc.reserve_credits(creator, 20, "generation-1", estimate["pricing_version"], "reserve-1")
+    assert svc.reserve_credits(creator, 20, "generation-1", estimate["pricing_version"], "reserve-1")["idempotent_replay"]
+    settled = svc.settle_credits(creator, reservation["reservation_id"], 7)
+    assert settled["released_credits"] == 13
+    assert svc.credit_balance(creator)["available_credits"] == 93
+    released = svc.reserve_credits(creator, 10, "generation-2", estimate["pricing_version"], "reserve-2")
+    assert svc.release_credits(creator, released["reservation_id"])["released_credits"] == 10
+    assert svc.credit_balance(creator)["available_credits"] == 93
+
+
 def test_certified_creator_claims_delivers_and_review_creates_simulated_ledger(tmp_path):
     svc = service(tmp_path)
     admin = svc.register("admin", "a" * 12, role="admin")

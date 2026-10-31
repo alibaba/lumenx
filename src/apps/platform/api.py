@@ -59,6 +59,10 @@ class ForkIn(BaseModel): fork_project_id: str
 class ApplyIn(BaseModel): exam_id: str; artifact: ArtifactIn
 class CertReviewIn(BaseModel): approved: bool; score: float | None = None; feedback: str = ""
 class SubmissionReviewIn(BaseModel): approved: bool; score: float | None = None; award_title: str | None = None
+class CreditEstimateIn(BaseModel): provider: str; model: str; prompt_tokens: int = Field(ge=0); completion_tokens: int = Field(ge=0)
+class CreditGrantIn(BaseModel): user_id: str; amount_credits: int = Field(gt=0); reason: str = Field(min_length=1, max_length=200); idempotency_key: str = Field(min_length=8, max_length=200)
+class CreditReservationIn(BaseModel): estimated_credits: int = Field(gt=0); generation_id: str = Field(min_length=1, max_length=200); pricing_version: str = Field(min_length=1, max_length=100); idempotency_key: str = Field(min_length=8, max_length=200)
+class CreditSettleIn(BaseModel): actual_credits: int = Field(ge=0)
 
 
 @router.post("/auth/register")
@@ -78,6 +82,30 @@ def logout(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), s
 @router.get("/usage/tokens")
 def token_usage(limit: int = 100, user=Depends(current_user), svc: PlatformService = Depends(service)):
     return svc.token_usage(user, limit)
+
+@router.get("/credits/pricing")
+def credit_pricing(svc: PlatformService = Depends(service)): return svc.credit_pricing()
+
+@router.post("/credits/estimate")
+def credit_estimate(body: CreditEstimateIn, svc: PlatformService = Depends(service)): return handle(lambda: svc.estimate_credits(body.provider, body.model, body.prompt_tokens, body.completion_tokens))
+
+@router.get("/credits/balance")
+def credit_balance(user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.credit_balance(user)
+
+@router.get("/credits/ledger")
+def credit_ledger(limit: int = 100, user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.credit_ledger(user, limit)
+
+@router.post("/credits/grants")
+def credit_grant(body: CreditGrantIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.grant_credits(user, body.user_id, body.amount_credits, body.reason, body.idempotency_key))
+
+@router.post("/credits/reservations")
+def credit_reserve(body: CreditReservationIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.reserve_credits(user, body.estimated_credits, body.generation_id, body.pricing_version, body.idempotency_key))
+
+@router.post("/credits/reservations/{reservation_id}/settle")
+def credit_settle(reservation_id: str, body: CreditSettleIn, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.settle_credits(user, reservation_id, body.actual_credits))
+
+@router.post("/credits/reservations/{reservation_id}/release")
+def credit_release(reservation_id: str, user=Depends(current_user), svc: PlatformService = Depends(service)): return handle(lambda: svc.release_credits(user, reservation_id))
 
 @router.get("/competitions")
 def competitions(svc: PlatformService = Depends(service)): return svc.list_competitions()

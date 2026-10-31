@@ -11,6 +11,7 @@ import secrets
 import sqlite3
 import uuid
 from typing import Any
+from math import ceil
 
 from .config import PlatformConfig
 from .contracts import TaskStatus, can_transition
@@ -112,6 +113,82 @@ class PlatformService:
             ).fetchall()
         keys = ("id", "product", "operation", "provider", "requested_model", "provider_model", "prompt_tokens", "completion_tokens", "total_tokens", "request_id", "created_at")
         return {"prompt_tokens": totals[0], "completion_tokens": totals[1], "total_tokens": totals[2], "records": [dict(zip(keys, row)) for row in rows]}
+
+    def credit_pricing(self) -> list[dict[str, Any]]:
+        with connect(self.path) as c:
+            rows = c.execute("SELECT provider,model,pricing_version,input_credits_per_1k,output_credits_per_1k FROM credit_pricing WHERE active=1 ORDER BY provider,model").fetchall()
+        return [dict(zip(("provider", "model", "pricing_version", "input_credits_per_1k", "output_credits_per_1k"), row)) for row in rows]
+
+    def estimate_credits(self, provider: str, model: str, prompt_tokens: int, completion_tokens: int) -> dict[str, Any]:
+        if min(prompt_tokens, completion_tokens) < 0:
+            raise PlatformError("invalid_token_usage", "token counts cannot be negative")
+        with connect(self.path) as c:
+            row = c.execute("SELECT pricing_version,input_credits_per_1k,output_credits_per_1k FROM credit_pricing WHERE provider=? AND model=? AND active=1 ORDER BY created_at DESC LIMIT 1", (provider, model)).fetchone()
+        if not row: raise PlatformError("pricing_unavailable", "no active credit pricing for this model", 422)
+        input_credits = ceil(prompt_tokens * row[1] / 1000)
+        output_credits = ceil(completion_tokens * row[2] / 1000)
+        return {"provider": provider, "model": model, "pricing_version": row[0], "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "estimated_credits": input_credits + output_credits}
+
+    def credit_balance(self, actor: dict[str, Any]) -> dict[str, Any]:
+        with connect(self.path) as c:
+            row = c.execute("SELECT COALESCE(SUM(CASE WHEN direction IN ('credit','release','refund') THEN amount_credits ELSE -amount_credits END),0), COALESCE(SUM(CASE WHEN direction='credit' THEN amount_credits ELSE 0 END),0), COALESCE(SUM(CASE WHEN direction='debit' THEN amount_credits ELSE 0 END),0) FROM credit_ledger WHERE user_id=?", (actor["id"],)).fetchone()
+        return {"user_id": actor["id"], "available_credits": row[0], "credited_credits": row[1], "debited_credits": row[2]}
+
+    def credit_ledger(self, actor: dict[str, Any], limit: int = 100) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        with connect(self.path) as c:
+            rows = c.execute("SELECT id,amount_credits,direction,reference_type,reference_id,metadata_json,created_at FROM credit_ledger WHERE user_id=? ORDER BY created_at DESC LIMIT ?", (actor["id"], limit)).fetchall()
+        keys = ("id", "amount_credits", "direction", "reference_type", "reference_id", "metadata_json", "created_at")
+        return [dict(zip(keys, row)) for row in rows]
+
+    def grant_credits(self, issuer: dict[str, Any], user_id: str, amount: int, reason: str, idempotency_key: str) -> dict[str, Any]:
+        if issuer["role"] not in {"admin", "client"}: raise PlatformError("forbidden", "credit grants require admin or client", 403)
+        if amount <= 0: raise PlatformError("invalid_credit_amount", "credit amount must be positive")
+        with connect(self.path) as c:
+            if not c.execute("SELECT 1 FROM platform_users WHERE id=? AND is_active=1", (user_id,)).fetchone(): raise PlatformError("user_not_found", "credit recipient not found", 404)
+            existing = c.execute("SELECT id,amount_credits FROM credit_ledger WHERE idempotency_key=?", (idempotency_key,)).fetchone()
+            if existing: return {"id": existing[0], "user_id": user_id, "amount_credits": existing[1], "status": "credited", "idempotent_replay": True}
+            entry_id = uid()
+            c.execute("INSERT INTO credit_ledger VALUES (?,?,?,?,?,?,?,?,?)", (entry_id, user_id, amount, "credit", "grant", user_id, idempotency_key, json.dumps({"reason": reason}, ensure_ascii=False), now()))
+            self._audit(c, issuer["id"], "credits.granted", "user", user_id, {"amount_credits": amount, "reason": reason})
+        return {"id": entry_id, "user_id": user_id, "amount_credits": amount, "status": "credited", "idempotent_replay": False}
+
+    def reserve_credits(self, actor: dict[str, Any], estimated_credits: int, generation_id: str, pricing_version: str, idempotency_key: str) -> dict[str, Any]:
+        if estimated_credits <= 0: raise PlatformError("invalid_credit_amount", "reservation must be positive")
+        with connect(self.path) as c:
+            old = c.execute("SELECT id,estimated_credits,status FROM credit_reservations WHERE idempotency_key=? AND user_id=?", (idempotency_key, actor["id"])).fetchone()
+            if old: return {"reservation_id": old[0], "estimated_credits": old[1], "status": old[2], "idempotent_replay": True}
+            balance = c.execute("SELECT COALESCE(SUM(CASE WHEN direction IN ('credit','release','refund') THEN amount_credits ELSE -amount_credits END),0) FROM credit_ledger WHERE user_id=?", (actor["id"],)).fetchone()[0]
+            if balance < estimated_credits: raise PlatformError("insufficient_credits", "insufficient platform credits", 402)
+            reservation_id = uid(); timestamp = now()
+            c.execute("INSERT INTO credit_reservations VALUES (?,?,?,?,?,?,?,?,?,?,?)", (reservation_id, actor["id"], generation_id, estimated_credits, 0, 0, pricing_version, "reserved", idempotency_key, timestamp, timestamp))
+            c.execute("INSERT INTO credit_ledger VALUES (?,?,?,?,?,?,?,?,?)", (uid(), actor["id"], estimated_credits, "debit", "reservation", reservation_id, f"{idempotency_key}:reserve", "{}", timestamp))
+        return {"reservation_id": reservation_id, "estimated_credits": estimated_credits, "status": "reserved", "idempotent_replay": False}
+
+    def settle_credits(self, actor: dict[str, Any], reservation_id: str, actual_credits: int) -> dict[str, Any]:
+        if actual_credits < 0: raise PlatformError("invalid_credit_amount", "actual credits cannot be negative")
+        with connect(self.path) as c:
+            row = c.execute("SELECT user_id,estimated_credits,status FROM credit_reservations WHERE id=?", (reservation_id,)).fetchone()
+            if not row or row[0] != actor["id"]: raise PlatformError("reservation_not_found", "credit reservation not found", 404)
+            if row[2] != "reserved": return {"reservation_id": reservation_id, "status": row[2], "actual_credits": actual_credits, "idempotent_replay": True}
+            extra = max(0, actual_credits - row[1]); release = max(0, row[1] - actual_credits)
+            if extra:
+                balance = c.execute("SELECT COALESCE(SUM(CASE WHEN direction IN ('credit','release','refund') THEN amount_credits ELSE -amount_credits END),0) FROM credit_ledger WHERE user_id=?", (actor["id"],)).fetchone()[0]
+                if balance < extra: raise PlatformError("insufficient_credits", "additional settlement credits are unavailable", 402)
+                c.execute("INSERT INTO credit_ledger VALUES (?,?,?,?,?,?,?,?,?)", (uid(), actor["id"], extra, "debit", "settlement", reservation_id, f"{reservation_id}:extra", "{}", now()))
+            if release:
+                c.execute("INSERT INTO credit_ledger VALUES (?,?,?,?,?,?,?,?,?)", (uid(), actor["id"], release, "release", "settlement", reservation_id, f"{reservation_id}:release", "{}", now()))
+            c.execute("UPDATE credit_reservations SET settled_credits=?,released_credits=?,status='settled',updated_at=? WHERE id=?", (actual_credits, release, now(), reservation_id))
+        return {"reservation_id": reservation_id, "status": "settled", "actual_credits": actual_credits, "released_credits": release, "additional_credits": extra, "idempotent_replay": False}
+
+    def release_credits(self, actor: dict[str, Any], reservation_id: str) -> dict[str, Any]:
+        with connect(self.path) as c:
+            row = c.execute("SELECT user_id,estimated_credits,status FROM credit_reservations WHERE id=?", (reservation_id,)).fetchone()
+            if not row or row[0] != actor["id"]: raise PlatformError("reservation_not_found", "credit reservation not found", 404)
+            if row[2] != "reserved": return {"reservation_id": reservation_id, "status": row[2], "idempotent_replay": True}
+            c.execute("INSERT INTO credit_ledger VALUES (?,?,?,?,?,?,?,?,?)", (uid(), actor["id"], row[1], "release", "reservation", reservation_id, f"{reservation_id}:release", "{}", now()))
+            c.execute("UPDATE credit_reservations SET released_credits=?,status='released',updated_at=? WHERE id=?", (row[1], now(), reservation_id))
+        return {"reservation_id": reservation_id, "status": "released", "released_credits": row[1], "idempotent_replay": False}
 
     def create_competition(self, actor: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
         if actor["role"] not in {"admin", "client"}: raise PlatformError("forbidden", "only client or admin can publish competitions", 403)
