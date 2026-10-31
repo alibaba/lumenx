@@ -97,7 +97,7 @@ skill_feedback     采纳/拒绝、QC、返修、成本和用户备注
 
 `010_skill_workers.sql` 保存按用户隔离的 Worker identity token 哈希。Worker 只能用自己的 token claim/heartbeat 所属用户的 Skill run；token 不返回明文存储，跨进程实例通过同一数据库进行原子竞争。该机制仍是单机/SQLite 阶段合同，生产环境需替换为集中式 job ledger 和独立 Worker 凭证服务。
 
-队列后端配置必须显式选择 `sqlite`、`redis` 或 `postgres`。Redis/PostgreSQL 模式是多用户生产的进入条件，但连接依赖、真实队列适配、job claim 监控和 Provider 执行仍需独立现场验收；Compose 的 `skill-production` profile 只提供基础服务和隔离容器边界，不代表生产 Worker 已完成。
+队列后端配置必须显式选择 `sqlite`、`redis` 或 `postgres`。`central_queue.py` 已提供 Redis Streams 和 PostgreSQL `FOR UPDATE SKIP LOCKED` 适配器，以及统一的 ack/requeue Worker runner。Redis/PostgreSQL 模式是多用户生产的进入条件，但真实服务连接、job claim 监控、Provider handler 和容器现场仍需独立验收；Compose 的 `skill-production` profile 不代表生产 Worker 已完成。
 
 ## 9. 云端部署级别
 

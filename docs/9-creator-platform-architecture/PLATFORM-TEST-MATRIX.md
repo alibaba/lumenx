@@ -40,6 +40,7 @@
 | Skill run atomic claim / lease recovery | `PlatformService.claim_skill_run` / `recover_expired_skill_runs` | `tests/test_platform_service.py` | 当前切片通过；同一活跃租约不可重复 claim |
 | Worker identity、heartbeat、跨进程 claim | `platform_skill_workers`；`PlatformService.claim_skill_run_with_token` | `tests/test_platform_service.py` | 当前切片通过；仍是持久化 SQLite 队列合同 |
 | Redis/PostgreSQL queue config and worker isolation | `src/apps/platform/queue_backend.py`; `Dockerfile.skill-worker`; Compose profile | `tests/test_skill_queue_backend.py`; `docker compose config` | 配置合同和隔离配方已通过；真实 Redis/PostgreSQL/Worker 现场待验收 |
+| Central queue adapters and isolated runner | `src/apps/platform/central_queue.py` | `tests/test_central_skill_queue.py` | Fake backend contract passes; live Redis/PostgreSQL connection remains environment-gated |
 
 验证命令：
 

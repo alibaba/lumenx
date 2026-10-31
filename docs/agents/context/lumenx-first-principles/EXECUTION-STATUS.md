@@ -234,3 +234,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：队列配置单测、平台 Skill/Worker 测试、文档检查和前端 typecheck；真实 Redis/PostgreSQL 现场连接未执行。
 - 证据边界：Redis/PostgreSQL adapter、集中式 job ledger、Worker claim 监控和 Provider 执行仍待生产现场验收。
+
+## 2026-10-31 集中队列适配器与隔离 Worker runner 切片
+
+新增 `central_queue.py`：Redis Streams 和 PostgreSQL `FOR UPDATE SKIP LOCKED` 适配器共享统一 enqueue/claim/ack/requeue 合同；新增 `IsolatedSkillWorker` runner 和 Fake backend 回归测试。`requirements-docker.txt` 增加 redis/psycopg 运行依赖，容器配方仍使用受限权限和只读根文件系统。
+
+- 责任文件：`src/apps/platform/central_queue.py`、`tests/test_central_skill_queue.py`、`requirements-docker.txt`、`Dockerfile.skill-worker`、队列/Worker 文档。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：Fake queue runner、队列配置、平台 Skill/Worker 测试、Compose config 和文档检查；未连接真实 Redis/PostgreSQL。
+- 证据边界：适配器代码已具备真实连接入口，但 live Redis/PostgreSQL、Provider handler、监控和容器部署仍需环境现场验收。
