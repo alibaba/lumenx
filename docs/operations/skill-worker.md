@@ -21,3 +21,7 @@ Worker 进入生产前必须满足：
 2026-11-01 已通过 loopback `127.0.0.1:15432` 执行 PostgreSQL 真实 smoke：24 个 job 由 6 个并发 Worker claim，`claimed=24`、`unique=24`、`duplicates=0`，随后全部 ack。可复用命令为 `LUMENX_SKILL_POSTGRES_URL=postgresql://... python scripts/verify_live_skill_queue.py --jobs 24 --workers 6`。该脚本只做队列层验收，不调用 Provider。
 
 Worker 监控当前以结构化日志提供 `worker_id`、claimed/succeeded/failed、最近 job 和错误类型，绝不输出 job payload。Provider job 必须通过 `LUMENX_CREDENTIAL_PROXY_URL` 访问凭证代理；队列只携带 provider、scope 等非 secret 字段，代理返回 opaque `credential_ref`。未配置代理时 provider job fail-closed；`LUMENX_CREDENTIAL_PROXY_TOKEN` 只用于 Worker 到代理的认证。
+
+当前生产配方新增 `credential-proxy`、Prometheus 和 OTel Collector：凭证代理监听 loopback `17178`，只允许 Worker issue 和 Core resolve 两种带 bearer token 的路径，引用默认 300 秒过期；Worker `/metrics` 监听 `9100`，Prometheus/OTel 通过容器网络抓取。示例配置使用环境变量注入，生产环境应替换为云 Secret Manager/KMS，不把真实 key 写进 Compose 或 job。
+
+2026-11-01 现场验收：凭证代理 `/healthz`、issue/resolve 通过；Prometheus target `lumenx-skill-worker` 为 `up`；OTel Collector 日志确认收到 9 个 Worker 指标数据点。多用户压力脚本运行 240 个任务、12 个并发 Worker、24 个租户，`duplicates=0`、`unique=240`，每租户 10 个任务。

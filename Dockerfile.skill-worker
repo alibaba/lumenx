@@ -7,11 +7,13 @@ COPY src/__init__.py src/__init__.py
 COPY src/apps/platform/__init__.py src/apps/platform/__init__.py
 COPY src/apps/platform/central_queue.py src/apps/platform/central_queue.py
 COPY src/apps/platform/queue_backend.py src/apps/platform/queue_backend.py
+COPY src/apps/platform/worker_runtime.py src/apps/platform/worker_runtime.py
 COPY src/apps/platform/skill_worker_main.py src/apps/platform/skill_worker_main.py
 
 # The worker image is a contract boundary. Runtime entrypoint wiring is added
 # only with the selected Redis/PostgreSQL queue adapter and provider policy.
 ENV PYTHONUNBUFFERED=1
 USER 65532:65532
+EXPOSE 9100
 
 CMD ["python", "-m", "src.apps.platform.skill_worker_main"]

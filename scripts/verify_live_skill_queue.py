@@ -21,6 +21,7 @@ def main() -> int:
     parser.add_argument("--dsn", default=os.getenv("LUMENX_SKILL_POSTGRES_URL"))
     parser.add_argument("--jobs", type=int, default=20)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--tenants", type=int, default=4)
     parser.add_argument("--run-id", default=f"{uuid4().hex[:8]}")
     args = parser.parse_args()
     if not args.dsn:
@@ -29,7 +30,7 @@ def main() -> int:
     jobs = [
         QueueJob(
             f"live-pg-{args.run_id}-{i}",
-            {"tenant_id": f"tenant-{i % 4}", "index": i},
+            {"tenant_id": f"tenant-{i % args.tenants}", "index": i},
         )
         for i in range(args.jobs)
     ]
@@ -49,12 +50,16 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         claimed = [job_id for batch in pool.map(consume, range(args.workers)) for job_id in batch]
     counts = Counter(claimed)
+    tenant_counts = Counter(next(job.payload["tenant_id"] for job in jobs if job.job_id == job_id) for job_id in claimed)
     result = {
         "jobs": len(jobs),
         "claimed": len(claimed),
         "unique": len(counts),
         "duplicates": sum(v - 1 for v in counts.values() if v > 1),
         "workers": args.workers,
+        "tenants": args.tenants,
+        "tenant_min": min(tenant_counts.values(), default=0),
+        "tenant_max": max(tenant_counts.values(), default=0),
     }
     print(json.dumps(result, sort_keys=True))
     if result["claimed"] != args.jobs or result["unique"] != args.jobs or result["duplicates"]:

@@ -41,7 +41,8 @@
 | Worker identity、heartbeat、跨进程 claim | `platform_skill_workers`；`PlatformService.claim_skill_run_with_token` | `tests/test_platform_service.py` | 当前切片通过；仍是持久化 SQLite 队列合同 |
 | Redis/PostgreSQL queue config and worker isolation | `src/apps/platform/queue_backend.py`; `Dockerfile.skill-worker`; Compose profile | `tests/test_skill_queue_backend.py`; `docker compose config`; live Redis smoke | 配置合同、隔离配方和 Redis 容器启动/健康通过；PostgreSQL 容器健康通过，adapter live claim 待补 |
 | Central queue adapters and isolated runner | `src/apps/platform/central_queue.py`; `src/apps/platform/skill_worker_main.py`; `scripts/verify_live_skill_queue.py` | `tests/test_central_skill_queue.py`; `tests/test_skill_worker_main.py`; Redis XADD/XPENDING smoke; PostgreSQL 24-job/6-worker smoke | Fake runner、Redis live consume/ack、PostgreSQL 真实 enqueue/claim/ack 与并发去重通过；Provider handler 仍为 dry-run |
-| Worker monitoring and credential proxy boundary | `src/apps/platform/worker_runtime.py` | `tests/test_worker_runtime.py`; `tests/test_skill_worker_main.py` | 结构化无 payload 指标、代理 opaque ref 和未配置 fail-closed 通过；生产代理服务与轮换策略待接入 |
+| Worker monitoring and credential proxy boundary | `src/apps/platform/worker_runtime.py`; `src/apps/platform/credential_proxy_service.py`; Compose monitoring profile | `tests/test_worker_runtime.py`; `tests/test_credential_proxy_service.py`; Worker `/metrics`; Prometheus target; OTel Collector logs | 结构化无 payload 指标、真实代理 issue/resolve、Prometheus scrape 和 OTel scrape 通过；生产 Secret Manager、轮换、告警路由待接入 |
+| Multi-user queue pressure and production profile | `scripts/verify_live_skill_queue.py`; `docker-compose.yml` | PostgreSQL 240-job/12-worker/24-tenant smoke; `docker compose --profile skill-production --profile monitoring up` | 240/240 claim，0 duplicate，每租户 10 个；本机生产 profile 通过，云端 HA/弹性/故障演练待补 |
 
 验证命令：
 

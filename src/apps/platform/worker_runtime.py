@@ -13,6 +13,8 @@ import os
 import time
 from typing import Any, Protocol
 from urllib import request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 
 class CredentialBroker(Protocol):
@@ -87,6 +89,49 @@ class WorkerMetrics:
             "last_error": self.last_error,
             "uptime_seconds": max(0.0, time.time() - self.started_at),
         }
+
+    def prometheus(self) -> str:
+        labels = f'worker_id="{self.worker_id}"'
+        return "\n".join(
+            [
+                "# HELP lumenx_skill_worker_claimed_total Jobs claimed by this worker.",
+                "# TYPE lumenx_skill_worker_claimed_total counter",
+                f"lumenx_skill_worker_claimed_total{{{labels}}} {self.claimed}",
+                "# HELP lumenx_skill_worker_succeeded_total Jobs completed successfully.",
+                "# TYPE lumenx_skill_worker_succeeded_total counter",
+                f"lumenx_skill_worker_succeeded_total{{{labels}}} {self.succeeded}",
+                "# HELP lumenx_skill_worker_failed_total Jobs failed and requeued.",
+                "# TYPE lumenx_skill_worker_failed_total counter",
+                f"lumenx_skill_worker_failed_total{{{labels}}} {self.failed}",
+                "# HELP lumenx_skill_worker_uptime_seconds Worker uptime.",
+                "# TYPE lumenx_skill_worker_uptime_seconds gauge",
+                f"lumenx_skill_worker_uptime_seconds{{{labels}}} {time.time() - self.started_at:.3f}",
+                "",
+            ]
+        )
+
+
+def start_metrics_server(metrics: WorkerMetrics, port: int) -> Thread:
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            if self.path != "/metrics":
+                self.send_response(404)
+                self.end_headers()
+                return
+            payload = metrics.prometheus().encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; version=0.0.4")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_args):
+            return
+
+    server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
+    thread = Thread(target=server.serve_forever, name="skill-worker-metrics", daemon=True)
+    thread.start()
+    return thread
 
 
 def credential_proxy_from_env() -> CredentialBroker:

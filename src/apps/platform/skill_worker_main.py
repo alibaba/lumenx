@@ -13,7 +13,7 @@ import time
 
 from .central_queue import IsolatedSkillWorker, PostgresSkillQueue, QueueJob, RedisStreamQueue
 from .queue_backend import SkillQueueConfig
-from .worker_runtime import CredentialBroker, WorkerMetrics, credential_proxy_from_env
+from .worker_runtime import CredentialBroker, WorkerMetrics, credential_proxy_from_env, start_metrics_server
 
 
 logger = logging.getLogger("lumenx.skill-worker")
@@ -50,6 +50,9 @@ def main() -> int:
     queue = _queue(config)
     worker_id = os.getenv("LUMENX_SKILL_WORKER_ID", socket.gethostname())
     metrics = WorkerMetrics(worker_id)
+    metrics_port = int(os.getenv("LUMENX_METRICS_PORT", "0"))
+    if metrics_port:
+        start_metrics_server(metrics, metrics_port)
     credential_proxy = credential_proxy_from_env()
 
     def handler(job: QueueJob) -> None:

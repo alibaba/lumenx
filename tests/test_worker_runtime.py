@@ -21,6 +21,16 @@ def test_worker_metrics_snapshot_is_payload_free():
     assert "payload" not in snapshot
 
 
+def test_worker_metrics_exposes_prometheus_counters_without_payload():
+    metrics = WorkerMetrics("worker-1")
+    metrics.record_claim("job-1")
+    metrics.record_failure(RuntimeError("secret details"))
+    output = metrics.prometheus()
+    assert "lumenx_skill_worker_claimed_total" in output
+    assert "lumenx_skill_worker_failed_total" in output
+    assert "secret details" not in output
+
+
 def test_default_credential_proxy_fails_closed():
     with pytest.raises(CredentialProxyError):
         DenyCredentialProxy().issue(worker_id="w", job_id="j", provider="p", scope="s")

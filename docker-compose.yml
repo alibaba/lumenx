@@ -62,16 +62,67 @@ services:
     security_opt: ["no-new-privileges:true"]
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=256m
+    ports:
+      - "127.0.0.1:19100:9100"
     environment:
       - LUMENX_SKILL_QUEUE_BACKEND=redis
       - LUMENX_SKILL_REDIS_URL=redis://redis:6379/0
       - LUMENX_SKILL_QUEUE_NAME=lumenx:skill-runs
       - LUMENX_SKILL_WORKER_ONCE=0
+      - LUMENX_METRICS_PORT=9100
+      - LUMENX_CREDENTIAL_PROXY_URL=http://credential-proxy:17178/v1/credentials/issue
+      - LUMENX_CREDENTIAL_PROXY_TOKEN=${LUMENX_CREDENTIAL_PROXY_TOKEN:-local-worker-token}
     depends_on:
       - redis
+      - credential-proxy
+    restart: unless-stopped
+
+  credential-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.credential-proxy
+    profiles: ["skill-production"]
+    command: ["python", "-m", "src.apps.platform.credential_proxy_service"]
+    environment:
+      - LUMENX_CREDENTIAL_PROXY_TOKEN=${LUMENX_CREDENTIAL_PROXY_TOKEN:-local-worker-token}
+      - LUMENX_CREDENTIAL_CORE_TOKEN=${LUMENX_CREDENTIAL_CORE_TOKEN:-local-core-token}
+      - LUMENX_CREDENTIAL_PROXY_SECRETS_JSON=${LUMENX_CREDENTIAL_PROXY_SECRETS_JSON:-{}}
+      - LUMENX_CREDENTIAL_PROXY_PORT=17178
+    ports:
+      - "127.0.0.1:17178:17178"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    profiles: ["skill-production", "monitoring"]
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - lumenx_prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:19090:9090"
+    depends_on:
+      - skill-worker
+    restart: unless-stopped
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    profiles: ["skill-production", "monitoring"]
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/otel/otel-collector.yml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "127.0.0.1:14318:4318"
+    depends_on:
+      - skill-worker
     restart: unless-stopped
 
 volumes:
   lumenx_user_data:
   lumenx_redis_data:
   lumenx_postgres_data:
+  lumenx_prometheus_data:

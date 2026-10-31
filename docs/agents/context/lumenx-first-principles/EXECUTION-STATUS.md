@@ -261,3 +261,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：PostgreSQL 真实 24-job/6-worker smoke 通过；Worker/队列/平台/Atelier 测试与 Compose 配置待统一回归；凭证代理为受控 HTTP 边界测试，未连接真实 Provider。
 - 证据边界：当前监控是 Worker 结构化日志，不是 Prometheus/OTel 集群；凭证代理客户端已接入 fail-closed 合同，但代理服务、密钥轮换、审计与真实 Provider 端到端仍待生产接入。
+
+## 2026-11-01 真实凭证代理、Prometheus/OTel 与多用户生产 profile 验收切片
+
+新增独立 `credential-proxy` 服务：Worker 只能 issue opaque `credential_ref`，Core 使用独立 bearer token resolve，引用默认 300 秒过期，未配置或未知 provider 时 fail-closed。Worker 新增 `/metrics` Prometheus 文本端点；Compose `monitoring` profile 启动 Prometheus 与 OTel Collector，二者通过容器网络抓取 Worker 指标。
+
+- 责任文件：`src/apps/platform/credential_proxy_service.py`、`src/apps/platform/worker_runtime.py`、`Dockerfile.credential-proxy`、`requirements-credential-proxy.txt`、`deploy/prometheus/prometheus.yml`、`deploy/otel/otel-collector.yml`、`docker-compose.yml`、`scripts/verify_live_skill_queue.py`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：凭证代理 health/issue/resolve 真实容器 smoke 通过；Prometheus target 为 `up`；OTel Collector debug exporter 收到 Worker 指标；PostgreSQL 240-job/12-worker/24-tenant 压力通过，0 duplicate、每租户 10 个。
+- 证据边界：当前代理的本地配置适配器从环境变量读取 secret，生产云部署必须替换为 Secret Manager/KMS；OTel 当前使用 debug exporter，告警、持久化远端 exporter、HA 和故障演练仍待接入。
