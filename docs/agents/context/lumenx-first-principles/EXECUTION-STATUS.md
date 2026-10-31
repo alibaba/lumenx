@@ -171,3 +171,12 @@ LLM Adapter 现在读取请求级算力计费上下文。平台积分模式在 P
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：平台隔离测试（15 passed）；`npm --prefix frontend run typecheck`（通过）；`npm --prefix frontend run build`（通过，保留 Next 静态导出 rewrites 警告）；文档结构检查（PASS）。
 - 证据边界：尚未完成 Atelier snapshot converter、Skill sandbox、用户反馈优化、视频生成接纳和多用户 worker。
+
+## 2026-10-31 Skill converter、静态沙箱与视频接纳绑定切片
+
+新增 `src/apps/atelier/skill_runtime.py`，完成平台 manifest 到 `AtelierProductSkillSnapshot` 的严格转换、禁止脚本/路径/网络/凭证字段的静态沙箱校验，以及带 Skill 内容哈希的视频请求绑定。`AtelierGenerationAdmissionService.admit` 可接收 Skill snapshot；绑定哈希进入 request fingerprint 和 candidate projection，重放必须使用同一 Skill 快照。
+
+- 责任文件：`src/apps/atelier/skill_runtime.py`、`src/apps/atelier/generation_admission.py`、`src/apps/atelier/generation_ledger.py`、`tests/test_atelier_skill_runtime.py`、`tests/test_atelier_generation_admission.py`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：Skill/runtime、generation admission、scope resolution、product Skill 测试（37 passed）。
+- 证据边界：这是静态沙箱和单次接纳绑定，不是隔离 worker；Skill snapshot 尚未单独写入 generation attempt schema，反馈优化和多用户 worker 仍未实现。

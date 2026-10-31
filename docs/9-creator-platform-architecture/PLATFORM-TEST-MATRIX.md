@@ -28,6 +28,9 @@
 | Skill manifest 安全字段与哈希 | `PlatformService.create_skill_version` | `tests/test_platform_service.py::test_skill_manifest_rejects_executable_fields_and_bad_hash` | 当前切片通过；尚未接 Product Skill snapshot converter |
 | Skill API 创建/列表/绑定/解析 | `src/apps/platform/api.py` | `tests/test_platform_skill_api.py` | 当前切片通过 |
 | Skill 前端账户/项目绑定界面 | `frontend/src/components/platform/SkillSettings.tsx`；`frontend/src/lib/platformApi.ts` | `npm --prefix frontend run typecheck`; `npm --prefix frontend run build` | 当前切片通过；组件交互回归仍可扩展 |
+| Platform manifest → Atelier snapshot converter | `src/apps/atelier/skill_runtime.py` | `tests/test_atelier_skill_runtime.py` | 当前切片通过 |
+| Skill static sandbox rejection | `src/apps/atelier/skill_runtime.py` | `tests/test_atelier_skill_runtime.py` | 当前切片通过；仅静态校验，不执行脚本 |
+| Video admission Skill snapshot binding | `src/apps/atelier/generation_admission.py`；`generation_ledger.py` | `tests/test_atelier_generation_admission.py` | 当前切片通过；绑定写入 candidate projection 和 request fingerprint |
 
 验证命令：
 

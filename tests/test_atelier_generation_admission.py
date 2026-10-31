@@ -10,6 +10,7 @@ import pytest
 from src.apps.atelier.generation_admission import AtelierGenerationAdmissionService
 from src.apps.atelier.generation_commands import CreateVideoCandidateCommand, ManualVideoCandidateBatchCommand
 from src.apps.atelier.models import AtelierNode, AtelierProject
+from src.apps.atelier.product_skills import resolve_product_skill_snapshot
 from src.apps.atelier.storage import AtelierStorage
 from src.models.provider_tasks import ProviderScope, ResolvedCredential
 from src.utils.json_storage import StorageConflictError, StorageError
@@ -98,6 +99,18 @@ def test_admission_saves_candidate_attempt_receipt_once_and_does_not_select_it(a
     assert store.get_project("p") == ack.project
     assert "test-only-secret" not in store.path.read_text()
     bind.assert_called_once_with(provider_model_id="wan2.7-i2v", gateway="dashscope")
+
+
+def test_admission_binds_skill_snapshot_to_request_identity_and_candidate(app):
+    service, store, _bind, _ = app
+    snapshot = resolve_product_skill_snapshot("story-scout")
+    ack = service.admit("p", "video", request(), skill_snapshot=snapshot)
+    binding = ack.candidate["skill_binding"]
+    assert binding["skill_name"] == "story-scout"
+    assert binding["skill_content_hash"] == snapshot.content_hash
+    replay = service.admit("p", "video", request(expected_revision=0), skill_snapshot=snapshot)
+    assert replay.replayed
+    assert replay.receipt.request_fingerprint == ack.receipt.request_fingerprint
 
 
 def test_replay_and_readback_do_not_read_changed_media_or_current_credentials(app):
