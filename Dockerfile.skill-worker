@@ -1,12 +1,17 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-COPY requirements-docker.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements-docker.txt
-COPY src/ src/
-COPY config/model_catalog/ config/model_catalog/
+COPY requirements-worker.txt /tmp/requirements-worker.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-worker.txt
+COPY src/__init__.py src/__init__.py
+COPY src/apps/platform/__init__.py src/apps/platform/__init__.py
+COPY src/apps/platform/central_queue.py src/apps/platform/central_queue.py
+COPY src/apps/platform/queue_backend.py src/apps/platform/queue_backend.py
+COPY src/apps/platform/skill_worker_main.py src/apps/platform/skill_worker_main.py
 
 # The worker image is a contract boundary. Runtime entrypoint wiring is added
 # only with the selected Redis/PostgreSQL queue adapter and provider policy.
 ENV PYTHONUNBUFFERED=1
 USER 65532:65532
+
+CMD ["python", "-m", "src.apps.platform.skill_worker_main"]

@@ -34,6 +34,22 @@ services:
       - lumenx_redis_data:/data
     restart: unless-stopped
 
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["skill-production"]
+    environment:
+      POSTGRES_DB: lumenx
+      POSTGRES_USER: lumenx
+      POSTGRES_PASSWORD: lumenx-local-only
+    volumes:
+      - lumenx_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lumenx -d lumenx"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   skill-worker:
     build:
       context: .
@@ -47,6 +63,8 @@ services:
     environment:
       - LUMENX_SKILL_QUEUE_BACKEND=redis
       - LUMENX_SKILL_REDIS_URL=redis://redis:6379/0
+      - LUMENX_SKILL_QUEUE_NAME=lumenx:skill-runs
+      - LUMENX_SKILL_WORKER_ONCE=0
     depends_on:
       - redis
     restart: unless-stopped
@@ -54,3 +72,4 @@ services:
 volumes:
   lumenx_user_data:
   lumenx_redis_data:
+  lumenx_postgres_data:

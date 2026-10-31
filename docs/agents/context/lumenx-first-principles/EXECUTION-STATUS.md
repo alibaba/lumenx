@@ -243,3 +243,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：Fake queue runner、队列配置、平台 Skill/Worker 测试、Compose config 和文档检查；未连接真实 Redis/PostgreSQL。
 - 证据边界：适配器代码已具备真实连接入口，但 live Redis/PostgreSQL、Provider handler、监控和容器部署仍需环境现场验收。
+
+## 2026-10-31 真实 Redis 现场与 Worker 容器 smoke 切片
+
+新增最小 `skill-worker` 入口和 Worker 专用依赖文件，容器只复制队列适配器与入口，不带 API、模型目录或用户数据。使用 Compose project `lumenx-live` 启动 Redis 7 和 PostgreSQL 16；Redis Streams 写入 `live-redis-2` 后由容器 Worker 消费并 ack，`XPENDING` 为 `0`。修复 Redis block timeout 被客户端抛出后导致 Worker 退出的问题，将其归一为空闲轮询。
+
+- 责任文件：`src/apps/platform/skill_worker_main.py`、`requirements-worker.txt`、`Dockerfile.skill-worker`、`docker-compose.yml`、`src/apps/platform/central_queue.py`、`tests/test_skill_worker_main.py`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：Redis 容器到 Worker 的真实消费/ack smoke 通过；PostgreSQL 16 容器健康检查通过；队列、平台、Worker 合同测试与 Compose config 待本切片统一回归。
+- 证据边界：PostgreSQL adapter 的真实 enqueue/claim/ack 尚未执行；Worker 仍为 dry-run handler，不调用 Provider；尚未完成多用户压力、监控、凭证代理和生产发布门禁。

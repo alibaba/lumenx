@@ -47,7 +47,12 @@ class RedisStreamQueue:
         return str(self.client.xadd(self.stream, {"job_id": job.job_id, "payload": json.dumps(job.payload, ensure_ascii=False), "lease_seconds": job.lease_seconds}))
 
     def claim(self, worker_id: str, timeout: int = 5) -> QueueJob | None:
-        rows = self.client.xreadgroup(self.group, worker_id, {self.stream: ">"}, count=1, block=max(0, timeout * 1000))
+        try:
+            rows = self.client.xreadgroup(self.group, worker_id, {self.stream: ">"}, count=1, block=max(0, timeout * 1000))
+        except Exception as exc:
+            if exc.__class__.__name__ == "TimeoutError":
+                return None
+            raise
         if not rows: return None
         _stream, messages = rows[0]; message_id, fields = messages[0]
         payload = json.loads(fields["payload"])
