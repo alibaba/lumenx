@@ -38,6 +38,7 @@
 | Skill run snapshot ledger | `platform_skill_runs` / `PlatformService` | `tests/test_platform_db.py`; `tests/test_platform_service.py` | 当前切片通过；持久化运行账本已建立 |
 | Skill run API | `/api/platform/skills/runs` | 待新增 HTTP test | 当前已接线；Worker claim 尚待实现 |
 | Skill run atomic claim / lease recovery | `PlatformService.claim_skill_run` / `recover_expired_skill_runs` | `tests/test_platform_service.py` | 当前切片通过；同一活跃租约不可重复 claim |
+| Worker identity、heartbeat、跨进程 claim | `platform_skill_workers`；`PlatformService.claim_skill_run_with_token` | `tests/test_platform_service.py` | 当前切片通过；仍是持久化 SQLite 队列合同 |
 
 验证命令：
 

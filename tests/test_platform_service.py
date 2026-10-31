@@ -148,6 +148,26 @@ def test_skill_run_claim_is_atomic_and_expired_lease_is_requeued(tmp_path):
     assert again["attempt_count"] == 2
 
 
+def test_worker_identity_claim_heartbeat_and_cross_process_recovery(tmp_path):
+    path = tmp_path / "platform.db"
+    svc_a = PlatformService(PlatformConfig(enabled=True, database_url=f"sqlite:///{path}"))
+    svc_b = PlatformService(PlatformConfig(enabled=True, database_url=f"sqlite:///{path}"))
+    alice = svc_a.register("alice", "a" * 12)
+    worker = svc_a.register_skill_worker(alice, "gpu-worker-1")
+    binding = {"skill_name": "story-scout", "skill_version": "1.0.0", "skill_content_hash": "a" * 64, "request_fingerprint": "e" * 64}
+    run = svc_a.create_skill_run(alice, project_id="p1", binding=binding)
+    claimed = svc_b.claim_skill_run_with_token(alice, run["id"], worker_token=worker["worker_token"], lease_seconds=60)
+    assert claimed["lease_owner"] == worker["worker_id"]
+    beat = svc_a.heartbeat_skill_run(alice, run["id"], worker_token=worker["worker_token"], lease_seconds=60)
+    assert beat["status"] == "running"
+    try:
+        svc_a.heartbeat_skill_run(alice, run["id"], worker_token="invalid-worker-token-000000", lease_seconds=60)
+    except PlatformError as exc:
+        assert exc.code == "skill_worker_invalid"
+    else:
+        raise AssertionError("invalid worker token was accepted")
+
+
 def test_user_credentials_are_encrypted_isolated_and_rotatable(tmp_path):
     svc = credential_service(tmp_path)
     alice = svc.register("alice", "a" * 12)

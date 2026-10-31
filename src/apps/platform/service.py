@@ -292,6 +292,24 @@ class PlatformService:
             self._audit(c, actor["id"], "skill.run.created", "skill_run", run_id, {"project_id": project_id, "skill_name": binding["skill_name"], "skill_version": binding["skill_version"]})
         return {"id": run_id, "status": "queued", "idempotent_replay": False}
 
+    def register_skill_worker(self, actor: dict[str, Any], label: str) -> dict[str, Any]:
+        if not label or len(label) > 80: raise PlatformError("invalid_worker_label", "Worker label is invalid")
+        raw = secrets.token_urlsafe(32); worker_id = uid(); timestamp = now()
+        token_hash = hashlib.sha256(raw.encode()).hexdigest()
+        with connect(self.path) as c:
+            c.execute("INSERT INTO platform_skill_workers VALUES (?,?,?,?,?,?,?,?)", (worker_id, actor["id"], label, token_hash, "active", timestamp, timestamp, None))
+            self._audit(c, actor["id"], "skill.worker.registered", "skill_worker", worker_id, {"label": label})
+        return {"worker_id": worker_id, "label": label, "worker_token": raw, "status": "active"}
+
+    def _worker(self, actor: dict[str, Any], worker_token: str) -> dict[str, Any]:
+        token_hash = hashlib.sha256(worker_token.encode()).hexdigest()
+        with connect(self.path) as c:
+            row = c.execute("SELECT id,user_id,label,status FROM platform_skill_workers WHERE token_hash=?", (token_hash,)).fetchone()
+            if not row or row[1] != actor.get("id") or row[3] != "active":
+                raise PlatformError("skill_worker_invalid", "Worker token is invalid", 401)
+            c.execute("UPDATE platform_skill_workers SET last_seen_at=? WHERE id=?", (now(), row[0]))
+        return {"worker_id": row[0], "user_id": row[1], "label": row[2]}
+
     def claim_skill_run(self, actor: dict[str, Any], run_id: str, *, worker_id: str, lease_seconds: int = 300) -> dict[str, Any]:
         if not worker_id or lease_seconds <= 0 or lease_seconds > 3600:
             raise PlatformError("invalid_skill_lease", "Worker lease is invalid")
@@ -307,6 +325,22 @@ class PlatformService:
             c.execute("UPDATE platform_skill_runs SET status='running',lease_owner=?,lease_expires_at=?,attempt_count=?,updated_at=? WHERE id=?", (worker_id, expires, attempt, timestamp, run_id))
             self._audit(c, actor.get("id"), "skill.run.claimed", "skill_run", run_id, {"worker_id": worker_id, "attempt": attempt, "lease_expires_at": expires})
         return {"id": run_id, "status": "running", "lease_owner": worker_id, "lease_expires_at": expires, "attempt_count": attempt}
+
+    def claim_skill_run_with_token(self, actor: dict[str, Any], run_id: str, *, worker_token: str, lease_seconds: int = 300) -> dict[str, Any]:
+        worker = self._worker(actor, worker_token)
+        return self.claim_skill_run(actor, run_id, worker_id=worker["worker_id"], lease_seconds=lease_seconds)
+
+    def heartbeat_skill_run(self, actor: dict[str, Any], run_id: str, *, worker_token: str, lease_seconds: int = 300) -> dict[str, Any]:
+        worker = self._worker(actor, worker_token)
+        if lease_seconds <= 0 or lease_seconds > 3600: raise PlatformError("invalid_skill_lease", "Worker lease is invalid")
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat(); timestamp = now()
+        with connect(self.path) as c:
+            row = c.execute("SELECT user_id,status,lease_owner FROM platform_skill_runs WHERE id=?", (run_id,)).fetchone()
+            if not row: raise PlatformError("skill_run_not_found", "Skill run not found", 404)
+            if row[0] != actor.get("id"): raise PlatformError("skill_run_forbidden", "Skill run belongs to another user", 403)
+            if row[1] != "running" or row[2] != worker["worker_id"]: raise PlatformError("skill_run_lease_required", "Worker lease is required", 409)
+            c.execute("UPDATE platform_skill_runs SET lease_expires_at=?,updated_at=? WHERE id=?", (expires, timestamp, run_id))
+        return {"id": run_id, "status": "running", "lease_owner": worker["worker_id"], "lease_expires_at": expires}
 
     def recover_expired_skill_runs(self, actor: dict[str, Any], *, now_value: str | None = None) -> int:
         cutoff = now_value or now()

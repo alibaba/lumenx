@@ -95,6 +95,8 @@ skill_feedback     采纳/拒绝、QC、返修、成本和用户备注
 
 `009_skill_run_leases.sql` 增加 `lease_owner`、`lease_expires_at` 和 `attempt_count`。claim 使用单写者事务，只允许 queued 或已过期 running 记录进入 running；活跃租约不能被第二个 Worker 接管。完成/失败必须携带匹配的 worker id，过期记录可回收到 queued。
 
+`010_skill_workers.sql` 保存按用户隔离的 Worker identity token 哈希。Worker 只能用自己的 token claim/heartbeat 所属用户的 Skill run；token 不返回明文存储，跨进程实例通过同一数据库进行原子竞争。该机制仍是单机/SQLite 阶段合同，生产环境需替换为集中式 job ledger 和独立 Worker 凭证服务。
+
 ## 9. 云端部署级别
 
 ### 9.1 单机 MVP

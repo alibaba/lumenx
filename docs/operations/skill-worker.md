@@ -14,4 +14,4 @@ Worker 进入生产前必须满足：
 
 单机 MVP 可以先在同机以受限子进程运行 dry-run evaluator；多用户生产再迁移到独立队列、PostgreSQL job ledger、对象存储和隔离容器。当前仓库没有把该合同误报为已完成的 worker 集群。
 
-平台 `platform_skill_runs` 是当前运行账本：创建按用户和 request fingerprint 幂等，状态更新只能由所属用户或后续受控 Worker 入口执行。当前已实现 `queued → running` 的原子 claim、Worker lease owner、过期回收和 attempt_count；下一步再接独立队列、租约心跳和跨进程恢复。
+平台 `platform_skill_runs` 是当前运行账本：创建按用户和 request fingerprint 幂等，状态更新只能由所属用户或后续受控 Worker 入口执行。当前已实现 `queued → running` 的原子 claim、Worker lease owner、过期回收、attempt_count、Worker identity token 和 heartbeat；两个 `PlatformService` 实例可以共享 SQLite 账本完成跨进程语义测试。真正的 Redis/PostgreSQL 队列和独立 Worker 集群仍待实现。

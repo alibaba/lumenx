@@ -216,3 +216,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：平台 Skill 运行账本、claim、租约和恢复测试将在本切片完成后统一运行。
 - 证据边界：当前 Worker 身份是受控 API 字段，尚未实现独立 Worker 凭证、队列租约心跳或跨进程生产恢复。
+
+## 2026-10-31 Worker identity、heartbeat 与跨进程恢复切片
+
+新增 `010_skill_workers.sql` 和按用户隔离的 Worker identity token 哈希。Skill run 支持 token claim、heartbeat、租约续期和跨进程 SQLite 账本竞争；两个 `PlatformService` 实例的恢复测试覆盖 Worker token、heartbeat 和用户边界。该切片仍是持久化队列合同，不是 Redis/PostgreSQL 集群。
+
+- 责任文件：`src/apps/platform/migrations/010_skill_workers.sql`、`src/apps/platform/service.py`、`src/apps/platform/api.py`、平台数据库/服务测试。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：Worker identity、claim、heartbeat、跨进程恢复和平台 Skill 相关测试将在本切片完成后统一运行。
+- 证据边界：尚未实现集中式队列、独立 Worker 凭证代理、Redis/PostgreSQL job ledger 或容器级隔离。

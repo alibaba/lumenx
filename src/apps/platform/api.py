@@ -90,6 +90,11 @@ class SkillRunUpdateIn(BaseModel):
 class SkillRunClaimIn(BaseModel):
     worker_id: str = Field(min_length=1, max_length=128)
     lease_seconds: int = Field(default=300, gt=0, le=3600)
+class SkillWorkerIn(BaseModel):
+    label: str = Field(min_length=1, max_length=80)
+class SkillWorkerClaimIn(BaseModel):
+    worker_token: str = Field(min_length=20)
+    lease_seconds: int = Field(default=300, gt=0, le=3600)
 
 
 @router.post("/auth/register")
@@ -143,6 +148,18 @@ def update_skill_run(run_id: str, body: SkillRunUpdateIn, user=Depends(current_u
 @router.post("/skills/runs/{run_id}/claim")
 def claim_skill_run(run_id: str, body: SkillRunClaimIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
     return handle(lambda: svc.claim_skill_run(user, run_id, worker_id=body.worker_id, lease_seconds=body.lease_seconds))
+
+@router.post("/skills/workers")
+def register_skill_worker(body: SkillWorkerIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.register_skill_worker(user, body.label))
+
+@router.post("/skills/runs/{run_id}/worker-claim")
+def worker_claim_skill_run(run_id: str, body: SkillWorkerClaimIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.claim_skill_run_with_token(user, run_id, worker_token=body.worker_token, lease_seconds=body.lease_seconds))
+
+@router.post("/skills/runs/{run_id}/heartbeat")
+def heartbeat_skill_run(run_id: str, body: SkillWorkerClaimIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.heartbeat_skill_run(user, run_id, worker_token=body.worker_token, lease_seconds=body.lease_seconds))
 
 @router.post("/skills/runs/recover-expired")
 def recover_expired_skill_runs(user=Depends(current_user), svc: PlatformService = Depends(service)):
