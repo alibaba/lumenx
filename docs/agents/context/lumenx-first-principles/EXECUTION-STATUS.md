@@ -77,6 +77,6 @@
 
 平台方案位于 `docs/9-creator-platform-architecture/`，当前从 Gate 0 开始执行。首个切片在独立分支 `platform-gate0` 建立了平台访问边界 ADR、数据/API 合同和无状态 Pydantic 契约类型；没有装配平台路由、创建平台数据库或开放真实支付。
 
-- 责任文件：`docs/9-creator-platform-architecture/adr/0001-platform-access-boundary.md`、`PLATFORM-DATA-CONTRACT.md`、`PLATFORM-TEST-MATRIX.md`、`src/apps/platform/contracts.py`、`tests/test_platform_contracts.py`。
-- 验证：`.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py -q`（3 passed）；`python3 docs/agents/tools/check_lumenx_refactor_docs.py`（PASS）。
-- 证据边界：依赖安装使用隔离 `.venv`；该结果只覆盖合同类型，不代表认证、HTTP、artifact resolver、数据库迁移或商业结算已通过。
+- 责任文件：`docs/9-creator-platform-architecture/adr/0001-platform-access-boundary.md`、`PLATFORM-DATA-CONTRACT.md`、`PLATFORM-TEST-MATRIX.md`、`src/apps/platform/contracts.py`、`src/apps/platform/config.py`、`src/apps/platform/db.py`、`src/apps/platform/migrations/001_initial.sql`、`tests/test_platform_contracts.py`、`tests/test_platform_db.py`。
+- 验证：`.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py tests/test_platform_db.py -q`（6 passed）；`python3 docs/agents/tools/check_lumenx_refactor_docs.py`（PASS）。
+- 证据边界：依赖安装使用隔离 `.venv`；结果覆盖无状态合同与 SQLite 迁移/备份基础，不代表认证、HTTP、artifact resolver 或商业结算已通过。
