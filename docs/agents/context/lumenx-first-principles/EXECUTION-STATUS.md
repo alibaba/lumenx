@@ -118,3 +118,12 @@
 - 请求合同：`X-LumenX-Billing-Mode: byok` 与 `X-LumenX-Credential-Ref` 必须成对出现；平台积分模式携带凭证引用会被拒绝。
 - 加密配置：`LUMENX_PLATFORM_CREDENTIALS_KEY` 必须是可解码为 32 字节的 URL-safe Base64 密钥；未配置时 BYOK 返回 `credentials_key_required`，不会回退到平台 Key。
 - 验证：平台、AppAccess 和凭证隔离测试共 39 项通过；真实 Provider 调用和真实密钥验证仍未执行。
+
+## 2026-10-31 算力来源前端入口切片
+
+平台工作台新增“算力与凭证”模块，用户可在平台积分和 BYOK 之间选择，创建/查看/撤销脱敏凭证。Studio 的 `appAccessFetch` 与 Axios 访问会读取该选择并发送 `X-LumenX-Billing-Mode`、`X-LumenX-Credential-Ref`；Atelier 保持独立产品标识并复用同一算力来源。
+
+- 新增 `frontend/src/components/platform/ComputeSettings.tsx` 和 `frontend/src/lib/computePreference.ts`。
+- 平台客户端已接入凭证管理、积分余额、价格估算、预扣、结算和释放方法。
+- 证据边界：当前生成入口已传递计费模式，但 Studio/Atelier 的各类 Provider 仍需逐一接入实际预扣/结算；本切片未执行真实 Provider 请求。
+- 验证：前端 typecheck 与 production build 通过。
