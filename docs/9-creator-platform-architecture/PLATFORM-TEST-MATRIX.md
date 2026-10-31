@@ -45,6 +45,7 @@
 | Multi-user queue pressure and production profile | `scripts/verify_live_skill_queue.py`; `docker-compose.yml` | PostgreSQL 240-job/12-worker/24-tenant smoke; `docker compose --profile skill-production --profile monitoring up` | 240/240 claim，0 duplicate，每租户 10 个；本机生产 profile 通过，云端 HA/弹性/故障演练待补 |
 | Production readiness gate and alerting | `scripts/verify_skill_production.py`; `deploy/prometheus/alerts.yml`; `deploy/otel/otel-collector-remote.yml` | proxy/metrics/Prometheus/OTel readiness smoke | 本机门禁和告警/远端 OTLP 配置模板通过；云端 Secret Manager、远端 exporter 和故障演练需部署参数 |
 | Mounted secret provider and rotation | `FileSecretProvider`; `deploy/credential-proxy-production.compose.yml` | `tests/test_credential_proxy_service.py::test_file_secret_provider_reads_rotated_secret`; production gate provider=file | 文件 provider 轮换读取通过；真实云 Secret Manager/KMS CSI 挂载仍需云端参数 |
+| Redis pending recovery and cloud profile | `RedisStreamQueue.claim`; `deploy/skill-production.compose.yml` | `tests/test_central_skill_queue.py::test_redis_queue_reclaims_pending_message_before_new_messages`; `scripts/verify_redis_worker_recovery.py` | XAUTOCLAIM 恢复合同和本机现场演练通过；云编排器副本、滚动升级和跨 AZ 故障演练待执行 |
 
 验证命令：
 

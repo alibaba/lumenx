@@ -24,3 +24,24 @@ def test_isolated_worker_requeues_failure():
     except RuntimeError: pass
     else: raise AssertionError("handler failure must propagate")
     assert queue.requeued == [("w1", "j1")]
+
+
+def test_redis_queue_reclaims_pending_message_before_new_messages():
+    from src.apps.platform.central_queue import RedisStreamQueue
+
+    queue = object.__new__(RedisStreamQueue)
+    queue.stream = "stream"
+    queue.group = "group"
+    queue._message_ids = {}
+
+    class Client:
+        def xautoclaim(self, *args, **kwargs):
+            return ("0-0", [("2-0", {"job_id": "pending", "payload": "{}", "lease_seconds": "4"})], [])
+
+        def xreadgroup(self, *args, **kwargs):
+            raise AssertionError("new message read should wait until pending recovery is exhausted")
+
+    queue.client = Client()
+    job = queue.claim("replacement", timeout=1)
+    assert job.job_id == "pending"
+    assert queue._message_ids["pending"] == "2-0"

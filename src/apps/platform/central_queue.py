@@ -48,6 +48,23 @@ class RedisStreamQueue:
 
     def claim(self, worker_id: str, timeout: int = 5) -> QueueJob | None:
         try:
+            # Reclaim messages left in the pending entries list after a worker
+            # crash before reading new work. The idle threshold prevents an
+            # active worker's in-flight message from being stolen immediately.
+            reclaimed = self.client.xautoclaim(
+                self.stream,
+                self.group,
+                worker_id,
+                min_idle_time=max(timeout * 1000, 1000),
+                start_id="0-0",
+                count=1,
+            )
+            messages = reclaimed[1] if reclaimed else []
+            if messages:
+                message_id, fields = messages[0]
+                payload = json.loads(fields["payload"])
+                self._message_ids[fields["job_id"]] = message_id
+                return QueueJob(fields["job_id"], payload, int(fields.get("lease_seconds", 300)))
             rows = self.client.xreadgroup(self.group, worker_id, {self.stream: ">"}, count=1, block=max(0, timeout * 1000))
         except Exception as exc:
             if exc.__class__.__name__ == "TimeoutError":

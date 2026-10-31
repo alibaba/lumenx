@@ -29,3 +29,5 @@ Worker 监控当前以结构化日志提供 `worker_id`、claimed/succeeded/fail
 部署前可运行 `python scripts/verify_skill_production.py --allow-local` 做本机门禁；云端不应使用 `--allow-local`，而应提供非默认 Worker/Core token。`deploy/prometheus/alerts.yml` 提供 Worker target down 和失败率告警；`deploy/otel/otel-collector-remote.yml` 是远端 OTLP HTTP 模板，通过 `OTEL_EXPORTER_OTLP_ENDPOINT` 与 `OTEL_EXPORTER_OTLP_AUTH` 注入目标和认证。
 
 云端凭证建议使用 Docker secret override：准备只允许代理用户读取的 JSON 文件（键格式为 `provider:scope`），设置 `LUMENX_CREDENTIALS_FILE` 后使用 `-f deploy/credential-proxy-production.compose.yml`；该 override 将 provider 切换为 `file`，每次 resolve 重新读取文件，支持轮换而不把 key 写入 Compose 环境或镜像。
+
+云端服务使用 `deploy/skill-production.compose.yml` 关闭宿主端口并声明 Worker/代理双副本与容器健康检查；在支持 Compose deploy 或 ECS/Kubernetes 转换器的环境中由平台兑现副本数。Redis pending recovery 使用 `XAUTOCLAIM`，Worker 崩溃后可由替代 Worker 接管未 ack 任务；可用 `scripts/verify_redis_worker_recovery.py` 做现场演练。

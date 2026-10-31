@@ -288,3 +288,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：FileSecretProvider 轮换测试（16 项凭证/Worker/队列测试）与 production Compose override config 通过；未宣称真实云 Secret Manager/KMS CSI 已连接。
 - 证据边界：云厂商 secret backend、CSI 驱动、远端 OTLP 账号和 HA 故障演练仍需云环境执行。
+
+## 2026-11-01 Redis pending recovery 与云端无宿主端口 profile 切片
+
+Redis Streams claim 先用 `XAUTOCLAIM` 接管超过 idle threshold 的 pending message，再读取新消息；新增现场脚本模拟 Worker claim 后等待替代 Worker 接管并 ack，已在 Redis 7 容器通过。新增 `deploy/skill-production.compose.yml`：关闭宿主端口，声明 Worker/credential-proxy 双副本和 healthcheck，供 ECS/Kubernetes 转换或 Compose deploy 使用。
+
+- 责任文件：`src/apps/platform/central_queue.py`、`scripts/verify_redis_worker_recovery.py`、`deploy/skill-production.compose.yml`、相关测试与文档。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：Redis pending recovery 现场 smoke（替代 Worker 接管并 ack）、15 项队列/凭证/Worker 测试和云端 Compose override config 通过。
+- 证据边界：云编排器副本调度、跨 AZ Redis/PostgreSQL、滚动升级和故障演练仍未在真实云环境执行。

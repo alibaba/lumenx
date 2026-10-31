@@ -30,6 +30,8 @@ services:
     image: redis:7-alpine
     profiles: ["skill-production"]
     command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:16379:6379"
     volumes:
       - lumenx_redis_data:/data
     restart: unless-stopped
