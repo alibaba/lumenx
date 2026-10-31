@@ -225,3 +225,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：Worker identity、claim、heartbeat、跨进程恢复和平台 Skill 相关测试将在本切片完成后统一运行。
 - 证据边界：尚未实现集中式队列、独立 Worker 凭证代理、Redis/PostgreSQL job ledger 或容器级隔离。
+
+## 2026-10-31 Redis/PostgreSQL 队列配置与 Worker 隔离配方切片
+
+新增 `queue_backend.py`，显式支持 sqlite/redis/postgres 队列后端配置校验；新增 `Dockerfile.skill-worker` 和 Compose `skill-production` profile，提供只读文件系统、capabilities drop、no-new-privileges 和 noexec tmpfs 的 Worker 容器边界。该切片验证配置和安全配方，不宣称 Redis/PostgreSQL 已连接或真实 Worker 已提交 Provider 任务。
+
+- 责任文件：`src/apps/platform/queue_backend.py`、`tests/test_skill_queue_backend.py`、`Dockerfile.skill-worker`、`docker-compose.yml`、`docs/operations/skill-worker.md`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：队列配置单测、平台 Skill/Worker 测试、文档检查和前端 typecheck；真实 Redis/PostgreSQL 现场连接未执行。
+- 证据边界：Redis/PostgreSQL adapter、集中式 job ledger、Worker claim 监控和 Provider 执行仍待生产现场验收。

@@ -19,6 +19,9 @@ class PlatformConfig:
     session_ttl_seconds: int = 86_400
     password_min_length: int = 12
     credentials_key: str | None = None
+    skill_queue_backend: str = "sqlite"
+    skill_redis_url: str | None = None
+    skill_postgres_url: str | None = None
 
     @classmethod
     def from_env(cls) -> "PlatformConfig":
@@ -34,6 +37,9 @@ class PlatformConfig:
             session_ttl_seconds=ttl,
             password_min_length=password_min_length,
             credentials_key=os.getenv("LUMENX_PLATFORM_CREDENTIALS_KEY"),
+            skill_queue_backend=os.getenv("LUMENX_SKILL_QUEUE_BACKEND", "sqlite"),
+            skill_redis_url=os.getenv("LUMENX_SKILL_REDIS_URL") or None,
+            skill_postgres_url=os.getenv("LUMENX_SKILL_POSTGRES_URL") or None,
         )
 
     def sqlite_path(self) -> Path:

@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements-docker.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements-docker.txt
+COPY src/ src/
+COPY config/model_catalog/ config/model_catalog/
+
+# The worker image is a contract boundary. Runtime entrypoint wiring is added
+# only with the selected Redis/PostgreSQL queue adapter and provider policy.
+ENV PYTHONUNBUFFERED=1
+USER 65532:65532

@@ -26,5 +26,31 @@ services:
       - backend
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    profiles: ["skill-production"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - lumenx_redis_data:/data
+    restart: unless-stopped
+
+  skill-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.skill-worker
+    profiles: ["skill-production"]
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    environment:
+      - LUMENX_SKILL_QUEUE_BACKEND=redis
+      - LUMENX_SKILL_REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    restart: unless-stopped
+
 volumes:
   lumenx_user_data:
+  lumenx_redis_data:
