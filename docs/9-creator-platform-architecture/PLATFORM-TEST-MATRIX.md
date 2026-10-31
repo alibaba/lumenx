@@ -40,7 +40,8 @@
 | Skill run atomic claim / lease recovery | `PlatformService.claim_skill_run` / `recover_expired_skill_runs` | `tests/test_platform_service.py` | 当前切片通过；同一活跃租约不可重复 claim |
 | Worker identity、heartbeat、跨进程 claim | `platform_skill_workers`；`PlatformService.claim_skill_run_with_token` | `tests/test_platform_service.py` | 当前切片通过；仍是持久化 SQLite 队列合同 |
 | Redis/PostgreSQL queue config and worker isolation | `src/apps/platform/queue_backend.py`; `Dockerfile.skill-worker`; Compose profile | `tests/test_skill_queue_backend.py`; `docker compose config`; live Redis smoke | 配置合同、隔离配方和 Redis 容器启动/健康通过；PostgreSQL 容器健康通过，adapter live claim 待补 |
-| Central queue adapters and isolated runner | `src/apps/platform/central_queue.py`; `src/apps/platform/skill_worker_main.py` | `tests/test_central_skill_queue.py`; `tests/test_skill_worker_main.py`; Redis XADD/XPENDING smoke | Fake runner 和 Redis live consume/ack 通过；PostgreSQL adapter live claim、Provider handler 与多用户压力验收待补 |
+| Central queue adapters and isolated runner | `src/apps/platform/central_queue.py`; `src/apps/platform/skill_worker_main.py`; `scripts/verify_live_skill_queue.py` | `tests/test_central_skill_queue.py`; `tests/test_skill_worker_main.py`; Redis XADD/XPENDING smoke; PostgreSQL 24-job/6-worker smoke | Fake runner、Redis live consume/ack、PostgreSQL 真实 enqueue/claim/ack 与并发去重通过；Provider handler 仍为 dry-run |
+| Worker monitoring and credential proxy boundary | `src/apps/platform/worker_runtime.py` | `tests/test_worker_runtime.py`; `tests/test_skill_worker_main.py` | 结构化无 payload 指标、代理 opaque ref 和未配置 fail-closed 通过；生产代理服务与轮换策略待接入 |
 
 验证命令：
 

@@ -252,3 +252,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：Redis 容器到 Worker 的真实消费/ack smoke 通过；PostgreSQL 16 容器健康检查通过；队列、平台、Worker 合同测试与 Compose config 待本切片统一回归。
 - 证据边界：PostgreSQL adapter 的真实 enqueue/claim/ack 尚未执行；Worker 仍为 dry-run handler，不调用 Provider；尚未完成多用户压力、监控、凭证代理和生产发布门禁。
+
+## 2026-11-01 PostgreSQL 现场并发、Worker 监控与凭证代理边界切片
+
+通过 loopback PostgreSQL 16 现场运行 `scripts/verify_live_skill_queue.py`：24 个任务由 6 个并发 Worker 完成 enqueue → claim → ack，结果为 `claimed=24`、`unique=24`、`duplicates=0`。新增 `worker_runtime.py`，为 Worker 提供无 payload 的结构化计数快照和凭证代理客户端；Provider job 未配置代理时 fail-closed，配置代理时只接收 opaque `credential_ref`，不会把 secret 放入 job 或日志。
+
+- 责任文件：`src/apps/platform/worker_runtime.py`、`src/apps/platform/skill_worker_main.py`、`scripts/verify_live_skill_queue.py`、`tests/test_worker_runtime.py`、`tests/test_skill_worker_main.py`、`docker-compose.yml`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：PostgreSQL 真实 24-job/6-worker smoke 通过；Worker/队列/平台/Atelier 测试与 Compose 配置待统一回归；凭证代理为受控 HTTP 边界测试，未连接真实 Provider。
+- 证据边界：当前监控是 Worker 结构化日志，不是 Prometheus/OTel 集群；凭证代理客户端已接入 fail-closed 合同，但代理服务、密钥轮换、审计与真实 Provider 端到端仍待生产接入。

@@ -43,6 +43,8 @@ services:
       POSTGRES_PASSWORD: lumenx-local-only
     volumes:
       - lumenx_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:15432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lumenx -d lumenx"]
       interval: 5s

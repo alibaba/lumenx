@@ -17,3 +17,7 @@ Worker 进入生产前必须满足：
 平台 `platform_skill_runs` 是当前运行账本：创建按用户和 request fingerprint 幂等，状态更新只能由所属用户或后续受控 Worker 入口执行。当前已实现 `queued → running` 的原子 claim、Worker lease owner、过期回收、attempt_count、Worker identity token 和 heartbeat；两个 `PlatformService` 实例可以共享 SQLite 账本完成跨进程语义测试。
 
 队列后端由 `LUMENX_SKILL_QUEUE_BACKEND` 显式选择：`sqlite` 是本地回退，`redis` 需要 `LUMENX_SKILL_REDIS_URL`，`postgres` 需要 `LUMENX_SKILL_POSTGRES_URL`。`src/apps/platform/central_queue.py` 提供 Redis Streams、PostgreSQL `SKIP LOCKED` 和统一 Worker runner；`Dockerfile.skill-worker` 和 Compose 的 `skill-production` profile 提供只读根文件系统、丢弃 Linux capabilities、无新权限和 noexec 临时目录的容器边界。2026-10-31 使用独立 Compose project `lumenx-live` 完成 Redis → Worker 容器真实 smoke：写入 `live-redis-2` 后被消费并 ack，`XPENDING lumenx:skill-runs lumenx-workers` 为 `0`。PostgreSQL 16 容器已通过 `pg_isready` 健康检查，但 adapter 的真实 enqueue/claim/ack 尚未执行。真实 Provider 调用仍需显式注入受控 handler；当前入口是 dry-run。
+
+2026-11-01 已通过 loopback `127.0.0.1:15432` 执行 PostgreSQL 真实 smoke：24 个 job 由 6 个并发 Worker claim，`claimed=24`、`unique=24`、`duplicates=0`，随后全部 ack。可复用命令为 `LUMENX_SKILL_POSTGRES_URL=postgresql://... python scripts/verify_live_skill_queue.py --jobs 24 --workers 6`。该脚本只做队列层验收，不调用 Provider。
+
+Worker 监控当前以结构化日志提供 `worker_id`、claimed/succeeded/failed、最近 job 和错误类型，绝不输出 job payload。Provider job 必须通过 `LUMENX_CREDENTIAL_PROXY_URL` 访问凭证代理；队列只携带 provider、scope 等非 secret 字段，代理返回 opaque `credential_ref`。未配置代理时 provider job fail-closed；`LUMENX_CREDENTIAL_PROXY_TOKEN` 只用于 Worker 到代理的认证。
