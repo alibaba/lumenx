@@ -270,3 +270,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：凭证代理 health/issue/resolve 真实容器 smoke 通过；Prometheus target 为 `up`；OTel Collector debug exporter 收到 Worker 指标；PostgreSQL 240-job/12-worker/24-tenant 压力通过，0 duplicate、每租户 10 个。
 - 证据边界：当前代理的本地配置适配器从环境变量读取 secret，生产云部署必须替换为 Secret Manager/KMS；OTel 当前使用 debug exporter，告警、持久化远端 exporter、HA 和故障演练仍待接入。
+
+## 2026-11-01 生产门禁、告警规则与远端 OTLP 模板切片
+
+凭证代理增加 `SecretProvider` 抽象和 `/readyz`：缺少 Worker/Core token 时拒绝 ready；本地环境适配器仍明确标记为 Secret Manager/KMS 的替换点。新增 `verify_skill_production.py`，检查代理 readiness、Worker Prometheus 指标、Prometheus target 和 OTel Collector 可达性；云端必须提供非默认 token，不能使用 `--allow-local`。Prometheus 增加 Worker down/失败率告警，OTel 增加远端 OTLP HTTP 配置模板。
+
+- 责任文件：`src/apps/platform/credential_proxy_service.py`、`scripts/verify_skill_production.py`、`deploy/prometheus/alerts.yml`、`deploy/otel/otel-collector-remote.yml`、相关测试与文档。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：`scripts/verify_skill_production.py --allow-local` 返回 proxy ready、Worker metrics up、Prometheus target up、OTel reachable；凭证代理 readiness、监控配置和 42 项 Skill/平台/Atelier 测试通过。
+- 证据边界：SecretProvider 真实云厂商实现、远端 OTLP 账号、告警通知渠道、云端 HA/弹性和故障演练仍需部署参数与现场执行。

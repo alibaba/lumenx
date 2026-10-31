@@ -1,0 +1,18 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: lumenx-skill-worker
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["skill-worker:9100"]
+exporters:
+  otlphttp:
+    endpoint: ${env:OTEL_EXPORTER_OTLP_ENDPOINT}
+    headers:
+      authorization: ${env:OTEL_EXPORTER_OTLP_AUTH}
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [otlphttp]

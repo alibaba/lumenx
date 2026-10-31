@@ -13,7 +13,7 @@ import os
 import secrets
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
@@ -26,25 +26,42 @@ class IssueRequest(BaseModel):
     scope: str = Field(min_length=1, max_length=128)
 
 
-class CredentialProxyStore:
-    def __init__(self, secrets_by_key: dict[str, str], *, ttl_seconds: int = 300):
+class SecretProvider(Protocol):
+    def get(self, provider: str, scope: str) -> str: ...
+
+
+class EnvironmentSecretProvider:
+    """Local adapter; production should replace this with Secret Manager/KMS."""
+
+    def __init__(self, secrets_by_key: dict[str, str]):
         self.secrets_by_key = secrets_by_key
+
+    def get(self, provider: str, scope: str) -> str:
+        key = f"{provider}:{scope}"
+        value = self.secrets_by_key.get(key)
+        if not isinstance(value, str) or not value:
+            raise KeyError(key)
+        return value
+
+
+class CredentialProxyStore:
+    def __init__(self, secrets_by_key: dict[str, str] | None = None, *, provider: SecretProvider | None = None, ttl_seconds: int = 300):
+        self.provider = provider or EnvironmentSecretProvider(secrets_by_key or {})
         self.ttl_seconds = ttl_seconds
-        self.refs: dict[str, tuple[str, float]] = {}
+        self.refs: dict[str, tuple[str, str, float]] = {}
 
     def issue(self, provider: str, scope: str) -> str:
         key = f"{provider}:{scope}"
-        if key not in self.secrets_by_key:
-            raise KeyError(key)
+        self.provider.get(provider, scope)
         ref = f"credref_{secrets.token_urlsafe(24)}"
-        self.refs[hashlib.sha256(ref.encode()).hexdigest()] = (key, time.time() + self.ttl_seconds)
+        self.refs[hashlib.sha256(ref.encode()).hexdigest()] = (provider, scope, time.time() + self.ttl_seconds)
         return ref
 
     def resolve(self, ref: str) -> str:
         entry = self.refs.get(hashlib.sha256(ref.encode()).hexdigest())
-        if entry is None or entry[1] <= time.time():
+        if entry is None or entry[2] <= time.time():
             raise KeyError("expired credential reference")
-        return self.secrets_by_key[entry[0]]
+        return self.provider.get(entry[0], entry[1])
 
 
 def _bearer(value: str | None, expected: str | None) -> None:
@@ -63,6 +80,12 @@ def create_app(store: CredentialProxyStore | None = None, *, worker_token: str |
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/readyz")
+    def readyz() -> dict[str, str]:
+        if not worker_token or not core_token:
+            raise HTTPException(503, detail={"code": "credential_proxy_tokens_missing"})
+        return {"status": "ready"}
 
     @app.post("/v1/credentials/issue")
     def issue(body: IssueRequest, authorization: str | None = Header(default=None)) -> dict[str, str]:

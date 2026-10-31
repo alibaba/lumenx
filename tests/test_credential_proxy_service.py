@@ -29,4 +29,10 @@ def test_credential_proxy_rejects_missing_secret_and_wrong_worker_token():
     app = create_app(CredentialProxyStore({"dashscope:tenant-1": "super-secret"}), worker_token="local-worker-token")
     client = TestClient(app)
     assert client.get("/healthz").json() == {"status": "ok"}
+    assert client.get("/readyz").json() == {"status": "ready"}
     assert client.post("/v1/credentials/issue", json={"worker_id": "w", "job_id": "j", "provider": "dashscope", "scope": "tenant-1"}).status_code == 401
+
+
+def test_credential_proxy_readiness_fails_without_tokens():
+    app = create_app(CredentialProxyStore({"dashscope:tenant-1": "super-secret"}), worker_token=None, core_token=None)
+    assert TestClient(app).get("/readyz").status_code == 503

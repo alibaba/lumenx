@@ -43,6 +43,7 @@
 | Central queue adapters and isolated runner | `src/apps/platform/central_queue.py`; `src/apps/platform/skill_worker_main.py`; `scripts/verify_live_skill_queue.py` | `tests/test_central_skill_queue.py`; `tests/test_skill_worker_main.py`; Redis XADD/XPENDING smoke; PostgreSQL 24-job/6-worker smoke | Fake runner、Redis live consume/ack、PostgreSQL 真实 enqueue/claim/ack 与并发去重通过；Provider handler 仍为 dry-run |
 | Worker monitoring and credential proxy boundary | `src/apps/platform/worker_runtime.py`; `src/apps/platform/credential_proxy_service.py`; Compose monitoring profile | `tests/test_worker_runtime.py`; `tests/test_credential_proxy_service.py`; Worker `/metrics`; Prometheus target; OTel Collector logs | 结构化无 payload 指标、真实代理 issue/resolve、Prometheus scrape 和 OTel scrape 通过；生产 Secret Manager、轮换、告警路由待接入 |
 | Multi-user queue pressure and production profile | `scripts/verify_live_skill_queue.py`; `docker-compose.yml` | PostgreSQL 240-job/12-worker/24-tenant smoke; `docker compose --profile skill-production --profile monitoring up` | 240/240 claim，0 duplicate，每租户 10 个；本机生产 profile 通过，云端 HA/弹性/故障演练待补 |
+| Production readiness gate and alerting | `scripts/verify_skill_production.py`; `deploy/prometheus/alerts.yml`; `deploy/otel/otel-collector-remote.yml` | proxy/metrics/Prometheus/OTel readiness smoke | 本机门禁和告警/远端 OTLP 配置模板通过；云端 Secret Manager、远端 exporter 和故障演练需部署参数 |
 
 验证命令：
 

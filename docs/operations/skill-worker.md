@@ -25,3 +25,5 @@ Worker 监控当前以结构化日志提供 `worker_id`、claimed/succeeded/fail
 当前生产配方新增 `credential-proxy`、Prometheus 和 OTel Collector：凭证代理监听 loopback `17178`，只允许 Worker issue 和 Core resolve 两种带 bearer token 的路径，引用默认 300 秒过期；Worker `/metrics` 监听 `9100`，Prometheus/OTel 通过容器网络抓取。示例配置使用环境变量注入，生产环境应替换为云 Secret Manager/KMS，不把真实 key 写进 Compose 或 job。
 
 2026-11-01 现场验收：凭证代理 `/healthz`、issue/resolve 通过；Prometheus target `lumenx-skill-worker` 为 `up`；OTel Collector 日志确认收到 9 个 Worker 指标数据点。多用户压力脚本运行 240 个任务、12 个并发 Worker、24 个租户，`duplicates=0`、`unique=240`，每租户 10 个任务。
+
+部署前可运行 `python scripts/verify_skill_production.py --allow-local` 做本机门禁；云端不应使用 `--allow-local`，而应提供非默认 Worker/Core token。`deploy/prometheus/alerts.yml` 提供 Worker target down 和失败率告警；`deploy/otel/otel-collector-remote.yml` 是远端 OTLP HTTP 模板，通过 `OTEL_EXPORTER_OTLP_ENDPOINT` 与 `OTEL_EXPORTER_OTLP_AUTH` 注入目标和认证。

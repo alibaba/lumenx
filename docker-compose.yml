@@ -102,6 +102,7 @@ services:
     profiles: ["skill-production", "monitoring"]
     volumes:
       - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - lumenx_prometheus_data:/prometheus
     ports:
       - "127.0.0.1:19090:9090"

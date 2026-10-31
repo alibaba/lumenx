@@ -1,0 +1,17 @@
+groups:
+  - name: lumenx-skill-worker
+    rules:
+      - alert: LumenXSkillWorkerDown
+        expr: up{job="lumenx-skill-worker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: LumenX Skill Worker metrics target is down
+      - alert: LumenXSkillWorkerFailures
+        expr: rate(lumenx_skill_worker_failed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: LumenX Skill Worker failure rate is elevated
