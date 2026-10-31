@@ -31,3 +31,5 @@ Worker 监控当前以结构化日志提供 `worker_id`、claimed/succeeded/fail
 云端凭证建议使用 Docker secret override：准备只允许代理用户读取的 JSON 文件（键格式为 `provider:scope`），设置 `LUMENX_CREDENTIALS_FILE` 后使用 `-f deploy/credential-proxy-production.compose.yml`；该 override 将 provider 切换为 `file`，每次 resolve 重新读取文件，支持轮换而不把 key 写入 Compose 环境或镜像。
 
 云端服务使用 `deploy/skill-production.compose.yml` 关闭宿主端口并声明 Worker/代理双副本与容器健康检查；在支持 Compose deploy 或 ECS/Kubernetes 转换器的环境中由平台兑现副本数。Redis pending recovery 使用 `XAUTOCLAIM`，Worker 崩溃后可由替代 Worker 接管未 ack 任务；可用 `scripts/verify_redis_worker_recovery.py` 做现场演练。
+
+Kubernetes/ECS 转换前先运行 `python scripts/validate_skill_k8s.py`。`deploy/k8s/skill-runtime.yaml` 使用双副本、PDB、非 root、只读根文件系统、drop ALL capabilities、无 ServiceAccount token 自动挂载、内部 metrics Service 和独立 provider Secret 挂载；镜像名和 Secret 名称仍需替换为云环境实际资源。

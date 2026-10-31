@@ -1,0 +1,175 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: lumenx-skill-runtime
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lumenx-skill-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lumenx-skill-worker
+  template:
+    metadata:
+      labels:
+        app: lumenx-skill-worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: lumenx-skill-runtime
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: skill-worker
+          image: ghcr.io/REPLACE/lumenx-skill-worker:REPLACE_TAG
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: lumenx-worker-runtime
+          env:
+            - name: LUMENX_SKILL_QUEUE_BACKEND
+              value: redis
+            - name: LUMENX_SKILL_QUEUE_NAME
+              value: lumenx:skill-runs
+            - name: LUMENX_METRICS_PORT
+              value: "9100"
+            - name: LUMENX_CREDENTIAL_PROXY_URL
+              value: http://lumenx-credential-proxy:17178/v1/credentials/issue
+          ports:
+            - name: metrics
+              containerPort: 9100
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 1000m, memory: 512Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lumenx-skill-worker
+spec:
+  selector:
+    app: lumenx-skill-worker
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: metrics
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: lumenx-skill-worker
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: lumenx-skill-worker
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lumenx-credential-proxy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lumenx-credential-proxy
+  template:
+    metadata:
+      labels:
+        app: lumenx-credential-proxy
+    spec:
+      serviceAccountName: lumenx-skill-runtime
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: credential-proxy
+          image: ghcr.io/REPLACE/lumenx-credential-proxy:REPLACE_TAG
+          envFrom:
+            - secretRef:
+                name: lumenx-credential-proxy-runtime
+          env:
+            - name: LUMENX_CREDENTIAL_PROXY_PROVIDER
+              value: file
+            - name: LUMENX_CREDENTIAL_PROXY_SECRET_FILE
+              value: /run/secrets/lumenx-credentials.json
+            - name: LUMENX_CREDENTIAL_PROXY_PORT
+              value: "17178"
+          ports:
+            - name: http
+              containerPort: 17178
+          volumeMounts:
+            - name: credentials
+              mountPath: /run/secrets/lumenx-credentials.json
+              subPath: credentials.json
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      volumes:
+        - name: credentials
+          secret:
+            secretName: lumenx-provider-credentials
+            defaultMode: 0400
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lumenx-credential-proxy
+spec:
+  selector:
+    app: lumenx-credential-proxy
+  ports:
+    - name: http
+      port: 17178
+      targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: lumenx-credential-proxy
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: lumenx-credential-proxy

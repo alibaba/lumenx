@@ -297,3 +297,12 @@ Redis Streams claim 先用 `XAUTOCLAIM` 接管超过 idle threshold 的 pending 
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：Redis pending recovery 现场 smoke（替代 Worker 接管并 ack）、15 项队列/凭证/Worker 测试和云端 Compose override config 通过。
 - 证据边界：云编排器副本调度、跨 AZ Redis/PostgreSQL、滚动升级和故障演练仍未在真实云环境执行。
+
+## 2026-11-01 Kubernetes/ECS 安全部署模板切片
+
+新增 `deploy/k8s/skill-runtime.yaml` 和 `scripts/validate_skill_k8s.py`，将 Worker 与 credential-proxy 的云部署约束显式化：双副本、PDB、非 root、RuntimeDefault seccomp、只读根文件系统、drop ALL capabilities、禁止自动挂载 ServiceAccount token、内部 metrics/service、provider Secret 挂载与健康检查。静态安全门禁已通过。
+
+- 责任文件：`deploy/k8s/skill-runtime.yaml`、`scripts/validate_skill_k8s.py`、相关运行文档与测试矩阵。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：Kubernetes manifest safety gate、Redis recovery、队列/Worker/凭证测试通过；未连接真实 Kubernetes/ECS 集群。
+- 证据边界：镜像仓库、Secret/KMS CSI、Ingress、跨 AZ 数据层、滚动升级和真实云故障演练仍需目标环境执行。
