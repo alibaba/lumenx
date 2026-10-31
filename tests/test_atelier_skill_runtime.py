@@ -10,6 +10,7 @@ from src.apps.atelier.skill_runtime import (
     resolve_runtime_skill_snapshot,
     validate_skill_manifest_sandbox,
 )
+from src.apps.atelier.agent_loop_api import _platform_manifest
 
 
 def platform_manifest():
@@ -38,6 +39,27 @@ def test_runtime_bridge_prefers_platform_manifest_and_falls_back_to_registry():
     assert fallback.name == "story-scout"
     with pytest.raises(ValueError, match="name_mismatch"):
         resolve_runtime_skill_snapshot("other", platform_manifest=manifest)
+
+
+def test_application_root_platform_context_resolves_authorized_manifest():
+    class State:
+        platform_user = {"id": "u1"}
+
+    class Platform:
+        def resolve_skill_version(self, actor, name, *, project_id):
+            assert actor["id"] == "u1"
+            assert project_id == "p1"
+            return {"manifest_json": json.dumps(platform_manifest())}
+
+    class App:
+        state = State()
+    App.state.platform_service = Platform()
+
+    class Request:
+        app = App()
+        state = State()
+
+    assert _platform_manifest(Request(), "story-scout", "p1")["name"] == "story-scout"
 
 
 def test_sandbox_rejects_scripts_and_unsupported_tools():

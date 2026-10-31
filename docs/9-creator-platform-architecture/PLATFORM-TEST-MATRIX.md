@@ -33,6 +33,8 @@
 | Video admission Skill snapshot binding | `src/apps/atelier/generation_admission.py`；`generation_ledger.py` | `tests/test_atelier_generation_admission.py` | 当前切片通过；绑定写入 candidate projection 和 request fingerprint |
 | Generation attempt Skill binding persistence | `src/apps/atelier/models.py`；Atelier storage readback | `tests/test_atelier_generation_admission.py`；`tests/test_atelier_agent_loop_storage.py` | 当前切片通过 |
 | Platform-to-Atelier runtime resolver | `src/apps/atelier/skill_runtime.py`；`agent_loop.py` | `tests/test_atelier_skill_runtime.py` | 当前切片通过；由组合根注入平台 manifest |
+| 真实请求上下文 Skill bridge | `src/apps/atelier/agent_loop_api.py`；platform middleware actor | `tests/test_atelier_skill_runtime.py` | 当前切片通过；用户/项目绑定按认证 actor 解析 |
+| 隔离 Skill worker job contract | `src/apps/atelier/skill_worker_contract.py` | `tests/test_atelier_skill_worker_contract.py` | 当前为合同/静态边界，worker 集群未实现 |
 
 验证命令：
 

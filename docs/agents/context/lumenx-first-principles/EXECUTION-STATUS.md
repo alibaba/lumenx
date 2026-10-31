@@ -189,3 +189,12 @@ LLM Adapter 现在读取请求级算力计费上下文。平台积分模式在 P
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：Atelier Skill/runtime、generation admission、agent loop storage、scope/product Skill 测试（55 passed）；平台相关 54 项测试仍保持通过；前端未改运行代码，typecheck/build 基线保持通过。
 - 证据边界：平台 manifest resolver 仍由应用组合根注入；尚未实现平台服务到 Atelier 的真实请求上下文接线、隔离 worker、队列恢复和反馈优化。
+
+## 2026-10-31 真实请求上下文桥接与隔离 Worker 合同切片
+
+Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware 获取认证 actor，按 `skill_name + project_id` 调用平台 Skill resolver，将受控 manifest 转为 Atelier snapshot 后启动 loop；未认证或无绑定时回退系统 registry。新增 `skill_worker_contract.py` 定义未来隔离 worker 的无网络、无凭证、无脚本 job 合同，并通过测试验证禁止字段和 Skill binding。
+
+- 责任文件：`src/apps/atelier/agent_loop.py`、`src/apps/atelier/agent_loop_api.py`、`src/apps/atelier/skill_worker_contract.py`、`tests/test_atelier_skill_runtime.py`、`tests/test_atelier_skill_worker_contract.py`、`docs/operations/skill-worker.md`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：新增桥接/worker 测试与 Agent storage/generation tests（53 passed）；平台 54 项测试保持通过；前端 typecheck 基线保持通过。
+- 证据边界：当前只完成 API 请求上下文桥接和 worker 消息合同；未启动队列、隔离容器、独立凭证代理或多用户生产 worker。

@@ -151,10 +151,10 @@ class AtelierAgentLoopService:
         self._product_skill_resolver = product_skill_resolver or resolve_product_skill_snapshot
         self._platform_skill_resolver = platform_skill_resolver
 
-    def start_loop(self, project_id: str, command: StartAgentLoopCommand) -> AgentLoopAck:
-        return _drain_ack(self.iter_start_loop(project_id, command))
+    def start_loop(self, project_id: str, command: StartAgentLoopCommand, *, platform_manifest: Mapping[str, Any] | None = None) -> AgentLoopAck:
+        return _drain_ack(self.iter_start_loop(project_id, command, platform_manifest=platform_manifest))
 
-    def iter_start_loop(self, project_id: str, command: StartAgentLoopCommand, *, cancel_event: Event | None = None) -> Iterator[AgentLoopEvent]:
+    def iter_start_loop(self, project_id: str, command: StartAgentLoopCommand, *, cancel_event: Event | None = None, platform_manifest: Mapping[str, Any] | None = None) -> Iterator[AgentLoopEvent]:
         if command.planner not in {"deterministic_core", "model_adapter"}:
             raise ValueError("unsupported planner for local Agent loop")
         if _cancelled(cancel_event):
@@ -170,10 +170,12 @@ class AtelierAgentLoopService:
         if command.skill_name is not None:
             if command.planner != "model_adapter":
                 raise ValueError("atelier_agent_loop_skill_requires_model_adapter")
-            platform_manifest = self._platform_skill_resolver(command.skill_name) if self._platform_skill_resolver is not None else None
+            resolved_manifest = platform_manifest
+            if resolved_manifest is None and self._platform_skill_resolver is not None:
+                resolved_manifest = self._platform_skill_resolver(command.skill_name)
             resolved_skill_snapshot = resolve_runtime_skill_snapshot(
                 command.skill_name,
-                platform_manifest=platform_manifest,
+                platform_manifest=resolved_manifest,
                 fallback_resolver=self._product_skill_resolver,
             )
             project_for_policy = self.storage.get_project(project_id)
