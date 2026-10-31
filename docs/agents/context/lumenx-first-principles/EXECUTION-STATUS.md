@@ -72,3 +72,11 @@
 ## 记录规则
 
 每次验证保留固定提交或源码清单、工具版本、实际命令、收集/通过/失败/跳过数量、外部替身和临时数据范围。运行失败与修复后的结果分别保留；构建、浏览器、安装包和真实模型分别判断。动态结果放在对应 PR Checks/CI artifacts 及注明版本的补充记录中；修改运行代码后，受影响结论重新验证。不要为复制一次运行数字而反复修改本文件，也不要让文档结构检查关闭产品验收。
+
+## 2026-10-31 创作者平台 Gate 0 切片
+
+平台方案位于 `docs/9-creator-platform-architecture/`，当前从 Gate 0 开始执行。首个切片在独立分支 `platform-gate0` 建立了平台访问边界 ADR、数据/API 合同和无状态 Pydantic 契约类型；没有装配平台路由、创建平台数据库或开放真实支付。
+
+- 责任文件：`docs/9-creator-platform-architecture/adr/0001-platform-access-boundary.md`、`PLATFORM-DATA-CONTRACT.md`、`PLATFORM-TEST-MATRIX.md`、`src/apps/platform/contracts.py`、`tests/test_platform_contracts.py`。
+- 验证：`.venv/bin/python -S scripts/run_tests_isolated.py -- tests/test_platform_contracts.py -q`（3 passed）；`python3 docs/agents/tools/check_lumenx_refactor_docs.py`（PASS）。
+- 证据边界：依赖安装使用隔离 `.venv`；该结果只覆盖合同类型，不代表认证、HTTP、artifact resolver、数据库迁移或商业结算已通过。
