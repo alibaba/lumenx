@@ -118,7 +118,9 @@ def test_skill_run_snapshot_is_idempotent_and_user_isolated(tmp_path):
     first = svc.create_skill_run(alice, project_id="p1", binding=binding, input_hash="c" * 64)
     replay = svc.create_skill_run(alice, project_id="p1", binding=binding)
     assert replay["id"] == first["id"] and replay["idempotent_replay"]
-    assert svc.update_skill_run(alice, first["id"], status="succeeded", output_hash="d" * 64)["status"] == "succeeded"
+    claim = svc.claim_skill_run(alice, first["id"], worker_id="worker-1", lease_seconds=60)
+    assert claim["status"] == "running"
+    assert svc.update_skill_run(alice, first["id"], status="succeeded", output_hash="d" * 64, worker_id="worker-1")["status"] == "succeeded"
     assert svc.list_skill_runs(alice)[0]["status"] == "succeeded"
     try:
         svc.update_skill_run(bob, first["id"], status="failed", error_code="x")
@@ -126,6 +128,24 @@ def test_skill_run_snapshot_is_idempotent_and_user_isolated(tmp_path):
         assert exc.code == "skill_run_forbidden"
     else:
         raise AssertionError("skill runs crossed user boundary")
+
+
+def test_skill_run_claim_is_atomic_and_expired_lease_is_requeued(tmp_path):
+    svc = service(tmp_path)
+    alice = svc.register("alice", "a" * 12)
+    binding = {"skill_name": "story-scout", "skill_version": "1.0.0", "skill_content_hash": "a" * 64, "request_fingerprint": "c" * 64}
+    run = svc.create_skill_run(alice, project_id="p1", binding=binding)
+    claimed = svc.claim_skill_run(alice, run["id"], worker_id="worker-1", lease_seconds=1)
+    try:
+        svc.claim_skill_run(alice, run["id"], worker_id="worker-2", lease_seconds=1)
+    except PlatformError as exc:
+        assert exc.code == "skill_run_not_claimable"
+    else:
+        raise AssertionError("active lease was claimed twice")
+    recovered = svc.recover_expired_skill_runs(alice, now_value="9999-01-01T00:00:00+00:00")
+    assert recovered == 1
+    again = svc.claim_skill_run(alice, run["id"], worker_id="worker-2", lease_seconds=60)
+    assert again["attempt_count"] == 2
 
 
 def test_user_credentials_are_encrypted_isolated_and_rotatable(tmp_path):

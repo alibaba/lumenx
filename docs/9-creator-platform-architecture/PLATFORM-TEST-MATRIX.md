@@ -37,6 +37,7 @@
 | 隔离 Skill worker job contract | `src/apps/atelier/skill_worker_contract.py` | `tests/test_atelier_skill_worker_contract.py` | 当前为合同/静态边界，worker 集群未实现 |
 | Skill run snapshot ledger | `platform_skill_runs` / `PlatformService` | `tests/test_platform_db.py`; `tests/test_platform_service.py` | 当前切片通过；持久化运行账本已建立 |
 | Skill run API | `/api/platform/skills/runs` | 待新增 HTTP test | 当前已接线；Worker claim 尚待实现 |
+| Skill run atomic claim / lease recovery | `PlatformService.claim_skill_run` / `recover_expired_skill_runs` | `tests/test_platform_service.py` | 当前切片通过；同一活跃租约不可重复 claim |
 
 验证命令：
 

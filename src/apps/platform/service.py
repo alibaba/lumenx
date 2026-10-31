@@ -288,11 +288,36 @@ class PlatformService:
             existing = c.execute("SELECT id,status FROM platform_skill_runs WHERE user_id=? AND request_fingerprint=?", (actor["id"], binding["request_fingerprint"])).fetchone()
             if existing:
                 return {"id": existing[0], "status": existing[1], "idempotent_replay": True}
-            c.execute("INSERT INTO platform_skill_runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (run_id, actor["id"], project_id, binding["skill_name"], binding["skill_version"], binding["skill_content_hash"], binding["request_fingerprint"], "queued", input_hash, None, None, timestamp, timestamp))
+            c.execute("INSERT INTO platform_skill_runs (id,user_id,project_id,skill_name,skill_version,skill_content_hash,request_fingerprint,status,input_hash,output_hash,error_code,created_at,updated_at,lease_owner,lease_expires_at,attempt_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (run_id, actor["id"], project_id, binding["skill_name"], binding["skill_version"], binding["skill_content_hash"], binding["request_fingerprint"], "queued", input_hash, None, None, timestamp, timestamp, None, None, 0))
             self._audit(c, actor["id"], "skill.run.created", "skill_run", run_id, {"project_id": project_id, "skill_name": binding["skill_name"], "skill_version": binding["skill_version"]})
         return {"id": run_id, "status": "queued", "idempotent_replay": False}
 
-    def update_skill_run(self, actor: dict[str, Any], run_id: str, *, status: str, output_hash: str | None = None, error_code: str | None = None) -> dict[str, Any]:
+    def claim_skill_run(self, actor: dict[str, Any], run_id: str, *, worker_id: str, lease_seconds: int = 300) -> dict[str, Any]:
+        if not worker_id or lease_seconds <= 0 or lease_seconds > 3600:
+            raise PlatformError("invalid_skill_lease", "Worker lease is invalid")
+        timestamp = now(); expires = (datetime.now(timezone.utc) + timedelta(seconds=lease_seconds)).isoformat()
+        with connect(self.path) as c:
+            row = c.execute("SELECT user_id,status,lease_owner,lease_expires_at,attempt_count FROM platform_skill_runs WHERE id=?", (run_id,)).fetchone()
+            if not row: raise PlatformError("skill_run_not_found", "Skill run not found", 404)
+            if row[0] != actor.get("id"): raise PlatformError("skill_run_forbidden", "Skill run belongs to another user", 403)
+            expired = row[1] == "running" and row[3] is not None and datetime.fromisoformat(row[3]) <= datetime.now(timezone.utc)
+            if row[1] not in {"queued", "running"} or (row[1] == "running" and not expired):
+                raise PlatformError("skill_run_not_claimable", "Skill run is not claimable", 409)
+            attempt = int(row[4]) + 1
+            c.execute("UPDATE platform_skill_runs SET status='running',lease_owner=?,lease_expires_at=?,attempt_count=?,updated_at=? WHERE id=?", (worker_id, expires, attempt, timestamp, run_id))
+            self._audit(c, actor.get("id"), "skill.run.claimed", "skill_run", run_id, {"worker_id": worker_id, "attempt": attempt, "lease_expires_at": expires})
+        return {"id": run_id, "status": "running", "lease_owner": worker_id, "lease_expires_at": expires, "attempt_count": attempt}
+
+    def recover_expired_skill_runs(self, actor: dict[str, Any], *, now_value: str | None = None) -> int:
+        cutoff = now_value or now()
+        with connect(self.path) as c:
+            rows = c.execute("SELECT id FROM platform_skill_runs WHERE user_id=? AND status='running' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?", (actor.get("id"), cutoff)).fetchall()
+            for (run_id,) in rows:
+                c.execute("UPDATE platform_skill_runs SET status='queued',lease_owner=NULL,lease_expires_at=NULL,updated_at=? WHERE id=?", (cutoff, run_id))
+                self._audit(c, actor.get("id"), "skill.run.lease_expired", "skill_run", run_id, {"requeued_at": cutoff})
+        return len(rows)
+
+    def update_skill_run(self, actor: dict[str, Any], run_id: str, *, status: str, output_hash: str | None = None, error_code: str | None = None, worker_id: str | None = None) -> dict[str, Any]:
         if status not in {"queued", "running", "succeeded", "failed", "cancelled"}:
             raise PlatformError("invalid_skill_run_status", "Skill run status is invalid")
         timestamp = now()
@@ -300,7 +325,10 @@ class PlatformService:
             row = c.execute("SELECT user_id,status FROM platform_skill_runs WHERE id=?", (run_id,)).fetchone()
             if not row: raise PlatformError("skill_run_not_found", "Skill run not found", 404)
             if row[0] != actor.get("id"): raise PlatformError("skill_run_forbidden", "Skill run belongs to another user", 403)
-            c.execute("UPDATE platform_skill_runs SET status=?,output_hash=?,error_code=?,updated_at=? WHERE id=?", (status, output_hash, error_code, timestamp, run_id))
+            owner = c.execute("SELECT lease_owner FROM platform_skill_runs WHERE id=?", (run_id,)).fetchone()[0]
+            if row[1] == "running" and owner != worker_id:
+                raise PlatformError("skill_run_lease_required", "Worker lease is required", 409)
+            c.execute("UPDATE platform_skill_runs SET status=?,output_hash=?,error_code=?,lease_owner=NULL,lease_expires_at=NULL,updated_at=? WHERE id=?", (status, output_hash, error_code, timestamp, run_id))
             self._audit(c, actor.get("id"), "skill.run.updated", "skill_run", run_id, {"from": row[1], "to": status})
         return {"id": run_id, "status": status, "output_hash": output_hash, "error_code": error_code}
 

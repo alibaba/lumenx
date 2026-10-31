@@ -86,6 +86,10 @@ class SkillRunUpdateIn(BaseModel):
     status: str
     output_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     error_code: str | None = None
+    worker_id: str | None = None
+class SkillRunClaimIn(BaseModel):
+    worker_id: str = Field(min_length=1, max_length=128)
+    lease_seconds: int = Field(default=300, gt=0, le=3600)
 
 
 @router.post("/auth/register")
@@ -134,7 +138,15 @@ def create_skill_run(body: SkillRunIn, user=Depends(current_user), svc: Platform
 
 @router.post("/skills/runs/{run_id}")
 def update_skill_run(run_id: str, body: SkillRunUpdateIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
-    return handle(lambda: svc.update_skill_run(user, run_id, status=body.status, output_hash=body.output_hash, error_code=body.error_code))
+    return handle(lambda: svc.update_skill_run(user, run_id, status=body.status, output_hash=body.output_hash, error_code=body.error_code, worker_id=body.worker_id))
+
+@router.post("/skills/runs/{run_id}/claim")
+def claim_skill_run(run_id: str, body: SkillRunClaimIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.claim_skill_run(user, run_id, worker_id=body.worker_id, lease_seconds=body.lease_seconds))
+
+@router.post("/skills/runs/recover-expired")
+def recover_expired_skill_runs(user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return {"recovered": svc.recover_expired_skill_runs(user)}
 
 @router.get("/credentials")
 def credentials(user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.list_credentials(user)

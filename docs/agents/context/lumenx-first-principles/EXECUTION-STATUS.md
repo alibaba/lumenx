@@ -207,3 +207,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：平台 Skill 迁移、服务、API 和 Atelier 相关测试将在本切片完成后统一运行。
 - 证据边界：尚未实现 queued→running 原子 claim、租约、独立 Worker、队列恢复或多用户生产调度。
+
+## 2026-10-31 Skill run atomic claim 与租约恢复切片
+
+新增 `009_skill_run_leases.sql`，为 Skill run ledger 增加 `lease_owner`、`lease_expires_at` 和 `attempt_count`。平台服务支持原子 claim、活跃租约冲突、过期回收和带 worker 身份的完成更新；API 增加 claim/recover 入口。该切片先验证单写者事务和恢复语义，尚未接独立队列或容器 Worker。
+
+- 责任文件：`src/apps/platform/migrations/009_skill_run_leases.sql`、`src/apps/platform/service.py`、`src/apps/platform/api.py`、平台数据库/服务测试。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：平台 Skill 运行账本、claim、租约和恢复测试将在本切片完成后统一运行。
+- 证据边界：当前 Worker 身份是受控 API 字段，尚未实现独立 Worker 凭证、队列租约心跳或跨进程生产恢复。

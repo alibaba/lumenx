@@ -93,6 +93,8 @@ skill_feedback     采纳/拒绝、QC、返修、成本和用户备注
 
 `008_skill_runs.sql` 建立运行快照账本。运行记录按用户和 request fingerprint 幂等，保存项目、Skill 版本/哈希、输入/输出哈希、状态和错误；更新运行记录必须再次核验用户归属。该账本是未来队列恢复和 Worker claim 的事实源。
 
+`009_skill_run_leases.sql` 增加 `lease_owner`、`lease_expires_at` 和 `attempt_count`。claim 使用单写者事务，只允许 queued 或已过期 running 记录进入 running；活跃租约不能被第二个 Worker 接管。完成/失败必须携带匹配的 worker id，过期记录可回收到 queued。
+
 ## 9. 云端部署级别
 
 ### 9.1 单机 MVP
