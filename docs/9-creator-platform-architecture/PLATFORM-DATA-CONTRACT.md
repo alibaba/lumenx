@@ -91,6 +91,8 @@ skill_feedback     采纳/拒绝、QC、返修、成本和用户备注
 
 真实请求上下文由应用组合根的 platform middleware 解析 Bearer actor，Atelier loop HTTP route 使用该 actor、项目 ID 和 Skill 名称调用平台 resolver，再把返回的受控 manifest 转成 snapshot。未认证或无绑定时只能使用系统 registry；平台数据库不直接进入 Atelier domain。
 
+`008_skill_runs.sql` 建立运行快照账本。运行记录按用户和 request fingerprint 幂等，保存项目、Skill 版本/哈希、输入/输出哈希、状态和错误；更新运行记录必须再次核验用户归属。该账本是未来队列恢复和 Worker claim 的事实源。
+
 ## 9. 云端部署级别
 
 ### 9.1 单机 MVP

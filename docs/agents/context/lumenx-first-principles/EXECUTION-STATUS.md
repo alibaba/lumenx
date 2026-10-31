@@ -198,3 +198,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：新增桥接/worker 测试与 Agent storage/generation tests（53 passed）；平台 54 项测试保持通过；前端 typecheck 基线保持通过。
 - 证据边界：当前只完成 API 请求上下文桥接和 worker 消息合同；未启动队列、隔离容器、独立凭证代理或多用户生产 worker。
+
+## 2026-10-31 Skill run snapshot ledger 切片
+
+新增 `008_skill_runs.sql`、平台运行账本服务和 `/api/platform/skills/runs` 入口。运行记录按用户与 request fingerprint 幂等，保存项目、Skill 版本/内容哈希、输入/输出哈希、状态和错误；用户隔离更新已测试。该账本为后续 Worker claim、租约和重启恢复提供事实源。
+
+- 责任文件：`src/apps/platform/migrations/008_skill_runs.sql`、`src/apps/platform/service.py`、`src/apps/platform/api.py`、平台数据库/服务测试。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：平台 Skill 迁移、服务、API 和 Atelier 相关测试将在本切片完成后统一运行。
+- 证据边界：尚未实现 queued→running 原子 claim、租约、独立 Worker、队列恢复或多用户生产调度。

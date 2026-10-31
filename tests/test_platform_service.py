@@ -110,6 +110,24 @@ def test_skill_manifest_rejects_executable_fields_and_bad_hash(tmp_path):
         raise AssertionError("executable Skill fields must be rejected")
 
 
+def test_skill_run_snapshot_is_idempotent_and_user_isolated(tmp_path):
+    svc = service(tmp_path)
+    alice = svc.register("alice", "a" * 12)
+    bob = svc.register("bob", "b" * 12)
+    binding = {"skill_name": "story-scout", "skill_version": "1.0.0", "skill_content_hash": "a" * 64, "request_fingerprint": "b" * 64}
+    first = svc.create_skill_run(alice, project_id="p1", binding=binding, input_hash="c" * 64)
+    replay = svc.create_skill_run(alice, project_id="p1", binding=binding)
+    assert replay["id"] == first["id"] and replay["idempotent_replay"]
+    assert svc.update_skill_run(alice, first["id"], status="succeeded", output_hash="d" * 64)["status"] == "succeeded"
+    assert svc.list_skill_runs(alice)[0]["status"] == "succeeded"
+    try:
+        svc.update_skill_run(bob, first["id"], status="failed", error_code="x")
+    except PlatformError as exc:
+        assert exc.code == "skill_run_forbidden"
+    else:
+        raise AssertionError("skill runs crossed user boundary")
+
+
 def test_user_credentials_are_encrypted_isolated_and_rotatable(tmp_path):
     svc = credential_service(tmp_path)
     alice = svc.register("alice", "a" * 12)

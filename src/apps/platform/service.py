@@ -277,6 +277,40 @@ class PlatformService:
         keys = ("id", "name", "version", "scope", "owner_id", "project_id", "parent_version", "content_hash", "status", "created_at")
         return [dict(zip(keys, row)) for row in rows]
 
+    def create_skill_run(self, actor: dict[str, Any], *, project_id: str, binding: dict[str, Any], input_hash: str | None = None) -> dict[str, Any]:
+        required = ("skill_name", "skill_version", "skill_content_hash", "request_fingerprint")
+        if any(not isinstance(binding.get(key), str) or not binding[key] for key in required):
+            raise PlatformError("invalid_skill_binding", "Skill run binding is incomplete")
+        if any(len(binding[key]) != 64 for key in ("skill_content_hash", "request_fingerprint")):
+            raise PlatformError("invalid_skill_binding", "Skill run hashes are invalid")
+        run_id, timestamp = uid(), now()
+        with connect(self.path) as c:
+            existing = c.execute("SELECT id,status FROM platform_skill_runs WHERE user_id=? AND request_fingerprint=?", (actor["id"], binding["request_fingerprint"])).fetchone()
+            if existing:
+                return {"id": existing[0], "status": existing[1], "idempotent_replay": True}
+            c.execute("INSERT INTO platform_skill_runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", (run_id, actor["id"], project_id, binding["skill_name"], binding["skill_version"], binding["skill_content_hash"], binding["request_fingerprint"], "queued", input_hash, None, None, timestamp, timestamp))
+            self._audit(c, actor["id"], "skill.run.created", "skill_run", run_id, {"project_id": project_id, "skill_name": binding["skill_name"], "skill_version": binding["skill_version"]})
+        return {"id": run_id, "status": "queued", "idempotent_replay": False}
+
+    def update_skill_run(self, actor: dict[str, Any], run_id: str, *, status: str, output_hash: str | None = None, error_code: str | None = None) -> dict[str, Any]:
+        if status not in {"queued", "running", "succeeded", "failed", "cancelled"}:
+            raise PlatformError("invalid_skill_run_status", "Skill run status is invalid")
+        timestamp = now()
+        with connect(self.path) as c:
+            row = c.execute("SELECT user_id,status FROM platform_skill_runs WHERE id=?", (run_id,)).fetchone()
+            if not row: raise PlatformError("skill_run_not_found", "Skill run not found", 404)
+            if row[0] != actor.get("id"): raise PlatformError("skill_run_forbidden", "Skill run belongs to another user", 403)
+            c.execute("UPDATE platform_skill_runs SET status=?,output_hash=?,error_code=?,updated_at=? WHERE id=?", (status, output_hash, error_code, timestamp, run_id))
+            self._audit(c, actor.get("id"), "skill.run.updated", "skill_run", run_id, {"from": row[1], "to": status})
+        return {"id": run_id, "status": status, "output_hash": output_hash, "error_code": error_code}
+
+    def list_skill_runs(self, actor: dict[str, Any], *, project_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 200))
+        with connect(self.path) as c:
+            rows = c.execute("SELECT id,project_id,skill_name,skill_version,skill_content_hash,request_fingerprint,status,input_hash,output_hash,error_code,created_at,updated_at FROM platform_skill_runs WHERE user_id=? AND (? IS NULL OR project_id=?) ORDER BY created_at DESC LIMIT ?", (actor["id"], project_id, project_id, limit)).fetchall()
+        keys = ("id", "project_id", "skill_name", "skill_version", "skill_content_hash", "request_fingerprint", "status", "input_hash", "output_hash", "error_code", "created_at", "updated_at")
+        return [dict(zip(keys, row)) for row in rows]
+
     def estimate_media_credits(self, provider: str, model: str, media_kind: str, units: int = 1) -> dict[str, Any]:
         if media_kind not in {"image", "video", "audio"} or type(units) is not int or units <= 0:
             raise PlatformError("invalid_media_usage", "media kind and units are invalid")

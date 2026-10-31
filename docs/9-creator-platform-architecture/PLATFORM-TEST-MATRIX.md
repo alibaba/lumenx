@@ -35,6 +35,8 @@
 | Platform-to-Atelier runtime resolver | `src/apps/atelier/skill_runtime.py`；`agent_loop.py` | `tests/test_atelier_skill_runtime.py` | 当前切片通过；由组合根注入平台 manifest |
 | 真实请求上下文 Skill bridge | `src/apps/atelier/agent_loop_api.py`；platform middleware actor | `tests/test_atelier_skill_runtime.py` | 当前切片通过；用户/项目绑定按认证 actor 解析 |
 | 隔离 Skill worker job contract | `src/apps/atelier/skill_worker_contract.py` | `tests/test_atelier_skill_worker_contract.py` | 当前为合同/静态边界，worker 集群未实现 |
+| Skill run snapshot ledger | `platform_skill_runs` / `PlatformService` | `tests/test_platform_db.py`; `tests/test_platform_service.py` | 当前切片通过；持久化运行账本已建立 |
+| Skill run API | `/api/platform/skills/runs` | 待新增 HTTP test | 当前已接线；Worker claim 尚待实现 |
 
 验证命令：
 

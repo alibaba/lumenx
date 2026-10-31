@@ -78,6 +78,14 @@ class SkillVersionIn(BaseModel):
     scope: str = "user"
     project_id: str | None = None
     parent_version: str | None = None
+class SkillRunIn(BaseModel):
+    project_id: str = Field(min_length=1, max_length=128)
+    binding: dict[str, Any]
+    input_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+class SkillRunUpdateIn(BaseModel):
+    status: str
+    output_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    error_code: str | None = None
 
 
 @router.post("/auth/register")
@@ -115,6 +123,18 @@ def resolve_skill_version(name: str, project_id: str | None = None, user=Depends
     resolved = svc.resolve_skill_version(user, name, project_id=project_id)
     if resolved is None: raise HTTPException(404, detail={"code": "skill_not_bound", "message": "Skill is not bound"})
     return resolved
+
+@router.get("/skills/runs")
+def skill_runs(project_id: str | None = None, limit: int = 50, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return svc.list_skill_runs(user, project_id=project_id, limit=limit)
+
+@router.post("/skills/runs")
+def create_skill_run(body: SkillRunIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.create_skill_run(user, project_id=body.project_id, binding=body.binding, input_hash=body.input_hash))
+
+@router.post("/skills/runs/{run_id}")
+def update_skill_run(run_id: str, body: SkillRunUpdateIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.update_skill_run(user, run_id, status=body.status, output_hash=body.output_hash, error_code=body.error_code))
 
 @router.get("/credentials")
 def credentials(user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.list_credentials(user)
