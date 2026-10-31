@@ -46,7 +46,7 @@
 | Production readiness gate and alerting | `scripts/verify_skill_production.py`; `deploy/prometheus/alerts.yml`; `deploy/otel/otel-collector-remote.yml` | proxy/metrics/Prometheus/OTel readiness smoke | 本机门禁和告警/远端 OTLP 配置模板通过；云端 Secret Manager、远端 exporter 和故障演练需部署参数 |
 | Mounted secret provider and rotation | `FileSecretProvider`; `deploy/credential-proxy-production.compose.yml` | `tests/test_credential_proxy_service.py::test_file_secret_provider_reads_rotated_secret`; production gate provider=file | 文件 provider 轮换读取通过；真实云 Secret Manager/KMS CSI 挂载仍需云端参数 |
 | Redis pending recovery and cloud profile | `RedisStreamQueue.claim`; `deploy/skill-production.compose.yml` | `tests/test_central_skill_queue.py::test_redis_queue_reclaims_pending_message_before_new_messages`; `scripts/verify_redis_worker_recovery.py` | XAUTOCLAIM 恢复合同和本机现场演练通过；云编排器副本、滚动升级和跨 AZ 故障演练待执行 |
-| Kubernetes/ECS runtime safety template | `deploy/k8s/skill-runtime.yaml`; `scripts/validate_skill_k8s.py` | static manifest safety gate | 双副本、PDB、非 root、只读根、drop ALL、Secret mount 和无 hostPort 通过；实际云编排器部署待执行 |
+| Kubernetes/ECS runtime safety template | `deploy/k8s/skill-runtime.yaml`; `scripts/validate_skill_k8s.py` | static manifest safety gate; production image gate | 双副本、PDB、非 root、只读根、drop ALL、Secret mount 和无 hostPort 通过；真实 image prefix/tag 需显式替换，实际云编排器部署待执行 |
 
 验证命令：
 

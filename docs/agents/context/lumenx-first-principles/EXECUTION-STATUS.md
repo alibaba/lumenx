@@ -304,5 +304,7 @@ Redis Streams claim 先用 `XAUTOCLAIM` 接管超过 idle threshold 的 pending 
 
 - 责任文件：`deploy/k8s/skill-runtime.yaml`、`scripts/validate_skill_k8s.py`、相关运行文档与测试矩阵。
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
-- 验证：Kubernetes manifest safety gate、Redis recovery、队列/Worker/凭证测试通过；未连接真实 Kubernetes/ECS 集群。
+- 验证：Kubernetes manifest safety gate、production image gate、Redis recovery、队列/Worker/凭证测试通过；本机无 Kubernetes API server，未连接真实 Kubernetes/ECS 集群。
 - 证据边界：镜像仓库、Secret/KMS CSI、Ingress、跨 AZ 数据层、滚动升级和真实云故障演练仍需目标环境执行。
+
+本机 Kubernetes API 不可用，`kubectl --dry-run=client` 无法完成 server schema 校验，现场只记录为“无集群连接”，未宣称云端部署通过。新增 `--production --image-prefix --image-tag` 门禁，模板中的 `REPLACE` 镜像占位符在生产检查中会被拒绝。
