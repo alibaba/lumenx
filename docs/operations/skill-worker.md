@@ -27,3 +27,5 @@ Worker 监控当前以结构化日志提供 `worker_id`、claimed/succeeded/fail
 2026-11-01 现场验收：凭证代理 `/healthz`、issue/resolve 通过；Prometheus target `lumenx-skill-worker` 为 `up`；OTel Collector 日志确认收到 9 个 Worker 指标数据点。多用户压力脚本运行 240 个任务、12 个并发 Worker、24 个租户，`duplicates=0`、`unique=240`，每租户 10 个任务。
 
 部署前可运行 `python scripts/verify_skill_production.py --allow-local` 做本机门禁；云端不应使用 `--allow-local`，而应提供非默认 Worker/Core token。`deploy/prometheus/alerts.yml` 提供 Worker target down 和失败率告警；`deploy/otel/otel-collector-remote.yml` 是远端 OTLP HTTP 模板，通过 `OTEL_EXPORTER_OTLP_ENDPOINT` 与 `OTEL_EXPORTER_OTLP_AUTH` 注入目标和认证。
+
+云端凭证建议使用 Docker secret override：准备只允许代理用户读取的 JSON 文件（键格式为 `provider:scope`），设置 `LUMENX_CREDENTIALS_FILE` 后使用 `-f deploy/credential-proxy-production.compose.yml`；该 override 将 provider 切换为 `file`，每次 resolve 重新读取文件，支持轮换而不把 key 写入 Compose 环境或镜像。

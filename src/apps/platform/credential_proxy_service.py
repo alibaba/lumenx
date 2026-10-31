@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import secrets
+from pathlib import Path
 import time
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -44,6 +45,20 @@ class EnvironmentSecretProvider:
         return value
 
 
+class FileSecretProvider:
+    """Read a JSON secret map from a mounted secret file on each lookup."""
+
+    def __init__(self, path: str):
+        self.path = Path(path)
+
+    def get(self, provider: str, scope: str) -> str:
+        try:
+            configured = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise KeyError("secret file unavailable") from exc
+        return EnvironmentSecretProvider(configured).get(provider, scope)
+
+
 class CredentialProxyStore:
     def __init__(self, secrets_by_key: dict[str, str] | None = None, *, provider: SecretProvider | None = None, ttl_seconds: int = 300):
         self.provider = provider or EnvironmentSecretProvider(secrets_by_key or {})
@@ -70,9 +85,17 @@ def _bearer(value: str | None, expected: str | None) -> None:
 
 
 def create_app(store: CredentialProxyStore | None = None, *, worker_token: str | None = None, core_token: str | None = None) -> FastAPI:
-    raw = os.getenv("LUMENX_CREDENTIAL_PROXY_SECRETS_JSON", "{}")
-    configured = json.loads(raw)
-    store = store or CredentialProxyStore(configured, ttl_seconds=int(os.getenv("LUMENX_CREDENTIAL_PROXY_TTL", "300")))
+    provider_kind = os.getenv("LUMENX_CREDENTIAL_PROXY_PROVIDER", "env_json")
+    if store is None and provider_kind == "file":
+        secret_file = os.getenv("LUMENX_CREDENTIAL_PROXY_SECRET_FILE")
+        if not secret_file:
+            raise RuntimeError("file credential provider requires LUMENX_CREDENTIAL_PROXY_SECRET_FILE")
+        store = CredentialProxyStore(provider=FileSecretProvider(secret_file), ttl_seconds=int(os.getenv("LUMENX_CREDENTIAL_PROXY_TTL", "300")))
+    elif store is None and provider_kind == "env_json":
+        raw = os.getenv("LUMENX_CREDENTIAL_PROXY_SECRETS_JSON", "{}")
+        store = CredentialProxyStore(json.loads(raw), ttl_seconds=int(os.getenv("LUMENX_CREDENTIAL_PROXY_TTL", "300")))
+    elif store is None:
+        raise RuntimeError("unsupported credential provider")
     worker_token = worker_token or os.getenv("LUMENX_CREDENTIAL_PROXY_TOKEN")
     core_token = core_token or os.getenv("LUMENX_CREDENTIAL_CORE_TOKEN") or worker_token
     app = FastAPI(title="LumenX Credential Proxy", docs_url=None, redoc_url=None)

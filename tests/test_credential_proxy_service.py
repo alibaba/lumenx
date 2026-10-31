@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from src.apps.platform.credential_proxy_service import CredentialProxyStore, create_app
+from src.apps.platform.credential_proxy_service import CredentialProxyStore, FileSecretProvider, create_app
 
 
 def test_credential_proxy_issues_opaque_ref_and_core_resolves_secret():
@@ -36,3 +36,12 @@ def test_credential_proxy_rejects_missing_secret_and_wrong_worker_token():
 def test_credential_proxy_readiness_fails_without_tokens():
     app = create_app(CredentialProxyStore({"dashscope:tenant-1": "super-secret"}), worker_token=None, core_token=None)
     assert TestClient(app).get("/readyz").status_code == 503
+
+
+def test_file_secret_provider_reads_rotated_secret(tmp_path):
+    path = tmp_path / "credentials.json"
+    path.write_text('{"dashscope:tenant-1":"first-secret"}', encoding="utf-8")
+    provider = FileSecretProvider(str(path))
+    assert provider.get("dashscope", "tenant-1") == "first-secret"
+    path.write_text('{"dashscope:tenant-1":"rotated-secret"}', encoding="utf-8")
+    assert provider.get("dashscope", "tenant-1") == "rotated-secret"

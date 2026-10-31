@@ -279,3 +279,12 @@ Atelier Agent loop HTTP 入口现在从应用组合根的 platform middleware �
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：`scripts/verify_skill_production.py --allow-local` 返回 proxy ready、Worker metrics up、Prometheus target up、OTel reachable；凭证代理 readiness、监控配置和 42 项 Skill/平台/Atelier 测试通过。
 - 证据边界：SecretProvider 真实云厂商实现、远端 OTLP 账号、告警通知渠道、云端 HA/弹性和故障演练仍需部署参数与现场执行。
+
+## 2026-11-01 挂载式 Secret provider 与云端生产门禁切片
+
+新增 `FileSecretProvider` 和 `deploy/credential-proxy-production.compose.yml`：云端通过 Docker secret/Secret Manager CSI 挂载 JSON secret map，生产门禁要求 `LUMENX_CREDENTIAL_PROXY_PROVIDER=file`、非默认 token 和挂载文件存在；每次 resolve 重新读取文件，支持轮换。环境变量 JSON 仅保留本机试运行路径。
+
+- 责任文件：`src/apps/platform/credential_proxy_service.py`、`deploy/credential-proxy-production.compose.yml`、`scripts/verify_skill_production.py`、凭证代理测试与运行文档。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：FileSecretProvider 轮换测试（16 项凭证/Worker/队列测试）与 production Compose override config 通过；未宣称真实云 Secret Manager/KMS CSI 已连接。
+- 证据边界：云厂商 secret backend、CSI 驱动、远端 OTLP 账号和 HA 故障演练仍需云环境执行。

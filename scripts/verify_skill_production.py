@@ -26,6 +26,10 @@ def main() -> int:
         for name in ("LUMENX_CREDENTIAL_PROXY_TOKEN", "LUMENX_CREDENTIAL_CORE_TOKEN"):
             if os.getenv(name, "").startswith("local-") or not os.getenv(name):
                 parser.error(f"{name} must be set to a non-local production secret")
+        if os.getenv("LUMENX_CREDENTIAL_PROXY_PROVIDER") != "file":
+            parser.error("LUMENX_CREDENTIAL_PROXY_PROVIDER must be file in production")
+        if not os.path.isfile(os.getenv("LUMENX_CREDENTIAL_PROXY_SECRET_FILE", "")):
+            parser.error("LUMENX_CREDENTIAL_PROXY_SECRET_FILE must point to a mounted secret file")
     if get_json(f"{args.proxy}/healthz").get("status") != "ok":
         return 1
     if get_json(f"{args.proxy}/readyz").get("status") != "ready":
