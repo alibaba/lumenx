@@ -360,6 +360,24 @@ draft → published → claimed → in_progress → delivered
 
 ---
 
+### 3.10 Skill 默认加载、用户覆盖与个性化版本
+
+视频 Skill 采用“系统基线 + 作用域覆盖”的版本化模型。系统 Skill 保持不可变；用户可以复制系统版本形成自己的 Skill，并在账户或项目范围激活。用户覆盖不得直接修改系统版本，也不得扩大系统授予的工具、模型、数据或费用权限。
+
+作用域优先级固定为：
+
+```text
+system -> workspace -> user -> project -> session draft
+```
+
+每次规划或执行前，把有效配置编译为 `effective_skill_snapshot`，保存 Skill 名称、版本、父版本、内容哈希、允许工具、模型能力、成本上限、审批要求和规则版本。批准、接纳、提交、查询恢复和 QC 都必须引用同一快照；快照生成后不受后续 Skill 更新影响。
+
+Skill 只能声明和组合已注册能力。其提示词、镜头规则、连续性约束、质量规则和默认偏好可以由用户修改；任意代码执行、任意网络访问、读取其他用户数据、绕过审批、绕过积分预扣或调用未注册 Provider 不属于可覆盖内容。
+
+用户优化采用草稿流程：复制 → 编辑 → 沙箱测试 → 新旧版本比较 → 用户激活 → 可回滚。采纳/拒绝、QC 分数、返修记录和成本可以作为优化反馈，但不能自动覆盖线上版本。系统发布新版本时，用户版本显示可同步的差异，不静默重写用户规则。
+
+建议首批 Skill 包含 `storyboard-shot-planner`、`continuity-reference-lock`、`seedance-prompt-compiler`、`video-generation-admission` 和 `video-qc-audit`。外部 `SKILL.md`、脚本和引用资料只能经过人工审核与 Skill 编译器转换后进入产品注册表，运行时不得直接加载任意外部路径或执行外部脚本。
+
 ## 五、开发前验证基线 (Pre-Development Baseline)
 
 本节只记录当前仓库可复核的前置检查，不代表平台功能已实现或验收。平台开发必须在独立分支进行，并在首个实现切片提交后重新运行受影响检查。

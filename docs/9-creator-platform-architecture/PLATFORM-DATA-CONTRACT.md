@@ -63,3 +63,26 @@ draft -> published -> claimed -> in_progress -> delivered
 ## 7. 模拟账本
 
 Gate 4 之前仅实现 `ledger_accounts`、`ledger_entries`、`payout_requests`、`payout_attempts`、`reconciliation_batches` 和 `audit_events` 的模拟模式。`ledger_entries` append-only，金额用整数分，借贷总额必须平衡；钱包余额只能从账本重建。支付回调只接受带幂等键的模拟事件，未知状态进入人工复核队列，不自动重复支付。
+
+## 8. Skill 版本与用户覆盖合同
+
+Skill 是产品配置和受控工具能力的组合，不是可执行脚本上传。系统 Skill、工作区 Skill、用户 Skill、项目 Skill 和会话草稿必须使用独立作用域保存，并通过 `parent_version` 建立来源关系。
+
+建议持久化实体：
+
+```text
+skill_definitions  Skill 身份、作用域、所有者和状态
+skill_versions     不可变 manifest、规则、内容哈希和父版本
+skill_bindings     作用域到当前激活版本的绑定
+skill_runs         运行时有效快照、输入摘要、输出摘要和审计引用
+skill_feedback     采纳/拒绝、QC、返修、成本和用户备注
+```
+
+`effective_skill_snapshot` 至少包含：`skill_id`、`version`、`scope`、`owner_id`、`parent_version`、`content_hash`、`allowed_tools`、`allowed_models`、`cost_policy`、`approval_policy` 和 `rules_version`。运行时按 `system → workspace → user → project → session` 解析，同一 Skill 在更具体作用域只有显式绑定时才覆盖上层版本。
+
+安全约束：
+
+- 用户 Skill 的工具集合只能是父版本、系统策略和当前入口能力的交集，不能新增任意代码、Shell、网络或凭证读取工具。
+- 用户 Skill 不能关闭付费生成审批、积分预扣、媒体冻结、Provider 能力校验、数据隔离和审计。
+- 已批准或已接纳任务必须继续使用原 Skill 快照；修改 Skill 只能创建新运行或要求重新批准。
+- Skill 草稿只能在沙箱中运行；激活、回滚和删除都写入审计事件。

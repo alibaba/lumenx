@@ -17,6 +17,12 @@
 | 任务原子认领、交付、评审 | `PlatformService.claim_task` / `deliver_task` / `review_task` | `tests/test_platform_service.py::test_certified_creator_claims_delivers_and_review_creates_simulated_ledger` | 已通过 |
 | 模拟账本与余额重建 | `PlatformService.wallet` | `tests/test_platform_service.py::test_certified_creator_claims_delivers_and_review_creates_simulated_ledger` | 已通过 |
 | 截止时间释放与账单查询 | `PlatformService.release_expired_tasks` / `transactions` | service coverage pending | 已实现 |
+| 系统 Skill 默认加载与目录快照 | `src/apps/atelier/product_skills.py` | `tests/test_atelier_product_skills.py` | 当前仅有静态系统 Skill；用户覆盖待实现 |
+| Skill 版本哈希与父版本关系 | `skill_versions` / `effective_skill_snapshot` | 待新增 Skill contract tests | 方案已定义，未实现 |
+| 用户/项目 Skill 绑定与回滚 | `skill_bindings` | 待新增 API/service tests | 方案已定义，未实现 |
+| Skill 工具与成本权限交集 | Agent admission/authorization | 待新增 authorization tests | 不得通过 Skill 绕过审批或计费 |
+| Skill 运行快照与任务恢复 | `skill_runs` + generation receipt | 待新增 recovery tests | 已批准任务必须固定原 Skill 快照 |
+| 用户反馈驱动的 Skill 草稿 | `skill_feedback` + sandbox evaluator | 待定义 | 不自动覆盖线上版本 |
 
 验证命令：
 
