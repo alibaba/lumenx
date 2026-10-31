@@ -26,6 +26,8 @@
 | Skill 版本与绑定持久化 | `platform_skill_versions` / `platform_skill_bindings` | `tests/test_platform_db.py`；`tests/test_platform_service.py` | 当前切片通过；HTTP/API 与 UI 待接线 |
 | 用户/项目/系统解析顺序 | `PlatformService.resolve_skill_version` | `tests/test_platform_service.py::test_skill_versions_are_user_isolated_and_resolve_project_then_user` | 当前切片通过 |
 | Skill manifest 安全字段与哈希 | `PlatformService.create_skill_version` | `tests/test_platform_service.py::test_skill_manifest_rejects_executable_fields_and_bad_hash` | 当前切片通过；尚未接 Product Skill snapshot converter |
+| Skill API 创建/列表/绑定/解析 | `src/apps/platform/api.py` | `tests/test_platform_skill_api.py` | 当前切片通过 |
+| Skill 前端账户/项目绑定界面 | `frontend/src/components/platform/SkillSettings.tsx`；`frontend/src/lib/platformApi.ts` | `npm --prefix frontend run typecheck`; `npm --prefix frontend run build` | 当前切片通过；组件交互回归仍可扩展 |
 
 验证命令：
 

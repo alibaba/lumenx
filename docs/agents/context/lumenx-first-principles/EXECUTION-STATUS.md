@@ -162,3 +162,12 @@ LLM Adapter 现在读取请求级算力计费上下文。平台积分模式在 P
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：隔离 runner 执行平台合同、数据库、服务测试（15 passed）。
 - 证据边界：尚未接 HTTP/API、前端编辑、Atelier snapshot converter、Skill sandbox、反馈优化或多用户 worker。
+
+## 2026-10-31 Product Skill API 与前端绑定切片
+
+继续完成 Skill 纵向接线。`src/apps/platform/api.py` 新增 Skill 版本列表、创建、绑定和解析入口；`frontend/src/lib/platformApi.ts` 与 `frontend/src/components/platform/SkillSettings.tsx` 接入账户级/项目级 Skill 管理入口。客户端在提交前按服务端同一 canonical JSON 规则计算 SHA-256；服务端仍是 manifest 和权限的最终校验者。
+
+- 责任文件：`src/apps/platform/api.py`、`frontend/src/lib/platformApi.ts`、`frontend/src/components/platform/SkillSettings.tsx`、`frontend/src/components/platform/PlatformPortal.tsx`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：平台隔离测试（15 passed）；`npm --prefix frontend run typecheck`（通过）；`npm --prefix frontend run build`（通过，保留 Next 静态导出 rewrites 警告）；文档结构检查（PASS）。
+- 证据边界：尚未完成 Atelier snapshot converter、Skill sandbox、用户反馈优化、视频生成接纳和多用户 worker。

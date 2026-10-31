@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .service import PlatformError, PlatformService
 from .contracts import TaskStatus
@@ -66,6 +66,18 @@ class CreditReservationIn(BaseModel): estimated_credits: int = Field(gt=0); gene
 class CreditSettleIn(BaseModel): actual_credits: int = Field(ge=0)
 class CredentialIn(BaseModel): provider: str = Field(min_length=1, max_length=50); label: str = Field(min_length=1, max_length=80); api_key: str = Field(min_length=16, max_length=500)
 class CredentialRotateIn(BaseModel): api_key: str = Field(min_length=16, max_length=500)
+class SkillManifestIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=3, max_length=64)
+    version: str = Field(min_length=1, max_length=32)
+    title: str = Field(min_length=1, max_length=120)
+    expected_tools: list[str] = Field(default_factory=list, max_length=16)
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+class SkillVersionIn(BaseModel):
+    manifest: SkillManifestIn
+    scope: str = "user"
+    project_id: str | None = None
+    parent_version: str | None = None
 
 
 @router.post("/auth/register")
@@ -85,6 +97,24 @@ def logout(credentials: HTTPAuthorizationCredentials | None = Depends(bearer), s
 @router.get("/usage/tokens")
 def token_usage(limit: int = 100, user=Depends(current_user), svc: PlatformService = Depends(service)):
     return svc.token_usage(user, limit)
+
+@router.get("/skills")
+def skill_versions(name: str | None = None, project_id: str | None = None, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return svc.list_skill_versions(user, name=name, project_id=project_id)
+
+@router.post("/skills/versions")
+def create_skill_version(body: SkillVersionIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.create_skill_version(user, body.manifest.model_dump(), scope=body.scope, project_id=body.project_id, parent_version=body.parent_version))
+
+@router.post("/skills/versions/{skill_version_id}/bind")
+def bind_skill_version(skill_version_id: str, active: bool = True, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.bind_skill_version(user, skill_version_id, active=active))
+
+@router.get("/skills/{name}/resolve")
+def resolve_skill_version(name: str, project_id: str | None = None, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    resolved = svc.resolve_skill_version(user, name, project_id=project_id)
+    if resolved is None: raise HTTPException(404, detail={"code": "skill_not_bound", "message": "Skill is not bound"})
+    return resolved
 
 @router.get("/credentials")
 def credentials(user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.list_credentials(user)

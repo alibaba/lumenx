@@ -268,6 +268,15 @@ class PlatformService:
                     return dict(zip(keys, row))
         return None
 
+    def list_skill_versions(self, actor: dict[str, Any], *, name: str | None = None, project_id: str | None = None) -> list[dict[str, Any]]:
+        with connect(self.path) as c:
+            rows = c.execute(
+                "SELECT id,name,version,scope,owner_id,project_id,parent_version,content_hash,status,created_at FROM platform_skill_versions WHERE (scope='system' OR (scope='user' AND owner_id=?) OR (scope='project' AND owner_id=? AND project_id=?)) AND (? IS NULL OR name=?) ORDER BY name,created_at DESC",
+                (actor.get("id"), actor.get("id"), project_id, name, name),
+            ).fetchall()
+        keys = ("id", "name", "version", "scope", "owner_id", "project_id", "parent_version", "content_hash", "status", "created_at")
+        return [dict(zip(keys, row)) for row in rows]
+
     def estimate_media_credits(self, provider: str, model: str, media_kind: str, units: int = 1) -> dict[str, Any]:
         if media_kind not in {"image", "video", "audio"} or type(units) is not int or units <= 0:
             raise PlatformError("invalid_media_usage", "media kind and units are invalid")

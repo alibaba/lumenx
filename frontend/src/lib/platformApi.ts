@@ -4,6 +4,7 @@ const TOKEN_KEY = "lumenx_platform_token";
 
 export type PlatformUser = { id: string; username: string; email?: string | null; role: string };
 export type PlatformSession = { access_token: string; expires_at: string; user: PlatformUser };
+export type PlatformSkillVersion = { id: string; name: string; version: string; scope: string; owner_id?: string | null; project_id?: string | null; parent_version?: string | null; content_hash: string; status: string; created_at: string };
 
 export function getPlatformToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -56,5 +57,9 @@ export const platformApi = {
   verifyCredential: (credentialId: string) => request(`/credentials/${credentialId}/verify`, { method: "POST" }),
   rotateCredential: (credentialId: string, api_key: string) => request(`/credentials/${credentialId}/rotate`, { method: "POST", body: JSON.stringify({ api_key }) }),
   revokeCredential: (credentialId: string) => request(`/credentials/${credentialId}/revoke`, { method: "POST" }),
+  skills: (name?: string, projectId?: string) => request<PlatformSkillVersion[]>(`/skills${name || projectId ? `?${new URLSearchParams({ ...(name ? { name } : {}), ...(projectId ? { project_id: projectId } : {}) }).toString()}` : ""}`),
+  createSkillVersion: (payload: { manifest: { name: string; version: string; title: string; expected_tools: string[]; content_hash: string }; scope?: string; project_id?: string; parent_version?: string }) => request<PlatformSkillVersion>("/skills/versions", { method: "POST", body: JSON.stringify(payload) }),
+  bindSkillVersion: (skillVersionId: string, active = true) => request(`/skills/versions/${skillVersionId}/bind?active=${active ? "true" : "false"}`, { method: "POST" }),
+  resolveSkill: (name: string, projectId?: string) => request<Record<string, unknown>>(`/skills/${encodeURIComponent(name)}/resolve${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`),
 };
 

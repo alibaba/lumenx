@@ -87,7 +87,7 @@ skill_feedback     采纳/拒绝、QC、返修、成本和用户备注
 - 已批准或已接纳任务必须继续使用原 Skill 快照；修改 Skill 只能创建新运行或要求重新批准。
 - Skill 草稿只能在沙箱中运行；激活、回滚和删除都写入审计事件。
 
-当前首个持久化切片使用 `007_skill_registry.sql` 建立 Skill 版本和绑定表；它只保存经过哈希校验的 manifest JSON，不保存脚本路径、命令、凭证引用或 Provider handle。该切片尚未把平台 manifest 转换为 Atelier `AtelierProductSkillSnapshot`，也未开放 HTTP/API 和前端编辑。
+当前持久化切片使用 `007_skill_registry.sql` 建立 Skill 版本和绑定表；它只保存经过哈希校验的 manifest JSON，不保存脚本路径、命令、凭证引用或 Provider handle。Skill API 已提供创建、列表、绑定和解析入口，前端工作台已提供账户级/项目级绑定界面；平台 manifest 转换为 Atelier `AtelierProductSkillSnapshot`、沙箱和运行快照仍未实现。
 
 ## 9. 云端部署级别
 
