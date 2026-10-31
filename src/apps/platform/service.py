@@ -241,6 +241,14 @@ class PlatformService:
             c.execute("INSERT INTO credit_ledger VALUES (?,?,?,?,?,?,?,?,?)", (uid(), actor["id"], estimated_credits, "debit", "reservation", reservation_id, f"{idempotency_key}:reserve", "{}", timestamp))
         return {"reservation_id": reservation_id, "estimated_credits": estimated_credits, "status": "reserved", "idempotent_replay": False}
 
+    def reserve_for_usage(self, actor: dict[str, Any], provider: str, model: str, prompt_tokens: int, completion_tokens: int, generation_id: str, idempotency_key: str) -> dict[str, Any]:
+        estimate = self.estimate_credits(provider, model, prompt_tokens, completion_tokens)
+        return {**self.reserve_credits(actor, estimate["estimated_credits"], generation_id, estimate["pricing_version"], idempotency_key), "pricing_version": estimate["pricing_version"], "estimated_credits": estimate["estimated_credits"]}
+
+    def settle_for_usage(self, actor: dict[str, Any], reservation_id: str, provider: str, model: str, prompt_tokens: int, completion_tokens: int) -> dict[str, Any]:
+        estimate = self.estimate_credits(provider, model, prompt_tokens, completion_tokens)
+        return self.settle_credits(actor, reservation_id, estimate["estimated_credits"])
+
     def settle_credits(self, actor: dict[str, Any], reservation_id: str, actual_credits: int) -> dict[str, Any]:
         if actual_credits < 0: raise PlatformError("invalid_credit_amount", "actual credits cannot be negative")
         with connect(self.path) as c:

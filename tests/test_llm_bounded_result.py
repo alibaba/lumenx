@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from src.apps.comic_gen.llm_adapter import LLMAdapter
+from src.core.compute_billing import bind_compute_billing, reset_compute_billing
 
 
 class FakeCompletionClient:
@@ -51,6 +52,27 @@ def install_openai(monkeypatch, client):
 
 def configured_adapter():
     return LLMAdapter(env={"LLM_PROVIDER": "openai", "OPENAI_API_KEY": "owned-key"})
+
+
+def test_chat_result_reserves_and_settles_platform_credits(monkeypatch):
+    client = FakeCompletionClient(responses=[response(content="ok", model="provider-model", usage={"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7})])
+    install_openai(monkeypatch, client)
+    events = []
+    token = bind_compute_billing({
+        "mode": "platform_credits",
+        "reserve": lambda *args: events.append(("reserve", args)) or {"reservation_id": "res-1"},
+        "settle": lambda *args: events.append(("settle", args)) or {"status": "settled"},
+        "release": lambda *args: events.append(("release", args)),
+    })
+    try:
+        result = configured_adapter().chat_result([{"role": "user", "content": "hello"}], model="requested-model", max_completion_tokens=12, timeout=5)
+    finally:
+        reset_compute_billing(token)
+    assert result.total_tokens == 7
+    assert events[0][0] == "reserve"
+    assert events[1][0] == "settle"
+    assert events[1][1][0] == "res-1"
+    assert events[1][1][-2:] == (3, 4)
 
 
 @pytest.mark.parametrize(

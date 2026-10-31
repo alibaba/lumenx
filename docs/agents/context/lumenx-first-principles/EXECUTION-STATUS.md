@@ -127,3 +127,11 @@
 - 平台客户端已接入凭证管理、积分余额、价格估算、预扣、结算和释放方法。
 - 证据边界：当前生成入口已传递计费模式，但 Studio/Atelier 的各类 Provider 仍需逐一接入实际预扣/结算；本切片未执行真实 Provider 请求。
 - 验证：前端 typecheck 与 production build 通过。
+
+## 2026-10-31 LLM 积分预扣与实际结算切片
+
+LLM Adapter 现在读取请求级算力计费上下文。平台积分模式在 Provider 调用前按估算 token 预扣，返回 usage 后按实际 token 结算，异常释放预扣；BYOK 模式不触发积分账本，只保留 token usage 记录。
+
+- Core 新增 `src/core/compute_billing.py`，平台服务提供 `reserve_for_usage` 与 `settle_for_usage` 回调。
+- `LLMAdapter.chat` 和 `chat_result` 已接入预扣/结算/释放路径；没有平台上下文的旧调用保持原行为。
+- 验证：LLM bounded/environment、平台合同/迁移/服务测试 47 项通过；真实 Provider、图像/视频/语音计费仍待接入。

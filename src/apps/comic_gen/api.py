@@ -73,6 +73,7 @@ from ...utils.app_access import (
 )
 from ...core.token_usage import bind_token_usage_recorder, reset_token_usage_recorder
 from ...core.provider_credentials import bind_provider_credential, reset_provider_credential
+from ...core.compute_billing import bind_compute_billing, reset_compute_billing
 from ...utils.media_static import ManagedMediaStaticFiles
 from .series_import import ConfirmImportRequest, ImportPreviewUnavailable, MAX_IMPORT_TEXT_BYTES
 from .series_episode import CreateSeriesEpisodeRequest, SeriesEpisodeCreationReceipt
@@ -1105,8 +1106,18 @@ def create_app(
                 provider_credential = platform.resolve_credential(actor, credential_ref)
             except PlatformError as exc:
                 return JSONResponse({"detail": {"code": exc.code, "message": exc.message}}, status_code=exc.status)
+        billing_token = bind_compute_billing({
+            "mode": billing_mode,
+            "actor": actor,
+            "reserve": (lambda provider, model, prompt, completion, generation_id, key: platform.reserve_for_usage(actor, provider, model, prompt, completion, generation_id, key))
+                if actor is not None and platform is not None and billing_mode == "platform_credits" else None,
+            "settle": (lambda reservation_id, provider, model, prompt, completion: platform.settle_for_usage(actor, reservation_id, provider, model, prompt, completion))
+                if actor is not None and platform is not None and billing_mode == "platform_credits" else None,
+            "release": (lambda reservation_id: platform.release_credits(actor, reservation_id))
+                if actor is not None and platform is not None and billing_mode == "platform_credits" else None,
+        })
         recorder_token = bind_token_usage_recorder(
-            (lambda event: platform.record_token_usage(actor, {**event, "product": product, "metadata": {"billing_mode": billing_mode, "credential_ref": credential_ref}}))
+            (lambda event: platform.record_token_usage(actor, {**event, "product": product, "metadata": {**(event.get("metadata") or {}), "billing_mode": billing_mode, "credential_ref": credential_ref}}))
             if actor is not None and platform is not None else None
         )
         credential_token = bind_provider_credential(provider_credential)
@@ -1115,6 +1126,7 @@ def create_app(
         finally:
             reset_token_usage_recorder(recorder_token)
             reset_provider_credential(credential_token)
+            reset_compute_billing(billing_token)
 
     @target_app.exception_handler(RequestValidationError)
     async def request_validation_response(request: Request, exc: RequestValidationError):
