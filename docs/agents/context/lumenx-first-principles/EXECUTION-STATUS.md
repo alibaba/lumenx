@@ -153,3 +153,12 @@ LLM Adapter 现在读取请求级算力计费上下文。平台积分模式在 P
 - 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
 - 验证：隔离 runner 执行 `tests/test_atelier_skill_resolution.py tests/test_atelier_product_skills.py -q`（5 passed）；`python3 docs/agents/tools/check_lumenx_refactor_docs.py`（PASS）。
 - 证据边界：当前 Product Skill 仍是静态系统注册表；用户/项目覆盖的存储、API、UI、Skill sandbox、运行快照持久化和媒体计费接线尚未实现。
+
+## 2026-10-31 Product Skill 版本与绑定持久化切片
+
+继续按 Skill 云端开发方案实现平台侧持久化合同。新增 `007_skill_registry.sql`、`PlatformService.create_skill_version`、`bind_skill_version` 和 `resolve_skill_version`，支持 system/workspace/user/project 绑定优先级、用户隔离、项目覆盖、manifest 内容哈希和可执行/凭证字段拒绝。当前只保存受控 JSON manifest，不把外部 Skill 文件或脚本带入运行时。
+
+- 责任文件：`src/apps/platform/migrations/007_skill_registry.sql`、`src/apps/platform/service.py`、`tests/test_platform_db.py`、`tests/test_platform_service.py`。
+- 分支/提交：`platform-gate0` / 待提交（本切片完成后记录固定提交）。
+- 验证：隔离 runner 执行平台合同、数据库、服务测试（15 passed）。
+- 证据边界：尚未接 HTTP/API、前端编辑、Atelier snapshot converter、Skill sandbox、反馈优化或多用户 worker。

@@ -203,6 +203,71 @@ class PlatformService:
         keys = ("provider", "model", "media_kind", "pricing_version", "credits_per_unit")
         return [dict(zip(keys, row)) for row in rows]
 
+    @staticmethod
+    def _skill_manifest(manifest: dict[str, Any]) -> tuple[str, str, str, str]:
+        if not isinstance(manifest, dict):
+            raise PlatformError("invalid_skill_manifest", "Skill manifest must be an object")
+        forbidden = {"path", "source", "script", "command", "credential_ref", "provider_handle"}
+        if forbidden.intersection(manifest):
+            raise PlatformError("invalid_skill_manifest", "Skill manifest cannot contain executable or secret fields")
+        name, version, content_hash = manifest.get("name"), manifest.get("version"), manifest.get("content_hash")
+        if not isinstance(name, str) or not name or len(name) > 64:
+            raise PlatformError("invalid_skill_manifest", "Skill name is invalid")
+        if not isinstance(version, str) or not version or len(version) > 32:
+            raise PlatformError("invalid_skill_manifest", "Skill version is invalid")
+        canonical = json.dumps({k: manifest[k] for k in sorted(manifest) if k != "content_hash"}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        expected = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        if content_hash != expected:
+            raise PlatformError("invalid_skill_manifest", "Skill content hash does not match manifest")
+        return name, version, content_hash, canonical
+
+    def create_skill_version(self, actor: dict[str, Any], manifest: dict[str, Any], *, scope: str = "user", project_id: str | None = None, parent_version: str | None = None) -> dict[str, Any]:
+        if scope not in {"system", "workspace", "user", "project"}:
+            raise PlatformError("invalid_skill_scope", "unsupported Skill scope")
+        if scope == "system" and actor.get("role") != "admin":
+            raise PlatformError("skill_admin_required", "system Skill versions require admin", 403)
+        if scope == "project" and not project_id:
+            raise PlatformError("skill_project_required", "project Skill versions require project_id")
+        if scope != "project" and project_id is not None:
+            raise PlatformError("skill_project_forbidden", "project_id is only valid for project scope")
+        name, version, content_hash, canonical = self._skill_manifest(manifest)
+        owner_id = actor.get("id") if scope in {"user", "project"} else None
+        skill_id = uid(); timestamp = now()
+        try:
+            with connect(self.path) as c:
+                c.execute(
+                    "INSERT INTO platform_skill_versions VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (skill_id, name, version, scope, owner_id, project_id, parent_version, canonical, content_hash, "draft", timestamp),
+                )
+                self._audit(c, actor.get("id"), "skill.version.created", "skill_version", skill_id, {"name": name, "version": version, "scope": scope, "project_id": project_id})
+        except sqlite3.IntegrityError as exc:
+            raise PlatformError("skill_version_exists", "Skill version already exists", 409) from exc
+        return {"id": skill_id, "name": name, "version": version, "scope": scope, "owner_id": owner_id, "project_id": project_id, "parent_version": parent_version, "content_hash": content_hash, "status": "draft", "created_at": timestamp}
+
+    def bind_skill_version(self, actor: dict[str, Any], skill_version_id: str, *, active: bool = True) -> dict[str, Any]:
+        timestamp = now()
+        with connect(self.path) as c:
+            row = c.execute("SELECT id,name,scope,owner_id,project_id,status FROM platform_skill_versions WHERE id=?", (skill_version_id,)).fetchone()
+            if not row: raise PlatformError("skill_version_not_found", "Skill version not found", 404)
+            if row[2] == "system" and actor.get("role") != "admin": raise PlatformError("skill_admin_required", "system Skill versions require admin", 403)
+            if row[2] in {"user", "project"} and row[3] != actor.get("id"): raise PlatformError("skill_forbidden", "Skill version belongs to another user", 403)
+            c.execute("UPDATE platform_skill_versions SET status=? WHERE id=?", ("active" if active else "draft", skill_version_id))
+            c.execute("DELETE FROM platform_skill_bindings WHERE name=? AND scope=? AND owner_id IS ? AND project_id IS ?", (row[1], row[2], row[3], row[4]))
+            if active:
+                c.execute("INSERT INTO platform_skill_bindings VALUES (?,?,?,?,?,?,?,?,?)", (uid(), row[1], row[2], row[3], row[4], skill_version_id, 1, timestamp, timestamp))
+            self._audit(c, actor.get("id"), "skill.version.bound", "skill_version", skill_version_id, {"active": active, "scope": row[2], "project_id": row[4]})
+        return {"id": skill_version_id, "name": row[1], "scope": row[2], "project_id": row[4], "active": active}
+
+    def resolve_skill_version(self, actor: dict[str, Any], name: str, *, project_id: str | None = None) -> dict[str, Any] | None:
+        order = [("project", actor.get("id"), project_id), ("user", actor.get("id"), None), ("workspace", None, None), ("system", None, None)]
+        with connect(self.path) as c:
+            for scope, owner_id, scoped_project in order:
+                row = c.execute("SELECT v.id,v.name,v.version,v.scope,v.owner_id,v.project_id,v.parent_version,v.manifest_json,v.content_hash FROM platform_skill_bindings b JOIN platform_skill_versions v ON v.id=b.skill_version_id WHERE b.name=? AND b.scope=? AND b.owner_id IS ? AND b.project_id IS ? AND b.active=1 AND v.status='active'", (name, scope, owner_id, scoped_project)).fetchone()
+                if row:
+                    keys = ("id", "name", "version", "scope", "owner_id", "project_id", "parent_version", "manifest_json", "content_hash")
+                    return dict(zip(keys, row))
+        return None
+
     def estimate_media_credits(self, provider: str, model: str, media_kind: str, units: int = 1) -> dict[str, Any]:
         if media_kind not in {"image", "video", "audio"} or type(units) is not int or units <= 0:
             raise PlatformError("invalid_media_usage", "media kind and units are invalid")

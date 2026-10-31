@@ -73,6 +73,43 @@ def test_media_pricing_estimate_supports_model_fallback(tmp_path):
     assert estimate["credits_per_unit"] == 4
 
 
+def _skill_manifest(name="story-scout", version="1.0.0", title="Story Scout"):
+    import hashlib
+    import json
+    payload = {"name": name, "version": version, "title": title, "expected_tools": ["canvas.readProject"]}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    payload["content_hash"] = hashlib.sha256(canonical.encode()).hexdigest()
+    return payload
+
+
+def test_skill_versions_are_user_isolated_and_resolve_project_then_user(tmp_path):
+    svc = service(tmp_path)
+    admin = svc.register("admin", "a" * 12, role="admin")
+    alice = svc.register("alice", "b" * 12)
+    bob = svc.register("bob", "c" * 12)
+    system = svc.create_skill_version(admin, _skill_manifest(), scope="system")
+    svc.bind_skill_version(admin, system["id"])
+    user = svc.create_skill_version(alice, _skill_manifest(version="1.1.0", title="Alice Scout"), scope="user")
+    svc.bind_skill_version(alice, user["id"])
+    project = svc.create_skill_version(alice, _skill_manifest(version="1.2.0", title="Project Scout"), scope="project", project_id="p1")
+    svc.bind_skill_version(alice, project["id"])
+    assert svc.resolve_skill_version(alice, "story-scout")["version"] == "1.1.0"
+    assert svc.resolve_skill_version(alice, "story-scout", project_id="p1")["version"] == "1.2.0"
+    assert svc.resolve_skill_version(bob, "story-scout")["version"] == "1.0.0"
+
+
+def test_skill_manifest_rejects_executable_fields_and_bad_hash(tmp_path):
+    svc = service(tmp_path)
+    user = svc.register("alice", "a" * 12)
+    bad = _skill_manifest(); bad["script"] = "rm -rf /"
+    try:
+        svc.create_skill_version(user, bad)
+    except PlatformError as exc:
+        assert exc.code == "invalid_skill_manifest"
+    else:
+        raise AssertionError("executable Skill fields must be rejected")
+
+
 def test_user_credentials_are_encrypted_isolated_and_rotatable(tmp_path):
     svc = credential_service(tmp_path)
     alice = svc.register("alice", "a" * 12)

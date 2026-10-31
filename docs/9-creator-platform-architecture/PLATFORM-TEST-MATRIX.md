@@ -23,6 +23,9 @@
 | Skill 工具与成本权限交集 | Agent admission/authorization | 待新增 authorization tests | 不得通过 Skill 绕过审批或计费 |
 | Skill 运行快照与任务恢复 | `skill_runs` + generation receipt | 待新增 recovery tests | 已批准任务必须固定原 Skill 快照 |
 | 用户反馈驱动的 Skill 草稿 | `skill_feedback` + sandbox evaluator | 待定义 | 不自动覆盖线上版本 |
+| Skill 版本与绑定持久化 | `platform_skill_versions` / `platform_skill_bindings` | `tests/test_platform_db.py`；`tests/test_platform_service.py` | 当前切片通过；HTTP/API 与 UI 待接线 |
+| 用户/项目/系统解析顺序 | `PlatformService.resolve_skill_version` | `tests/test_platform_service.py::test_skill_versions_are_user_isolated_and_resolve_project_then_user` | 当前切片通过 |
+| Skill manifest 安全字段与哈希 | `PlatformService.create_skill_version` | `tests/test_platform_service.py::test_skill_manifest_rejects_executable_fields_and_bad_hash` | 当前切片通过；尚未接 Product Skill snapshot converter |
 
 验证命令：
 
