@@ -195,6 +195,27 @@ class PlatformService:
             rows = c.execute("SELECT provider,model,pricing_version,input_credits_per_1k,output_credits_per_1k FROM credit_pricing WHERE active=1 ORDER BY provider,model").fetchall()
         return [dict(zip(("provider", "model", "pricing_version", "input_credits_per_1k", "output_credits_per_1k"), row)) for row in rows]
 
+    def media_pricing(self) -> list[dict[str, Any]]:
+        with connect(self.path) as c:
+            rows = c.execute(
+                "SELECT provider,model,media_kind,pricing_version,credits_per_unit FROM media_pricing WHERE active=1 ORDER BY provider,media_kind,model"
+            ).fetchall()
+        keys = ("provider", "model", "media_kind", "pricing_version", "credits_per_unit")
+        return [dict(zip(keys, row)) for row in rows]
+
+    def estimate_media_credits(self, provider: str, model: str, media_kind: str, units: int = 1) -> dict[str, Any]:
+        if media_kind not in {"image", "video", "audio"} or type(units) is not int or units <= 0:
+            raise PlatformError("invalid_media_usage", "media kind and units are invalid")
+        with connect(self.path) as c:
+            row = c.execute(
+                "SELECT pricing_version,credits_per_unit FROM media_pricing WHERE provider=? AND model IN (?, '*') AND media_kind=? AND active=1 ORDER BY model DESC,created_at DESC LIMIT 1",
+                (provider, model, media_kind),
+            ).fetchone()
+        if not row:
+            raise PlatformError("pricing_unavailable", "no active media pricing for this model", 422)
+        return {"provider": provider, "model": model, "media_kind": media_kind, "units": units,
+                "pricing_version": row[0], "credits_per_unit": row[1], "estimated_credits": row[1] * units}
+
     def estimate_credits(self, provider: str, model: str, prompt_tokens: int, completion_tokens: int) -> dict[str, Any]:
         if min(prompt_tokens, completion_tokens) < 0:
             raise PlatformError("invalid_token_usage", "token counts cannot be negative")

@@ -60,6 +60,7 @@ class ApplyIn(BaseModel): exam_id: str; artifact: ArtifactIn
 class CertReviewIn(BaseModel): approved: bool; score: float | None = None; feedback: str = ""
 class SubmissionReviewIn(BaseModel): approved: bool; score: float | None = None; award_title: str | None = None
 class CreditEstimateIn(BaseModel): provider: str; model: str; prompt_tokens: int = Field(ge=0); completion_tokens: int = Field(ge=0)
+class MediaCreditEstimateIn(BaseModel): provider: str; model: str; media_kind: str; units: int = Field(gt=0)
 class CreditGrantIn(BaseModel): user_id: str; amount_credits: int = Field(gt=0); reason: str = Field(min_length=1, max_length=200); idempotency_key: str = Field(min_length=8, max_length=200)
 class CreditReservationIn(BaseModel): estimated_credits: int = Field(gt=0); generation_id: str = Field(min_length=1, max_length=200); pricing_version: str = Field(min_length=1, max_length=100); idempotency_key: str = Field(min_length=8, max_length=200)
 class CreditSettleIn(BaseModel): actual_credits: int = Field(ge=0)
@@ -103,8 +104,14 @@ def revoke_credential(credential_id: str, user=Depends(current_user), svc: Platf
 @router.get("/credits/pricing")
 def credit_pricing(svc: PlatformService = Depends(service)): return svc.credit_pricing()
 
+@router.get("/credits/media-pricing")
+def media_credit_pricing(svc: PlatformService = Depends(service)): return svc.media_pricing()
+
 @router.post("/credits/estimate")
 def credit_estimate(body: CreditEstimateIn, svc: PlatformService = Depends(service)): return handle(lambda: svc.estimate_credits(body.provider, body.model, body.prompt_tokens, body.completion_tokens))
+
+@router.post("/credits/media-estimate")
+def media_credit_estimate(body: MediaCreditEstimateIn, svc: PlatformService = Depends(service)): return handle(lambda: svc.estimate_media_credits(body.provider, body.model, body.media_kind, body.units))
 
 @router.get("/credits/balance")
 def credit_balance(user=Depends(current_user), svc: PlatformService = Depends(service)): return svc.credit_balance(user)

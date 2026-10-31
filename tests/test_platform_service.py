@@ -65,6 +65,14 @@ def test_credit_reservation_settlement_release_and_idempotency(tmp_path):
     assert svc.credit_balance(creator)["available_credits"] == 93
 
 
+def test_media_pricing_estimate_supports_model_fallback(tmp_path):
+    svc = service(tmp_path)
+    assert any(item["media_kind"] == "image" for item in svc.media_pricing())
+    estimate = svc.estimate_media_credits("dashscope", "wan2.7-image-pro", "image", 3)
+    assert estimate["estimated_credits"] == 12
+    assert estimate["credits_per_unit"] == 4
+
+
 def test_user_credentials_are_encrypted_isolated_and_rotatable(tmp_path):
     svc = credential_service(tmp_path)
     alice = svc.register("alice", "a" * 12)

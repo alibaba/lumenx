@@ -46,6 +46,8 @@ export const platformApi = {
   creditBalance: () => request<{ user_id: string; available_credits: number; credited_credits: number; debited_credits: number }>("/credits/balance"),
   creditLedger: (limit = 50) => request<Array<Record<string, unknown>>>(`/credits/ledger?limit=${limit}`),
   estimateCredits: (payload: { provider: string; model: string; prompt_tokens: number; completion_tokens: number }) => request<{ estimated_credits: number; pricing_version: string }>("/credits/estimate", { method: "POST", body: JSON.stringify(payload) }),
+  mediaPricing: () => request<Array<{ provider: string; model: string; media_kind: string; pricing_version: string; credits_per_unit: number }>>("/credits/media-pricing"),
+  estimateMediaCredits: (payload: { provider: string; model: string; media_kind: string; units: number }) => request<{ estimated_credits: number; pricing_version: string; credits_per_unit: number }>("/credits/media-estimate", { method: "POST", body: JSON.stringify(payload) }),
   reserveCredits: (payload: { estimated_credits: number; generation_id: string; pricing_version: string; idempotency_key: string }) => request<{ reservation_id: string; estimated_credits: number; status: string }>("/credits/reservations", { method: "POST", body: JSON.stringify(payload) }),
   settleCredits: (reservationId: string, actual_credits: number) => request(`/credits/reservations/${reservationId}/settle`, { method: "POST", body: JSON.stringify({ actual_credits }) }),
   releaseCredits: (reservationId: string) => request(`/credits/reservations/${reservationId}/release`, { method: "POST" }),

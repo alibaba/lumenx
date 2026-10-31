@@ -135,3 +135,12 @@ LLM Adapter 现在读取请求级算力计费上下文。平台积分模式在 P
 - Core 新增 `src/core/compute_billing.py`，平台服务提供 `reserve_for_usage` 与 `settle_for_usage` 回调。
 - `LLMAdapter.chat` 和 `chat_result` 已接入预扣/结算/释放路径；没有平台上下文的旧调用保持原行为。
 - 验证：LLM bounded/environment、平台合同/迁移/服务测试 47 项通过；真实 Provider、图像/视频/语音计费仍待接入。
+
+## 2026-10-31 媒体算力价格目录切片
+
+为后续图片、视频和音频生成接入持久化预扣/结算，平台新增按媒体单位计价的独立目录。该切片先完成价格原语和查询入口，不宣称媒体生成已经完成计费接线。
+
+- 迁移：`006_media_pricing.sql` 建立 `media_pricing`，按 provider、model、media_kind 和 pricing_version 保存每单位积分价格；当前种子覆盖 DashScope 图片、Kling 视频和 CosyVoice 音频默认价格。
+- 服务/API：新增媒体价格列表和单位估算方法，未知具体模型回退到 provider 的 `*` 默认价格；前端 `platformApi` 已提供查询客户端。
+- 验证：平台数据库/服务测试 10 项通过，前端 typecheck 通过。
+- 证据边界：图片、视频、音频后台任务仍需把 reservation id 写入持久回执，并在完成/失败/恢复路径结算或释放；真实 Provider 和价格校准尚未执行。
