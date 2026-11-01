@@ -35,3 +35,5 @@ Worker 监控当前以结构化日志提供 `worker_id`、claimed/succeeded/fail
 Kubernetes/ECS 转换前先运行 `python scripts/validate_skill_k8s.py`。`deploy/k8s/skill-runtime.yaml` 使用双副本、PDB、非 root、只读根文件系统、drop ALL capabilities、无 ServiceAccount token 自动挂载、内部 metrics Service 和独立 provider Secret 挂载；镜像名和 Secret 名称仍需替换为云环境实际资源。
 
 完成镜像发布后使用 `python scripts/validate_skill_k8s.py --production --image-prefix ghcr.io/ORG --image-tag SHA_OR_TAG`，门禁会拒绝 `REPLACE` 占位镜像；随后再由目标集群执行 `kubectl apply --server-side --dry-run=server` 和滚动发布验收。
+
+真实发布链路可使用 `scripts/deploy_skill_runtime.py --registry ghcr.io/ORG --tag SHA --skip-push` 做本地构建和 client dry-run；具备 registry、kubectl context 和外部 Secret/KMS CSI 后，再去掉 `--skip-push` 并加 `--apply`。`scripts/verify_k8s_fault_drill.py --execute` 会执行可回滚的 Worker 0→2 副本重启演练，默认不修改集群。
