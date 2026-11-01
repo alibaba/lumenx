@@ -310,3 +310,11 @@ Redis Streams claim 先用 `XAUTOCLAIM` 接管超过 idle threshold 的 pending 
 本机 Kubernetes API 不可用，`kubectl --dry-run=client` 无法完成 server schema 校验，现场只记录为“无集群连接”，未宣称云端部署通过。新增 `--production --image-prefix --image-tag` 门禁，模板中的 `REPLACE` 镜像占位符在生产检查中会被拒绝。
 
 新增 `deploy_skill_runtime.py` 与 `verify_k8s_fault_drill.py`：前者要求 kubectl context、非占位镜像、registry push 和外部 Secret/KMS CSI 标记后才允许 server-side apply/rollout；后者默认只打印 dry-run，只有显式 `--execute` 才会执行 Worker 0→2 副本重启。当前环境没有 registry 登录或 Kubernetes context，故未执行真实发布与故障演练。
+
+## 2026-11-01 上线前最终验收
+
+候选源码提交为 `2a7d218`（本地 `platform-gate0`）。本地最终证据：47 项队列/Worker/凭证/平台/Atelier/Kubernetes 门禁测试通过；前端 typecheck/build 通过（保留 Next export rewrites 警告）；模型目录校验通过；文档结构与文档回归通过；Redis pending recovery 通过；PostgreSQL 240 job / 12 worker / 24 tenant 压力通过，0 duplicate、每租户 10 个；credential proxy ready、Worker metrics、Prometheus target、OTel reachable 均通过；本地 `lumenx-live` Compose profile 全部运行且 PostgreSQL healthy。
+
+- 本地受控候选结论：Conditional Go，可继续内部试运行和云端发布准备。
+- 云端公开生产结论：No-Go。GitHub `main` 仍为 `f2a02e2`，`feature/lumenx-core-release` 为 `b9672e7`，尚未接收本地候选；当前无 Kubernetes context、镜像仓库登录、Secret/KMS CSI、远端 OTLP 账号或真实云故障演练证据。
+- 上线阻断项：推送固定镜像并记录 digest；在目标集群创建/验证 Secret/KMS CSI；server-side dry-run 与滚动升级；远端 Prometheus/OTLP 与告警通知；Worker/代理重启演练和跨 AZ 数据层恢复；完成 GitHub 发布/PR 后重新绑定提交验收证据。
