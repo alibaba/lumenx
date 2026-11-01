@@ -526,7 +526,8 @@
     "settings": "设置",
     "workspaceAria": "LumenX Studio · 工作区",
     "mainNavAria": "主导航",
-    "atelier": "Atelier"
+    "atelier": "Atelier",
+    "platform": "平台"
   },
   "workspace": {
     "title": "我的工作区",

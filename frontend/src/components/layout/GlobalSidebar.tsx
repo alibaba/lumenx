@@ -1,12 +1,12 @@
 "use client";
 
-import { LayoutGrid, Layers, Wand2, Settings, FileText, Workflow } from "lucide-react";
+import { LayoutGrid, Layers, Wand2, Settings, FileText, Workflow, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 import clsx from "clsx";
 import LumenXBranding from "./LumenXBranding";
 import { isTauri } from "@/lib/transport";
 
-export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "atelier" | "settings";
+export type GlobalTab = "workspace" | "library" | "editor" | "playground" | "atelier" | "platform" | "settings";
 
 interface GlobalSidebarProps {
   activeTab: GlobalTab;
@@ -21,6 +21,7 @@ export const GLOBAL_NAV_ITEMS: { id: GlobalTab; icon: typeof LayoutGrid; hash: s
   { id: "editor", icon: FileText, hash: "#/studio/editor" },
   { id: "playground", icon: Wand2, hash: "#/playground" },
   { id: "atelier", icon: Workflow, hash: "#/atelier" },
+  { id: "platform", icon: Users, hash: "#/platform" },
   { id: "settings", icon: Settings, hash: "#/settings" },
 ];
 

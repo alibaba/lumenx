@@ -526,7 +526,8 @@
     "settings": "Settings",
     "workspaceAria": "LumenX Studio · Workspace",
     "mainNavAria": "Main navigation",
-    "atelier": "Atelier"
+    "atelier": "Atelier",
+    "platform": "Platform"
   },
   "workspace": {
     "title": "My Workspace",

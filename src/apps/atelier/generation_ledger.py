@@ -14,6 +14,7 @@ from .models import (
 from ...models import provider_recovery
 from ...models.media_generation_records import MediaGenerationCandidateRecord
 from ...models.provider_media_intents import validate_sync_artifact_record_intent
+from .skill_runtime import SkillExecutionBinding
 
 
 GENERATION_CANDIDATE_CONTRACT = "atelier-provider-video-v1"
@@ -36,6 +37,7 @@ _CANDIDATE_FIELDS = {
     "error_code",
     "created_at",
     "updated_at",
+    "skill_binding",
 }
 
 
@@ -260,8 +262,13 @@ def _validate_candidate_shape(candidate: dict[str, Any], error: type[Exception])
         except ValueError as exc:
             raise error("Atelier media generation candidate is invalid") from exc
         return record
-    if set(candidate) != _CANDIDATE_FIELDS:
+    if set(candidate) - _CANDIDATE_FIELDS or set(candidate) != _CANDIDATE_FIELDS and "skill_binding" in candidate:
         raise error("Atelier generation candidate fields are invalid")
+    if "skill_binding" in candidate:
+        try:
+            candidate["skill_binding"] = SkillExecutionBinding(**candidate["skill_binding"]).model_dump(mode="json")
+        except Exception as exc:
+            raise error("Atelier generation candidate Skill binding is invalid") from exc
     if candidate["execution_contract"] != GENERATION_CANDIDATE_CONTRACT:
         raise error("Atelier generation candidate contract is invalid")
     for field in ("id", "attempt_id"):

@@ -1907,6 +1907,7 @@ async function requestJson(path: string, init: RequestInit = {}, allowedErrorCod
     const environment = requireActiveRuntimeEnvironment();
     const headers = new Headers(init.headers);
     headers.set("Accept", "application/json");
+    headers.set("X-LumenX-Product", "atelier");
     if (init.body !== undefined && !headers.has("Content-Type")) {
         headers.set("Content-Type", "application/json");
     }

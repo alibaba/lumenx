@@ -24,6 +24,7 @@ from .models import (
     AtelierGenerationRequestReceipt,
     AtelierProject,
 )
+from .skill_runtime import bind_skill_to_video_request
 
 
 def _find_call(project, turn_id, call_id):
@@ -159,7 +160,9 @@ def append_approved_generation(
         schema_version=2, project_id=project.id, node_id=node.id,
         candidate_id=candidate_id, attempt_id=attempt_id, status="pending",
         first_frame_source=AtelierGenerationFirstFrameSource(**request.first_frame.model_dump()),
-        provider_execution=record, agent_authorization_ref=ref.model_copy(deep=True),
+        provider_execution=record,
+        skill_binding=(bind_skill_to_video_request(turn.loop_start_context.skill_snapshot, raw) if turn.loop_start_context is not None and turn.loop_start_context.skill_snapshot is not None else None),
+        agent_authorization_ref=ref.model_copy(deep=True),
         created_at=now, updated_at=now,
     )
     candidate = {

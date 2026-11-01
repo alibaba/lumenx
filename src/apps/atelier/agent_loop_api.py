@@ -12,6 +12,7 @@ from .agent_loop import AgentLoopAck, AgentLoopNotFound
 from .agent_loop_commands import ResumeAgentLoopCommand, StartAgentLoopCommand
 from .agent_stream_http import AgentEventStreamResponse
 from .storage import AtelierProjectNotFound
+import json
 from .product_skills import list_product_skill_catalog
 from ...models.provider_recovery import ProviderRecoveryError
 from ...utils.json_storage import StorageConflictError, StorageError
@@ -26,7 +27,7 @@ def list_agent_product_skills():
 
 @router.post("/projects/{project_id}/agent/loops", response_model=AgentLoopAck)
 def start_agent_loop(project_id: str, payload: StartAgentLoopCommand, request: Request) -> AgentLoopAck:
-    return _call_loop(lambda: _loop(request).start_loop(project_id, payload))
+    return _call_loop(lambda: _loop(request).start_loop(project_id, payload, platform_manifest=_platform_manifest(request, payload.skill_name, project_id)))
 
 
 @router.post("/projects/{project_id}/agent/loops/stream")
@@ -34,7 +35,7 @@ def stream_agent_loop(project_id: str, payload: StartAgentLoopCommand, request: 
     service = _loop(request)
     cancel = Event()
     return AgentEventStreamResponse(
-        service.iter_start_loop(project_id, payload, cancel_event=cancel), cancel,
+        service.iter_start_loop(project_id, payload, cancel_event=cancel, platform_manifest=_platform_manifest(request, payload.skill_name, project_id)), cancel,
         project_id=project_id, turn_id=payload.client_turn_id,
     )
 
@@ -92,6 +93,25 @@ def _loop(request: Request):
             "code": "atelier_agent_loop_unavailable", "detail": "Atelier Agent loop service is unavailable",
         })
     return service
+
+
+def _platform_manifest(request: Request, skill_name: str | None, project_id: str) -> dict | None:
+    if not skill_name:
+        return None
+    platform = getattr(request.app.state, "platform_service", None)
+    actor = getattr(request.state, "platform_user", None)
+    if platform is None or actor is None:
+        return None
+    resolved = platform.resolve_skill_version(actor, skill_name, project_id=project_id)
+    if resolved is None:
+        return None
+    try:
+        manifest = json.loads(resolved["manifest_json"])
+    except (KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail={"code": "platform_skill_manifest_invalid", "detail": "Platform Skill manifest is invalid"}) from exc
+    if not isinstance(manifest, dict):
+        raise HTTPException(status_code=422, detail={"code": "platform_skill_manifest_invalid", "detail": "Platform Skill manifest is invalid"})
+    return manifest
 
 
 def _require_turn_identity(path_id: str, body_id: str) -> None:

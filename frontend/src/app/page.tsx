@@ -17,6 +17,7 @@ import AppShell from "@/components/layout/AppShell";
 import type { GlobalTab } from "@/components/layout/GlobalSidebar";
 import dynamic from "next/dynamic";
 import { api } from "@/lib/api";
+import { getPlatformToken, platformApi } from "@/lib/platformApi";
 import { requireActiveRuntimeEnvironment } from "@/lib/runtimeEnvironment";
 import { useTranslations } from "next-intl";
 import TauriMenuListener from "@/components/layout/TauriMenuListener";
@@ -30,6 +31,7 @@ const AssetLibraryPage = dynamic(() => import("@/components/library/AssetLibrary
 const PlaygroundPage = dynamic(() => import("@/components/modules/playground/PlaygroundPage"), { ssr: false });
 const ScriptEditorShell = dynamic(() => import("@/components/modules/ScriptEditor/ScriptEditorShell"), { ssr: false });
 const AtelierShell = dynamic(() => import("@/components/atelier/v3/AtelierShell"), { ssr: false });
+const PlatformPortal = dynamic(() => import("@/components/platform/PlatformPortal"), { ssr: false });
 
 type CreatedSeriesReceipt = { id: string; revision: number; title: string };
 
@@ -641,8 +643,9 @@ export default function Home() {
   const [isPackageImportOpen, setIsPackageImportOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCreateDropdown, setShowCreateDropdown] = useState(false);
-  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'atelier' | 'studio/editor' | 'project-editor'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'project' | 'series' | 'series-episode' | 'library' | 'settings' | 'playground' | 'atelier' | 'platform' | 'studio/editor' | 'project-editor'>('home');
   const [activeTab, setActiveTab] = useState<GlobalTab>("workspace");
+  const [platformAccess, setPlatformAccess] = useState<"checking" | "ready">("checking");
   const [wsSearch, setWsSearch] = useState("");
   const online = useOnline();
   const [wsStatus, setWsStatus] = useState<DerivedStatus | "all">("all");
@@ -660,6 +663,26 @@ export default function Home() {
   const fetchSeriesList = useProjectStore((state) => state.fetchSeriesList);
   const t = useTranslations("workspace");
   const tc = useTranslations("common");
+
+  useEffect(() => {
+    if (currentView === "platform") {
+      setPlatformAccess("ready");
+      return;
+    }
+    if (!getPlatformToken()) {
+      setPlatformAccess("ready");
+      if (window.location.hash !== "#/platform") window.location.hash = "#/platform";
+      return;
+    }
+    let active = true;
+    void platformApi.me().then(() => { if (active) setPlatformAccess("ready"); }).catch(() => {
+      if (!active) return;
+      window.localStorage.removeItem("lumenx_platform_token");
+      window.location.hash = "#/platform";
+      setPlatformAccess("ready");
+    });
+    return () => { active = false; };
+  }, [currentView]);
 
   // Sync projects and series from backend on mount
   useEffect(() => {
@@ -746,6 +769,14 @@ export default function Home() {
       if (hash === '#/atelier') {
         setCurrentView('atelier');
         setActiveTab('atelier');
+        setProjectId(null);
+        setSeriesId(null);
+        setEpisodeId(null);
+        return;
+      }
+      if (hash === '#/platform') {
+        setCurrentView('platform');
+        setActiveTab('platform');
         setProjectId(null);
         setSeriesId(null);
         setEpisodeId(null);
@@ -845,7 +876,18 @@ export default function Home() {
   }, []);
 
   if (currentView === 'atelier') {
+    if (platformAccess === "checking") {
+      return <div className="min-h-screen bg-background text-foreground flex items-center justify-center">正在验证平台账户…</div>;
+    }
     return <AtelierShell />;
+  }
+
+  if (currentView === 'platform') {
+    return <PlatformPortal />;
+  }
+
+  if (platformAccess === "checking") {
+    return <div className="min-h-screen bg-background text-foreground flex items-center justify-center">正在验证平台账户…</div>;
   }
 
   // 项目详情页 — 全屏，无 GlobalSidebar

@@ -1,0 +1,31 @@
+services:
+  redis:
+    ports: []
+  postgres:
+    ports: []
+  skill-worker:
+    ports: []
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100/metrics', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+  credential-proxy:
+    ports: []
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:17178/readyz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+  prometheus:
+    ports: []
+  otel-collector:
+    ports: []

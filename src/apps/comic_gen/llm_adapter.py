@@ -15,11 +15,15 @@ Configuration via environment variables:
 import os
 import logging
 import math
+import uuid
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Dict, List, Optional, Any, Mapping
 
 from ...utils.endpoints import get_provider_base_url
+from ...core.token_usage import record_token_usage
+from ...core.provider_credentials import current_provider_credential
+from ...core.compute_billing import current_compute_billing
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +52,8 @@ class LLMAdapter:
     @property
     def is_configured(self) -> bool:
         if self.provider == "openai":
-            return bool(self._env.get("OPENAI_API_KEY"))
-        return bool(self._env.get("DASHSCOPE_API_KEY"))
+            return bool((current_provider_credential("openai") or {}).get("secret") or self._env.get("OPENAI_API_KEY"))
+        return bool((current_provider_credential("dashscope") or {}).get("secret") or self._env.get("DASHSCOPE_API_KEY"))
 
     def _get_client(self):
         """Get or create the OpenAI-compatible client (lazy, cached)."""
@@ -66,13 +70,13 @@ class LLMAdapter:
 
             if self.provider == "openai":
                 self._client = OpenAI(
-                    api_key=self._env.get("OPENAI_API_KEY"),
+                    api_key=(current_provider_credential("openai") or {}).get("secret") or self._env.get("OPENAI_API_KEY"),
                     base_url=self._env.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
                 )
             else:
                 # DashScope uses OpenAI-compatible endpoint
                 self._client = OpenAI(
-                    api_key=self._env.get("DASHSCOPE_API_KEY"),
+                    api_key=(current_provider_credential("dashscope") or {}).get("secret") or self._env.get("DASHSCOPE_API_KEY"),
                     base_url=f"{get_provider_base_url('DASHSCOPE', env=self._env)}/compatible-mode/v1",
                 )
         return self._client
@@ -183,6 +187,7 @@ class LLMAdapter:
             timeout=timeout,
             response_format=response_format,
         )
+        reservation, _ = self._reserve(model, messages, max_completion_tokens)
         try:
             client = self._get_client()
             response = self._chat_result_once(
@@ -194,6 +199,7 @@ class LLMAdapter:
                 response_format=response_format,
             )
         except Exception as e:
+            self._finish_billing(reservation, model, messages, {}, failed=True)
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
             raise RuntimeError(f"{provider_label} bounded chat failed") from e
 
@@ -205,6 +211,17 @@ class LLMAdapter:
         provider_model = self._get_response_value(response, "model")
         if not isinstance(provider_model, str) or not provider_model.strip():
             provider_model = None
+        self._finish_billing(reservation, model, messages, usage)
+        record_token_usage(
+            operation="llm.chat_result",
+            provider=self.provider,
+            requested_model=model,
+            provider_model=provider_model,
+            prompt_tokens=usage["prompt_tokens"],
+            completion_tokens=usage["completion_tokens"],
+            total_tokens=usage["total_tokens"],
+            metadata={"charged_credits": True if reservation else 0},
+        )
         return LLMChatResult(
             content=content,
             requested_model=model,
@@ -234,6 +251,31 @@ class LLMAdapter:
         request_client = client.with_options(timeout=timeout, max_retries=0)
         return request_client.chat.completions.create(**kwargs)
 
+    @staticmethod
+    def _estimated_prompt_tokens(messages: List[Dict[str, str]]) -> int:
+        return max(1, math.ceil(sum(len(str(message.get("content") or "")) for message in messages) / 4))
+
+    def _reserve(self, model: str, messages: List[Dict[str, str]], completion_tokens: int) -> tuple[dict[str, Any] | None, str | None]:
+        context = current_compute_billing()
+        reserve = context.get("reserve") if context else None
+        if context is None or context.get("mode") != "platform_credits" or reserve is None:
+            return None, None
+        key = f"llm:{uuid.uuid4()}"
+        result = reserve(self.provider, model, self._estimated_prompt_tokens(messages), completion_tokens, key, key)
+        return result, key
+
+    def _finish_billing(self, reservation: dict[str, Any] | None, model: str, messages: List[Dict[str, str]], usage: Dict[str, Optional[int]], *, failed: bool = False) -> None:
+        if reservation is None:
+            return
+        context = current_compute_billing() or {}
+        if failed:
+            release = context.get("release")
+            if release: release(reservation["reservation_id"])
+            return
+        settle = context.get("settle")
+        if settle:
+            settle(reservation["reservation_id"], self.provider, model, usage.get("prompt_tokens") or 0, usage.get("completion_tokens") or 0)
+
     def _chat_once(
         self,
         client,
@@ -260,12 +302,30 @@ class LLMAdapter:
                 options["max_retries"] = max_retries
             request_client = client.with_options(**options)
 
+        reservation, _ = self._reserve(model, messages, 1024)
         try:
             response = request_client.chat.completions.create(**kwargs)
+            usage = self._extract_result_usage(response)
+            self._finish_billing(reservation, model, messages, usage)
+            self._record_usage(response, model, metadata={"charged_credits": True if reservation else 0})
             return response.choices[0].message.content
         except Exception as e:
+            self._finish_billing(reservation, model, messages, {}, failed=True)
             provider_label = "DashScope" if self.provider != "openai" else "OpenAI"
             raise RuntimeError(f"{provider_label} API error: {e}") from e
+
+    def _record_usage(self, response, requested_model: str, metadata: dict[str, Any] | None = None) -> None:
+        usage = self._extract_result_usage(response)
+        record_token_usage(
+            operation="llm.chat",
+            provider=self.provider,
+            requested_model=requested_model,
+            provider_model=self._get_response_value(response, "model"),
+            prompt_tokens=usage["prompt_tokens"],
+            completion_tokens=usage["completion_tokens"],
+            total_tokens=usage["total_tokens"],
+            metadata=metadata or {},
+        )
 
     def _validate_chat_result_args(
         self,

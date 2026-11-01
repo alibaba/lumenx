@@ -34,6 +34,8 @@ from .models import (
     AtelierGenerationRequestReceiptMember,
     AtelierProject,
 )
+from .product_skills import AtelierProductSkillSnapshot
+from .skill_runtime import bind_skill_to_video_request
 from .storage import AtelierStorage
 
 
@@ -107,10 +109,15 @@ class AtelierGenerationAdmissionService:
         project_id: str,
         node_id: str,
         command: CreateVideoCandidateCommand | OrderedVideoCandidateCommand,
+        *,
+        skill_snapshot: AtelierProductSkillSnapshot | None = None,
     ) -> GenerationAdmissionAck | GenerationBatchAdmissionAck:
         batch_size = _manual_batch_size(command)
         ordered = isinstance(command, OrderedVideoCandidateCommand)
         fingerprint = (fingerprint_ordered_video_candidate_request if ordered else fingerprint_video_candidate_request)(command, node_id=node_id)
+        skill_binding = bind_skill_to_video_request(skill_snapshot, command.model_dump(mode="json")) if skill_snapshot is not None else None
+        if skill_binding is not None:
+            fingerprint = skill_binding.request_fingerprint
         entrypoint = generation_entrypoint_for_command(command)
 
         def apply(project: AtelierProject) -> None:
@@ -155,7 +162,8 @@ class AtelierGenerationAdmissionService:
                     project_id=project.id, node_id=node.id, candidate_id=candidate_id,
                     attempt_id=attempt_id, attempt_revision=0, status="pending",
                     **source_fields,
-                    provider_execution=record, created_at=now, updated_at=now,
+                    provider_execution=record, skill_binding=skill_binding,
+                    created_at=now, updated_at=now,
                 )
                 candidate = {
                     "execution_contract": GENERATION_CANDIDATE_CONTRACT,
@@ -163,6 +171,8 @@ class AtelierGenerationAdmissionService:
                     "status": "pending", "video_url": None, "error_code": None,
                     "created_at": now, "updated_at": now,
                 }
+                if skill_binding is not None:
+                    candidate["skill_binding"] = skill_binding.model_dump(mode="json")
                 project.generation_attempts.append(attempt)
                 appended_candidates.append(candidate)
                 receipt_members.append(AtelierGenerationRequestReceiptMember(

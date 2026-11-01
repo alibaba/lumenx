@@ -1,0 +1,16 @@
+receivers:
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: lumenx-skill-worker
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["skill-worker:9100"]
+exporters:
+  debug:
+    verbosity: basic
+service:
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      exporters: [debug]

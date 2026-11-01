@@ -259,6 +259,17 @@ export async function appAccessFetch(input: RequestInfo | URL, init: RequestInit
         throw new AppAccessError("Runtime environment is not active", "runtime_environment_unavailable");
     }
     const baseInit: RequestInit = shouldAttach ? { ...init, credentials: "include" as RequestCredentials } : init;
+    if (shouldAttach && typeof window !== "undefined") {
+        const headers = new Headers(baseInit.headers);
+        const platformToken = window.localStorage.getItem("lumenx_platform_token");
+        if (platformToken && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${platformToken}`);
+        if (!headers.has("X-LumenX-Product")) headers.set("X-LumenX-Product", "studio");
+        const billingMode = window.localStorage.getItem("lumenx_billing_mode") === "byok" ? "byok" : "platform_credits";
+        headers.set("X-LumenX-Billing-Mode", billingMode);
+        const credentialRef = window.localStorage.getItem("lumenx_credential_ref");
+        if (billingMode === "byok" && credentialRef) headers.set("X-LumenX-Credential-Ref", credentialRef);
+        baseInit.headers = headers;
+    }
     const response = await fetch(input, shouldAttach && !discovery && environment
         ? withRuntimeEnvironmentHeader(input, baseInit, environment)
         : baseInit);
@@ -304,6 +315,16 @@ export function installAppAccessAxiosInterceptors(axiosClient: MaybeAxios = axio
                 throw new AppAccessError("Runtime environment is not active", "runtime_environment_unavailable");
             }
             next.headers = withAxiosRuntimeEnvironmentHeader(next.headers, environment);
+            const requestHeaders = isRecord(next.headers) ? { ...next.headers } : {};
+            const platformToken = typeof window !== "undefined" ? window.localStorage.getItem("lumenx_platform_token") : null;
+            if (platformToken && !requestHeaders.Authorization && !requestHeaders.authorization) requestHeaders.Authorization = `Bearer ${platformToken}`;
+            requestHeaders["X-LumenX-Product"] = requestHeaders["X-LumenX-Product"] || "studio";
+            requestHeaders["X-LumenX-Billing-Mode"] = typeof window !== "undefined" && window.localStorage.getItem("lumenx_billing_mode") === "byok" ? "byok" : "platform_credits";
+            if (typeof window !== "undefined") {
+                const credentialRef = window.localStorage.getItem("lumenx_credential_ref");
+                if (credentialRef && requestHeaders["X-LumenX-Billing-Mode"] === "byok") requestHeaders["X-LumenX-Credential-Ref"] = credentialRef;
+            }
+            next.headers = requestHeaders;
             next.__lumenxEnvironmentKey = environment.key;
             next.__lumenxEnvironmentGeneration = environment.generation;
         }
