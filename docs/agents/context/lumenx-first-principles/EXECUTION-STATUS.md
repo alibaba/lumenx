@@ -318,3 +318,13 @@ Redis Streams claim 先用 `XAUTOCLAIM` 接管超过 idle threshold 的 pending 
 - 本地受控候选结论：Conditional Go，可继续内部试运行和云端发布准备。
 - 云端公开生产结论：No-Go。GitHub `main` 仍为 `f2a02e2`，`feature/lumenx-core-release` 为 `b9672e7`，尚未接收本地候选；当前无 Kubernetes context、镜像仓库登录、Secret/KMS CSI、远端 OTLP 账号或真实云故障演练证据。
 - 上线阻断项：推送固定镜像并记录 digest；在目标集群创建/验证 Secret/KMS CSI；server-side dry-run 与滚动升级；远端 Prometheus/OTLP 与告警通知；Worker/代理重启演练和跨 AZ 数据层恢复；完成 GitHub 发布/PR 后重新绑定提交验收证据。
+
+## 2026-11-01 平台邀请码注册切片
+
+注册逻辑新增 `registration_invites` 持久化表和邀请码管理员入口。生产环境 `PlatformConfig.from_env()` 默认开启邀请注册；注册事务先原子消费有效邀请码，再创建用户，支持最大使用次数、过期时间和重复消费拒绝。前端注册入口增加邀请码必填字段并在提交前规范化为大写。短信验证码未伪造为已接入能力，仍需独立供应商和发送限流方案。
+
+- 责任文件：`src/apps/platform/migrations/011_registration_invites.sql`、`src/apps/platform/service.py`、`src/apps/platform/api.py`、`frontend/src/components/platform/PlatformPortal.tsx`、`frontend/src/lib/platformApi.ts`、`frontend/src/store/platformStore.ts`。
+- 分支/提交：`feature/skill-runtime-production` / 待提交（本切片完成后记录固定提交）。
+- 验证：平台注册/邀请码服务与 API 测试、前端 typecheck 待本切片统一回归。
+- 证据边界：没有实现短信验证码发送、手机号绑定或运营商实名校验；邀请码生成需要管理员 API 或受控初始化脚本。
+- 首次部署：`scripts/bootstrap_platform_admin.py` 提供一次性 admin 初始化路径，生产数据库初始化后应立即恢复邀请码强制配置。

@@ -8,7 +8,7 @@ type PlatformStore = {
   error: string | null;
   initialize: () => Promise<void>;
   login: (username: string, password: string) => Promise<void>;
-  register: (username: string, password: string, email?: string) => Promise<void>;
+  register: (username: string, password: string, email: string | undefined, inviteCode: string) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
 };
@@ -34,9 +34,9 @@ export const usePlatformStore = create<PlatformStore>((set) => ({
     try { const session = await platformApi.login({ username, password }); set({ user: session.user, loading: false }); }
     catch (error) { set({ loading: false, error: error instanceof Error ? error.message : String(error) }); throw error; }
   },
-  register: async (username, password, email) => {
+  register: async (username, password, email, inviteCode) => {
     set({ loading: true, error: null });
-    try { await platformApi.register({ username, password, email }); const session = await platformApi.login({ username, password }); set({ user: session.user, loading: false }); }
+    try { await platformApi.register({ username, password, email, invite_code: inviteCode }); const session = await platformApi.login({ username, password }); set({ user: session.user, loading: false }); }
     catch (error) { set({ loading: false, error: error instanceof Error ? error.message : String(error) }); throw error; }
   },
   logout: async () => { await platformApi.logout(); set({ user: null, walletCents: 0 }); },

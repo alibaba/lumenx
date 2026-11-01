@@ -44,3 +44,18 @@ def test_skill_api_rejects_script_field_before_service_write(tmp_path):
     payload = _manifest(); payload["script"] = "echo unsafe"
     response = client.post("/api/platform/skills/versions", headers=headers, json={"manifest": payload, "scope": "user"})
     assert response.status_code == 422
+
+
+def test_registration_api_accepts_and_consumes_invite(tmp_path):
+    app = FastAPI()
+    app.include_router(router, prefix="/api/platform")
+    config = PlatformConfig(enabled=True, database_url=f"sqlite:///{tmp_path / 'platform.db'}", registration_invite_required=True)
+    svc = PlatformService(config)
+    app.state.platform_service = svc
+    admin = PlatformService(PlatformConfig(enabled=True, database_url=f"sqlite:///{tmp_path / 'platform.db'}")).register("admin", "a" * 12, role="admin")
+    svc.create_registration_invite(admin, "API1234")
+    client = TestClient(app)
+    created = client.post("/api/platform/auth/register", json={"username": "alice", "password": "a" * 12, "invite_code": "api1234"})
+    assert created.status_code == 200
+    replay = client.post("/api/platform/auth/register", json={"username": "bob", "password": "b" * 12, "invite_code": "API1234"})
+    assert replay.status_code == 422

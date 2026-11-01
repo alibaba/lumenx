@@ -22,6 +22,7 @@ class PlatformConfig:
     skill_queue_backend: str = "sqlite"
     skill_redis_url: str | None = None
     skill_postgres_url: str | None = None
+    registration_invite_required: bool = False
 
     @classmethod
     def from_env(cls) -> "PlatformConfig":
@@ -40,6 +41,7 @@ class PlatformConfig:
             skill_queue_backend=os.getenv("LUMENX_SKILL_QUEUE_BACKEND", "sqlite"),
             skill_redis_url=os.getenv("LUMENX_SKILL_REDIS_URL") or None,
             skill_postgres_url=os.getenv("LUMENX_SKILL_POSTGRES_URL") or None,
+            registration_invite_required=_bool_env("LUMENX_PLATFORM_REGISTRATION_INVITE_REQUIRED", True),
         )
 
     def sqlite_path(self) -> Path:

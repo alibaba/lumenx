@@ -56,17 +56,52 @@ class PlatformService:
     def _audit(self, c: sqlite3.Connection, actor: str | None, event: str, entity: str, entity_id: str | None, payload: dict[str, Any]) -> None:
         c.execute("INSERT INTO audit_events_ext VALUES (?,?,?,?,?,?,?,?)", (uid(), actor, uid(), event, entity, entity_id, json.dumps(payload), now()))
 
-    def register(self, username: str, password: str, email: str | None = None, role: str = "user") -> dict[str, Any]:
+    def register(self, username: str, password: str, email: str | None = None, role: str = "user", invite_code: str | None = None) -> dict[str, Any]:
         if len(password) < self.config.password_min_length: raise PlatformError("weak_password", "password is too short")
         if role not in {"user", "creator", "reviewer", "client", "admin"}: raise PlatformError("invalid_role", "unsupported role")
         digest, salt = hash_password(password); user_id = uid(); timestamp = now()
         try:
             with connect(self.path) as c:
+                if self.config.registration_invite_required:
+                    normalized = (invite_code or "").strip().upper()
+                    if not normalized:
+                        raise PlatformError("invite_required", "a valid invitation code is required", 422)
+                    claimed = c.execute(
+                        "UPDATE registration_invites SET used_count=used_count+1,last_used_at=? WHERE code=? AND used_count < max_uses AND (expires_at IS NULL OR expires_at > ?)",
+                        (timestamp, normalized, timestamp),
+                    )
+                    if claimed.rowcount != 1:
+                        raise PlatformError("invalid_invite", "invitation code is invalid, expired, or already used", 422)
                 c.execute("INSERT INTO platform_users VALUES (?,?,?,?,?,?,?,?,?,?,?)", (user_id, username, email, None, digest, salt, username, role, 1, timestamp, timestamp))
                 if role == "creator": c.execute("INSERT INTO creator_certifications VALUES (?,?,?,?,?,?,?,?,?,?)", (uid(), user_id, "unapplied", "standard", "direct_exam", None, None, None, None, timestamp))
                 self._audit(c, user_id, "user.registered", "user", user_id, {"role": role})
         except sqlite3.IntegrityError as exc: raise PlatformError("user_exists", "username or email already exists", 409) from exc
         return {"id": user_id, "username": username, "email": email, "role": role}
+
+    def create_registration_invite(self, actor: dict[str, Any], code: str | None = None, max_uses: int = 1, expires_at: str | None = None) -> dict[str, Any]:
+        if actor.get("role") != "admin":
+            raise PlatformError("forbidden", "admin role required", 403)
+        normalized = (code or secrets.token_urlsafe(8)).strip().upper()
+        if not 6 <= len(normalized) <= 64 or not normalized.replace("-", "").isalnum():
+            raise PlatformError("invalid_invite", "invitation code must be 6-64 alphanumeric characters", 422)
+        if max_uses < 1 or max_uses > 100000:
+            raise PlatformError("invalid_invite", "max_uses must be between 1 and 100000", 422)
+        invite_id = uid(); timestamp = now()
+        try:
+            with connect(self.path) as c:
+                c.execute("INSERT INTO registration_invites VALUES (?,?,?,?,?,?,?,?)", (invite_id, normalized, max_uses, 0, expires_at, actor["id"], timestamp, None))
+                self._audit(c, actor["id"], "registration.invite_created", "registration_invite", invite_id, {"code": normalized, "max_uses": max_uses, "expires_at": expires_at})
+        except sqlite3.IntegrityError as exc:
+            raise PlatformError("invite_exists", "invitation code already exists", 409) from exc
+        return {"id": invite_id, "code": normalized, "max_uses": max_uses, "used_count": 0, "expires_at": expires_at, "created_at": timestamp}
+
+    def list_registration_invites(self, actor: dict[str, Any]) -> list[dict[str, Any]]:
+        if actor.get("role") != "admin":
+            raise PlatformError("forbidden", "admin role required", 403)
+        with connect(self.path) as c:
+            rows = c.execute("SELECT id,code,max_uses,used_count,expires_at,created_at,last_used_at FROM registration_invites ORDER BY created_at DESC").fetchall()
+        keys = ("id", "code", "max_uses", "used_count", "expires_at", "created_at", "last_used_at")
+        return [dict(zip(keys, row)) for row in rows]
 
     def login(self, username: str, password: str) -> dict[str, Any]:
         with connect(self.path) as c:

@@ -41,9 +41,14 @@ class RegisterIn(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     password: str = Field(min_length=12, max_length=200)
     email: str | None = None
+    invite_code: str = Field(default="", max_length=64)
 
 
 class LoginIn(BaseModel): username: str; password: str
+class RegistrationInviteIn(BaseModel):
+    code: str | None = Field(default=None, min_length=6, max_length=64)
+    max_uses: int = Field(default=1, ge=1, le=100000)
+    expires_at: str | None = None
 class CompetitionIn(BaseModel):
     title: str; slug: str; description: str = ""; rules_markdown: str = ""; whitelist_required: bool = True; allocated_credits: int = Field(default=0, ge=0); status: str = "draft"; enroll_deadline: str | None = None; submit_deadline: str | None = None
 class WhitelistIn(BaseModel): user_id: str; invite_code: str | None = None
@@ -98,7 +103,15 @@ class SkillWorkerClaimIn(BaseModel):
 
 
 @router.post("/auth/register")
-def register(body: RegisterIn, svc: PlatformService = Depends(service)): return handle(lambda: svc.register(body.username, body.password, body.email))
+def register(body: RegisterIn, svc: PlatformService = Depends(service)): return handle(lambda: svc.register(body.username, body.password, body.email, invite_code=body.invite_code))
+
+@router.post("/auth/invites")
+def create_registration_invite(body: RegistrationInviteIn, user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.create_registration_invite(user, body.code, body.max_uses, body.expires_at))
+
+@router.get("/auth/invites")
+def list_registration_invites(user=Depends(current_user), svc: PlatformService = Depends(service)):
+    return handle(lambda: svc.list_registration_invites(user))
 
 @router.post("/auth/login")
 def login(body: LoginIn, svc: PlatformService = Depends(service)): return handle(lambda: svc.login(body.username, body.password))

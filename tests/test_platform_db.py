@@ -6,18 +6,18 @@ from src.apps.platform.db import MigrationError, backup_database, check_foreign_
 
 def test_migrate_creates_isolated_schema_with_sqlite_safety(tmp_path):
     db_path = tmp_path / "platform.db"
-    assert migrate(db_path) == ["001_initial.sql", "002_business.sql", "003_token_usage.sql", "004_credit_ledger.sql", "005_user_credentials.sql", "006_media_pricing.sql", "007_skill_registry.sql", "008_skill_runs.sql", "009_skill_run_leases.sql", "010_skill_workers.sql"]
+    assert migrate(db_path) == ["001_initial.sql", "002_business.sql", "003_token_usage.sql", "004_credit_ledger.sql", "005_user_credentials.sql", "006_media_pricing.sql", "007_skill_registry.sql", "008_skill_runs.sql", "009_skill_run_leases.sql", "010_skill_workers.sql", "011_registration_invites.sql"]
     assert migrate(db_path) == []
     assert check_foreign_keys(db_path) == []
     with connect(db_path) as connection:
         assert connection.execute("PRAGMA foreign_keys").fetchone() == (1,)
         assert connection.execute(
             "SELECT version FROM schema_migrations"
-        ).fetchall() == [("001_initial.sql",), ("002_business.sql",), ("003_token_usage.sql",), ("004_credit_ledger.sql",), ("005_user_credentials.sql",), ("006_media_pricing.sql",), ("007_skill_registry.sql",), ("008_skill_runs.sql",), ("009_skill_run_leases.sql",), ("010_skill_workers.sql",)]
+        ).fetchall() == [("001_initial.sql",), ("002_business.sql",), ("003_token_usage.sql",), ("004_credit_ledger.sql",), ("005_user_credentials.sql",), ("006_media_pricing.sql",), ("007_skill_registry.sql",), ("008_skill_runs.sql",), ("009_skill_run_leases.sql",), ("010_skill_workers.sql",), ("011_registration_invites.sql",)]
         tables = {row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type='table'"
         )}
-    assert {"platform_users", "platform_sessions", "audit_events", "platform_token_usage", "credit_ledger", "credit_reservations", "platform_credentials", "media_pricing", "platform_skill_versions", "platform_skill_bindings", "platform_skill_runs", "platform_skill_workers"}.issubset(tables)
+    assert {"platform_users", "platform_sessions", "audit_events", "platform_token_usage", "credit_ledger", "credit_reservations", "platform_credentials", "media_pricing", "platform_skill_versions", "platform_skill_bindings", "platform_skill_runs", "platform_skill_workers", "registration_invites"}.issubset(tables)
 
 
 def test_migrate_rejects_changed_applied_migration(tmp_path, monkeypatch):

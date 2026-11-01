@@ -35,6 +35,28 @@ def test_auth_session_revocation_and_password_policy(tmp_path):
         raise AssertionError("revoked session remained usable")
 
 
+def test_registration_requires_single_use_invite_when_enabled(tmp_path):
+    path = tmp_path / "platform.db"
+    admin_service = PlatformService(PlatformConfig(enabled=True, database_url=f"sqlite:///{path}"))
+    admin = admin_service.register("admin", "a" * 12, role="admin")
+    invite = admin_service.create_registration_invite(admin, "WELCOME1")
+    invited_service = PlatformService(PlatformConfig(enabled=True, database_url=f"sqlite:///{path}", registration_invite_required=True))
+    try:
+        invited_service.register("missing", "b" * 12)
+    except PlatformError as exc:
+        assert exc.code == "invite_required"
+    else:
+        raise AssertionError("registration without invite must be rejected")
+    created = invited_service.register("alice", "b" * 12, invite_code=invite["code"])
+    assert created["username"] == "alice"
+    try:
+        invited_service.register("bob", "c" * 12, invite_code=invite["code"])
+    except PlatformError as exc:
+        assert exc.code == "invalid_invite"
+    else:
+        raise AssertionError("single-use invite was reused")
+
+
 def test_token_usage_is_recorded_and_summarized_per_platform_user(tmp_path):
     svc = service(tmp_path)
     user = svc.register("alice", "a" * 12)

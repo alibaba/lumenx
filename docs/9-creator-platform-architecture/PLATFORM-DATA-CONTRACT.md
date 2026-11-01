@@ -89,6 +89,10 @@ skill_feedback     采纳/拒绝、QC、返修、成本和用户备注
 
 当前持久化切片使用 `007_skill_registry.sql` 建立 Skill 版本和绑定表；它只保存经过哈希校验的 manifest JSON，不保存脚本路径、命令、凭证引用或 Provider handle。Skill API 已提供创建、列表、绑定和解析入口，前端工作台已提供账户级/项目级绑定界面。`skill_runtime.py` 负责静态沙箱检查、平台 manifest 到 Atelier snapshot 的严格转换，以及生成请求的 Skill 快照绑定；它不执行外部脚本。生成 attempt 现在保存 Skill binding，Agent loop 支持由组合根注入平台 manifest resolver，重启读回继续使用原绑定。隔离 worker 和反馈优化仍未实现。
 
+平台注册使用 `registration_invites` 邀请码表；生产 `PlatformConfig.from_env()` 默认要求邀请码，服务端在同一事务内校验有效期/剩余次数并消费邀请码后才创建用户。管理员可通过 `/api/platform/auth/invites` 创建和查看邀请码；邀请码只保存代码、次数和审计元数据，不保存短信验证码或明文凭证。测试夹具可显式关闭 `registration_invite_required`，不改变生产默认。
+
+首次部署没有管理员时，使用受控初始化命令 `scripts/bootstrap_platform_admin.py` 创建第一个 admin；该命令通过独立配置显式关闭邀请码限制，仅用于一次性 bootstrap，不开放为公共 API。
+
 真实请求上下文由应用组合根的 platform middleware 解析 Bearer actor，Atelier loop HTTP route 使用该 actor、项目 ID 和 Skill 名称调用平台 resolver，再把返回的受控 manifest 转成 snapshot。未认证或无绑定时只能使用系统 registry；平台数据库不直接进入 Atelier domain。
 
 `008_skill_runs.sql` 建立运行快照账本。运行记录按用户和 request fingerprint 幂等，保存项目、Skill 版本/哈希、输入/输出哈希、状态和错误；更新运行记录必须再次核验用户归属。该账本是未来队列恢复和 Worker claim 的事实源。

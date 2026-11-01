@@ -30,7 +30,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const platformApi = {
-  register: (payload: { username: string; password: string; email?: string }) => request<PlatformUser>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  register: (payload: { username: string; password: string; email?: string; invite_code: string }) => request<PlatformUser>("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   login: async (payload: { username: string; password: string }) => {
     const session = await request<PlatformSession>("/auth/login", { method: "POST", body: JSON.stringify(payload) });
     if (typeof window !== "undefined") window.localStorage.setItem(TOKEN_KEY, session.access_token);

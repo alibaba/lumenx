@@ -5,6 +5,7 @@
 | 能力 | 当前入口 | 代表测试 | 当前状态 |
 |---|---|---|---|
 | 角色集合与任务状态迁移 | `src/apps/platform/contracts.py` | `tests/test_platform_contracts.py::test_platform_roles_and_task_transitions_are_explicit` | Gate 0 合同通过 |
+| 邀请码注册与消费 | `registration_invites`; `/api/platform/auth/register`; `/api/platform/auth/invites` | `tests/test_platform_service.py::test_registration_requires_single_use_invite_when_enabled`; `tests/test_platform_skill_api.py::test_registration_api_accepts_and_consumes_invite` | 生产默认强制邀请码；一次性消费、过期/次数限制和管理员生成已通过 |
 | artifact 不可变快照 | `src/apps/platform/contracts.py` | `tests/test_platform_contracts.py::test_artifact_snapshot_is_immutable_and_rejects_client_url_only_evidence` | Gate 0 合同通过 |
 | 幂等上下文与整数分账本字段 | `src/apps/platform/contracts.py` | `tests/test_platform_contracts.py::test_idempotency_and_ledger_contracts_reject_invalid_values` | Gate 0 合同通过 |
 | SQLite 迁移与恢复 | `src/apps/platform/db.py` | `tests/test_platform_db.py` | Sprint 1 第一切片通过 |
